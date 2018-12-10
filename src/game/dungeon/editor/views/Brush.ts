@@ -13,22 +13,24 @@ export class BrushTool extends EditorComponent {
 
         this.editorStore.Subscribe(this.Render, this);
 
-        this.game.interactionManager.on("mousemove", (e: PIXI.interaction.InteractionEvent) => {
-            let pos = e.data.global.clone();
-
-            //snap
-            let tileSize = (TileSize * this.editorStore.state.scale) / BrushSnap;
-            if (!e.data.originalEvent.ctrlKey) {
-                pos.x = ((pos.x - this.editorStore.state.gridBounds.x) / tileSize) | 0;
-                pos.y = ((pos.y - this.editorStore.state.gridBounds.y) / tileSize) | 0;
-            }
-
+        this.game.interactionManager.on("mousemove", (e: PIXI.interaction.InteractionEvent) => {        
             let currentBrush = this.editorStore.state.currentBrush;
-            if (currentBrush && (currentBrush.position.x != pos.x || currentBrush.position.y != pos.y)) {
-                this.editorStore.Dispatch({
-                    type: EditorActions.BRUSH_MOVED,
-                    data: {brush:{name:currentBrush.name, position:pos, layer:currentBrush.layer},}
-                });
+            if (currentBrush){           
+                let pos = e.data.global.clone();
+
+                //snap
+                let tileSize = (TileSize * this.editorStore.state.scale) / BrushSnap;
+                if (!e.data.originalEvent.ctrlKey) {
+                    pos.x = ((pos.x - this.editorStore.state.gridBounds.x) / tileSize) | 0;
+                    pos.y = ((pos.y - this.editorStore.state.gridBounds.y) / tileSize) | 0;
+                }
+
+                if(currentBrush.position.x != pos.x || currentBrush.position.y != pos.y) {
+                    this.editorStore.Dispatch({
+                        type: EditorActions.BRUSH_MOVED,
+                        data: {brush:{name:currentBrush.name, position:pos, layer:currentBrush.layer},}
+                    });
+                }
             }
         });
 
@@ -50,7 +52,6 @@ export class BrushTool extends EditorComponent {
     }
 
     private Render(prevState: IState, state: IState): void {
-
         //update brush
         if (prevState.currentBrush.name != state.currentBrush.name) {
             if (this.brush) {
