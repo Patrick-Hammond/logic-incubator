@@ -13,9 +13,9 @@ export class BrushTool extends EditorComponent {
 
         this.editorStore.Subscribe(this.Render, this);
 
-        this.game.interactionManager.on("mousemove", (e: PIXI.interaction.InteractionEvent) => {        
+        this.game.interactionManager.on("mousemove", (e: PIXI.interaction.InteractionEvent) => {
             let currentBrush = this.editorStore.state.currentBrush;
-            if (currentBrush){           
+            if (currentBrush) {
                 let pos = e.data.global.clone();
 
                 //snap
@@ -25,10 +25,10 @@ export class BrushTool extends EditorComponent {
                     pos.y = ((pos.y - this.editorStore.state.gridBounds.y) / tileSize) | 0;
                 }
 
-                if(currentBrush.position.x != pos.x || currentBrush.position.y != pos.y) {
+                if (currentBrush.position.x != pos.x || currentBrush.position.y != pos.y) {
                     this.editorStore.Dispatch({
                         type: EditorActions.BRUSH_MOVED,
-                        data: {brush:{name:currentBrush.name, position:pos, layer:currentBrush.layer},}
+                        data: { brush: { name: currentBrush.name, position: pos, layer: currentBrush.layer }, }
                     });
                 }
             }
@@ -79,11 +79,11 @@ export class BrushTool extends EditorComponent {
             if (state.gridBounds.contains(this.brush.position.x, this.brush.position.y)) {
                 //drag to paint
                 if (state.mouseButtonState == MouseButtonState.LEFT_DOWN) {
-                    this.levelDataStore.Dispatch({ type:LevelDataActions.PAINT, data:state.currentBrush, canUndo:true });
+                    this.levelDataStore.Dispatch({ type: LevelDataActions.PAINT, data: state.currentBrush, canUndo: true });
                 }
                 //delete with right button
                 if (state.mouseButtonState == MouseButtonState.RIGHT_DOWN) {
-                    this.levelDataStore.Dispatch({ type:LevelDataActions.ERASE, data:state.currentBrush, canUndo:true });
+                    this.levelDataStore.Dispatch({ type: LevelDataActions.ERASE, data: state.currentBrush, canUndo: true });
                 }
             }
         }
