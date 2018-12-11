@@ -9,13 +9,13 @@ export default abstract class GameComponent
     public loader:Loader;
     public root = new PIXI.Container();
 
-    constructor(autostart:boolean = false)
+    constructor(startUpdates:boolean = false)
     {
         this.game = Game.inst;
         this.assetFactory = AssetFactory.inst;
         this.loader = Loader.inst;
 
-        if(autostart) this.StartUpdates();
+        if(startUpdates) this.StartUpdates();
     }
     
     public AddToStage():PIXI.DisplayObject
@@ -41,5 +41,5 @@ export default abstract class GameComponent
         Game.inst.ticker.remove(this.Update, this);
     }
 
-    public Update(dt:number):void{}
+    protected Update(dt:number):void{}
 }
