@@ -5,14 +5,13 @@ import { BrushTool } from "./views/Brush";
 import { Canvas } from "./views/Canvas";
 import { EditorActions } from "./stores/EditorStore";
 import { LevelDataActions } from "./stores/LevelDataStore";
+import {AssetPath} from "./Constants";
 
 export class DungeonEditor extends EditorComponent {
     constructor() {
         super();
 
-        this.loader.LoadSpriteSheet("http://localhost:4000/dist-include/spritesheet.json", /^.+(?=_f)/, () => {
-            this.Create();
-        });
+        this.loader.LoadSpriteSheet(AssetPath, /^.+(?=_f)/, () => this.Create());
     }
 
     private Create(): void {

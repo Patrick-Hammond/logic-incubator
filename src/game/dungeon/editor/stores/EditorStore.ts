@@ -88,9 +88,8 @@ export default class EditorStore extends Store<IState, ActionData>
             case EditorActions.PALETTE_ITEM_CHANGED:
                 {
                     return {
+                        ...currentBrush,
                         name: action.data.name,
-                        position: { x: currentBrush.position.x, y: currentBrush.position.y },
-                        rotation: currentBrush.rotation,
                         layer: action.data.layer
                     };
                 }
