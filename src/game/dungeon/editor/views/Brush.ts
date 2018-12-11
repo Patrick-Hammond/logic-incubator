@@ -26,10 +26,7 @@ export class BrushTool extends EditorComponent {
                 }
 
                 if (currentBrush.position.x != pos.x || currentBrush.position.y != pos.y) {
-                    this.editorStore.Dispatch({
-                        type: EditorActions.BRUSH_MOVED,
-                        data: { brush: { name: currentBrush.name, position: pos, layer: currentBrush.layer }, }
-                    });
+                    this.editorStore.Dispatch({ type: EditorActions.BRUSH_MOVED, data: { position: pos } });
                 }
             }
         });
@@ -71,8 +68,10 @@ export class BrushTool extends EditorComponent {
 
         //update position
         let pos = state.currentBrush.position;
-        let tileSize = (TileSize * this.editorStore.state.scale) / BrushSnap;
         if (this.brush && (prevState.currentBrush.position.x != pos.x || prevState.currentBrush.position.y != pos.y)) {
+
+            let tileSize = (TileSize * this.editorStore.state.scale) / BrushSnap;
+
             this.brush.position.set(pos.x * tileSize + state.gridBounds.x, pos.y * tileSize + state.gridBounds.y);
 
             //check still on grid
@@ -86,6 +85,11 @@ export class BrushTool extends EditorComponent {
                     this.levelDataStore.Dispatch({ type: LevelDataActions.ERASE, data: state.currentBrush, canUndo: true });
                 }
             }
+        }
+
+        //update rotation
+        if (this.brush && prevState.currentBrush.rotation != state.currentBrush.rotation) {
+            this.brush.rotation = state.currentBrush.rotation;
         }
 
         //update scale

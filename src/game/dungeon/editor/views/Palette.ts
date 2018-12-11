@@ -22,12 +22,7 @@ export class Palette extends EditorComponent {
         this.root.on("mousedown", (e: PIXI.interaction.InteractionEvent) => {
             this.editorStore.Dispatch({
                 type: EditorActions.PALETTE_ITEM_CHANGED,
-                data: {
-                    brush: {
-                        name: e.target.name,
-                        layer: this.palettes.indexOf(e.target.parent)
-                    }
-                }
+                data: {name: e.target.name, layer: this.palettes.indexOf(e.target.parent)}
             });
         });
 
@@ -35,6 +30,7 @@ export class Palette extends EditorComponent {
     }
 
     private Render(prevState: IState, state: IState): void {
+        
         //update palette
         let paletteChanged = prevState.paletteIndex != state.paletteIndex;
         if (paletteChanged) {

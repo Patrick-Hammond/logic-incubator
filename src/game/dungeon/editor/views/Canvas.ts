@@ -60,6 +60,7 @@ export class Canvas extends EditorComponent {
                 let posY = brush.position.y * tileSize + layout.gridBounds.y;
                 if (layout.gridBounds.contains(posX, posY)) {
                     sprite.position.set(posX, posY);
+                    sprite.rotation = brush.rotation;
                     sprite.scale.set(layout.scale);
                     if (sprite instanceof PIXI.extras.AnimatedSprite) {
                         sprite.play();

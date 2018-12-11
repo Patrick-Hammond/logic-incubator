@@ -6,8 +6,6 @@ import { Canvas } from "./views/Canvas";
 import { EditorActions } from "./stores/EditorStore";
 import { LevelDataActions } from "./stores/LevelDataStore";
 
-export interface Brush { name: string; position?: { x: number, y: number }; layer: number; };
-
 export class DungeonEditor extends EditorComponent {
     constructor() {
         super();
@@ -27,6 +25,9 @@ export class DungeonEditor extends EditorComponent {
         document.onkeydown = (e: KeyboardEvent) => {
             if (e.keyCode == 32) {
                 this.editorStore.Dispatch({ type: EditorActions.NEXT_PALETTE });
+            }
+            if (e.keyCode == 82) {
+                this.editorStore.Dispatch({ type: EditorActions.ROTATE_BRUSH });
             }
             if (e.keyCode == 90 && e.ctrlKey) {
                 this.levelDataStore.Undo();
