@@ -4,42 +4,42 @@ import Loader from "./loading/Loader";
 
 export default abstract class GameComponent 
 {
-    public game:Game;
-    public assetFactory:AssetFactory;
-    public loader:Loader;
+    public game: Game;
+    public assetFactory: AssetFactory;
+    public loader: Loader;
     public root = new PIXI.Container();
 
-    constructor(autostart:boolean = false)
+    constructor(autostart: boolean = false)
     {
         this.game = Game.inst;
         this.assetFactory = AssetFactory.inst;
         this.loader = Loader.inst;
 
-        if(autostart) this.StartUpdates();
+        if (autostart) this.StartUpdates();
     }
-    
-    public AddToStage():PIXI.DisplayObject
+
+    public AddToStage(): PIXI.DisplayObject
     {
         return Game.inst.stage.addChild(this.root);
     }
 
-    public RemoveFromStage():PIXI.DisplayObject
+    public RemoveFromStage(): PIXI.DisplayObject
     {
-        if(this.root.parent){
+        if (this.root.parent) {
             return Game.inst.stage.removeChild(this.root);
         }
         return null;
     }
 
-    public StartUpdates():void
+    public StartUpdates(): void
     {
         Game.inst.ticker.add(this.Update, this);
     }
 
-    public StopUpdates():void
+    public StopUpdates(): void
     {
         Game.inst.ticker.remove(this.Update, this);
     }
 
-    public Update(dt:number):void{}
+    public Update(dt: number): void { }
 }

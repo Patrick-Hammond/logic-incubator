@@ -3,5 +3,25 @@
 		{
 			"path": "."
 		}
-	]
+	],
+	"settings": {
+		"typescript.format.placeOpenBraceOnNewLineForFunctions": true,
+		"typescript.suggest.completeFunctionCalls": true,
+		"typescript.updateImportsOnFileMove.enabled": "always",
+		"typescript.format.insertSpaceAfterOpeningAndBeforeClosingNonemptyBraces": false,
+		"typescript.format.insertSpaceAfterKeywordsInControlFlowStatements": false,
+		"typescript.format.insertSpaceAfterFunctionKeywordForAnonymousFunctions": false,
+		"javascript.format.insertSpaceAfterCommaDelimiter": false,
+		"javascript.format.enable": false,
+		"javascript.autoClosingTags": false,
+		"javascript.format.insertSpaceAfterKeywordsInControlFlowStatements": false,
+		"javascript.format.insertSpaceAfterOpeningAndBeforeClosingNonemptyBraces": false,
+		"javascript.format.insertSpaceAfterSemicolonInForStatements": false,
+		"javascript.format.insertSpaceBeforeAndAfterBinaryOperators": false,
+		"javascript.suggest.autoImports": false,
+		"javascript.suggest.enabled": false,
+		"javascript.suggest.names": false,
+		"javascript.suggest.paths": false,
+		"javascript.suggestionActions.enabled": false
+	}
 }
