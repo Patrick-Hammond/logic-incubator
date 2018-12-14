@@ -32,7 +32,7 @@ export class Palette extends EditorComponent
     {
         const state = this.editorStore.state;
 
-        let scrollBounds = new PIXI.Rectangle(state.gridBounds.right + 10, state.gridBounds.y, 260, 630);
+        let scrollBounds = new PIXI.Rectangle(state.gridBounds.right + 10, state.gridBounds.y, 260, state.gridBounds.height);
         this.paletteContainer = new ScrollingContainer(scrollBounds, 1);
         this.root.addChild(this.paletteContainer);
 

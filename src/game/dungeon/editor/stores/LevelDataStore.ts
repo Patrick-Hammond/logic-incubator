@@ -49,7 +49,7 @@ export default class LevelDataStore extends Store<ILevelDataState, ActionData>
                 let brush = action.data;
 
                 //remove last item in the same location
-                for(let i = levelDataCopy.length - 1; i > 0; i--) {
+                for(let i = levelDataCopy.length - 1; i >= 0; i--) {
                     let item = levelDataCopy[ i ];
                     if(item.position.x == brush.position.x && item.position.y == brush.position.y) {
                         levelDataCopy.splice(i, 1);

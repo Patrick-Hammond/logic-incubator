@@ -110,15 +110,11 @@ export default class EditorStore extends Store<IState, ActionData>
     {
         const calc = (scale: number): ILayoutState =>
         {
-            let scaledTileSize = TileSize * scale;
-            let screen = Game.inst.screen;
-            let w = (screen.width * 0.8) - scaledTileSize;
-            let h = (screen.height * 0.9) - scaledTileSize;
-            let gridBounds = new PIXI.Rectangle(scaledTileSize, scaledTileSize, w - w % scaledTileSize, h - h % scaledTileSize);
+            let gridBounds = new PIXI.Rectangle(20, 20, Game.inst.screen.width - 300, Game.inst.screen.height - 40);
             return {
                 scale: scale,
                 gridBounds: gridBounds,
-                scaledTileSize: scaledTileSize
+                scaledTileSize: TileSize * scale
             };
         }
 
