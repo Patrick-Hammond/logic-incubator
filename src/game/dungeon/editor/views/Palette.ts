@@ -1,16 +1,13 @@
 
 import EditorComponent from "../EditorComponent";
-import { AnimationSpeed, TileSize } from "../Constants";
-import { IState, EditorActions } from "../stores/EditorStore";
-import Game from "../../../../_lib/Game";
-
-enum Palettes { Room, Prop, Animation }
+import {AnimationSpeed, TileSize} from "../Constants";
+import {IState, EditorActions} from "../stores/EditorStore";
+import {ScrollingContainer} from "../ui/ScrollingContainer";
 
 export class Palette extends EditorComponent
 {
     private brushText: PIXI.Text;
-    private palettes: PIXI.Container[] = [];
-    private paletteContainer = new PIXI.Container();
+    private paletteContainer: ScrollingContainer;
 
     constructor()
     {
@@ -20,43 +17,59 @@ export class Palette extends EditorComponent
 
         this.AddToStage();
 
-        this.root.interactive = this.root.interactiveChildren = true;
-        this.root.on("mousedown", (e: PIXI.interaction.InteractionEvent) =>
-        {
-            this.editorStore.Dispatch({
-                type: EditorActions.PALETTE_ITEM_CHANGED,
-                data: { name: e.target.name, layer: this.palettes.indexOf(e.target.parent) }
-            });
-        });
-
         this.editorStore.Subscribe(this.Render, this);
     }
 
     private Render(prevState: IState, state: IState): void
     {
-
-        //update palette
-        let paletteChanged = prevState.paletteIndex != state.paletteIndex;
-        if (paletteChanged) {
-            this.paletteContainer.removeChildren();
-            this.paletteContainer.addChild(this.palettes[ state.paletteIndex ]);
-        }
-
         //update text
-        if (paletteChanged || prevState.currentBrush.name != state.currentBrush.name) {
-            this.brushText.text = state.currentBrush.name;
+        if(prevState.hoveredBrushName != state.hoveredBrushName) {
+            this.brushText.text = state.hoveredBrushName;
         }
     }
 
     private Create(): void
     {
-        for (let palette in Palettes) {
-            if (isNaN(Number(palette))) {
-                this.palettes.push(new PIXI.Container());
-            }
-        }
+        const state = this.editorStore.state;
 
-        const roomItems = [ "floor", "wall", "hole", "edge" ];
+        let scrollBounds = new PIXI.Rectangle(state.gridBounds.right + 10, state.gridBounds.y, 260, 630);
+        this.paletteContainer = new ScrollingContainer(scrollBounds, 1);
+        this.root.addChild(this.paletteContainer);
+
+        const padding = 2;
+        let maxHeight = 0;
+        let x = 5;
+        let y = 5;
+
+        const tileLayout = (child: PIXI.Sprite) =>
+        {
+            if((x + child.width + padding) > scrollBounds.width) {
+                x = 5;
+                y += maxHeight + padding;
+                maxHeight = 0;
+            }
+            child.position.set(x, y);
+            maxHeight = Math.max(maxHeight, child.height);
+            x += child.width + padding;
+        };
+
+        const addMouseEvents = (child: PIXI.Sprite) =>
+        {
+            child.on("mousedown", (e: PIXI.interaction.InteractionEvent) =>
+            {
+                this.editorStore.Dispatch({
+                    type: EditorActions.BRUSH_CHANGED,
+                    data: {name: e.target.name}
+                });
+            });
+            child.on("mouseover", (e: PIXI.interaction.InteractionEvent) =>
+            {
+                this.editorStore.Dispatch({
+                    type: EditorActions.BRUSH_HOVERED,
+                    data: {name: e.target.name}
+                });
+            });
+        }
 
         this.assetFactory.SpriteNames.forEach(name =>
         {
@@ -66,8 +79,10 @@ export class Palette extends EditorComponent
             s.name = name;
             s.interactive = true;
 
-            const layer = roomItems.some(v => s.name.indexOf(v) > -1) ? this.palettes[ Palettes.Room ] : this.palettes[ Palettes.Prop ];
-            layer.addChild(s);
+            this.paletteContainer.addChild(s);
+
+            tileLayout(s);
+            addMouseEvents(s);
         });
 
         this.assetFactory.AnimationNames.forEach(name =>
@@ -80,35 +95,14 @@ export class Palette extends EditorComponent
             a.name = name;
             a.interactive = true;
 
-            this.palettes[ Palettes.Animation ].addChild(a);
+            this.paletteContainer.addChild(a);
+
+            tileLayout(a);
+            addMouseEvents(a);
         });
 
-        const padding = 2;
-        const layout = this.editorStore.state;
-        let left = layout.gridBounds.right + 10;
-
-        this.palettes.forEach(layer =>
-        {
-            let x = left;
-            let y = layout.gridBounds.y;
-            let maxHeight = 0;
-
-            layer.children.forEach((child: PIXI.Sprite) =>
-            {
-                child.position.set(x, y);
-                maxHeight = Math.max(maxHeight, child.height);
-                x += child.width + padding;
-                if (x > Game.inst.screen.width - 20) {
-                    x = left;
-                    y += maxHeight + padding;
-                }
-            });
-        });
-
-        this.brushText = new PIXI.Text("", { fontFamily: "Arial", fontSize: 11, fill: 0xeeeeee });
-        this.brushText.position.set(left, 3);
-
-        this.paletteContainer.addChild(this.palettes[ Palettes.Room ]);
-        this.root.addChild(this.paletteContainer, this.brushText);
+        this.brushText = new PIXI.Text("", {fontFamily: "Arial", fontSize: 11, fill: 0xeeeeee});
+        this.brushText.position.set(scrollBounds.x, 3);
+        this.root.addChild(this.brushText);
     }
 }

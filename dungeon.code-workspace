@@ -5,7 +5,6 @@
 		}
 	],
 	"settings": {
-		"typescript.format.placeOpenBraceOnNewLineForFunctions": true,
 		"typescript.suggest.completeFunctionCalls": true,
 		"typescript.updateImportsOnFileMove.enabled": "always",
 		"typescript.format.insertSpaceAfterOpeningAndBeforeClosingNonemptyBraces": false,

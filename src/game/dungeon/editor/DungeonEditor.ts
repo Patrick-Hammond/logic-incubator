@@ -7,6 +7,7 @@ import {EditorActions} from "./stores/EditorStore";
 import {LevelDataActions} from "./stores/LevelDataStore";
 import {AssetPath, KeyCodes} from "./Constants";
 import FileUtils from "../../../_lib/utils/FileUtils";
+import Game from "../../../_lib/Game";
 
 export class DungeonEditor extends EditorComponent
 {
@@ -28,9 +29,6 @@ export class DungeonEditor extends EditorComponent
         document.onkeydown = (e: KeyboardEvent) =>
         {
             switch(e.keyCode) {
-                case KeyCodes.SPACE:
-                    this.editorStore.Dispatch({type: EditorActions.NEXT_PALETTE});
-                    break;
                 case KeyCodes.R:
                     this.editorStore.Dispatch({type: EditorActions.ROTATE_BRUSH});
                     break;
@@ -59,6 +57,20 @@ export class DungeonEditor extends EditorComponent
                         });
                     });
                     break;
+            }
+        }
+
+        //mouse wheel zooming
+        this.game.view.onwheel = (e: WheelEvent) =>
+        {
+            if(this.editorStore.state.gridBounds.contains(e.offsetX, e.offsetY)) {
+                if(e.deltaY < 0) {
+                    this.editorStore.Dispatch({type: EditorActions.ZOOM_IN});
+                }
+                else if(e.deltaY > 0) {
+                    this.editorStore.Dispatch({type: EditorActions.ZOOM_OUT});
+                }
+                this.levelDataStore.Dispatch({type: LevelDataActions.REFRESH});
             }
         }
 
