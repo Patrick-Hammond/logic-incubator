@@ -29,6 +29,18 @@ export class DungeonEditor extends EditorComponent
         document.onkeydown = (e: KeyboardEvent) =>
         {
             switch(e.keyCode) {
+                case KeyCodes.UP:
+                    this.editorStore.Dispatch({type: EditorActions.NUDGE, data: {nudge: {x: 0, y: 1}}});
+                    break;
+                case KeyCodes.DOWN:
+                    this.editorStore.Dispatch({type: EditorActions.NUDGE, data: {nudge: {x: 0, y: -1}}});
+                    break;
+                case KeyCodes.LEFT:
+                    this.editorStore.Dispatch({type: EditorActions.NUDGE, data: {nudge: {x: 1, y: 0}}});
+                    break;
+                case KeyCodes.RIGHT:
+                    this.editorStore.Dispatch({type: EditorActions.NUDGE, data: {nudge: {x: -1, y: 0}}});
+                    break;
                 case KeyCodes.R:
                     this.editorStore.Dispatch({type: EditorActions.ROTATE_BRUSH});
                     break;
@@ -46,7 +58,7 @@ export class DungeonEditor extends EditorComponent
                     this.levelDataStore.Dispatch({type: LevelDataActions.REFRESH});
                     break;
                 case KeyCodes.S:
-                    FileUtils.SaveTextFile("_dungeonLevel.txt", this.levelDataStore.Serialize())
+                    FileUtils.SaveTextFile("_dungeonLevel.txt", this.levelDataStore.Serialize());
                     break;
                 case KeyCodes.L:
                     FileUtils.ShowOpenFileDialog().then((fileList: FileList) =>
@@ -56,6 +68,14 @@ export class DungeonEditor extends EditorComponent
                             this.levelDataStore.Load(text);
                         });
                     });
+                    break;
+                case KeyCodes.Q:
+                    if(e.ctrlKey) {
+                        let ok = confirm("This will delete the current map. Are you sure?");
+                        if(ok) {
+                            this.levelDataStore.Dispatch({type: LevelDataActions.RESET});
+                        }
+                    }
                     break;
             }
         }

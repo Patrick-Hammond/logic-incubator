@@ -7,6 +7,7 @@ export const enum EditorActions
 {
     BRUSH_MOVED, BRUSH_MOUSE_DOWN, ROTATE_BRUSH,
     BRUSH_CHANGED, BRUSH_HOVERED,
+    NUDGE,
     ZOOM_IN, ZOOM_OUT,
     REFRESH
 };
@@ -16,7 +17,13 @@ export const enum MouseButtonState
     LEFT_DOWN, RIGHT_DOWN, UP
 }
 
-type ActionData = {mouseButtonState?: MouseButtonState, name?: string, position?: Point, rotation?: number, layer?: number};
+type ActionData = {
+    mouseButtonState?: MouseButtonState,
+    name?: string,
+    position?: Point,
+    rotation?: number,
+    nudge?: Point
+};
 
 interface ILayoutState
 {
@@ -81,6 +88,8 @@ export default class EditorStore extends Store<IState, ActionData>
                 {
                     return {
                         ...currentBrush,
+                        rotation: 0,
+                        pixelOffset: {x: 0, y: 0},
                         name: action.data.name
                     };
                 }
@@ -89,6 +98,13 @@ export default class EditorStore extends Store<IState, ActionData>
                     return {
                         ...currentBrush,
                         rotation: currentBrush.rotation + Math.PI / 2
+                    };
+                }
+            case EditorActions.NUDGE:
+                {
+                    return {
+                        ...currentBrush,
+                        pixelOffset: {x: currentBrush.pixelOffset.x + action.data.nudge.x, y: currentBrush.pixelOffset.y + action.data.nudge.y}
                     };
                 }
             default:

@@ -3,7 +3,7 @@ import {Brush} from "../Types";
 
 export const enum LevelDataActions
 {
-    PAINT, ERASE, REFRESH
+    PAINT, ERASE, REFRESH, RESET
 };
 
 type LevelData = Brush[];
@@ -35,7 +35,7 @@ export default class LevelDataStore extends Store<ILevelDataState, ActionData>
             case LevelDataActions.PAINT: {
                 let levelDataCopy = levelData.concat();
 
-                //remove existing items on same layer
+                //remove identical items at this position
                 let brush = action.data;
                 let existing = levelDataCopy.filter(v =>
                     (v.position.x == brush.position.x && v.position.y == brush.position.y && v.name == brush.name)
@@ -61,6 +61,9 @@ export default class LevelDataStore extends Store<ILevelDataState, ActionData>
             }
             case LevelDataActions.REFRESH: {
                 return levelData.concat();
+            }
+            case LevelDataActions.RESET: {
+                return this.DefaultState().levelData;
             }
             default: {
                 return levelData || this.DefaultState().levelData;
