@@ -6,13 +6,15 @@ import {IState} from "../stores/EditorStore";
 export class Canvas extends EditorComponent
 {
     private grid: PIXI.Graphics = new PIXI.Graphics();
+    private mask: PIXI.Graphics = new PIXI.Graphics();
     private levelContainer = new PIXI.Container();
 
     constructor()
     {
         super();
 
-        this.root.addChild(this.grid, this.levelContainer);
+        this.root.addChild(this.grid, this.levelContainer, this.mask);
+        this.levelContainer.mask = this.mask;
 
         this.AddToStage();
 
@@ -39,6 +41,7 @@ export class Canvas extends EditorComponent
             const margin = state.gridBounds.x;
 
             this.grid.clear().beginFill(0x222222, 0.5).drawShape(state.gridBounds);
+            this.mask.clear().beginFill(0xff).drawShape(state.gridBounds);
 
             for(let col = 0; col <= state.gridBounds.width; col += state.scaledTileSize / 2) {
                 this.grid.lineStyle(1, 0x999999, col % state.scaledTileSize == 0 ? 0.25 : 0.1);
