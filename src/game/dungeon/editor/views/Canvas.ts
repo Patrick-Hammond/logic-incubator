@@ -3,14 +3,12 @@ import {AnimationSpeed, TileSize, BrushSnap} from "../Constants";
 import {ILevelDataState, LevelDataActions} from "../stores/LevelDataStore";
 import {IState} from "../stores/EditorStore";
 
-export class Canvas extends EditorComponent
-{
+export class Canvas extends EditorComponent {
     private grid: PIXI.Graphics = new PIXI.Graphics();
     private mask: PIXI.Graphics = new PIXI.Graphics();
     private levelContainer = new PIXI.Container();
 
-    constructor()
-    {
+    constructor() {
         super();
 
         this.root.addChild(this.grid, this.levelContainer, this.mask);
@@ -21,8 +19,7 @@ export class Canvas extends EditorComponent
         this.levelDataStore.Subscribe(this.UpdateLevel, this);
         this.editorStore.Subscribe(this.UpdateLayout, this);
 
-        let paint = (type: LevelDataActions) =>
-        {
+        let paint = (type: LevelDataActions) => {
             let currentBrush = this.editorStore.state.currentBrush;
             if(currentBrush.name != "") {
                 this.levelDataStore.Dispatch({type: type, data: currentBrush, canUndo: true});
@@ -34,8 +31,7 @@ export class Canvas extends EditorComponent
         this.grid.on("rightdown", (e: PIXI.interaction.InteractionEvent) => paint(LevelDataActions.ERASE));
     }
 
-    private UpdateLayout(prevState: IState, state: IState): void
-    {
+    private UpdateLayout(prevState: IState, state: IState): void {
         if(prevState.gridBounds != state.gridBounds) {
             //redraw grid
             const margin = state.gridBounds.x;
@@ -54,16 +50,14 @@ export class Canvas extends EditorComponent
         }
     }
 
-    private UpdateLevel(prevState: ILevelDataState, state: ILevelDataState): void
-    {
+    private UpdateLevel(prevState: ILevelDataState, state: ILevelDataState): void {
         if(prevState.levelData != state.levelData) {
             this.levelContainer.removeChildren();
 
             let layout = this.editorStore.state;
             let tileSize = (TileSize * layout.scale) / BrushSnap;
 
-            state.levelData.forEach(brush =>
-            {
+            state.levelData.forEach(brush => {
                 let sprite = this.assetFactory.Create(brush.name);
                 let posX = brush.position.x * tileSize + layout.gridBounds.x;
                 let posY = brush.position.y * tileSize + layout.gridBounds.y;

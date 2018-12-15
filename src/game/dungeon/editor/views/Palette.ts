@@ -4,13 +4,11 @@ import {AnimationSpeed, TileSize} from "../Constants";
 import {IState, EditorActions} from "../stores/EditorStore";
 import {ScrollingContainer} from "../ui/ScrollingContainer";
 
-export class Palette extends EditorComponent
-{
+export class Palette extends EditorComponent {
     private brushText: PIXI.Text;
     private paletteContainer: ScrollingContainer;
 
-    constructor()
-    {
+    constructor() {
         super();
 
         this.Create();
@@ -20,16 +18,14 @@ export class Palette extends EditorComponent
         this.editorStore.Subscribe(this.Render, this);
     }
 
-    private Render(prevState: IState, state: IState): void
-    {
+    private Render(prevState: IState, state: IState): void {
         //update text
         if(prevState.hoveredBrushName != state.hoveredBrushName) {
             this.brushText.text = state.hoveredBrushName;
         }
     }
 
-    private Create(): void
-    {
+    private Create(): void {
         const state = this.editorStore.state;
 
         let scrollBounds = new PIXI.Rectangle(state.gridBounds.right + 10, state.gridBounds.y, 260, state.gridBounds.height);
@@ -41,8 +37,7 @@ export class Palette extends EditorComponent
         let x = 5;
         let y = 5;
 
-        const tileLayout = (child: PIXI.Sprite) =>
-        {
+        const tileLayout = (child: PIXI.Sprite) => {
             if((x + child.width + padding) > scrollBounds.width) {
                 x = 5;
                 y += maxHeight + padding;
@@ -53,17 +48,14 @@ export class Palette extends EditorComponent
             x += child.width + padding;
         };
 
-        const addMouseEvents = (child: PIXI.Sprite) =>
-        {
-            child.on("mousedown", (e: PIXI.interaction.InteractionEvent) =>
-            {
+        const addMouseEvents = (child: PIXI.Sprite) => {
+            child.on("mousedown", (e: PIXI.interaction.InteractionEvent) => {
                 this.editorStore.Dispatch({
                     type: EditorActions.BRUSH_CHANGED,
                     data: {name: e.target.name}
                 });
             });
-            child.on("mouseover", (e: PIXI.interaction.InteractionEvent) =>
-            {
+            child.on("mouseover", (e: PIXI.interaction.InteractionEvent) => {
                 this.editorStore.Dispatch({
                     type: EditorActions.BRUSH_HOVERED,
                     data: {name: e.target.name}
@@ -71,8 +63,7 @@ export class Palette extends EditorComponent
             });
         }
 
-        this.assetFactory.SpriteNames.forEach(name =>
-        {
+        this.assetFactory.SpriteNames.forEach(name => {
             let s = this.assetFactory.Create(name);
             s.texture.baseTexture.scaleMode = PIXI.SCALE_MODES.NEAREST;
             s.scale.set(2);
@@ -85,8 +76,7 @@ export class Palette extends EditorComponent
             addMouseEvents(s);
         });
 
-        this.assetFactory.AnimationNames.forEach(name =>
-        {
+        this.assetFactory.AnimationNames.forEach(name => {
             let a = this.assetFactory.CreateAnimatedSprite(name);
             a.texture.baseTexture.scaleMode = PIXI.SCALE_MODES.NEAREST;
             a.scale.set(2);

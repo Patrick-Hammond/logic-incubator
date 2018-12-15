@@ -7,27 +7,27 @@ import {EditorActions} from "./stores/EditorStore";
 import {LevelDataActions} from "./stores/LevelDataStore";
 import {AssetPath, KeyCodes} from "./Constants";
 import FileUtils from "../../../_lib/utils/FileUtils";
-import Game from "../../../_lib/Game";
+import {ShowHelp} from "./ui/Help";
+import {GenerateMap} from "./Generators";
 
-export class DungeonEditor extends EditorComponent
-{
-    constructor()
-    {
+export class DungeonEditor extends EditorComponent {
+    constructor() {
         super();
 
         this.loader.LoadSpriteSheet(AssetPath, /^.+(?=_f)/, () => this.Create());
     }
 
-    private Create(): void
-    {
+    private Create(): void {
         //views
         new Canvas();
         new BrushTool();
         new Palette();
 
+        //help
+        ShowHelp();
+
         //keyboard commands
-        document.onkeydown = (e: KeyboardEvent) =>
-        {
+        document.onkeydown = (e: KeyboardEvent) => {
             switch(e.keyCode) {
                 case KeyCodes.UP:
                     this.editorStore.Dispatch({type: EditorActions.NUDGE, data: {nudge: {x: 0, y: 1}}});
@@ -58,14 +58,12 @@ export class DungeonEditor extends EditorComponent
                     this.levelDataStore.Dispatch({type: LevelDataActions.REFRESH});
                     break;
                 case KeyCodes.S:
-                    FileUtils.SaveTextFile("_dungeonLevel.txt", this.levelDataStore.Serialize());
+                    FileUtils.SaveTextFile("dungeonLevel.txt", this.levelDataStore.SerializeJSON());
                     break;
                 case KeyCodes.L:
-                    FileUtils.ShowOpenFileDialog().then((fileList: FileList) =>
-                    {
-                        FileUtils.LoadTextFile(fileList[ 0 ]).then((text: string) =>
-                        {
-                            this.levelDataStore.Load(text);
+                    FileUtils.ShowOpenFileDialog().then((fileList: FileList) => {
+                        FileUtils.LoadTextFile(fileList[ 0 ]).then((text: string) => {
+                            this.levelDataStore.LoadJSON(text);
                         });
                     });
                     break;
@@ -77,12 +75,26 @@ export class DungeonEditor extends EditorComponent
                         }
                     }
                     break;
+                case KeyCodes.ONE:
+                case KeyCodes.TWO:
+                case KeyCodes.THREE:
+                case KeyCodes.FOUR:
+                case KeyCodes.FIVE:
+                case KeyCodes.SIX:
+                case KeyCodes.SEVEN:
+                case KeyCodes.EIGHT:
+                case KeyCodes.NINE:
+                    {
+                        let w = this.editorStore.state.gridBounds.width / this.editorStore.state.scaledTileSize;
+                        let h = this.editorStore.state.gridBounds.height / this.editorStore.state.scaledTileSize;
+                        this.levelDataStore.Load(GenerateMap(e.keyCode - KeyCodes.ONE, w, h));
+                        break;
+                    }
             }
         }
 
         //mouse wheel zooming
-        this.game.view.onwheel = (e: WheelEvent) =>
-        {
+        this.game.view.onwheel = (e: WheelEvent) => {
             if(this.editorStore.state.gridBounds.contains(e.offsetX, e.offsetY)) {
                 if(e.deltaY < 0) {
                     this.editorStore.Dispatch({type: EditorActions.ZOOM_IN});

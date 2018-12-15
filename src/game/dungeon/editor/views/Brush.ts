@@ -3,20 +3,17 @@ import {TileSize, AnimationSpeed, BrushSnap} from "../Constants";
 import {IState, EditorActions, MouseButtonState} from "../stores/EditorStore";
 import {LevelDataActions} from "../stores/LevelDataStore";
 
-export class BrushTool extends EditorComponent
-{
+export class BrushTool extends EditorComponent {
     private brush: PIXI.Sprite | PIXI.extras.AnimatedSprite;
 
-    constructor()
-    {
+    constructor() {
         super();
 
         this.AddToStage();
 
         this.editorStore.Subscribe(this.Render, this);
 
-        this.game.interactionManager.on("mousemove", (e: PIXI.interaction.InteractionEvent) =>
-        {
+        this.game.interactionManager.on("mousemove", (e: PIXI.interaction.InteractionEvent) => {
             let currentBrush = this.editorStore.state.currentBrush;
             if(currentBrush) {
                 let pos = e.data.global.clone();
@@ -34,29 +31,30 @@ export class BrushTool extends EditorComponent
             }
         });
 
-        this.game.interactionManager.on("mousedown", (e: PIXI.interaction.InteractionEvent) =>
-        {
+        this.game.interactionManager.on("mousedown", (e: PIXI.interaction.InteractionEvent) => {
             this.editorStore.Dispatch({type: EditorActions.BRUSH_MOUSE_DOWN, data: {mouseButtonState: MouseButtonState.LEFT_DOWN}});
         });
 
-        this.game.interactionManager.on("mouseup", (e: PIXI.interaction.InteractionEvent) =>
-        {
+        this.game.interactionManager.on("mouseup", (e: PIXI.interaction.InteractionEvent) => {
+            this.editorStore.Dispatch({type: EditorActions.BRUSH_MOUSE_DOWN, data: {mouseButtonState: MouseButtonState.UP}});
+        });
+        this.game.interactionManager.on("mouseupoutside", (e: PIXI.interaction.InteractionEvent) => {
             this.editorStore.Dispatch({type: EditorActions.BRUSH_MOUSE_DOWN, data: {mouseButtonState: MouseButtonState.UP}});
         });
 
-        this.game.interactionManager.on("rightdown", (e: PIXI.interaction.InteractionEvent) =>
-        {
+        this.game.interactionManager.on("rightdown", (e: PIXI.interaction.InteractionEvent) => {
             this.editorStore.Dispatch({type: EditorActions.BRUSH_MOUSE_DOWN, data: {mouseButtonState: MouseButtonState.RIGHT_DOWN}});
         });
 
-        this.game.interactionManager.on("rightup", (e: PIXI.interaction.InteractionEvent) =>
-        {
+        this.game.interactionManager.on("rightup", (e: PIXI.interaction.InteractionEvent) => {
+            this.editorStore.Dispatch({type: EditorActions.BRUSH_MOUSE_DOWN, data: {mouseButtonState: MouseButtonState.UP}});
+        });
+        this.game.interactionManager.on("rightupoutside", (e: PIXI.interaction.InteractionEvent) => {
             this.editorStore.Dispatch({type: EditorActions.BRUSH_MOUSE_DOWN, data: {mouseButtonState: MouseButtonState.UP}});
         });
     }
 
-    private Render(prevState: IState, state: IState): void
-    {
+    private Render(prevState: IState, state: IState): void {
         //update brush
         if(prevState.currentBrush.name != state.currentBrush.name) {
             if(this.brush) {

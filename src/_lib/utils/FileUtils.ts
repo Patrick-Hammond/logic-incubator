@@ -1,7 +1,5 @@
-export default class FileUtils
-{
-    static ImageSequenceIndex(url: string): number
-    {
+export default class FileUtils {
+    static ImageSequenceIndex(url: string): number {
         let filename = FileUtils.RemoveExtension(url);
         let result = filename.match(/[0-9]+\b/);
         if(result) {
@@ -11,8 +9,7 @@ export default class FileUtils
         return -1;
     }
 
-    static GetNextInImageSequence(url: string): string
-    {
+    static GetNextInImageSequence(url: string): string {
         let filename = FileUtils.RemoveExtension(url);
         let result = filename.match(/[0-9]+\b/);
         if(result) {
@@ -23,31 +20,25 @@ export default class FileUtils
         return null;
     }
 
-    static GetExtension(url: string): string
-    {
+    static GetExtension(url: string): string {
         let result = url.match(/(\.\w+$)/igm);
         return result.length ? result[ 0 ] : "";
     }
 
-    static RemoveExtension(url: string): string
-    {
+    static RemoveExtension(url: string): string {
         return url.replace(/\.[^/.]+$/, "");
     }
 
-    static FileAPISupported(): boolean
-    {
+    static FileAPISupported(): boolean {
         return [ "File", "FileReader", "FileList", "Blob" ].some(prop => window[ prop ] != null);
     }
 
-    static ShowOpenFileDialog(): Promise<FileList>
-    {
-        return new Promise((resolve, reject) =>
-        {
+    static ShowOpenFileDialog(): Promise<FileList> {
+        return new Promise((resolve, reject) => {
             if(FileUtils.FileAPISupported()) {
                 let input = document.createElement("input");
                 input.type = "file";
-                input.addEventListener("change", (e) =>
-                {
+                input.addEventListener("change", (e) => {
                     if(input.files.length) {
                         resolve(input.files);
                     }
@@ -63,8 +54,7 @@ export default class FileUtils
         });
     }
 
-    static SaveTextFile(fileName: string, output: string): boolean
-    {
+    static SaveTextFile(fileName: string, output: string): boolean {
         if(FileUtils.FileAPISupported()) {
             let file = new File([ output ], fileName, {type: "application/octet-stream"});
             let blobUrl = URL.createObjectURL(file);
@@ -78,10 +68,8 @@ export default class FileUtils
         }
     }
 
-    static LoadTextFile(file: File): Promise<string>
-    {
-        return new Promise((resolve, reject) =>
-        {
+    static LoadTextFile(file: File): Promise<string> {
+        return new Promise((resolve, reject) => {
             if(FileUtils.FileAPISupported()) {
                 let reader = new FileReader();
                 reader.onload = event => resolve(reader.result as string);

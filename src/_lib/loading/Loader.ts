@@ -1,19 +1,16 @@
 import FileUtils from "../utils/FileUtils";
 import AssetFactory from "./AssetFactory";
 
-export default class Loader
-{
+export default class Loader {
     private static _inst: Loader;
-    public static get inst(): Loader
-    {
-        if (!Loader._inst) Loader._inst = new Loader();
+    public static get inst(): Loader {
+        if(!Loader._inst) Loader._inst = new Loader();
         return Loader._inst;
     }
 
     private loader: PIXI.loaders.Loader;
 
-    constructor()
-    {
+    constructor() {
         this.loader = new PIXI.loaders.Loader();
     }
 
@@ -27,24 +24,22 @@ export default class Loader
      * @param {()=>void} complete
      * @memberof Loader
      */
-    public LoadSpriteSheet(url: string, nameRegEx: RegExp, complete: () => void): void
-    {
-        this.loader.use((resource: PIXI.loaders.Resource, next: () => void) =>
-        {
-            if (resource.data && resource.data.frames) {
+    public LoadSpriteSheet(url: string, nameRegEx: RegExp, complete: () => void): void {
+        this.loader.use((resource: PIXI.loaders.Resource, next: () => void) => {
+            if(resource.data && resource.data.frames) {
                 let frames = resource.data.frames;
-                for (let frame in frames) {
-                    if (frames.hasOwnProperty(frame)) {
+                for(let frame in frames) {
+                    if(frames.hasOwnProperty(frame)) {
                         let nameResult = nameRegEx.exec(frame);
-                        if (nameResult) {
+                        if(nameResult) {
                             //animation
                             let name = nameResult[ 0 ];
                             let seqIndex = FileUtils.ImageSequenceIndex(frame);
 
-                            if (seqIndex == 0) {
+                            if(seqIndex == 0) {
                                 let nextFrame = frame;
                                 let animFrames: string[] = [];
-                                while (frames[ nextFrame ]) {
+                                while(frames[ nextFrame ]) {
                                     animFrames.push(nextFrame);
                                     nextFrame = FileUtils.GetNextInImageSequence(nextFrame);
                                 }

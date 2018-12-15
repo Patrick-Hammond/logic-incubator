@@ -1,7 +1,5 @@
-export class ScrollingContainer extends PIXI.Container
-{
-    constructor(bounds: PIXI.Rectangle, borderWidth: number = 0)
-    {
+export class ScrollingContainer extends PIXI.Container {
+    constructor(bounds: PIXI.Rectangle, borderWidth: number = 0) {
         super();
 
         this.position.set(bounds.x, bounds.y);
@@ -17,13 +15,11 @@ export class ScrollingContainer extends PIXI.Container
             this.addChild(border);
         }
 
-        document.onwheel = (e: WheelEvent) =>
-        {
+        document.onwheel = (e: WheelEvent) => {
             if(mask.getBounds().contains(e.offsetX, e.offsetY)) {
                 let topChildY = Number.MAX_VALUE;
                 let bottomChildY = 0;
-                this.children.forEach(child =>
-                {
+                this.children.forEach(child => {
                     if(child.name != "mask" && child.name != "border") {
                         topChildY = Math.min(topChildY, child.y);
                         bottomChildY = Math.max(topChildY, child.y);
@@ -34,8 +30,7 @@ export class ScrollingContainer extends PIXI.Container
                 const canScrollDown = bottomChildY > bounds.height * 0.5;
                 const canScroll = (e.deltaY < 0 && canScrollUp) || (e.deltaY > 0 && canScrollDown);
                 if(canScroll) {
-                    this.children.forEach(child =>
-                    {
+                    this.children.forEach(child => {
                         if(child.name != "mask" && child.name != "border") {
                             child.y -= e.deltaY;
                         }

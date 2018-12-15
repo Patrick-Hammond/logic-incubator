@@ -57,5 +57,7 @@
     "webpack": "^2.4.1",
     "webpack-dev-server": "^2.4.4"
   },
-  "dependencies": {}
+  "dependencies": {
+    "rot-js": "^2.0.2"
+  }
 }

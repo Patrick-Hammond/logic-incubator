@@ -1,12 +1,10 @@
-import { RendererOptions, Application, interaction } from "pixi.js";
+import {RendererOptions, Application, interaction} from "pixi.js";
 
-export default class Game extends Application
-{
+export default class Game extends Application {
     public static inst: Game;
 
-    constructor(private width = 1280, private height = 720, rendererOptions?: RendererOptions)
-    {
-        super(width, height, rendererOptions || { backgroundColor: 0x111111, autoStart: true }, false, true, true);
+    constructor(private width = 1280, private height = 720, rendererOptions?: RendererOptions) {
+        super(width, height, rendererOptions || {backgroundColor: 0x111111, autoStart: true}, false, true, true);
 
         Game.inst = this;
 
@@ -16,13 +14,11 @@ export default class Game extends Application
         //this.Resize();
     }
 
-    public get interactionManager(): interaction.InteractionManager
-    {
+    public get interactionManager(): interaction.InteractionManager {
         return this.renderer.plugins.interaction;
     }
 
-    private Resize(): void
-    {
+    private Resize(): void {
         let clientWidth = this.view.clientWidth | 0;
         let clientHeight = this.view.clientHeight | 0;
 

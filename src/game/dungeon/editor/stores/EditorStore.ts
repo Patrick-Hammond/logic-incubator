@@ -3,8 +3,7 @@ import Game from "../../../../_lib/Game";
 import {TileSize} from "../Constants";
 import {Point, Brush} from "../Types";
 
-export const enum EditorActions
-{
+export const enum EditorActions {
     BRUSH_MOVED, BRUSH_MOUSE_DOWN, ROTATE_BRUSH,
     BRUSH_CHANGED, BRUSH_HOVERED,
     NUDGE,
@@ -12,8 +11,7 @@ export const enum EditorActions
     REFRESH
 };
 
-export const enum MouseButtonState
-{
+export const enum MouseButtonState {
     LEFT_DOWN, RIGHT_DOWN, UP
 }
 
@@ -25,15 +23,13 @@ type ActionData = {
     nudge?: Point
 };
 
-interface ILayoutState
-{
+interface ILayoutState {
     scale: number;
     gridBounds: PIXI.Rectangle;
     scaledTileSize: number;
 }
 
-export interface IState extends ILayoutState
-{
+export interface IState extends ILayoutState {
     mouseButtonState: MouseButtonState;
     currentBrush: Brush;
     hoveredBrushName: string,
@@ -41,8 +37,7 @@ export interface IState extends ILayoutState
 
 export default class EditorStore extends Store<IState, ActionData>
 {
-    protected DefaultState(): IState
-    {
+    protected DefaultState(): IState {
         return {
             mouseButtonState: MouseButtonState.UP,
             currentBrush: {name: "", position: {x: 0, y: 0}, pixelOffset: {x: 0, y: 0}, rotation: 0},
@@ -53,8 +48,7 @@ export default class EditorStore extends Store<IState, ActionData>
         };
     }
 
-    protected Reduce(state: IState, action: IAction<ActionData>): IState
-    {
+    protected Reduce(state: IState, action: IAction<ActionData>): IState {
         let newState = {
             mouseButtonState: this.UpdateMouseButton(state.mouseButtonState, action),
             currentBrush: this.UpdateBrush(state.currentBrush, action),
@@ -64,8 +58,7 @@ export default class EditorStore extends Store<IState, ActionData>
         return newState as IState;
     }
 
-    private UpdateMouseButton(mouseButtonDown: MouseButtonState, action: IAction<ActionData>): MouseButtonState
-    {
+    private UpdateMouseButton(mouseButtonDown: MouseButtonState, action: IAction<ActionData>): MouseButtonState {
         switch(action.type) {
             case EditorActions.BRUSH_MOUSE_DOWN:
                 return action.data.mouseButtonState;
@@ -74,8 +67,7 @@ export default class EditorStore extends Store<IState, ActionData>
         }
     }
 
-    private UpdateBrush(currentBrush: Brush, action: IAction<ActionData>): Brush
-    {
+    private UpdateBrush(currentBrush: Brush, action: IAction<ActionData>): Brush {
         switch(action.type) {
             case EditorActions.BRUSH_MOVED:
                 {
@@ -112,8 +104,7 @@ export default class EditorStore extends Store<IState, ActionData>
         }
     }
 
-    private UpdateHoveredBrushName(hoveredBrushName: string, action: IAction<ActionData>): string
-    {
+    private UpdateHoveredBrushName(hoveredBrushName: string, action: IAction<ActionData>): string {
         switch(action.type) {
             case EditorActions.BRUSH_HOVERED:
                 return action.data.name;
@@ -122,10 +113,8 @@ export default class EditorStore extends Store<IState, ActionData>
         }
     }
 
-    private UpdateLayout(state: ILayoutState, action: IAction<{}>): ILayoutState
-    {
-        const calc = (scale: number): ILayoutState =>
-        {
+    private UpdateLayout(state: ILayoutState, action: IAction<{}>): ILayoutState {
+        const calc = (scale: number): ILayoutState => {
             let gridBounds = new PIXI.Rectangle(20, 20, Game.inst.screen.width - 300, Game.inst.screen.height - 40);
             return {
                 scale: scale,
