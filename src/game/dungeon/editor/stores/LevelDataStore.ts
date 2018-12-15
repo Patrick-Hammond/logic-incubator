@@ -1,12 +1,13 @@
 import Store, {IAction} from "../../../../_lib/Store";
-import {Brush} from "../Types";
+import {Brush, Point} from "../Types";
+import {AddPoints} from "../../../../_lib/utils/GeometryUtils";
 
 export const enum LevelDataActions {
     PAINT, ERASE, REFRESH, RESET
 };
 
 type LevelData = Brush[];
-type ActionData = Brush;
+type ActionData = {brush?: Brush, viewOffset?: Point};
 
 export interface ILevelDataState {
     levelData: LevelData;
@@ -31,7 +32,9 @@ export default class LevelDataStore extends Store<ILevelDataState, ActionData>
                 let levelDataCopy = levelData.concat();
 
                 //remove identical items at this position
-                let brush = action.data;
+                let brush = {...action.data.brush};
+                brush.position = AddPoints(brush.position, action.data.viewOffset);
+
                 let existing = levelDataCopy.filter(v =>
                     (v.position.x == brush.position.x && v.position.y == brush.position.y && v.name == brush.name)
                 );
@@ -41,7 +44,8 @@ export default class LevelDataStore extends Store<ILevelDataState, ActionData>
             }
             case LevelDataActions.ERASE: {
                 let levelDataCopy = levelData.concat();
-                let brush = action.data;
+                let brush = {...action.data.brush};
+                brush.position = AddPoints(brush.position, action.data.viewOffset);
 
                 //remove last item in the same location
                 for(let i = levelDataCopy.length - 1; i >= 0; i--) {

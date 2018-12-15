@@ -1,5 +1,5 @@
 import EditorComponent from "../EditorComponent";
-import {TileSize, AnimationSpeed, BrushSnap} from "../Constants";
+import {TileSize, AnimationSpeed, GridBounds} from "../Constants";
 import {IState, EditorActions, MouseButtonState} from "../stores/EditorStore";
 import {LevelDataActions} from "../stores/LevelDataStore";
 
@@ -17,16 +17,20 @@ export class BrushTool extends EditorComponent {
             let currentBrush = this.editorStore.state.currentBrush;
             if(currentBrush) {
                 let pos = e.data.global.clone();
-
+                let scaledTileSize = TileSize * this.editorStore.state.scale;
                 //snap
-                let tileSize = (TileSize * this.editorStore.state.scale) / BrushSnap;
-                if(!e.data.originalEvent.ctrlKey) {
-                    pos.x = ((pos.x - this.editorStore.state.gridBounds.x) / tileSize) | 0;
-                    pos.y = ((pos.y - this.editorStore.state.gridBounds.y) / tileSize) | 0;
-                }
+                pos.x = ((pos.x - GridBounds.x) / scaledTileSize) | 0;
+                pos.y = ((pos.y - GridBounds.y) / scaledTileSize) | 0;
 
                 if(currentBrush.position.x != pos.x || currentBrush.position.y != pos.y) {
+
                     this.editorStore.Dispatch({type: EditorActions.BRUSH_MOVED, data: {position: pos}});
+
+                    let spaceDragging = this.editorStore.state.spaceKeyDown && this.editorStore.state.mouseButtonState == MouseButtonState.LEFT_DOWN;
+                    if(spaceDragging) {
+                        this.editorStore.Dispatch({type: EditorActions.SPACE_DRAG, data: {move: currentBrush.position}});
+                        this.levelDataStore.Dispatch({type: LevelDataActions.REFRESH});
+                    }
                 }
             }
         });
@@ -76,19 +80,19 @@ export class BrushTool extends EditorComponent {
         let pos = state.currentBrush.position;
         if(this.brush && (prevState.currentBrush.position.x != pos.x || prevState.currentBrush.position.y != pos.y)) {
 
-            let tileSize = (TileSize * this.editorStore.state.scale) / BrushSnap;
+            let scaledTileSize = TileSize * this.editorStore.state.scale;
 
-            this.brush.position.set(pos.x * tileSize + state.gridBounds.x, pos.y * tileSize + state.gridBounds.y);
+            this.brush.position.set(pos.x * scaledTileSize + GridBounds.x, pos.y * scaledTileSize + GridBounds.y);
 
             //check still on grid
-            if(state.gridBounds.contains(this.brush.position.x, this.brush.position.y)) {
+            if(GridBounds.contains(this.brush.position.x, this.brush.position.y)) {
                 //drag to paint
-                if(state.mouseButtonState == MouseButtonState.LEFT_DOWN) {
-                    this.levelDataStore.Dispatch({type: LevelDataActions.PAINT, data: state.currentBrush, canUndo: true});
+                if(state.mouseButtonState == MouseButtonState.LEFT_DOWN && !state.spaceKeyDown) {
+                    this.levelDataStore.Dispatch({type: LevelDataActions.PAINT, data: {brush: state.currentBrush, viewOffset: state.viewOffset}, canUndo: true});
                 }
                 //delete with right button
                 if(state.mouseButtonState == MouseButtonState.RIGHT_DOWN) {
-                    this.levelDataStore.Dispatch({type: LevelDataActions.ERASE, data: state.currentBrush, canUndo: true});
+                    this.levelDataStore.Dispatch({type: LevelDataActions.ERASE, data: {brush: state.currentBrush, viewOffset: state.viewOffset}, canUndo: true});
                 }
             }
         }

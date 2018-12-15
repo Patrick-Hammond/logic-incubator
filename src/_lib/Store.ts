@@ -6,10 +6,10 @@ export interface IAction<U> {
 
 export default abstract class Store<T extends object, U>
 {
-    protected _state: T = {} as T;
-    protected _prevState: T;
-    protected _undoStates: T[] = [];
-    protected subscribers: ((prevState: T, state: T) => void)[] = [];
+    private _state: T = {} as T;
+    private _prevState: T;
+    private _undoStates: T[] = [];
+    private subscribers: ((prevState: T, state: T) => void)[] = [];
 
     constructor(private maxUndo: number = 0) {
         this._state = this.Reduce(this._state, {type: null, data: null});

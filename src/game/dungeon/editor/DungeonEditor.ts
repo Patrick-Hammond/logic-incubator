@@ -5,7 +5,7 @@ import {BrushTool} from "./views/Brush";
 import {Canvas} from "./views/Canvas";
 import {EditorActions} from "./stores/EditorStore";
 import {LevelDataActions} from "./stores/LevelDataStore";
-import {AssetPath, KeyCodes} from "./Constants";
+import {AssetPath, KeyCodes, GridBounds, TileSize} from "./Constants";
 import FileUtils from "../../../_lib/utils/FileUtils";
 import {ShowHelp} from "./ui/Help";
 import {GenerateMap} from "./Generators";
@@ -41,6 +41,9 @@ export class DungeonEditor extends EditorComponent {
                 case KeyCodes.RIGHT:
                     this.editorStore.Dispatch({type: EditorActions.NUDGE, data: {nudge: {x: -1, y: 0}}});
                     break;
+                case KeyCodes.SPACE:
+                    this.editorStore.Dispatch({type: EditorActions.SPACE_KEY_DOWN});
+                    break;
                 case KeyCodes.R:
                     this.editorStore.Dispatch({type: EditorActions.ROTATE_BRUSH});
                     break;
@@ -71,6 +74,7 @@ export class DungeonEditor extends EditorComponent {
                     if(e.ctrlKey) {
                         let ok = confirm("This will delete the current map. Are you sure?");
                         if(ok) {
+                            this.editorStore.Dispatch({type: EditorActions.RESET, data: {persistZoom: false}});
                             this.levelDataStore.Dispatch({type: LevelDataActions.RESET});
                         }
                     }
@@ -85,17 +89,30 @@ export class DungeonEditor extends EditorComponent {
                 case KeyCodes.EIGHT:
                 case KeyCodes.NINE:
                     {
-                        let w = this.editorStore.state.gridBounds.width / this.editorStore.state.scaledTileSize;
-                        let h = this.editorStore.state.gridBounds.height / this.editorStore.state.scaledTileSize;
-                        this.levelDataStore.Load(GenerateMap(e.keyCode - KeyCodes.ONE, w, h));
+                        let ok = confirm("This will delete the current map. Are you sure?");
+                        if(ok) {
+                            this.editorStore.Dispatch({type: EditorActions.RESET, data: {persistZoom: true}});
+                            this.levelDataStore.Dispatch({type: LevelDataActions.RESET});
+
+                            const scaledTileSize = TileSize * this.editorStore.state.scale;
+                            let w = GridBounds.width / scaledTileSize;
+                            let h = GridBounds.height / scaledTileSize;
+                            this.levelDataStore.Load(GenerateMap(e.keyCode - KeyCodes.ONE, w, h));
+                        }
                         break;
                     }
             }
         }
 
+        document.onkeyup = (e: KeyboardEvent) => {
+            if(e.keyCode == KeyCodes.SPACE) {
+                this.editorStore.Dispatch({type: EditorActions.SPACE_KEY_UP});
+            }
+        }
+
         //mouse wheel zooming
         this.game.view.onwheel = (e: WheelEvent) => {
-            if(this.editorStore.state.gridBounds.contains(e.offsetX, e.offsetY)) {
+            if(GridBounds.contains(e.offsetX, e.offsetY)) {
                 if(e.deltaY < 0) {
                     this.editorStore.Dispatch({type: EditorActions.ZOOM_IN});
                 }

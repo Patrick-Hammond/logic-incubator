@@ -1,14 +1,15 @@
 import Store, {IAction} from "../../../../_lib/Store";
-import Game from "../../../../_lib/Game";
-import {TileSize} from "../Constants";
+import {InitalScale} from "../Constants";
 import {Point, Brush} from "../Types";
+import {SubtractPoints, AddPoints} from "../../../../_lib/utils/GeometryUtils";
 
 export const enum EditorActions {
     BRUSH_MOVED, BRUSH_MOUSE_DOWN, ROTATE_BRUSH,
     BRUSH_CHANGED, BRUSH_HOVERED,
     NUDGE,
     ZOOM_IN, ZOOM_OUT,
-    REFRESH
+    SPACE_KEY_DOWN, SPACE_KEY_UP, SPACE_DRAG,
+    REFRESH, RESET
 };
 
 export const enum MouseButtonState {
@@ -20,19 +21,18 @@ type ActionData = {
     name?: string,
     position?: Point,
     rotation?: number,
-    nudge?: Point
+    nudge?: Point,
+    move?: Point,
+    persistZoom?: boolean
 };
 
-interface ILayoutState {
-    scale: number;
-    gridBounds: PIXI.Rectangle;
-    scaledTileSize: number;
-}
-
-export interface IState extends ILayoutState {
+export interface IState {
     mouseButtonState: MouseButtonState;
+    viewOffset: Point;
+    spaceKeyDown: boolean,
     currentBrush: Brush;
     hoveredBrushName: string,
+    scale: number;
 }
 
 export default class EditorStore extends Store<IState, ActionData>
@@ -40,20 +40,22 @@ export default class EditorStore extends Store<IState, ActionData>
     protected DefaultState(): IState {
         return {
             mouseButtonState: MouseButtonState.UP,
+            viewOffset: {x: 0, y: 0},
+            spaceKeyDown: false,
             currentBrush: {name: "", position: {x: 0, y: 0}, pixelOffset: {x: 0, y: 0}, rotation: 0},
             hoveredBrushName: "",
-            scale: 1.5,
-            gridBounds: new PIXI.Rectangle(),
-            scaledTileSize: 16
+            scale: InitalScale
         };
     }
 
     protected Reduce(state: IState, action: IAction<ActionData>): IState {
         let newState = {
+            viewOffset: this.UpdateViewOffset(state.viewOffset, action),
             mouseButtonState: this.UpdateMouseButton(state.mouseButtonState, action),
+            spaceKeyDown: this.UpdateSpaceKeyDown(state.spaceKeyDown, action),
             currentBrush: this.UpdateBrush(state.currentBrush, action),
             hoveredBrushName: this.UpdateHoveredBrushName(state.hoveredBrushName, action),
-            ...this.UpdateLayout(state, action)
+            scale: this.UpdateScale(state.scale, action)
         };
         return newState as IState;
     }
@@ -64,6 +66,17 @@ export default class EditorStore extends Store<IState, ActionData>
                 return action.data.mouseButtonState;
             default:
                 return mouseButtonDown != null ? mouseButtonDown : this.DefaultState().mouseButtonState;
+        }
+    }
+
+    private UpdateSpaceKeyDown(spaceKeyDown: boolean, action: IAction<ActionData>): boolean {
+        switch(action.type) {
+            case EditorActions.SPACE_KEY_DOWN:
+                return true;
+            case EditorActions.SPACE_KEY_UP:
+                return false;
+            default:
+                return spaceKeyDown != null ? spaceKeyDown : this.DefaultState().spaceKeyDown;
         }
     }
 
@@ -99,6 +112,8 @@ export default class EditorStore extends Store<IState, ActionData>
                         pixelOffset: {x: currentBrush.pixelOffset.x + action.data.nudge.x, y: currentBrush.pixelOffset.y + action.data.nudge.y}
                     };
                 }
+            case EditorActions.RESET:
+                return this.DefaultState().currentBrush;
             default:
                 return currentBrush || this.DefaultState().currentBrush;
         }
@@ -113,23 +128,29 @@ export default class EditorStore extends Store<IState, ActionData>
         }
     }
 
-    private UpdateLayout(state: ILayoutState, action: IAction<{}>): ILayoutState {
-        const calc = (scale: number): ILayoutState => {
-            let gridBounds = new PIXI.Rectangle(20, 20, Game.inst.screen.width - 300, Game.inst.screen.height - 40);
-            return {
-                scale: scale,
-                gridBounds: gridBounds,
-                scaledTileSize: TileSize * scale
-            };
-        }
-
+    private UpdateScale(scale: number, action: IAction<ActionData>): number {
         switch(action.type) {
             case EditorActions.ZOOM_IN:
-                return calc(state.scale + 0.25);
+                return scale + 0.25;
             case EditorActions.ZOOM_OUT:
-                return calc(Math.max(state.scale - 0.25, 0.25));
+                return scale - 0.25;
+            case EditorActions.RESET:
+                if(!action.data.persistZoom) {
+                    return this.DefaultState().scale;
+                }
             default:
-                return state.scale ? calc(state.scale) : calc(this.DefaultState().scale);
+                return scale ? scale : this.DefaultState().scale;
+        }
+    }
+
+    private UpdateViewOffset(offset: Point, action: IAction<ActionData>): Point {
+        switch(action.type) {
+            case EditorActions.SPACE_DRAG:
+                return SubtractPoints(offset, SubtractPoints(this.state.currentBrush.position, action.data.move));
+            case EditorActions.RESET:
+                return this.DefaultState().viewOffset;
+            default:
+                return offset ? offset : this.DefaultState().viewOffset;
         }
     }
 }

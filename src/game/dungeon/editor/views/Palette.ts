@@ -1,6 +1,5 @@
-
 import EditorComponent from "../EditorComponent";
-import {AnimationSpeed, TileSize} from "../Constants";
+import {AnimationSpeed, GridBounds} from "../Constants";
 import {IState, EditorActions} from "../stores/EditorStore";
 import {ScrollingContainer} from "../ui/ScrollingContainer";
 
@@ -26,9 +25,7 @@ export class Palette extends EditorComponent {
     }
 
     private Create(): void {
-        const state = this.editorStore.state;
-
-        let scrollBounds = new PIXI.Rectangle(state.gridBounds.right + 10, state.gridBounds.y, 260, state.gridBounds.height);
+        let scrollBounds = new PIXI.Rectangle(GridBounds.right + 10, GridBounds.y, 260, GridBounds.height);
         this.paletteContainer = new ScrollingContainer(scrollBounds, 1);
         this.root.addChild(this.paletteContainer);
 
