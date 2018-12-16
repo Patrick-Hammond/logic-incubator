@@ -9,6 +9,7 @@ import {AssetPath, KeyCodes, GridBounds, TileSize} from "./Constants";
 import FileUtils from "../../../_lib/utils/FileUtils";
 import {ShowHelp} from "./ui/Help";
 import {GenerateMap} from "./Generators";
+import {Enumerate, Subtract} from "../../../_lib/utils/ObjectUtils";
 
 export class DungeonEditor extends EditorComponent {
     constructor() {
@@ -107,19 +108,6 @@ export class DungeonEditor extends EditorComponent {
         document.onkeyup = (e: KeyboardEvent) => {
             if(e.keyCode == KeyCodes.SPACE) {
                 this.editorStore.Dispatch({type: EditorActions.SPACE_KEY_UP});
-            }
-        }
-
-        //mouse wheel zooming
-        this.game.view.onwheel = (e: WheelEvent) => {
-            if(GridBounds.contains(e.offsetX, e.offsetY)) {
-                if(e.deltaY < 0) {
-                    this.editorStore.Dispatch({type: EditorActions.ZOOM_IN});
-                }
-                else if(e.deltaY > 0) {
-                    this.editorStore.Dispatch({type: EditorActions.ZOOM_OUT});
-                }
-                this.levelDataStore.Dispatch({type: LevelDataActions.REFRESH});
             }
         }
 

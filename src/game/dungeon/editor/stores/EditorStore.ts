@@ -1,13 +1,13 @@
 import Store, {IAction} from "../../../../_lib/Store";
-import {InitalScale} from "../Constants";
+import {InitalScale, GridBounds, TileSize} from "../Constants";
 import {Point, Brush} from "../Types";
-import {SubtractPoints, AddPoints} from "../../../../_lib/utils/GeometryUtils";
+import {Enumerate, Subtract, Multiply, Add} from "../../../../_lib/utils/ObjectUtils";
 
 export const enum EditorActions {
     BRUSH_MOVED, BRUSH_MOUSE_DOWN, ROTATE_BRUSH,
     BRUSH_CHANGED, BRUSH_HOVERED,
     NUDGE,
-    ZOOM_IN, ZOOM_OUT,
+    ZOOM_IN, ZOOM_OUT, VIEW_MOVE,
     SPACE_KEY_DOWN, SPACE_KEY_UP, SPACE_DRAG,
     REFRESH, RESET
 };
@@ -50,12 +50,12 @@ export default class EditorStore extends Store<IState, ActionData>
 
     protected Reduce(state: IState, action: IAction<ActionData>): IState {
         let newState = {
-            viewOffset: this.UpdateViewOffset(state.viewOffset, action),
             mouseButtonState: this.UpdateMouseButton(state.mouseButtonState, action),
             spaceKeyDown: this.UpdateSpaceKeyDown(state.spaceKeyDown, action),
             currentBrush: this.UpdateBrush(state.currentBrush, action),
             hoveredBrushName: this.UpdateHoveredBrushName(state.hoveredBrushName, action),
-            scale: this.UpdateScale(state.scale, action)
+            scale: this.UpdateScale(state.scale, action),
+            viewOffset: this.UpdateViewOffset(state.viewOffset, action)
         };
         return newState as IState;
     }
@@ -131,9 +131,9 @@ export default class EditorStore extends Store<IState, ActionData>
     private UpdateScale(scale: number, action: IAction<ActionData>): number {
         switch(action.type) {
             case EditorActions.ZOOM_IN:
-                return scale + 0.25;
+                return scale * 1.1;
             case EditorActions.ZOOM_OUT:
-                return scale - 0.25;
+                return scale * 0.909;
             case EditorActions.RESET:
                 if(!action.data.persistZoom) {
                     return this.DefaultState().scale;
@@ -146,7 +146,10 @@ export default class EditorStore extends Store<IState, ActionData>
     private UpdateViewOffset(offset: Point, action: IAction<ActionData>): Point {
         switch(action.type) {
             case EditorActions.SPACE_DRAG:
-                return SubtractPoints(offset, SubtractPoints(this.state.currentBrush.position, action.data.move));
+                let delta = Enumerate([ this.state.currentBrush.position, action.data.position ], Subtract);
+                return Enumerate([ offset, delta ], Subtract);
+            case EditorActions.VIEW_MOVE:
+                return Enumerate([ offset, action.data.move ], Add);
             case EditorActions.RESET:
                 return this.DefaultState().viewOffset;
             default:

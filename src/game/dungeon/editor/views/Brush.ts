@@ -28,7 +28,7 @@ export class BrushTool extends EditorComponent {
 
                     let spaceDragging = this.editorStore.state.spaceKeyDown && this.editorStore.state.mouseButtonState == MouseButtonState.LEFT_DOWN;
                     if(spaceDragging) {
-                        this.editorStore.Dispatch({type: EditorActions.SPACE_DRAG, data: {move: currentBrush.position}});
+                        this.editorStore.Dispatch({type: EditorActions.SPACE_DRAG, data: {position: currentBrush.position}});
                         this.levelDataStore.Dispatch({type: LevelDataActions.REFRESH});
                     }
                 }
