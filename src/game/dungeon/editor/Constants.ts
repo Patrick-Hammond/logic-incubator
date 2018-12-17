@@ -8,7 +8,7 @@ export const AssetPath = "http://localhost:4000/dist-include/spritesheet.json";
 export const GridBounds = new PIXI.Rectangle(20, 20, EditorWidth - 300, EditorHeight - 40);
 
 export const enum MapType {
-    DIGGER, ROGUE, UNIFORM, DUNGEON, DIVIDED_MAZE, ELLER_MAZE, ICEY_MAZE, CELLULAR
+    DIGGER, ROGUE, UNIFORM, DIVIDED_MAZE, ELLER_MAZE, ICEY_MAZE, CELLULAR
 }
 
 export const enum KeyCodes {

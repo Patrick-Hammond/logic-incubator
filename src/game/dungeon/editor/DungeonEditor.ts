@@ -87,8 +87,6 @@ export class DungeonEditor extends EditorComponent {
                 case KeyCodes.FIVE:
                 case KeyCodes.SIX:
                 case KeyCodes.SEVEN:
-                case KeyCodes.EIGHT:
-                case KeyCodes.NINE:
                     {
                         let ok = confirm("This will delete the current map. Are you sure?");
                         if(ok) {
