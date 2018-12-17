@@ -42,9 +42,6 @@ export class DungeonEditor extends EditorComponent {
                 case KeyCodes.RIGHT:
                     this.editorStore.Dispatch({type: EditorActions.NUDGE, data: {nudge: {x: -1, y: 0}}});
                     break;
-                case KeyCodes.SPACE:
-                    this.editorStore.Dispatch({type: EditorActions.SPACE_KEY_DOWN});
-                    break;
                 case KeyCodes.R:
                     this.editorStore.Dispatch({type: EditorActions.ROTATE_BRUSH});
                     break;
@@ -100,6 +97,9 @@ export class DungeonEditor extends EditorComponent {
                         }
                         break;
                     }
+                case KeyCodes.SPACE:
+                    this.editorStore.Dispatch({type: EditorActions.SPACE_KEY_DOWN});
+                    break;
             }
         }
 

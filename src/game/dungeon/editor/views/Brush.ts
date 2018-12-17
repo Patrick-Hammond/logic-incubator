@@ -27,8 +27,9 @@ export class BrushTool extends EditorComponent {
                     this.editorStore.Dispatch({type: EditorActions.BRUSH_MOVED, data: {position: pos}});
 
                     let spaceDragging = this.editorStore.state.spaceKeyDown && this.editorStore.state.mouseButtonState == MouseButtonState.LEFT_DOWN;
-                    if(spaceDragging) {
-                        this.editorStore.Dispatch({type: EditorActions.SPACE_DRAG, data: {position: currentBrush.position}});
+                    let middleButtonDragging = this.editorStore.state.mouseButtonState == MouseButtonState.MIDDLE_DOWN;
+                    if(spaceDragging || middleButtonDragging) {
+                        this.editorStore.Dispatch({type: EditorActions.VIEW_DRAG, data: {position: currentBrush.position}});
                         this.levelDataStore.Dispatch({type: LevelDataActions.REFRESH});
                     }
                 }
@@ -36,25 +37,30 @@ export class BrushTool extends EditorComponent {
         });
 
         this.game.interactionManager.on("mousedown", (e: PIXI.interaction.InteractionEvent) => {
-            this.editorStore.Dispatch({type: EditorActions.BRUSH_MOUSE_DOWN, data: {mouseButtonState: MouseButtonState.LEFT_DOWN}});
+            if(e.data.button === 0) {
+                this.editorStore.Dispatch({type: EditorActions.MOUSE_BUTTON_CHANGE, data: {mouseButtonState: MouseButtonState.LEFT_DOWN}});
+            }
+            else if(e.data.button === 1) {
+                this.editorStore.Dispatch({type: EditorActions.MOUSE_BUTTON_CHANGE, data: {mouseButtonState: MouseButtonState.MIDDLE_DOWN}});
+            }
         });
 
         this.game.interactionManager.on("mouseup", (e: PIXI.interaction.InteractionEvent) => {
-            this.editorStore.Dispatch({type: EditorActions.BRUSH_MOUSE_DOWN, data: {mouseButtonState: MouseButtonState.UP}});
+            this.editorStore.Dispatch({type: EditorActions.MOUSE_BUTTON_CHANGE, data: {mouseButtonState: MouseButtonState.UP}});
         });
         this.game.interactionManager.on("mouseupoutside", (e: PIXI.interaction.InteractionEvent) => {
-            this.editorStore.Dispatch({type: EditorActions.BRUSH_MOUSE_DOWN, data: {mouseButtonState: MouseButtonState.UP}});
+            this.editorStore.Dispatch({type: EditorActions.MOUSE_BUTTON_CHANGE, data: {mouseButtonState: MouseButtonState.UP}});
         });
 
         this.game.interactionManager.on("rightdown", (e: PIXI.interaction.InteractionEvent) => {
-            this.editorStore.Dispatch({type: EditorActions.BRUSH_MOUSE_DOWN, data: {mouseButtonState: MouseButtonState.RIGHT_DOWN}});
+            this.editorStore.Dispatch({type: EditorActions.MOUSE_BUTTON_CHANGE, data: {mouseButtonState: MouseButtonState.RIGHT_DOWN}});
         });
 
         this.game.interactionManager.on("rightup", (e: PIXI.interaction.InteractionEvent) => {
-            this.editorStore.Dispatch({type: EditorActions.BRUSH_MOUSE_DOWN, data: {mouseButtonState: MouseButtonState.UP}});
+            this.editorStore.Dispatch({type: EditorActions.MOUSE_BUTTON_CHANGE, data: {mouseButtonState: MouseButtonState.UP}});
         });
         this.game.interactionManager.on("rightupoutside", (e: PIXI.interaction.InteractionEvent) => {
-            this.editorStore.Dispatch({type: EditorActions.BRUSH_MOUSE_DOWN, data: {mouseButtonState: MouseButtonState.UP}});
+            this.editorStore.Dispatch({type: EditorActions.MOUSE_BUTTON_CHANGE, data: {mouseButtonState: MouseButtonState.UP}});
         });
     }
 

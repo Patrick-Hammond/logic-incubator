@@ -71,6 +71,9 @@ export class Canvas extends EditorComponent {
         if(prevState.scale != state.scale) {
             this.RedrawGrid(state.scale);
         }
+        if(prevState.spaceKeyDown != state.spaceKeyDown) {
+            //this.game.interactionManager.setCursorMode(state.spaceKeyDown ? "grab" : "default");
+        }
     }
 
     private UpdateLevel(prevState: ILevelDataState, state: ILevelDataState): void {

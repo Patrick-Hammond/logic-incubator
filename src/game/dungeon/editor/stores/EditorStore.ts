@@ -4,16 +4,18 @@ import {Point, Brush} from "../Types";
 import {Enumerate, Subtract, Multiply, Add} from "../../../../_lib/utils/ObjectUtils";
 
 export const enum EditorActions {
-    BRUSH_MOVED, BRUSH_MOUSE_DOWN, ROTATE_BRUSH,
+    BRUSH_MOVED, ROTATE_BRUSH,
     BRUSH_CHANGED, BRUSH_HOVERED,
     NUDGE,
-    ZOOM_IN, ZOOM_OUT, VIEW_MOVE,
-    SPACE_KEY_DOWN, SPACE_KEY_UP, SPACE_DRAG,
+    ZOOM_IN, ZOOM_OUT,
+    MOUSE_BUTTON_CHANGE,
+    SPACE_KEY_DOWN, SPACE_KEY_UP,
+    VIEW_DRAG, VIEW_MOVE,
     REFRESH, RESET
 };
 
 export const enum MouseButtonState {
-    LEFT_DOWN, RIGHT_DOWN, UP
+    LEFT_DOWN, RIGHT_DOWN, UP, MIDDLE_DOWN
 }
 
 type ActionData = {
@@ -62,7 +64,7 @@ export default class EditorStore extends Store<IState, ActionData>
 
     private UpdateMouseButton(mouseButtonDown: MouseButtonState, action: IAction<ActionData>): MouseButtonState {
         switch(action.type) {
-            case EditorActions.BRUSH_MOUSE_DOWN:
+            case EditorActions.MOUSE_BUTTON_CHANGE:
                 return action.data.mouseButtonState;
             default:
                 return mouseButtonDown != null ? mouseButtonDown : this.DefaultState().mouseButtonState;
@@ -145,7 +147,7 @@ export default class EditorStore extends Store<IState, ActionData>
 
     private UpdateViewOffset(offset: Point, action: IAction<ActionData>): Point {
         switch(action.type) {
-            case EditorActions.SPACE_DRAG:
+            case EditorActions.VIEW_DRAG:
                 let delta = Enumerate([ this.state.currentBrush.position, action.data.position ], Subtract);
                 return Enumerate([ offset, delta ], Subtract);
             case EditorActions.VIEW_MOVE:
