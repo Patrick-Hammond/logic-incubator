@@ -1,7 +1,7 @@
 import Store, {IAction} from "../../../../_lib/Store";
-import {InitalScale, GridBounds, TileSize} from "../Constants";
+import {InitalScale} from "../Constants";
 import {Point, Brush} from "../Types";
-import {Enumerate, Subtract, Multiply, Add} from "../../../../_lib/utils/ObjectUtils";
+import {SubtractTypes, AddTypes} from "../../../../_lib/utils/ObjectUtils";
 
 export const enum EditorActions {
     BRUSH_MOVED, ROTATE_BRUSH,
@@ -148,10 +148,10 @@ export default class EditorStore extends Store<IState, ActionData>
     private UpdateViewOffset(offset: Point, action: IAction<ActionData>): Point {
         switch(action.type) {
             case EditorActions.VIEW_DRAG:
-                let delta = Enumerate([ this.state.currentBrush.position, action.data.position ], Subtract);
-                return Enumerate([ offset, delta ], Subtract);
+                let delta = SubtractTypes(this.state.currentBrush.position, action.data.position);
+                return SubtractTypes(offset, delta);
             case EditorActions.VIEW_MOVE:
-                return Enumerate([ offset, action.data.move ], Add);
+                return AddTypes(offset, action.data.move);
             case EditorActions.RESET:
                 return this.DefaultState().viewOffset;
             default:

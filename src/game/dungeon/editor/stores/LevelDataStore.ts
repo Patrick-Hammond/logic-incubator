@@ -1,6 +1,6 @@
 import Store, {IAction} from "../../../../_lib/Store";
 import {Brush, Point} from "../Types";
-import {Enumerate, Add} from "../../../../_lib/utils/ObjectUtils";
+import {AddTypes} from "../../../../_lib/utils/ObjectUtils";
 
 export const enum LevelDataActions {
     PAINT, ERASE, REFRESH, RESET
@@ -33,7 +33,7 @@ export default class LevelDataStore extends Store<ILevelDataState, ActionData>
 
                 //remove identical items at this position
                 let brush = {...action.data.brush};
-                brush.position = Enumerate([ brush.position, action.data.viewOffset ], Add);
+                brush.position = AddTypes(brush.position, action.data.viewOffset);
 
                 let existing = levelDataCopy.filter(v =>
                     (v.position.x == brush.position.x && v.position.y == brush.position.y && v.name == brush.name)
@@ -45,7 +45,7 @@ export default class LevelDataStore extends Store<ILevelDataState, ActionData>
             case LevelDataActions.ERASE: {
                 let levelDataCopy = levelData.concat();
                 let brush = {...action.data.brush};
-                brush.position = Enumerate([ brush.position, action.data.viewOffset ], Add);
+                brush.position = AddTypes(brush.position, action.data.viewOffset);
 
                 //remove last item in the same location
                 for(let i = levelDataCopy.length - 1; i >= 0; i--) {

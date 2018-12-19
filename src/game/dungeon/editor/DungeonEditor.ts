@@ -8,8 +8,8 @@ import {LevelDataActions} from "./stores/LevelDataStore";
 import {AssetPath, KeyCodes, GridBounds, TileSize} from "./Constants";
 import FileUtils from "../../../_lib/utils/FileUtils";
 import {ShowHelp} from "./ui/Help";
-import {GenerateMap} from "./Generators";
-import {Enumerate, Subtract} from "../../../_lib/utils/ObjectUtils";
+import {GenerateMap} from "./maps/Generators";
+import {MapStyle, StyleMap} from "./maps/Stylers";
 
 export class DungeonEditor extends EditorComponent {
     constructor() {
@@ -93,7 +93,8 @@ export class DungeonEditor extends EditorComponent {
                             const scaledTileSize = TileSize * this.editorStore.state.scale;
                             let w = GridBounds.width / scaledTileSize;
                             let h = GridBounds.height / scaledTileSize;
-                            this.levelDataStore.Load(GenerateMap(e.keyCode - KeyCodes.ONE, w, h));
+
+                            this.levelDataStore.Load(StyleMap(MapStyle.HEX_72, GenerateMap(e.keyCode - KeyCodes.ONE, w, h)));
                         }
                         break;
                     }

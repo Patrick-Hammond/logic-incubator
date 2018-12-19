@@ -1,7 +1,10 @@
-import {MapType} from "./Constants";
-import {Map, RNG} from "rot-js";
-import {ILevelDataState} from "./stores/LevelDataStore";
-import {Brush} from "./Types";
+import {Map} from "rot-js";
+import {ILevelDataState} from "../stores/LevelDataStore";
+import {Brush} from "../Types";
+
+export const enum MapType {
+    DIGGER, ROGUE, UNIFORM, DIVIDED_MAZE, ELLER_MAZE, ICEY_MAZE, CELLULAR
+}
 
 export function GenerateMap(mapType: MapType, width: number, height: number): ILevelDataState {
 
