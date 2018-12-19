@@ -1,22 +1,29 @@
 import {Map} from "rot-js";
-import {ILevelDataState} from "../stores/LevelDataStore";
 import {Brush} from "../Types";
+import Dungeon from "rot-js/lib/map/dungeon";
 
 export const enum MapType {
     DIGGER, ROGUE, UNIFORM, DIVIDED_MAZE, ELLER_MAZE, ICEY_MAZE, CELLULAR
 }
 
-export function GenerateMap(mapType: MapType, width: number, height: number): ILevelDataState {
+export interface IMap {
+    type:MapType,
+    levelData:Brush[],
+    dungeon:Dungeon
+}
+
+export function GenerateMap(mapType: MapType, width: number, height: number): IMap {
 
     let map: Brush[] = [];
+    let dungeon:Dungeon = null;
 
     width = width | 0;
     height = height | 0;
 
     switch(mapType) {
         case MapType.DIGGER:
-            let digger = new Map.Digger(width, height, {roomHeight: [ 8, 30 ], roomWidth: [ 8, 30 ], dugPercentage: 0.3, timeLimit: 60000});
-            digger.create((x: number, y: number, value: number) => {
+            dungeon = new Map.Digger(width, height, {roomHeight: [ 8, 30 ], roomWidth: [ 8, 30 ], dugPercentage: 0.3, timeLimit: 60000});
+            dungeon.create((x: number, y: number, value: number) => {
                 if(value == 0) {
                     map.push({name: "floor_1", position: {x: x, y: y}, rotation: 0, pixelOffset: {x: 0, y: 0}});
                 }
@@ -29,11 +36,12 @@ export function GenerateMap(mapType: MapType, width: number, height: number): IL
                 if(value == 0) {
                     map.push({name: "floor_1", position: {x: x, y: y}, rotation: 0, pixelOffset: {x: 0, y: 0}});
                 }
+            //todo: rewrite Rogue as a Dungeon subclass
             });
             break;
         case MapType.UNIFORM:
-            let uniform = new Map.Uniform(width, height, {roomHeight: [ 2, 10 ], roomWidth: [ 5, 18 ], roomDugPercentage: 0.3, timeLimit: 60000});
-            uniform.create((x: number, y: number, value: number) => {
+            dungeon = new Map.Uniform(width, height, {roomHeight: [ 2, 10 ], roomWidth: [ 5, 18 ], roomDugPercentage: 0.3, timeLimit: 60000});
+            dungeon.create((x: number, y: number, value: number) => {
                 if(value == 0) {
                     map.push({name: "floor_1", position: {x: x, y: y}, rotation: 0, pixelOffset: {x: 0, y: 0}});
                 }
@@ -76,5 +84,5 @@ export function GenerateMap(mapType: MapType, width: number, height: number): IL
             break;
     }
 
-    return {levelData: map};
+    return {type:mapType, levelData:map, dungeon:dungeon};
 }

@@ -4,12 +4,13 @@ import {Palette} from "./views/Palette";
 import {BrushTool} from "./views/Brush";
 import {Canvas} from "./views/Canvas";
 import {EditorActions} from "./stores/EditorStore";
-import {LevelDataActions} from "./stores/LevelDataStore";
+import {LevelDataActions, ILevelDataState} from "./stores/LevelDataStore";
 import {AssetPath, KeyCodes, GridBounds, TileSize} from "./Constants";
 import FileUtils from "../../../_lib/utils/FileUtils";
 import {ShowHelp} from "./ui/Help";
-import {GenerateMap} from "./maps/Generators";
-import {MapStyle, StyleMap} from "./maps/Stylers";
+import {GenerateMap, IMap, MapType} from "./maps/Generators";
+import {Style0x7} from "./maps/Style0x7";
+import {ApplyMapStyle} from "./maps/Styler";
 
 export class DungeonEditor extends EditorComponent {
     constructor() {
@@ -77,13 +78,13 @@ export class DungeonEditor extends EditorComponent {
                         }
                     }
                     break;
-                case KeyCodes.ONE:
-                case KeyCodes.TWO:
-                case KeyCodes.THREE:
-                case KeyCodes.FOUR:
-                case KeyCodes.FIVE:
-                case KeyCodes.SIX:
-                case KeyCodes.SEVEN:
+                case KeyCodes.ONE:      //digger
+                case KeyCodes.TWO:      //rogue
+                case KeyCodes.THREE:    //uniform
+                case KeyCodes.FOUR:     //divided maze
+                case KeyCodes.FIVE:     //eller maze
+                case KeyCodes.SIX:      //icey maze
+                case KeyCodes.SEVEN:    //cellular
                     {
                         let ok = confirm("This will delete the current map. Are you sure?");
                         if(ok) {
@@ -93,8 +94,12 @@ export class DungeonEditor extends EditorComponent {
                             const scaledTileSize = TileSize * this.editorStore.state.scale;
                             let w = GridBounds.width / scaledTileSize;
                             let h = GridBounds.height / scaledTileSize;
-
-                            this.levelDataStore.Load(StyleMap(MapStyle.HEX_72, GenerateMap(e.keyCode - KeyCodes.ONE, w, h)));
+                            
+                            let mapType:MapType = e.keyCode - KeyCodes.ONE;
+                            let map:IMap = GenerateMap(mapType, w, h);
+                            let styler = new Style0x7();
+                            ApplyMapStyle(map, styler);
+                            this.levelDataStore.Load(map as ILevelDataState);
                         }
                         break;
                     }
