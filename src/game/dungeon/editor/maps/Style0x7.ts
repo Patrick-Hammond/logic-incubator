@@ -3,31 +3,31 @@ import {Brush} from "../Types";
 
 export class Style0x7 implements IStyler
 {
-    TopLeft():Brush[]{
+    TopLeft(x:number, y:number):Brush[]{
         return null;
     }
-    TopRight():Brush[]{
+    TopRight(x:number, y:number):Brush[]{
         return null;
     }
-    BottomLeft():Brush[]{
+    BottomLeft(x:number, y:number):Brush[]{
         return null;
     }
-    BottomRight():Brush[]{
+    BottomRight(x:number, y:number):Brush[]{
         return null;
     }
-    Top():Brush[]{
+    Top(x:number, y:number):Brush[]{
         return null;
     }
-    Bottom():Brush[]{
+    Bottom(x:number, y:number):Brush[]{
         return null;
     }
-    Left():Brush[]{
+    Left(x:number, y:number):Brush[]{
         return null;
     }
-    Right():Brush[]{
+    Right(x:number, y:number):Brush[]{
         return null;
     }
-    Floor():Brush[]{
+    Floor(x:number, y:number):Brush[]{
         return null;
     }
 }

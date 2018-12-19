@@ -2,15 +2,15 @@ import {MapType, IMap} from "./Generators";
 import {Brush, Point} from "../Types";
 
 export interface IStyler {
-    TopLeft():Brush[];
-    TopRight():Brush[];
-    BottomLeft():Brush[];
-    BottomRight():Brush[];
-    Top():Brush[];
-    Bottom():Brush[];
-    Left():Brush[];
-    Right():Brush[];
-    Floor():Brush[];
+    TopLeft(x:number, y:number):Brush[];
+    TopRight(x:number, y:number):Brush[];
+    BottomLeft(x:number, y:number):Brush[];
+    BottomRight(x:number, y:number):Brush[];
+    Top(y:number, width:number):Brush[];
+    Bottom(y:number, width:number):Brush[];
+    Left(x:number, height:number):Brush[];
+    Right(x:number, height:number):Brush[];
+    Floor(x:number, y:number, width:number, height:number):Brush[];
 }
 
 export function ApplyMapStyle(map: IMap, styler:IStyler): IMap {
@@ -36,20 +36,26 @@ function StyleDungeon(map: IMap, styler:IStyler): IMap
 
     map.dungeon._rooms.forEach(room =>
         {
-            
+            let roomRect = new PIXI.Rectangle(room._x1, room._y1, room._x2 - room._x1, room._y2 - room._y1);
+
+            //remove old room
+            result = result.filter(brush => roomRect.contains(brush.position.x, brush.position.y));
 
             //style corners
-            let topLeft = {x:room._x1, y:room._y1};
-            result = [...RemoveTiles(result, topLeft), ...styler.TopLeft()];
-
-            let topRight = {x:room._x2, y:room._y1};
-            result = [...RemoveTiles(result, topRight), ...styler.TopRight()];
+            result.push(
+                ...styler.TopLeft(roomRect.x, roomRect.y),
+                ...styler.TopRight(roomRect.x + roomRect.width, roomRect.y),
+                ...styler.BottomLeft(roomRect.x, roomRect.y + roomRect.height),
+                ...styler.BottomRight(roomRect.x + roomRect.width, roomRect.y),
+                ...styler.Top(roomRect.y, roomRect.width),
+                ...styler.Bottom(roomRect.y, roomRect.width),
+                ...styler.Left(roomRect.x, roomRect.height),
+                ...styler.Right(roomRect.x + roomRect.width, roomRect.height)
+            );
             
-            let bottomLeft = {x:room._x1, y:room._y2};
-            result = [...RemoveTiles(result, bottomLeft), ...styler.BottomLeft()];
-
-            let bottomRight = {x:room._x2, y:room._y2};
-            result = [...RemoveTiles(result, bottomRight), ...styler.BottomRight()];
+            //style the floor
+            //result.push(...styler.Floor());
+           
         });
     return map;
 }
