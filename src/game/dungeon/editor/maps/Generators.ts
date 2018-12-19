@@ -15,8 +15,8 @@ export function GenerateMap(mapType: MapType, width: number, height: number): IL
 
     switch(mapType) {
         case MapType.DIGGER:
-            let arena = new Map.Digger(width, height, {roomHeight: [ 8, 30 ], roomWidth: [ 8, 30 ], dugPercentage: 0.3, timeLimit: 60000});
-            arena.create((x: number, y: number, value: number) => {
+            let digger = new Map.Digger(width, height, {roomHeight: [ 8, 30 ], roomWidth: [ 8, 30 ], dugPercentage: 0.3, timeLimit: 60000});
+            digger.create((x: number, y: number, value: number) => {
                 if(value == 0) {
                     map.push({name: "floor_1", position: {x: x, y: y}, rotation: 0, pixelOffset: {x: 0, y: 0}});
                 }
