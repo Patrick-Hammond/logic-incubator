@@ -1,7 +1,8 @@
 import Store, {IAction} from "../../../../_lib/Store";
 import {InitalScale} from "../Constants";
-import {Point, Brush} from "../Types";
 import {SubtractTypes, AddTypes} from "../../../../_lib/utils/ObjectUtils";
+import {IPoint} from "../../../../_lib/math/Geometry";
+import {Brush} from "./LevelDataStore";
 
 export const enum EditorActions {
     BRUSH_MOVED, ROTATE_BRUSH,
@@ -21,16 +22,16 @@ export const enum MouseButtonState {
 type ActionData = {
     mouseButtonState?: MouseButtonState,
     name?: string,
-    position?: Point,
+    position?: IPoint,
     rotation?: number,
-    nudge?: Point,
-    move?: Point,
+    nudge?: IPoint,
+    move?: IPoint,
     persistZoom?: boolean
 };
 
 export interface IState {
     mouseButtonState: MouseButtonState;
-    viewOffset: Point;
+    viewOffset: IPoint;
     spaceKeyDown: boolean,
     currentBrush: Brush;
     hoveredBrushName: string,
@@ -145,7 +146,7 @@ export default class EditorStore extends Store<IState, ActionData>
         }
     }
 
-    private UpdateViewOffset(offset: Point, action: IAction<ActionData>): Point {
+    private UpdateViewOffset(offset: IPoint, action: IAction<ActionData>): IPoint {
         switch(action.type) {
             case EditorActions.VIEW_DRAG:
                 let delta = SubtractTypes(this.state.currentBrush.position, action.data.position);

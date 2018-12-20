@@ -1,21 +1,21 @@
 import {Map} from "rot-js";
-import {Brush} from "../Types";
 import Dungeon from "rot-js/lib/map/dungeon";
+import {Brush} from "../stores/LevelDataStore";
 
 export const enum MapType {
     DIGGER, ROGUE, UNIFORM, DIVIDED_MAZE, ELLER_MAZE, ICEY_MAZE, CELLULAR
 }
 
 export interface IMap {
-    type:MapType,
-    levelData:Brush[],
-    dungeon:Dungeon
+    type: MapType,
+    levelData: Brush[],
+    dungeon: Dungeon
 }
 
 export function GenerateMap(mapType: MapType, width: number, height: number): IMap {
 
     let map: Brush[] = [];
-    let dungeon:Dungeon = null;
+    let dungeon: Dungeon = null;
 
     width = width | 0;
     height = height | 0;
@@ -36,7 +36,7 @@ export function GenerateMap(mapType: MapType, width: number, height: number): IM
                 if(value == 0) {
                     map.push({name: "floor_1", position: {x: x, y: y}, rotation: 0, pixelOffset: {x: 0, y: 0}});
                 }
-            //todo: rewrite Rogue as a Dungeon subclass
+                //todo: rewrite Rogue as a Dungeon subclass
             });
             break;
         case MapType.UNIFORM:
@@ -84,5 +84,5 @@ export function GenerateMap(mapType: MapType, width: number, height: number): IM
             break;
     }
 
-    return {type:mapType, levelData:map, dungeon:dungeon};
+    return {type: mapType, levelData: map, dungeon: dungeon};
 }

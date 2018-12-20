@@ -94,11 +94,10 @@ export class DungeonEditor extends EditorComponent {
                             const scaledTileSize = TileSize * this.editorStore.state.scale;
                             let w = GridBounds.width / scaledTileSize;
                             let h = GridBounds.height / scaledTileSize;
-                            
-                            let mapType:MapType = e.keyCode - KeyCodes.ONE;
-                            let map:IMap = GenerateMap(mapType, w, h);
-                            let styler = new Style0x7();
-                            ApplyMapStyle(map, styler);
+
+                            let mapType: MapType = e.keyCode - KeyCodes.ONE;
+                            let map: IMap = GenerateMap(mapType, w, h);
+                            map = ApplyMapStyle(map, new Style0x7());
                             this.levelDataStore.Load(map as ILevelDataState);
                         }
                         break;
