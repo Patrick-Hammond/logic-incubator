@@ -1,7 +1,6 @@
 import {IStyler} from "./Styler";
 import {IRectangle} from "../../../../_lib/math/Geometry";
 import {Brush} from "../stores/LevelDataStore";
-import Rect from "rot-js/lib/display/rect";
 
 var defaultBrush: Brush = {name: "", position: {x: 0, y: 0}, pixelOffset: {x: 0, y: 0}, rotation: 0};
 
@@ -9,7 +8,7 @@ export class Style0x7 implements IStyler {
 
     private rect: IRectangle;
 
-    Style(rect: IRectangle): Brush[] {
+    StyleRoom(rect: IRectangle): Brush[] {
 
         this.rect = rect;
 
