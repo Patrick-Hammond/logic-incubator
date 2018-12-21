@@ -5,7 +5,7 @@ import RNG from "rot-js/lib/rng";
 
 var defaultBrush: Brush = {name: "", position: {x: 0, y: 0}, pixelOffset: {x: 0, y: 0}, rotation: 0};
 
-export abstract class BaseStyle implements IStyler{
+export abstract class BaseStyle implements IStyler {
 
     protected rect: IRectangle;
 
@@ -49,11 +49,11 @@ export abstract class BaseStyle implements IStyler{
         });
     }
 
-    protected FillRect(tileNames: string[], rect: IRectangle): Brush[] {
+    protected FillRect(weightedTiles: {[ key: string ]: number}, rect: IRectangle): Brush[] {
         let result: Brush[] = [];
         for(let i = 0; i <= rect.width; i++) {
             for(let j = 0; j <= rect.height; j++) {
-                let name = tileNames[(RNG.getUniform() * tileNames.length) | 0];
+                let name = RNG.getWeightedValue(weightedTiles);
                 result.push({...defaultBrush, name: name, position: {x: rect.x + i, y: rect.y + j}});
             }
         }

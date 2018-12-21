@@ -55,6 +55,7 @@ export class Style0x7 extends BaseStyle {
     }
 
     Floor(): Brush[] {
-        return this.FillRect([ "floor_1", "floor_2", "floor_3" ], {x: this.rect.x, y: this.rect.y + 1, width: this.rect.width, height: this.rect.height - 1});
+        return this.FillRect({"floor_1": 900, "floor_2": 5, "floor_3": 5, "floor_4": 1, "floor_5": 5},
+            {x: this.rect.x, y: this.rect.y + 1, width: this.rect.width, height: this.rect.height - 1});
     }
 }
