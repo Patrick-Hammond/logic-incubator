@@ -14,11 +14,13 @@ export class Style0x7 extends BaseStyle {
     }
 
     BottomLeft(): Brush[] {
-        return this.Fill([ "floor_1", "wall_inner_corner_l_top_left" ], this.rect.x, this.rect.y + this.rect.height);
+        return this.Fill([ "floor_1", "wall_inner_corner_l_top_left", "wall_top_left" ], this.rect.x, this.rect.y + this.rect.height - 1)
+            .concat(this.Fill([ "wall_left" ], this.rect.x, this.rect.y + this.rect.height));
     }
 
     BottomRight(): Brush[] {
-        return this.Fill([ "floor_1", "wall_inner_corner_l_top_rigth" ], this.rect.x + this.rect.width, this.rect.y + this.rect.height);
+        return this.Fill([ "floor_1", "wall_inner_corner_l_top_rigth", "wall_top_right" ], this.rect.x + this.rect.width, this.rect.y + this.rect.height - 1)
+            .concat(this.Fill([ "wall_right" ], this.rect.x + this.rect.width, this.rect.y + this.rect.height));
     }
 
     TopWall(): Brush[] {
@@ -33,14 +35,15 @@ export class Style0x7 extends BaseStyle {
     BottomWall(): Brush[] {
         let result: Brush[] = [];
         for(let w = 1; w < this.rect.width; w++) {
-            result.push(...this.Fill([ "floor_1", "wall_top_left" ], this.rect.x + w, this.rect.y + this.rect.height));
+            result.push(...this.Fill([ "floor_1", "wall_top_mid" ], this.rect.x + w, this.rect.y + this.rect.height - 1));
+            result.push(...this.Fill([ "wall_mid" ], this.rect.x + w, this.rect.y + this.rect.height));
         }
         return result;
     }
 
     LeftWall(): Brush[] {
         let result: Brush[] = [];
-        for(let h = 1; h < this.rect.height; h++) {
+        for(let h = 1; h < this.rect.height - 1; h++) {
             result.push(...this.Fill([ "floor_1", "wall_side_mid_right" ], this.rect.x, this.rect.y + h));
         }
         return result;
@@ -48,7 +51,7 @@ export class Style0x7 extends BaseStyle {
 
     RightWall(): Brush[] {
         let result: Brush[] = [];
-        for(let h = 1; h < this.rect.height; h++) {
+        for(let h = 1; h < this.rect.height - 1; h++) {
             result.push(...this.Fill([ "floor_1", "wall_side_mid_left" ], this.rect.x + this.rect.width, this.rect.y + h));
         }
         return result;
