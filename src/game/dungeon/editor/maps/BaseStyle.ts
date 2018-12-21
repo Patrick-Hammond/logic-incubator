@@ -1,19 +1,27 @@
 import {IStyler} from "./Styler";
-import {IRectangle} from "../../../../_lib/math/Geometry";
+import {IRectangle, IPoint} from "../../../../_lib/math/Geometry";
 import {Brush} from "../stores/LevelDataStore";
-import RNG from "rot-js/lib/rng";
 
 var defaultBrush: Brush = {name: "", position: {x: 0, y: 0}, pixelOffset: {x: 0, y: 0}, rotation: 0};
 
 export abstract class BaseStyle implements IStyler {
 
     protected rect: IRectangle;
+    protected doors: IPoint[];
 
-    StyleRoom(rect: IRectangle): Brush[] {
+    StyleRoom(rect: IRectangle, doors?:{[key:string]:number}): Brush[] {
 
         this.rect = rect;
 
         let result: Brush[] = [];
+
+        this.doors = [];
+        for (const key in doors) {
+            if (doors.hasOwnProperty(key)) {
+                const pos = key.split(",");
+                this.doors.push({x:parseInt(pos[0]), y:parseInt(pos[1])});
+            }
+        }
 
         //floor
         result.push(...this.Floor());
@@ -30,6 +38,9 @@ export abstract class BaseStyle implements IStyler {
         result.push(...this.LeftWall());
         result.push(...this.RightWall());
 
+        //doors
+        result.push(...this.Doors());
+
         return result;
     };
 
@@ -42,6 +53,7 @@ export abstract class BaseStyle implements IStyler {
     abstract LeftWall(): Brush[];
     abstract RightWall(): Brush[];
     abstract Floor(): Brush[];
+    abstract Doors(): Brush[];
 
     protected Fill(tileNames: string[], x: number, y: number): Brush[] {
         return tileNames.map(name => {
@@ -49,12 +61,12 @@ export abstract class BaseStyle implements IStyler {
         });
     }
 
-    protected FillRect(weightedTiles: {[ key: string ]: number}, rect: IRectangle): Brush[] {
+    protected FillRect(rect: IRectangle, cb:(position:IPoint) => string): Brush[] {
         let result: Brush[] = [];
         for(let i = 0; i <= rect.width; i++) {
             for(let j = 0; j <= rect.height; j++) {
-                let name = RNG.getWeightedValue(weightedTiles);
-                result.push({...defaultBrush, name: name, position: {x: rect.x + i, y: rect.y + j}});
+                let position = {x: rect.x + i, y: rect.y + j};
+                result.push({...defaultBrush, name:cb(position), position:position});
             }
         }
         return result;

@@ -4,7 +4,7 @@ import {Brush} from "../stores/LevelDataStore";
 import Dungeon from "rot-js/lib/map/dungeon";
 
 export interface IStyler {
-    StyleRoom(rect: IRectangle): Brush[];
+    StyleRoom(rect: IRectangle, doors?:{[key:string]:number}): Brush[];
 }
 
 export function ApplyMapStyle(map: IMap, styler: IStyler): IMap {
@@ -32,7 +32,7 @@ function StyleDungeon(map: IMap, styler: IStyler): IMap {
         result = result.filter(brush => !roomRect.Contains(brush.position.x, brush.position.y));
 
         //style room
-        result.push(...styler.StyleRoom(roomRect));
+        result.push(...styler.StyleRoom(roomRect, room._doors));
 
     });
     return {...map, levelData: result};

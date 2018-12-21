@@ -29,7 +29,7 @@ export function GenerateMap(mapType: MapType, width: number, height: number): IM
 
     switch(mapType) {
         case MapType.DIGGER:
-            dungeon = new Digger(width, height, {roomHeight: [ 8, 30 ], roomWidth: [ 8, 30 ], dugPercentage: 0.3, timeLimit: 60000});
+            dungeon = new Digger(width, height, {roomHeight: [ 4, 30 ], roomWidth: [ 4, 30 ], dugPercentage: 0.2, timeLimit: 60000, corridorLength:[1, 5]});
             dungeon.create((x: number, y: number, value: number) => {
                 if(value == 0) {
                     map.push({name: "floor_1", position: {x: x, y: y}, rotation: 0, pixelOffset: {x: 0, y: 0}});
