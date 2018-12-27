@@ -1,5 +1,5 @@
 import EditorComponent from "../EditorComponent";
-import {AnimationSpeed, TileSize, GridBounds, InitalScale} from "../Constants";
+import {AnimationSpeed, TileSize, GridBounds, InitalScale, KeyCodes} from "../Constants";
 import {ILevelDataState, LevelDataActions} from "../stores/LevelDataStore";
 import {IState, EditorActions} from "../stores/EditorStore";
 
@@ -28,9 +28,7 @@ export class Canvas extends EditorComponent {
 
         this.grid.interactive = true;
         this.grid.on("mousedown", (e: PIXI.interaction.InteractionEvent) => {
-            if(!this.editorStore.state.spaceKeyDown) {
-                paint(LevelDataActions.PAINT);
-            }
+            if(e.data.button === 0 && this.editorStore.state.keyCode != KeyCodes.SPACE) paint(LevelDataActions.PAINT)
         });
         this.grid.on("rightdown", (e: PIXI.interaction.InteractionEvent) => paint(LevelDataActions.ERASE));
 
@@ -38,7 +36,7 @@ export class Canvas extends EditorComponent {
         this.game.view.onwheel = (e: WheelEvent) => {
             if(GridBounds.contains(e.offsetX, e.offsetY)) {
 
-                let oldScale = this.editorStore.state.scale;
+                let oldScale = this.editorStore.state.viewScale;
 
                 if(e.deltaY < 0) {
                     this.editorStore.Dispatch({type: EditorActions.ZOOM_IN});
@@ -52,7 +50,7 @@ export class Canvas extends EditorComponent {
                 let percentPos = {x: (pos.x - GridBounds.x) / GridBounds.width, y: (pos.y - GridBounds.y) / GridBounds.height};
 
                 let oldScaledTileSize = TileSize * oldScale;
-                let newScaledTileSize = TileSize * this.editorStore.state.scale;
+                let newScaledTileSize = TileSize * this.editorStore.state.viewScale;
 
                 let widthDelta = (GridBounds.width / oldScaledTileSize) * newScaledTileSize - GridBounds.width;
                 let heightDelta = (GridBounds.height / oldScaledTileSize) * newScaledTileSize - GridBounds.height;
@@ -68,10 +66,10 @@ export class Canvas extends EditorComponent {
     }
 
     private UpdateLayout(prevState: IState, state: IState): void {
-        if(prevState.scale != state.scale) {
-            this.RedrawGrid(state.scale);
+        if(prevState.viewScale != state.viewScale) {
+            this.RedrawGrid(state.viewScale);
         }
-        if(prevState.spaceKeyDown != state.spaceKeyDown) {
+        if(state.keyCode == KeyCodes.SPACE) {
             //this.game.interactionManager.setCursorMode(state.spaceKeyDown ? "grab" : "default");
         }
     }
@@ -80,20 +78,23 @@ export class Canvas extends EditorComponent {
         if(prevState.levelData != state.levelData) {
             this.levelContainer.removeChildren();
 
-            const scale = this.editorStore.state.scale;
-            const scaledTileSize = TileSize * scale;
+            const scaledTileSize = TileSize * this.editorStore.state.viewScale;
             const viewOffset = this.editorStore.state.viewOffset;
 
             state.levelData.forEach(brush => {
                 let sprite = this.assetFactory.Create(brush.name);
-                let posX = (brush.position.x - viewOffset.x) * scaledTileSize + GridBounds.x;
-                let posY = (brush.position.y - viewOffset.y) * scaledTileSize + GridBounds.y;
+                let scaleX = brush.scale.x * this.editorStore.state.viewScale;
+                let scaleY = brush.scale.y * this.editorStore.state.viewScale;
+                let flipOffsetX = scaleX < 0 ? sprite.width * this.editorStore.state.viewScale : 0;
+                let flipOffsetY = scaleY < 0 ? sprite.height * this.editorStore.state.viewScale : 0;
+                let posX = (brush.position.x - viewOffset.x) * scaledTileSize + GridBounds.x + flipOffsetX;
+                let posY = (brush.position.y - viewOffset.y) * scaledTileSize + GridBounds.y + flipOffsetY;
 
                 if(GridBounds.contains(posX, posY)) {
                     sprite.position.set(posX, posY);
                     sprite.rotation = brush.rotation;
                     sprite.pivot.set(brush.pixelOffset.x, brush.pixelOffset.y);
-                    sprite.scale.set(scale);
+                    sprite.scale.set(scaleX, scaleY);
                     if(sprite instanceof PIXI.extras.AnimatedSprite) {
                         sprite.play();
                         sprite.animationSpeed = AnimationSpeed;

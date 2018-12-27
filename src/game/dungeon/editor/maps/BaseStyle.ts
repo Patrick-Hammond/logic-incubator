@@ -2,24 +2,24 @@ import {IStyler} from "./Styler";
 import {IRectangle, IPoint} from "../../../../_lib/math/Geometry";
 import {Brush} from "../stores/LevelDataStore";
 
-var defaultBrush: Brush = {name: "", position: {x: 0, y: 0}, pixelOffset: {x: 0, y: 0}, rotation: 0};
+var defaultBrush: Brush = {name: "", position: {x: 0, y: 0}, pixelOffset: {x: 0, y: 0}, rotation: 0, scale: {x: 1, y: 1}};
 
 export abstract class BaseStyle implements IStyler {
 
     protected rect: IRectangle;
     protected doors: IPoint[];
 
-    StyleRoom(rect: IRectangle, doors?:{[key:string]:number}): Brush[] {
+    StyleRoom(rect: IRectangle, doors?: {[ key: string ]: number}): Brush[] {
 
         this.rect = rect;
 
         let result: Brush[] = [];
 
         this.doors = [];
-        for (const key in doors) {
-            if (doors.hasOwnProperty(key)) {
+        for(const key in doors) {
+            if(doors.hasOwnProperty(key)) {
                 const pos = key.split(",");
-                this.doors.push({x:parseInt(pos[0]), y:parseInt(pos[1])});
+                this.doors.push({x: parseInt(pos[ 0 ]), y: parseInt(pos[ 1 ])});
             }
         }
 
@@ -61,12 +61,12 @@ export abstract class BaseStyle implements IStyler {
         });
     }
 
-    protected FillRect(rect: IRectangle, cb:(position:IPoint) => string): Brush[] {
+    protected FillRect(rect: IRectangle, cb: (position: IPoint) => string): Brush[] {
         let result: Brush[] = [];
         for(let i = 0; i <= rect.width; i++) {
             for(let j = 0; j <= rect.height; j++) {
                 let position = {x: rect.x + i, y: rect.y + j};
-                result.push({...defaultBrush, name:cb(position), position:position});
+                result.push({...defaultBrush, name: cb(position), position: position});
             }
         }
         return result;

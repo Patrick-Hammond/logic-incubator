@@ -1,16 +1,16 @@
 import Store, {IAction} from "../../../../_lib/Store";
 import {InitalScale} from "../Constants";
-import {SubtractTypes, AddTypes} from "../../../../_lib/utils/ObjectUtils";
+import {SubtractTypes, AddTypes} from "../../../../_lib/utils/EnumerateTypes";
 import {IPoint} from "../../../../_lib/math/Geometry";
 import {Brush} from "./LevelDataStore";
 
 export const enum EditorActions {
-    BRUSH_MOVED, ROTATE_BRUSH,
+    BRUSH_MOVED, ROTATE_BRUSH, FLIP_BRUSH_H, FLIP_BRUSH_V,
     BRUSH_CHANGED, BRUSH_HOVERED,
     NUDGE,
     ZOOM_IN, ZOOM_OUT,
     MOUSE_BUTTON_CHANGE,
-    SPACE_KEY_DOWN, SPACE_KEY_UP,
+    KEY_DOWN, KEY_UP,
     VIEW_DRAG, VIEW_MOVE,
     REFRESH, RESET
 };
@@ -21,21 +21,23 @@ export const enum MouseButtonState {
 
 type ActionData = {
     mouseButtonState?: MouseButtonState,
+    keyCode?: number,
     name?: string,
     position?: IPoint,
     rotation?: number,
     nudge?: IPoint,
     move?: IPoint,
+    scale?: IPoint,
     persistZoom?: boolean
 };
 
 export interface IState {
     mouseButtonState: MouseButtonState;
     viewOffset: IPoint;
-    spaceKeyDown: boolean,
+    keyCode: number,
     currentBrush: Brush;
     hoveredBrushName: string,
-    scale: number;
+    viewScale: number;
 }
 
 export default class EditorStore extends Store<IState, ActionData>
@@ -44,20 +46,20 @@ export default class EditorStore extends Store<IState, ActionData>
         return {
             mouseButtonState: MouseButtonState.UP,
             viewOffset: {x: 0, y: 0},
-            spaceKeyDown: false,
-            currentBrush: {name: "", position: {x: 0, y: 0}, pixelOffset: {x: 0, y: 0}, rotation: 0},
+            keyCode: null,
+            currentBrush: {name: "", position: {x: 0, y: 0}, pixelOffset: {x: 0, y: 0}, rotation: 0, scale: {x: 1, y: 1}},
             hoveredBrushName: "",
-            scale: InitalScale
+            viewScale: InitalScale
         };
     }
 
     protected Reduce(state: IState, action: IAction<ActionData>): IState {
         let newState = {
             mouseButtonState: this.UpdateMouseButton(state.mouseButtonState, action),
-            spaceKeyDown: this.UpdateSpaceKeyDown(state.spaceKeyDown, action),
+            keyCode: this.UpdateKeyDown(state.keyCode, action),
             currentBrush: this.UpdateBrush(state.currentBrush, action),
             hoveredBrushName: this.UpdateHoveredBrushName(state.hoveredBrushName, action),
-            scale: this.UpdateScale(state.scale, action),
+            viewScale: this.UpdateViewScale(state.viewScale, action),
             viewOffset: this.UpdateViewOffset(state.viewOffset, action)
         };
         return newState as IState;
@@ -72,14 +74,15 @@ export default class EditorStore extends Store<IState, ActionData>
         }
     }
 
-    private UpdateSpaceKeyDown(spaceKeyDown: boolean, action: IAction<ActionData>): boolean {
+    private UpdateKeyDown(keyCode: number, action: IAction<ActionData>): number {
         switch(action.type) {
-            case EditorActions.SPACE_KEY_DOWN:
-                return true;
-            case EditorActions.SPACE_KEY_UP:
-                return false;
+            case EditorActions.KEY_DOWN:
+                return action.data.keyCode;
+            case EditorActions.KEY_UP:
+                return null;
+            case EditorActions.MOUSE_BUTTON_CHANGE:
             default:
-                return spaceKeyDown != null ? spaceKeyDown : this.DefaultState().spaceKeyDown;
+                return keyCode != null ? keyCode : this.DefaultState().keyCode;
         }
     }
 
@@ -95,9 +98,7 @@ export default class EditorStore extends Store<IState, ActionData>
             case EditorActions.BRUSH_CHANGED:
                 {
                     return {
-                        ...currentBrush,
-                        rotation: 0,
-                        pixelOffset: {x: 0, y: 0},
+                        ...this.DefaultState().currentBrush,
                         name: action.data.name
                     };
                 }
@@ -106,6 +107,20 @@ export default class EditorStore extends Store<IState, ActionData>
                     return {
                         ...currentBrush,
                         rotation: currentBrush.rotation + Math.PI / 2
+                    };
+                }
+            case EditorActions.FLIP_BRUSH_H:
+                {
+                    return {
+                        ...currentBrush,
+                        scale: {x: currentBrush.scale.x * -1, y: currentBrush.scale.y}
+                    };
+                }
+            case EditorActions.FLIP_BRUSH_V:
+                {
+                    return {
+                        ...currentBrush,
+                        scale: {x: currentBrush.scale.x, y: currentBrush.scale.y * -1}
                     };
                 }
             case EditorActions.NUDGE:
@@ -131,7 +146,7 @@ export default class EditorStore extends Store<IState, ActionData>
         }
     }
 
-    private UpdateScale(scale: number, action: IAction<ActionData>): number {
+    private UpdateViewScale(scale: number, action: IAction<ActionData>): number {
         switch(action.type) {
             case EditorActions.ZOOM_IN:
                 return scale * 1.1;
@@ -139,10 +154,10 @@ export default class EditorStore extends Store<IState, ActionData>
                 return scale * 0.909;
             case EditorActions.RESET:
                 if(!action.data.persistZoom) {
-                    return this.DefaultState().scale;
+                    return this.DefaultState().viewScale;
                 }
             default:
-                return scale ? scale : this.DefaultState().scale;
+                return scale ? scale : this.DefaultState().viewScale;
         }
     }
 

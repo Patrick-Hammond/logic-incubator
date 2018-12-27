@@ -3,7 +3,7 @@ import EditorComponent from "./EditorComponent";
 import {Palette} from "./views/Palette";
 import {BrushTool} from "./views/Brush";
 import {Canvas} from "./views/Canvas";
-import {EditorActions} from "./stores/EditorStore";
+import EditorStore, {EditorActions} from "./stores/EditorStore";
 import {LevelDataActions, ILevelDataState} from "./stores/LevelDataStore";
 import {AssetPath, KeyCodes, GridBounds, TileSize} from "./Constants";
 import FileUtils from "../../../_lib/utils/FileUtils";
@@ -42,6 +42,12 @@ export class DungeonEditor extends EditorComponent {
                     break;
                 case KeyCodes.RIGHT:
                     this.editorStore.Dispatch({type: EditorActions.NUDGE, data: {nudge: {x: -1, y: 0}}});
+                    break;
+                case KeyCodes.H:
+                    this.editorStore.Dispatch({type: EditorActions.FLIP_BRUSH_H});
+                    break;
+                case KeyCodes.V:
+                    this.editorStore.Dispatch({type: EditorActions.FLIP_BRUSH_V});
                     break;
                 case KeyCodes.R:
                     this.editorStore.Dispatch({type: EditorActions.ROTATE_BRUSH});
@@ -91,7 +97,7 @@ export class DungeonEditor extends EditorComponent {
                             this.editorStore.Dispatch({type: EditorActions.RESET, data: {persistZoom: true}});
                             this.levelDataStore.Dispatch({type: LevelDataActions.RESET});
 
-                            const scaledTileSize = TileSize * this.editorStore.state.scale;
+                            const scaledTileSize = TileSize * this.editorStore.state.viewScale;
                             let w = GridBounds.width / scaledTileSize;
                             let h = GridBounds.height / scaledTileSize;
 
@@ -102,15 +108,15 @@ export class DungeonEditor extends EditorComponent {
                         }
                         break;
                     }
-                case KeyCodes.SPACE:
-                    this.editorStore.Dispatch({type: EditorActions.SPACE_KEY_DOWN});
+                default:
+                    this.editorStore.Dispatch({type: EditorActions.KEY_DOWN, data: {keyCode: e.keyCode}});
                     break;
             }
         }
 
         document.onkeyup = (e: KeyboardEvent) => {
             if(e.keyCode == KeyCodes.SPACE) {
-                this.editorStore.Dispatch({type: EditorActions.SPACE_KEY_UP});
+                this.editorStore.Dispatch({type: EditorActions.KEY_UP});
             }
         }
 

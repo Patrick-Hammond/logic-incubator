@@ -29,10 +29,10 @@ export function GenerateMap(mapType: MapType, width: number, height: number): IM
 
     switch(mapType) {
         case MapType.DIGGER:
-            dungeon = new Digger(width, height, {roomHeight: [ 4, 30 ], roomWidth: [ 4, 30 ], dugPercentage: 0.2, timeLimit: 60000, corridorLength:[1, 5]});
+            dungeon = new Digger(width, height, {roomHeight: [ 4, 30 ], roomWidth: [ 4, 30 ], dugPercentage: 0.2, timeLimit: 60000, corridorLength: [ 1, 5 ]});
             dungeon.create((x: number, y: number, value: number) => {
                 if(value == 0) {
-                    map.push({name: "floor_1", position: {x: x, y: y}, rotation: 0, pixelOffset: {x: 0, y: 0}});
+                    map.push({name: "floor_1", position: {x: x, y: y}, rotation: 0, pixelOffset: {x: 0, y: 0}, scale: {x: 1, y: 1}});
                 }
             });
             break;
@@ -41,7 +41,7 @@ export function GenerateMap(mapType: MapType, width: number, height: number): IM
             dungeon = new Rogue(width, height, {cellWidth: width / maxRoomSize.width, cellHeight: height / maxRoomSize.height, roomHeight: [ 8, 30 ], roomWidth: [ 8, 30 ]});
             dungeon.create((x: number, y: number, value: number) => {
                 if(value == 0) {
-                    map.push({name: "floor_1", position: {x: x, y: y}, rotation: 0, pixelOffset: {x: 0, y: 0}});
+                    map.push({name: "floor_1", position: {x: x, y: y}, rotation: 0, pixelOffset: {x: 0, y: 0}, scale: {x: 1, y: 1}});
                 }
             });
             break;
@@ -49,7 +49,7 @@ export function GenerateMap(mapType: MapType, width: number, height: number): IM
             dungeon = new Uniform(width, height, {roomHeight: [ 2, 10 ], roomWidth: [ 5, 18 ], roomDugPercentage: 0.3, timeLimit: 60000});
             dungeon.create((x: number, y: number, value: number) => {
                 if(value == 0) {
-                    map.push({name: "floor_1", position: {x: x, y: y}, rotation: 0, pixelOffset: {x: 0, y: 0}});
+                    map.push({name: "floor_1", position: {x: x, y: y}, rotation: 0, pixelOffset: {x: 0, y: 0}, scale: {x: 1, y: 1}});
                 }
             });
             break;
@@ -57,7 +57,7 @@ export function GenerateMap(mapType: MapType, width: number, height: number): IM
             let dividedMaze = new DividedMaze(width, height);
             dividedMaze.create((x: number, y: number, value: number) => {
                 if(value == 1) {
-                    map.push({name: "wall_mid", position: {x: x, y: y}, rotation: 0, pixelOffset: {x: 0, y: 0}});
+                    map.push({name: "wall_mid", position: {x: x, y: y}, rotation: 0, pixelOffset: {x: 0, y: 0}, scale: {x: 1, y: 1}});
                 }
             });
             break;
@@ -65,7 +65,7 @@ export function GenerateMap(mapType: MapType, width: number, height: number): IM
             let ellerMaze = new EllerMaze(width, height);
             ellerMaze.create((x: number, y: number, value: number) => {
                 if(value == 1) {
-                    map.push({name: "wall_mid", position: {x: x, y: y}, rotation: 0, pixelOffset: {x: 0, y: 0}});
+                    map.push({name: "wall_mid", position: {x: x, y: y}, rotation: 0, pixelOffset: {x: 0, y: 0}, scale: {x: 1, y: 1}});
                 }
             });
             break;
@@ -73,7 +73,7 @@ export function GenerateMap(mapType: MapType, width: number, height: number): IM
             let iceyMaze = new IceyMaze(width, height, 0);
             iceyMaze.create((x: number, y: number, value: number) => {
                 if(value == 1) {
-                    map.push({name: "wall_mid", position: {x: x, y: y}, rotation: 0, pixelOffset: {x: 0, y: 0}});
+                    map.push({name: "wall_mid", position: {x: x, y: y}, rotation: 0, pixelOffset: {x: 0, y: 0}, scale: {x: 1, y: 1}});
                 }
             });
             break;
@@ -83,7 +83,7 @@ export function GenerateMap(mapType: MapType, width: number, height: number): IM
             for(var i = 0; i < 3; i++) {
                 cellular.create((x: number, y: number, value: number) => {
                     if(i == 2 && value == 0) {
-                        map.push({name: "floor_1", position: {x: x, y: y}, rotation: 0, pixelOffset: {x: 0, y: 0}});
+                        map.push({name: "floor_1", position: {x: x, y: y}, rotation: 0, pixelOffset: {x: 0, y: 0}, scale: {x: 1, y: 1}});
                     }
                 });
             }

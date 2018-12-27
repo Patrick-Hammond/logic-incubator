@@ -1,8 +1,8 @@
 import Store, {IAction} from "../../../../_lib/Store";
-import {AddTypes} from "../../../../_lib/utils/ObjectUtils";
+import {AddTypes} from "../../../../_lib/utils/EnumerateTypes";
 import {IPoint} from "../../../../_lib/math/Geometry";
 
-export interface Brush {name: string; position?: IPoint; pixelOffset: IPoint, rotation: number};
+export interface Brush {name: string; position?: IPoint; pixelOffset: IPoint, rotation: number, scale: IPoint};
 
 export const enum LevelDataActions {
     PAINT, ERASE, REFRESH, RESET
