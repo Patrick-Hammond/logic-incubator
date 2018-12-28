@@ -1,6 +1,6 @@
-import EditorComponent from "../EditorComponent";
 import {AnimationSpeed, GridBounds} from "../Constants";
-import {IState, EditorActions} from "../stores/EditorStore";
+import EditorComponent from "../EditorComponent";
+import {EditorActions, IState} from "../stores/EditorStore";
 import {ScrollingContainer} from "../ui/ScrollingContainer";
 
 export class Palette extends EditorComponent {
@@ -18,14 +18,13 @@ export class Palette extends EditorComponent {
     }
 
     private Render(prevState: IState, state: IState): void {
-        //update text
-        if(prevState.hoveredBrushName != state.hoveredBrushName) {
+        if(prevState.hoveredBrushName !== state.hoveredBrushName) {
             this.brushText.text = state.hoveredBrushName;
         }
     }
 
     private Create(): void {
-        let scrollBounds = new PIXI.Rectangle(GridBounds.right + 10, GridBounds.y, 260, GridBounds.height);
+        const scrollBounds = new PIXI.Rectangle(GridBounds.right + 10, GridBounds.y, 260, GridBounds.height);
         this.paletteContainer = new ScrollingContainer(scrollBounds, 1);
         this.root.addChild(this.paletteContainer);
 
@@ -48,20 +47,20 @@ export class Palette extends EditorComponent {
         const addMouseEvents = (child: PIXI.Sprite) => {
             child.on("mousedown", (e: PIXI.interaction.InteractionEvent) => {
                 this.editorStore.Dispatch({
-                    type: EditorActions.BRUSH_CHANGED,
-                    data: {name: e.target.name}
+                    data: {name: e.target.name},
+                    type: EditorActions.BRUSH_CHANGED
                 });
             });
             child.on("mouseover", (e: PIXI.interaction.InteractionEvent) => {
                 this.editorStore.Dispatch({
-                    type: EditorActions.BRUSH_HOVERED,
-                    data: {name: e.target.name}
+                    data: {name: e.target.name},
+                    type: EditorActions.BRUSH_HOVERED
                 });
             });
         }
 
         this.assetFactory.SpriteNames.forEach(name => {
-            let s = this.assetFactory.Create(name);
+            const s = this.assetFactory.Create(name);
             s.texture.baseTexture.scaleMode = PIXI.SCALE_MODES.NEAREST;
             s.scale.set(2);
             s.name = name;
@@ -74,7 +73,7 @@ export class Palette extends EditorComponent {
         });
 
         this.assetFactory.AnimationNames.forEach(name => {
-            let a = this.assetFactory.CreateAnimatedSprite(name);
+            const a = this.assetFactory.CreateAnimatedSprite(name);
             a.texture.baseTexture.scaleMode = PIXI.SCALE_MODES.NEAREST;
             a.scale.set(2);
             a.animationSpeed = AnimationSpeed;

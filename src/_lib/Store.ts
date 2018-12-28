@@ -4,8 +4,7 @@ export interface IAction<U> {
     canUndo?: boolean;
 }
 
-export default abstract class Store<T extends object, U>
-{
+export default abstract class Store<T extends object, U> {
     private _state: T = {} as T;
     private _prevState: T;
     private _undoStates: T[] = [];
@@ -36,7 +35,7 @@ export default abstract class Store<T extends object, U>
 
         this._state = this.Reduce(this._state, action);
 
-        if(this._prevState != this.state) {
+        if(this._prevState !== this.state) {
             this.subscribers.forEach(callback => callback(this._prevState, this._state));
         }
     };

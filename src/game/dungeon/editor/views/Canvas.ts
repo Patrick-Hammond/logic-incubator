@@ -1,7 +1,7 @@
+import {AnimationSpeed, GridBounds, InitalScale, KeyCodes, TileSize} from "../Constants";
 import EditorComponent from "../EditorComponent";
-import {AnimationSpeed, TileSize, GridBounds, InitalScale, KeyCodes} from "../Constants";
+import {EditorActions, IState} from "../stores/EditorStore";
 import {ILevelDataState, LevelDataActions} from "../stores/LevelDataStore";
-import {IState, EditorActions} from "../stores/EditorStore";
 
 export class Canvas extends EditorComponent {
     private grid: PIXI.Graphics = new PIXI.Graphics();
@@ -19,43 +19,47 @@ export class Canvas extends EditorComponent {
         this.levelDataStore.Subscribe(this.UpdateLevel, this);
         this.editorStore.Subscribe(this.UpdateLayout, this);
 
-        let paint = (type: LevelDataActions) => {
-            let currentBrush = this.editorStore.state.currentBrush;
-            if(currentBrush.name != "") {
-                this.levelDataStore.Dispatch({type: type, data: {brush: currentBrush, viewOffset: this.editorStore.state.viewOffset}, canUndo: true});
+        const paint = (type: LevelDataActions) => {
+            const currentBrush = this.editorStore.state.currentBrush;
+            if(currentBrush.name !== "") {
+                this.levelDataStore.Dispatch(
+                    {type, data: {brush: currentBrush, viewOffset: this.editorStore.state.viewOffset}, canUndo: true}
+                    );
             }
         }
 
         this.grid.interactive = true;
         this.grid.on("mousedown", (e: PIXI.interaction.InteractionEvent) => {
-            if(e.data.button === 0 && this.editorStore.state.keyCode != KeyCodes.SPACE) paint(LevelDataActions.PAINT)
+            if(e.data.button === 0 && this.editorStore.state.keyCode !== KeyCodes.SPACE) { paint(LevelDataActions.PAINT) }
         });
         this.grid.on("rightdown", (e: PIXI.interaction.InteractionEvent) => paint(LevelDataActions.ERASE));
 
-        //mouse wheel zooming
+        // mouse wheel zooming
         this.game.view.onwheel = (e: WheelEvent) => {
             if(GridBounds.contains(e.offsetX, e.offsetY)) {
 
-                let oldScale = this.editorStore.state.viewScale;
+                const oldScale = this.editorStore.state.viewScale;
 
                 if(e.deltaY < 0) {
                     this.editorStore.Dispatch({type: EditorActions.ZOOM_IN});
-                }
-                else if(e.deltaY > 0) {
+                } else if(e.deltaY > 0) {
                     this.editorStore.Dispatch({type: EditorActions.ZOOM_OUT});
                 }
 
-                //adjust offset to zoom in and out of the cursor position
-                let pos = this.game.interactionManager.mouse.global;
-                let percentPos = {x: (pos.x - GridBounds.x) / GridBounds.width, y: (pos.y - GridBounds.y) / GridBounds.height};
+                // adjust offset to zoom in and out of the cursor position
+                const pos = this.game.interactionManager.mouse.global;
+                const percentPos = {x: (pos.x - GridBounds.x) / GridBounds.width, y: (pos.y - GridBounds.y) / GridBounds.height};
 
-                let oldScaledTileSize = TileSize * oldScale;
-                let newScaledTileSize = TileSize * this.editorStore.state.viewScale;
+                const oldScaledTileSize = TileSize * oldScale;
+                const newScaledTileSize = TileSize * this.editorStore.state.viewScale;
 
-                let widthDelta = (GridBounds.width / oldScaledTileSize) * newScaledTileSize - GridBounds.width;
-                let heightDelta = (GridBounds.height / oldScaledTileSize) * newScaledTileSize - GridBounds.height;
+                const widthDelta = (GridBounds.width / oldScaledTileSize) * newScaledTileSize - GridBounds.width;
+                const heightDelta = (GridBounds.height / oldScaledTileSize) * newScaledTileSize - GridBounds.height;
 
-                let moveDistance = {x: Math.round((widthDelta / oldScaledTileSize) * percentPos.x), y: Math.round((heightDelta / oldScaledTileSize) * percentPos.y)};
+                const moveDistance = {
+                    x: Math.round((widthDelta / oldScaledTileSize) * percentPos.x),
+                    y: Math.round((heightDelta / oldScaledTileSize) * percentPos.y)
+                };
 
                 this.editorStore.Dispatch({type: EditorActions.VIEW_MOVE, data: {move: moveDistance}});
                 this.levelDataStore.Dispatch({type: LevelDataActions.REFRESH});
@@ -66,29 +70,29 @@ export class Canvas extends EditorComponent {
     }
 
     private UpdateLayout(prevState: IState, state: IState): void {
-        if(prevState.viewScale != state.viewScale) {
+        if(prevState.viewScale !== state.viewScale) {
             this.RedrawGrid(state.viewScale);
         }
-        if(state.keyCode == KeyCodes.SPACE) {
-            //this.game.interactionManager.setCursorMode(state.spaceKeyDown ? "grab" : "default");
+        if(state.keyCode === KeyCodes.SPACE) {
+            // this.game.interactionManager.setCursorMode(state.spaceKeyDown ? "grab" : "default");
         }
     }
 
     private UpdateLevel(prevState: ILevelDataState, state: ILevelDataState): void {
-        if(prevState.levelData != state.levelData) {
+        if(prevState.levelData !== state.levelData) {
             this.levelContainer.removeChildren();
 
             const scaledTileSize = TileSize * this.editorStore.state.viewScale;
             const viewOffset = this.editorStore.state.viewOffset;
 
             state.levelData.forEach(brush => {
-                let sprite = this.assetFactory.Create(brush.name);
-                let scaleX = brush.scale.x * this.editorStore.state.viewScale;
-                let scaleY = brush.scale.y * this.editorStore.state.viewScale;
-                let flipOffsetX = scaleX < 0 ? sprite.width * this.editorStore.state.viewScale : 0;
-                let flipOffsetY = scaleY < 0 ? sprite.height * this.editorStore.state.viewScale : 0;
-                let posX = (brush.position.x - viewOffset.x) * scaledTileSize + GridBounds.x + flipOffsetX;
-                let posY = (brush.position.y - viewOffset.y) * scaledTileSize + GridBounds.y + flipOffsetY;
+                const sprite = this.assetFactory.Create(brush.name);
+                const scaleX = brush.scale.x * this.editorStore.state.viewScale;
+                const scaleY = brush.scale.y * this.editorStore.state.viewScale;
+                const flipOffsetX = scaleX < 0 ? sprite.width * this.editorStore.state.viewScale : 0;
+                const flipOffsetY = scaleY < 0 ? sprite.height * this.editorStore.state.viewScale : 0;
+                const posX = (brush.position.x - viewOffset.x) * scaledTileSize + GridBounds.x + flipOffsetX;
+                const posY = (brush.position.y - viewOffset.y) * scaledTileSize + GridBounds.y + flipOffsetY;
 
                 if(GridBounds.contains(posX, posY)) {
                     sprite.position.set(posX, posY);

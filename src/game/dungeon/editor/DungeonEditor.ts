@@ -3,7 +3,7 @@ import EditorComponent from "./EditorComponent";
 import {Palette} from "./views/Palette";
 import {BrushTool} from "./views/Brush";
 import {Canvas} from "./views/Canvas";
-import EditorStore, {EditorActions} from "./stores/EditorStore";
+import {EditorActions} from "./stores/EditorStore";
 import {LevelDataActions, ILevelDataState} from "./stores/LevelDataStore";
 import {AssetPath, KeyCodes, GridBounds, TileSize} from "./Constants";
 import FileUtils from "../../../_lib/utils/FileUtils";

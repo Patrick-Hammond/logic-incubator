@@ -1,3 +1,4 @@
+// tslint:disable
 export const EditorWidth = 1280;
 export const EditorHeight = 720;
 export const InitalScale = 1.5;

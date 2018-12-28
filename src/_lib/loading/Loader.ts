@@ -4,7 +4,9 @@ import AssetFactory from "./AssetFactory";
 export default class Loader {
     private static _inst: Loader;
     public static get inst(): Loader {
-        if(!Loader._inst) Loader._inst = new Loader();
+        if(!Loader._inst) {
+            Loader._inst = new Loader();
+        }
         return Loader._inst;
     }
 
@@ -13,7 +15,6 @@ export default class Loader {
     constructor() {
         this.loader = new PIXI.loaders.Loader();
     }
-
 
     /**
      * Loads a sprite sheet from the given url and then registers
@@ -27,18 +28,18 @@ export default class Loader {
     public LoadSpriteSheet(url: string, nameRegEx: RegExp, complete: () => void): void {
         this.loader.use((resource: PIXI.loaders.Resource, next: () => void) => {
             if(resource.data && resource.data.frames) {
-                let frames = resource.data.frames;
-                for(let frame in frames) {
+                const frames = resource.data.frames;
+                for(const frame in frames) {
                     if(frames.hasOwnProperty(frame)) {
-                        let nameResult = nameRegEx.exec(frame);
+                        const nameResult = nameRegEx.exec(frame);
                         if(nameResult) {
-                            //animation
-                            let name = nameResult[ 0 ];
-                            let seqIndex = FileUtils.ImageSequenceIndex(frame);
+                            // animation
+                            const name = nameResult[ 0 ];
+                            const seqIndex = FileUtils.ImageSequenceIndex(frame);
 
-                            if(seqIndex == 0) {
+                            if(seqIndex === 0) {
                                 let nextFrame = frame;
-                                let animFrames: string[] = [];
+                                const animFrames: string[] = [];
                                 while(frames[ nextFrame ]) {
                                     animFrames.push(nextFrame);
                                     nextFrame = FileUtils.GetNextInImageSequence(nextFrame);
@@ -47,10 +48,9 @@ export default class Loader {
                                 AssetFactory.inst.Add(name, animFrames);
                                 console.log("creating amination " + name);
                             }
-                        }
-                        else {
-                            //image
-                            let name = FileUtils.RemoveExtension(frame);
+                        } else {
+                            // image
+                            const name = FileUtils.RemoveExtension(frame);
                             AssetFactory.inst.Add(name, [ frame ]);
                             console.log("creating sprite " + name);
                         }

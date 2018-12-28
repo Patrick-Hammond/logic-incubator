@@ -13,7 +13,7 @@ export default abstract class GameComponent {
         this.assetFactory = AssetFactory.inst;
         this.loader = Loader.inst;
 
-        if(startUpdates) this.StartUpdates();
+        if(startUpdates) { this.StartUpdates(); }
     }
 
     public AddToStage(): PIXI.DisplayObject {
@@ -35,5 +35,7 @@ export default abstract class GameComponent {
         Game.inst.ticker.remove(this.Update, this);
     }
 
-    protected Update(dt: number): void {}
+    protected Update(dt: number): void {
+        // override and do stuff
+    }
 }

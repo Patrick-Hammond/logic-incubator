@@ -1,19 +1,17 @@
+import {IPoint, IRectangle} from "../../../../_lib/math/Geometry";
+import {IBrush} from "../stores/LevelDataStore";
 import {IStyler} from "./Styler";
-import {IRectangle, IPoint} from "../../../../_lib/math/Geometry";
-import {Brush} from "../stores/LevelDataStore";
 
-var defaultBrush: Brush = {name: "", position: {x: 0, y: 0}, pixelOffset: {x: 0, y: 0}, rotation: 0, scale: {x: 1, y: 1}};
+const defaultBrush: IBrush = {name: "", position: {x: 0, y: 0}, pixelOffset: {x: 0, y: 0}, rotation: 0, scale: {x: 1, y: 1}};
 
 export abstract class BaseStyle implements IStyler {
 
     protected rect: IRectangle;
     protected doors: IPoint[];
 
-    StyleRoom(rect: IRectangle, doors?: {[ key: string ]: number}): Brush[] {
+    StyleRoom(rect: IRectangle, doors?: {[ key: string ]: number}): IBrush[] {
 
         this.rect = rect;
-
-        let result: Brush[] = [];
 
         this.doors = [];
         for(const key in doors) {
@@ -23,50 +21,42 @@ export abstract class BaseStyle implements IStyler {
             }
         }
 
-        //floor
-        result.push(...this.Floor());
-
-        //corners
-        result.push(...this.TopLeft());
-        result.push(...this.TopRight());
-        result.push(...this.BottomLeft());
-        result.push(...this.BottomRight());
-
-        //walls
-        result.push(...this.TopWall());
-        result.push(...this.BottomWall());
-        result.push(...this.LeftWall());
-        result.push(...this.RightWall());
-
-        //doors
-        result.push(...this.Doors());
-
-        return result;
+        return [
+            ...this.Floor(),
+            ...this.TopLeft(),
+            ...this.TopRight(),
+            ...this.BottomLeft(),
+            ...this.TopWall(),
+            ...this.BottomWall(),
+            ...this.LeftWall(),
+            ...this.RightWall(),
+            ...this.Doors()
+        ];
     };
 
-    abstract TopLeft(): Brush[];
-    abstract TopRight(): Brush[];
-    abstract BottomLeft(): Brush[];
-    abstract BottomRight(): Brush[];
-    abstract TopWall(): Brush[];
-    abstract BottomWall(): Brush[];
-    abstract LeftWall(): Brush[];
-    abstract RightWall(): Brush[];
-    abstract Floor(): Brush[];
-    abstract Doors(): Brush[];
+    abstract TopLeft(): IBrush[];
+    abstract TopRight(): IBrush[];
+    abstract BottomLeft(): IBrush[];
+    abstract BottomRight(): IBrush[];
+    abstract TopWall(): IBrush[];
+    abstract BottomWall(): IBrush[];
+    abstract LeftWall(): IBrush[];
+    abstract RightWall(): IBrush[];
+    abstract Floor(): IBrush[];
+    abstract Doors(): IBrush[];
 
-    protected Fill(tileNames: string[], x: number, y: number): Brush[] {
+    protected Fill(tileNames: string[], x: number, y: number): IBrush[] {
         return tileNames.map(name => {
-            return {...defaultBrush, name: name, position: {x: x, y: y}};
+            return {...defaultBrush, name, position: {x, y}};
         });
     }
 
-    protected FillRect(rect: IRectangle, cb: (position: IPoint) => string): Brush[] {
-        let result: Brush[] = [];
+    protected FillRect(rect: IRectangle, cb: (position: IPoint) => string): IBrush[] {
+        const result: IBrush[] = [];
         for(let i = 0; i <= rect.width; i++) {
             for(let j = 0; j <= rect.height; j++) {
-                let position = {x: rect.x + i, y: rect.y + j};
-                result.push({...defaultBrush, name: cb(position), position: position});
+                const position = {x: rect.x + i, y: rect.y + j};
+                result.push({...defaultBrush, name: cb(position), position});
             }
         }
         return result;

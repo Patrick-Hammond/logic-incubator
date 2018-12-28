@@ -1,7 +1,6 @@
 import GameComponent from "../../_lib/GameComponent";
 import * as AssetTypes from "./assets/AssetTypes";
 
-
 export class Dungeon extends GameComponent {
     constructor() {
         super();
@@ -14,7 +13,7 @@ export class Dungeon extends GameComponent {
     }
 
     private Create(): void {
-        let a = this.assetFactory.CreateAnimatedSprite(AssetTypes.Animations.big_zombie_run_anim);
+        const a = this.assetFactory.CreateAnimatedSprite(AssetTypes.Animations.big_zombie_run_anim);
         a.texture.baseTexture.scaleMode = PIXI.SCALE_MODES.NEAREST;
         a.scale.set(4);
         a.animationSpeed = 0.1;

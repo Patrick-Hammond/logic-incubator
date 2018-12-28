@@ -9,18 +9,19 @@
  * @returns {T}
  */
 function EnumerateTypes<T extends {[ P in keyof T ]: number}>(a: T[], calc: (propName: string, values: number[]) => number): T {
-    let result: {[ prop: string ]: number} = {};
+    const result: {[ prop: string ]: number} = {};
     for(const prop in a[ 0 ]) {
         if(a[ 0 ].hasOwnProperty(prop)) {
-            let vals = a.map(v => v[ prop ]);
+            const vals = a.map(v => v[ prop ]);
             result[ prop ] = calc(prop, vals);
         }
     }
     return result as T;
 }
 
-//OPERATOR METHODS
-
+/**
+ * OPERATOR METHODS
+ */
 export function AddTypes<T extends {[ P in keyof T ]: number}>(...values: T[]): T {
     return EnumerateTypes(values, Add);
 }
@@ -33,8 +34,9 @@ export function MultiplyTypes<T extends {[ P in keyof T ]: number}>(...values: T
     return EnumerateTypes(values, Multiply);
 }
 
-//OPERATOR FUNCTIONS
-
+/**
+ * OPERATORS
+ */
 function Add(propName: string, values: number[]): number {
     return values.reduce((prev, curr) => prev + curr);
 }

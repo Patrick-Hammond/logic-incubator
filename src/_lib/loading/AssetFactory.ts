@@ -1,8 +1,9 @@
-
 export default class AssetFactory {
     private static _inst: AssetFactory;
     public static get inst(): AssetFactory {
-        if(!AssetFactory._inst) AssetFactory._inst = new AssetFactory();
+        if(!AssetFactory._inst) {
+            AssetFactory._inst = new AssetFactory();
+        }
         return AssetFactory._inst;
     }
 
@@ -19,14 +20,13 @@ export default class AssetFactory {
 
     public Add(name: string, frameNames: string[]): void {
         this.registry[ name ] = frameNames;
-        frameNames.length == 1 ? this.names.sprites.push(name) : this.names.anims.push(name);
+        frameNames.length === 1 ? this.names.sprites.push(name) : this.names.anims.push(name);
     }
 
     public Create(name: string): PIXI.Sprite | PIXI.extras.AnimatedSprite {
         if(this.SpriteNames.indexOf(name) > -1) {
             return this.CreateSprite(name);
-        }
-        else if(this.AnimationNames.indexOf(name) > -1) {
+        } else if(this.AnimationNames.indexOf(name) > -1) {
             return this.CreateAnimatedSprite(name);
         }
 
@@ -42,12 +42,12 @@ export default class AssetFactory {
     }
 
     public CreateDTS(): void {
-        let sprites = this.names.sprites.map(s => `${s} = "${s}"`).join(", ");
-        let animations = this.names.anims.map(a => `${a} = "${a}"`).join(", ");
-        let dts = `
-            export const enum Sprites {${sprites}} 
+        const sprites = this.names.sprites.map(s => `${s} = "${s}"`).join(", ");
+        const animations = this.names.anims.map(a => `${a} = "${a}"`).join(", ");
+        const dts = `
+            export const enum Sprites {${sprites}}
             export const enum Animations {${animations}};
-        `
+        `;
         console.log(dts);
     }
 }
