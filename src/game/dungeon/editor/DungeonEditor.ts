@@ -1,16 +1,16 @@
 
-import EditorComponent from "./EditorComponent";
-import {Palette} from "./views/Palette";
-import {BrushTool} from "./views/Brush";
-import {Canvas} from "./views/Canvas";
-import {EditorActions} from "./stores/EditorStore";
-import {LevelDataActions, ILevelDataState} from "./stores/LevelDataStore";
-import {AssetPath, KeyCodes, GridBounds, TileSize} from "./Constants";
 import FileUtils from "../../../_lib/utils/FileUtils";
-import {ShowHelp} from "./ui/Help";
+import {AssetPath, GridBounds, KeyCodes, TileSize} from "./Constants";
+import EditorComponent from "./EditorComponent";
 import {GenerateMap, IMap, MapType} from "./maps/Generators";
 import {Style0x7} from "./maps/Style0x7";
 import {ApplyMapStyle} from "./maps/Styler";
+import {EditorActions} from "./stores/EditorStore";
+import {ILevelDataState, LevelDataActions} from "./stores/LevelDataStore";
+import {ShowHelp} from "./ui/Help";
+import {BrushTool} from "./views/Brush";
+import {Canvas} from "./views/Canvas";
+import {Palette} from "./views/Palette";
 
 export class DungeonEditor extends EditorComponent {
     constructor() {
@@ -20,15 +20,15 @@ export class DungeonEditor extends EditorComponent {
     }
 
     private Create(): void {
-        //views
+        // views
         new Canvas();
         new BrushTool();
         new Palette();
 
-        //help
+        // help
         ShowHelp();
 
-        //keyboard commands
+        // keyboard commands
         document.onkeydown = (e: KeyboardEvent) => {
             switch(e.keyCode) {
                 case KeyCodes.UP:
@@ -77,34 +77,33 @@ export class DungeonEditor extends EditorComponent {
                     break;
                 case KeyCodes.Q:
                     if(e.ctrlKey) {
-                        let ok = confirm("This will delete the current map. Are you sure?");
+                        const ok = confirm("This will delete the current map. Are you sure?");
                         if(ok) {
                             this.editorStore.Dispatch({type: EditorActions.RESET, data: {persistZoom: false}});
                             this.levelDataStore.Dispatch({type: LevelDataActions.RESET});
                         }
                     }
                     break;
-                case KeyCodes.ONE:      //digger
-                case KeyCodes.TWO:      //rogue
-                case KeyCodes.THREE:    //uniform
-                case KeyCodes.FOUR:     //divided maze
-                case KeyCodes.FIVE:     //eller maze
-                case KeyCodes.SIX:      //icey maze
-                case KeyCodes.SEVEN:    //cellular
-                    {
-                        let ok = confirm("This will delete the current map. Are you sure?");
+                case KeyCodes.ONE:      // digger
+                case KeyCodes.TWO:      // rogue
+                case KeyCodes.THREE:    // uniform
+                case KeyCodes.FOUR:     // divided maze
+                case KeyCodes.FIVE:     // eller maze
+                case KeyCodes.SIX:      // icey maze
+                case KeyCodes.SEVEN: {
+                        const ok = confirm("This will delete the current map. Are you sure?");
                         if(ok) {
                             this.editorStore.Dispatch({type: EditorActions.RESET, data: {persistZoom: true}});
                             this.levelDataStore.Dispatch({type: LevelDataActions.RESET});
 
                             const scaledTileSize = TileSize * this.editorStore.state.viewScale;
-                            let w = GridBounds.width / scaledTileSize;
-                            let h = GridBounds.height / scaledTileSize;
+                            const w = GridBounds.width / scaledTileSize;
+                            const h = GridBounds.height / scaledTileSize;
 
-                            let mapType: MapType = e.keyCode - KeyCodes.ONE;
+                            const mapType: MapType = e.keyCode - KeyCodes.ONE;
                             let map: IMap = GenerateMap(mapType, w, h);
                             map = ApplyMapStyle(map, new Style0x7());
-                            this.levelDataStore.Load(map as ILevelDataState);
+                            this.levelDataStore.Load({levelData: map.levelData} as ILevelDataState);
                         }
                         break;
                     }
@@ -115,15 +114,15 @@ export class DungeonEditor extends EditorComponent {
         }
 
         document.onkeyup = (e: KeyboardEvent) => {
-            if(e.keyCode == KeyCodes.SPACE) {
+            if(e.keyCode === KeyCodes.SPACE) {
                 this.editorStore.Dispatch({type: EditorActions.KEY_UP});
             }
         }
 
-        //disable context menu
+        // disable context menu
         document.body.oncontextmenu = () => false;
 
-        //render inital
+        // render inital
         this.editorStore.Dispatch({type: EditorActions.REFRESH});
     }
 }

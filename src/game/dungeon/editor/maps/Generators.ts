@@ -19,22 +19,22 @@ export interface IMap {
     dungeon: Dungeon | Map
 }
 
-export function GenerateMap(mapType: MapType, width: number, height: number): IMap {
+export function GenerateMap(type: MapType, width: number, height: number): IMap {
 
-    const map: IBrush[] = [];
+    const levelData: IBrush[] = [];
     let dungeon: Dungeon | Map = null;
 
     width = width | 0;
     height = height | 0;
 
-    switch(mapType) {
+    switch(type) {
         case MapType.DIGGER:
             dungeon = new Digger(width, height,
                 {roomHeight: [4, 30], roomWidth: [4, 30], dugPercentage: 0.2, timeLimit: 60000, corridorLength: [1, 5]}
             );
             dungeon.create((x: number, y: number, value: number) => {
                 if(value === 0) {
-                    map.push({name: "floor_1", position: {x, y}, rotation: 0, pixelOffset: {x: 0, y: 0}, scale: {x: 1, y: 1}});
+                    levelData.push({name: "floor_1", position: {x, y}, rotation: 0, pixelOffset: {x: 0, y: 0}, scale: {x: 1, y: 1}});
                 }
             });
             break;
@@ -46,17 +46,17 @@ export function GenerateMap(mapType: MapType, width: number, height: number): IM
             );
             dungeon.create((x: number, y: number, value: number) => {
                 if(value === 0) {
-                    map.push({name: "floor_1", position: {x, y}, rotation: 0, pixelOffset: {x: 0, y: 0}, scale: {x: 1, y: 1}});
+                    levelData.push({name: "floor_1", position: {x, y}, rotation: 0, pixelOffset: {x: 0, y: 0}, scale: {x: 1, y: 1}});
                 }
             });
             break;
         case MapType.UNIFORM:
             dungeon = new Uniform(width, height,
-                {roomHeight: [2, 10], roomWidth: [5, 18], roomDugPercentage: 0.3, timeLimit: 60000}
+                {roomHeight: [5, 10], roomWidth: [5, 18], roomDugPercentage: 0.3, timeLimit: 60000}
             );
             dungeon.create((x: number, y: number, value: number) => {
                 if(value === 0) {
-                    map.push({name: "floor_1", position: {x, y}, rotation: 0, pixelOffset: {x: 0, y: 0}, scale: {x: 1, y: 1}});
+                    levelData.push({name: "floor_1", position: {x, y}, rotation: 0, pixelOffset: {x: 0, y: 0}, scale: {x: 1, y: 1}});
                 }
             });
             break;
@@ -64,7 +64,7 @@ export function GenerateMap(mapType: MapType, width: number, height: number): IM
             const dividedMaze = new DividedMaze(width, height);
             dividedMaze.create((x: number, y: number, value: number) => {
                 if(value === 1) {
-                    map.push({name: "wall_mid", position: {x, y}, rotation: 0, pixelOffset: {x: 0, y: 0}, scale: {x: 1, y: 1}});
+                    levelData.push({name: "wall_mid", position: {x, y}, rotation: 0, pixelOffset: {x: 0, y: 0}, scale: {x: 1, y: 1}});
                 }
             });
             break;
@@ -72,7 +72,7 @@ export function GenerateMap(mapType: MapType, width: number, height: number): IM
             const ellerMaze = new EllerMaze(width, height);
             ellerMaze.create((x: number, y: number, value: number) => {
                 if(value === 1) {
-                    map.push({name: "wall_mid", position: {x, y}, rotation: 0, pixelOffset: {x: 0, y: 0}, scale: {x: 1, y: 1}});
+                    levelData.push({name: "wall_mid", position: {x, y}, rotation: 0, pixelOffset: {x: 0, y: 0}, scale: {x: 1, y: 1}});
                 }
             });
             break;
@@ -80,7 +80,7 @@ export function GenerateMap(mapType: MapType, width: number, height: number): IM
             const iceyMaze = new IceyMaze(width, height, 0);
             iceyMaze.create((x: number, y: number, value: number) => {
                 if(value === 1) {
-                    map.push({name: "wall_mid", position: {x, y}, rotation: 0, pixelOffset: {x: 0, y: 0}, scale: {x: 1, y: 1}});
+                    levelData.push({name: "wall_mid", position: {x, y}, rotation: 0, pixelOffset: {x: 0, y: 0}, scale: {x: 1, y: 1}});
                 }
             });
             break;
@@ -90,12 +90,12 @@ export function GenerateMap(mapType: MapType, width: number, height: number): IM
             for(let i = 0; i < 3; i++) {
                 cellular.create((x: number, y: number, value: number) => {
                     if(i === 2 && value === 0) {
-                        map.push({name: "floor_1", position: {x, y}, rotation: 0, pixelOffset: {x: 0, y: 0}, scale: {x: 1, y: 1}});
+                        levelData.push({name: "floor_1", position: {x, y}, rotation: 0, pixelOffset: {x: 0, y: 0}, scale: {x: 1, y: 1}});
                     }
                 });
             }
             break;
     }
 
-    return {type: mapType, levelData: map, dungeon};
+    return {type, levelData, dungeon};
 }

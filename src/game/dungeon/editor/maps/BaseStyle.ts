@@ -26,6 +26,7 @@ export abstract class BaseStyle implements IStyler {
             ...this.TopLeft(),
             ...this.TopRight(),
             ...this.BottomLeft(),
+            ...this.BottomRight(),
             ...this.TopWall(),
             ...this.BottomWall(),
             ...this.LeftWall(),
