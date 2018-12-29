@@ -29,6 +29,13 @@
             "problemMatcher": [
                 "$tsc"
             ]
+        },
+        {
+            "type": "npm",
+            "script": "test:dev",
+            "problemMatcher": [
+                "$tsc"
+            ]
         }
     ]
 }

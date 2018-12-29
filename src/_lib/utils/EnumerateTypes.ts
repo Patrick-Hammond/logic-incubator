@@ -11,7 +11,7 @@
 function EnumerateTypes<T extends {[ P in keyof T ]: number}>(a: T[], calc: (propName: string, values: number[]) => number): T {
     const result: {[ prop: string ]: number} = {};
     for(const prop in a[ 0 ]) {
-        if(a[ 0 ].hasOwnProperty(prop)) {
+        if(a[ 0 ].hasOwnProperty(prop) && typeof(a[0][prop]) === "number") {
             const vals = a.map(v => v[ prop ]);
             result[ prop ] = calc(prop, vals);
         }
