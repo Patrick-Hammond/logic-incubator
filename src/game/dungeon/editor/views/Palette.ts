@@ -12,7 +12,6 @@ export class Palette extends EditorComponent {
 
         this.Create();
         this.AddToStage();
-        
         this.editorStore.Subscribe(this.Render, this);
     }
 

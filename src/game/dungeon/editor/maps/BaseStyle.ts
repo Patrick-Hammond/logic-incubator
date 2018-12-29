@@ -1,15 +1,15 @@
-import {IPoint, IRectangle} from "../../../../_lib/math/Geometry";
-import {IBrush} from "../stores/LevelDataStore";
+import {PointLike, RectangleLike} from "../../../../_lib/math/Geometry";
+import {Brush} from "../stores/LevelDataStore";
 import {IStyler} from "./Styler";
 
-const defaultBrush: IBrush = {name: "", position: {x: 0, y: 0}, pixelOffset: {x: 0, y: 0}, rotation: 0, scale: {x: 1, y: 1}};
+const defaultBrush: Brush = {name: "", position: {x: 0, y: 0}, pixelOffset: {x: 0, y: 0}, rotation: 0, scale: {x: 1, y: 1}};
 
 export abstract class BaseStyle implements IStyler {
 
-    protected rect: IRectangle;
-    protected doors: IPoint[];
+    protected rect: RectangleLike;
+    protected doors: PointLike[];
 
-    StyleRoom(rect: IRectangle, doors?: {[ key: string ]: number}): IBrush[] {
+    StyleRoom(rect: RectangleLike, doors?: {[ key: string ]: number}): Brush[] {
 
         this.rect = rect;
 
@@ -35,25 +35,25 @@ export abstract class BaseStyle implements IStyler {
         ];
     };
 
-    abstract TopLeft(): IBrush[];
-    abstract TopRight(): IBrush[];
-    abstract BottomLeft(): IBrush[];
-    abstract BottomRight(): IBrush[];
-    abstract TopWall(): IBrush[];
-    abstract BottomWall(): IBrush[];
-    abstract LeftWall(): IBrush[];
-    abstract RightWall(): IBrush[];
-    abstract Floor(): IBrush[];
-    abstract Doors(): IBrush[];
+    abstract TopLeft(): Brush[];
+    abstract TopRight(): Brush[];
+    abstract BottomLeft(): Brush[];
+    abstract BottomRight(): Brush[];
+    abstract TopWall(): Brush[];
+    abstract BottomWall(): Brush[];
+    abstract LeftWall(): Brush[];
+    abstract RightWall(): Brush[];
+    abstract Floor(): Brush[];
+    abstract Doors(): Brush[];
 
-    protected Fill(tileNames: string[], x: number, y: number): IBrush[] {
+    protected Fill(tileNames: string[], x: number, y: number): Brush[] {
         return tileNames.map(name => {
             return {...defaultBrush, name, position: {x, y}};
         });
     }
 
-    protected FillRect(rect: IRectangle, cb: (position: IPoint) => string): IBrush[] {
-        const result: IBrush[] = [];
+    protected FillRect(rect: RectangleLike, cb: (position: PointLike) => string): Brush[] {
+        const result: Brush[] = [];
         for(let i = 0; i <= rect.width; i++) {
             for(let j = 0; j <= rect.height; j++) {
                 const position = {x: rect.x + i, y: rect.y + j};

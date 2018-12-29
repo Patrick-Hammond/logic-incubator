@@ -1,10 +1,10 @@
 import Dungeon from "rot-js/lib/map/dungeon";
-import {IRectangle, Rectangle} from "../../../../_lib/math/Geometry";
-import {IBrush} from "../stores/LevelDataStore";
+import {Rectangle, RectangleLike} from "../../../../_lib/math/Geometry";
+import {Brush} from "../stores/LevelDataStore";
 import {IMap, MapType} from "./Generators";
 
 export interface IStyler {
-    StyleRoom(rect: IRectangle, doors?: {[key: string]: number}): IBrush[];
+    StyleRoom(rect: RectangleLike, doors?: {[key: string]: number}): Brush[];
 }
 
 export function ApplyMapStyle(map: IMap, styler: IStyler): IMap {
@@ -38,7 +38,7 @@ function StyleDungeon(map: IMap, styler: IStyler): IMap {
     return {...map, levelData: result};
 }
 
-type RogueRoom = {connections: number[][], cellx: number, celly: number} & IRectangle;
+type RogueRoom = {connections: number[][], cellx: number, celly: number} & RectangleLike;
 
 function StyleRogue(map: IMap, styler: IStyler): IMap {
 

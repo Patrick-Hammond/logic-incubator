@@ -1,39 +1,37 @@
-import {IPoint} from "../../../../_lib/math/Geometry";
+import {PointLike} from "../../../../_lib/math/Geometry";
 import Store, {IAction} from "../../../../_lib/Store";
 import {AddTypes} from "../../../../_lib/utils/EnumerateTypes";
 
-export interface IBrush {name: string; position?: IPoint; pixelOffset: IPoint, rotation: number, scale: IPoint};
+export type Brush = {name: string; position?: PointLike; pixelOffset: PointLike, rotation: number, scale: PointLike};
+
+export type LevelDataState = {levelData: LevelData};
 
 export const enum LevelDataActions {
     PAINT, ERASE, REFRESH, RESET
 };
 
-export interface ILevelDataState {
-    levelData: LevelData;
-}
+type LevelData = Brush[];
+type ActionData = {brush?: Brush, viewOffset?: PointLike};
 
-type LevelData = IBrush[];
-interface IActionData {brush?: IBrush, viewOffset?: IPoint}
-
-export default class LevelDataStore extends Store<ILevelDataState, IActionData> {
-    protected DefaultState(): ILevelDataState {
+export default class LevelDataStore extends Store<LevelDataState, ActionData> {
+    protected DefaultState(): LevelDataState {
         return {levelData: []};
     }
 
-    protected Reduce(state: ILevelDataState, action: IAction<IActionData>): ILevelDataState {
+    protected Reduce(state: LevelDataState, action: IAction<ActionData>): LevelDataState {
         const newState = {
             levelData: this.UpdateLevelData(state.levelData, action)
         };
-        return newState as ILevelDataState;
+        return newState as LevelDataState;
     }
 
-    private UpdateLevelData(levelData: LevelData, action: IAction<IActionData>): LevelData {
+    private UpdateLevelData(levelData: LevelData, action: IAction<ActionData>): LevelData {
         switch(action.type) {
             case LevelDataActions.PAINT: {
                 const levelDataCopy = levelData.concat();
 
                 // remove identical items at this position
-                const brush: IBrush = {...action.data.brush};
+                const brush: Brush = {...action.data.brush};
                 brush.position = AddTypes(brush.position, action.data.viewOffset);
 
                 const existing = levelDataCopy.filter(v =>
@@ -45,7 +43,7 @@ export default class LevelDataStore extends Store<ILevelDataState, IActionData> 
             }
             case LevelDataActions.ERASE: {
                 const levelDataCopy = levelData.concat();
-                const brush: IBrush = {...action.data.brush};
+                const brush: Brush = {...action.data.brush};
                 brush.position = AddTypes(brush.position, action.data.viewOffset);
 
                 // remove last item in the same location

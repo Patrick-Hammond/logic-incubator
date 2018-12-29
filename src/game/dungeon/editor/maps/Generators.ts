@@ -7,7 +7,7 @@ import IceyMaze from "rot-js/lib/map/iceymaze";
 import Map from "rot-js/lib/map/map";
 import Rogue from "rot-js/lib/map/rogue";
 import Uniform from "rot-js/lib/map/uniform";
-import {IBrush} from "../stores/LevelDataStore";
+import {Brush} from "../stores/LevelDataStore";
 
 export const enum MapType {
     DIGGER, ROGUE, UNIFORM, DIVIDED_MAZE, ELLER_MAZE, ICEY_MAZE, CELLULAR
@@ -15,13 +15,13 @@ export const enum MapType {
 
 export interface IMap {
     type: MapType,
-    levelData: IBrush[],
+    levelData: Brush[],
     dungeon: Dungeon | Map
 }
 
 export function GenerateMap(type: MapType, width: number, height: number): IMap {
 
-    const levelData: IBrush[] = [];
+    const levelData: Brush[] = [];
     let dungeon: Dungeon | Map = null;
 
     width = width | 0;

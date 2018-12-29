@@ -1,4 +1,4 @@
-export interface IPoint {x: number; y: number};
+export type PointLike = {x: number; y: number};
 export class Point {
     constructor(public x: number, public y: number) {}
 
@@ -13,7 +13,7 @@ export class Point {
     }
 }
 
-export interface IRectangle {x: number, y: number, width: number, height: number};
+export type RectangleLike = {x: number, y: number, width: number, height: number};
 export class Rectangle {
     constructor(public x: number, public y: number, public width: number, public height: number) {}
 
@@ -22,16 +22,16 @@ export class Rectangle {
     get right(): number {return this.x + this.width}
     get bottom(): number {return this.y + this.height}
 
-    get topLeft(): IPoint {return {x: this.x, y: this.y}}
-    get topRight(): IPoint {return {x: this.x + this.width, y: this.y}}
-    get bottomLeft(): IPoint {return {x: this.x, y: this.y + this.height}}
-    get bottomRight(): IPoint {return {x: this.x + this.width, y: this.y + this.height}}
+    get topLeft(): PointLike {return {x: this.x, y: this.y}}
+    get topRight(): PointLike {return {x: this.x + this.width, y: this.y}}
+    get bottomLeft(): PointLike {return {x: this.x, y: this.y + this.height}}
+    get bottomRight(): PointLike {return {x: this.x + this.width, y: this.y + this.height}}
 
-    get centerLeft(): IPoint {return {x: this.x, y: this.y + this.height * 0.5}}
-    get centerTop(): IPoint {return {x: this.x + this.width * 0.5, y: this.y}}
-    get centerRight(): IPoint {return {x: this.x + this.width, y: this.y + this.height * 0.5}}
-    get centerBottom(): IPoint {return {x: this.x + this.width * 0.5, y: this.y + this.height}}
-    get center(): IPoint {return {x: this.x + this.width * 0.5, y: this.y + this.height * 0.5}}
+    get centerLeft(): PointLike {return {x: this.x, y: this.y + this.height * 0.5}}
+    get centerTop(): PointLike {return {x: this.x + this.width * 0.5, y: this.y}}
+    get centerRight(): PointLike {return {x: this.x + this.width, y: this.y + this.height * 0.5}}
+    get centerBottom(): PointLike {return {x: this.x + this.width * 0.5, y: this.y + this.height}}
+    get center(): PointLike {return {x: this.x + this.width * 0.5, y: this.y + this.height * 0.5}}
 
     Set(x: number, y: number, width: number, height: number): Rectangle {
         this.x = x;

@@ -6,7 +6,7 @@ import {GenerateMap, IMap, MapType} from "./maps/Generators";
 import {Style0x7} from "./maps/Style0x7";
 import {ApplyMapStyle} from "./maps/Styler";
 import {EditorActions} from "./stores/EditorStore";
-import {ILevelDataState, LevelDataActions} from "./stores/LevelDataStore";
+import {LevelDataActions, LevelDataState} from "./stores/LevelDataStore";
 import {ShowHelp} from "./ui/Help";
 import {BrushTool} from "./views/Brush";
 import {Canvas} from "./views/Canvas";
@@ -103,7 +103,7 @@ export class DungeonEditor extends EditorComponent {
                             const mapType: MapType = e.keyCode - KeyCodes.ONE;
                             let map: IMap = GenerateMap(mapType, w, h);
                             map = ApplyMapStyle(map, new Style0x7());
-                            this.levelDataStore.Load({levelData: map.levelData} as ILevelDataState);
+                            this.levelDataStore.Load({levelData: map.levelData} as LevelDataState);
                         }
                         break;
                     }

@@ -1,7 +1,7 @@
 import {AnimationSpeed, GridBounds, InitalScale, KeyCodes, TileSize} from "../Constants";
 import EditorComponent from "../EditorComponent";
 import {EditorActions, IState} from "../stores/EditorStore";
-import {ILevelDataState, LevelDataActions} from "../stores/LevelDataStore";
+import {LevelDataActions, LevelDataState} from "../stores/LevelDataStore";
 
 export class Canvas extends EditorComponent {
     private grid: PIXI.Graphics = new PIXI.Graphics();
@@ -73,12 +73,9 @@ export class Canvas extends EditorComponent {
         if(prevState.viewScale !== state.viewScale) {
             this.RedrawGrid(state.viewScale);
         }
-        if(state.keyCode === KeyCodes.SPACE) {
-            // this.game.interactionManager.setCursorMode(state.spaceKeyDown ? "grab" : "default");
-        }
     }
 
-    private UpdateLevel(prevState: ILevelDataState, state: ILevelDataState): void {
+    private UpdateLevel(prevState: LevelDataState, state: LevelDataState): void {
         if(prevState.levelData !== state.levelData) {
             this.levelContainer.removeChildren();
 

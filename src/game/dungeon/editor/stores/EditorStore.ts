@@ -1,8 +1,8 @@
-import {IPoint} from "../../../../_lib/math/Geometry";
+import {PointLike} from "../../../../_lib/math/Geometry";
 import Store, {IAction} from "../../../../_lib/Store";
 import {AddTypes, SubtractTypes} from "../../../../_lib/utils/EnumerateTypes";
 import {InitalScale} from "../Constants";
-import {IBrush} from "./LevelDataStore";
+import {Brush} from "./LevelDataStore";
 
 export const enum EditorActions {
     BRUSH_MOVED, ROTATE_BRUSH, FLIP_BRUSH_H, FLIP_BRUSH_V,
@@ -23,19 +23,19 @@ interface IActionData {
     mouseButtonState?: MouseButtonState,
     keyCode?: number,
     name?: string,
-    position?: IPoint,
+    position?: PointLike,
     rotation?: number,
-    nudge?: IPoint,
-    move?: IPoint,
-    scale?: IPoint,
+    nudge?: PointLike,
+    move?: PointLike,
+    scale?: PointLike,
     persistZoom?: boolean
 }
 
 export interface IState {
     mouseButtonState: MouseButtonState;
-    viewOffset: IPoint;
+    viewOffset: PointLike;
     keyCode: number,
-    currentBrush: IBrush;
+    currentBrush: Brush;
     hoveredBrushName: string,
     viewScale: number;
 }
@@ -84,7 +84,7 @@ export default class EditorStore extends Store<IState, IActionData> {
         }
     }
 
-    private UpdateBrush(currentBrush: IBrush, action: IAction<IActionData>): IBrush {
+    private UpdateBrush(currentBrush: Brush, action: IAction<IActionData>): Brush {
         switch(action.type) {
             case EditorActions.BRUSH_MOVED: {
                 return {
@@ -156,7 +156,7 @@ export default class EditorStore extends Store<IState, IActionData> {
         }
     }
 
-    private UpdateViewOffset(offset: IPoint, action: IAction<IActionData>): IPoint {
+    private UpdateViewOffset(offset: PointLike, action: IAction<IActionData>): PointLike {
         switch(action.type) {
             case EditorActions.VIEW_DRAG:
                 const delta = SubtractTypes(this.state.currentBrush.position, action.data.position);

@@ -20,7 +20,7 @@ function EnumerateTypes<T extends {[ P in keyof T ]: number}>(a: T[], calc: (pro
 }
 
 /**
- * OPERATOR METHODS
+ * ARITHMETIC METHODS
  */
 export function AddTypes<T extends {[ P in keyof T ]: number}>(...values: T[]): T {
     return EnumerateTypes(values, Add);
