@@ -1,6 +1,6 @@
 import {AnimationSpeed, GridBounds} from "../Constants";
 import EditorComponent from "../EditorComponent";
-import {EditorActions, IState} from "../stores/EditorStore";
+import {IState} from "../stores/EditorStore";
 import {ScrollingContainer} from "../ui/ScrollingContainer";
 
 export class Palette extends EditorComponent {
@@ -22,7 +22,7 @@ export class Palette extends EditorComponent {
     }
 
     private Create(): void {
-        const scrollBounds = new PIXI.Rectangle(GridBounds.right + 10, GridBounds.y, 260, GridBounds.height);
+        const scrollBounds = new PIXI.Rectangle(GridBounds.right + 10, GridBounds.y, 260, GridBounds.height * 0.5);
         this.paletteContainer = new ScrollingContainer(scrollBounds, 1);
         this.root.addChild(this.paletteContainer);
 
@@ -42,21 +42,6 @@ export class Palette extends EditorComponent {
             x += child.width + padding;
         };
 
-        const addMouseEvents = (child: PIXI.Sprite) => {
-            child.on("mousedown", (e: PIXI.interaction.InteractionEvent) => {
-                this.editorStore.Dispatch({
-                    data: {name: e.target.name},
-                    type: EditorActions.BRUSH_CHANGED
-                });
-            });
-            child.on("mouseover", (e: PIXI.interaction.InteractionEvent) => {
-                this.editorStore.Dispatch({
-                    data: {name: e.target.name},
-                    type: EditorActions.BRUSH_HOVERED
-                });
-            });
-        }
-
         this.assetFactory.SpriteNames.forEach(name => {
             const s = this.assetFactory.Create(name);
             s.texture.baseTexture.scaleMode = PIXI.SCALE_MODES.NEAREST;
@@ -67,7 +52,6 @@ export class Palette extends EditorComponent {
             this.paletteContainer.addChild(s);
 
             tileLayout(s);
-            addMouseEvents(s);
         });
 
         this.assetFactory.AnimationNames.forEach(name => {
@@ -82,7 +66,6 @@ export class Palette extends EditorComponent {
             this.paletteContainer.addChild(a);
 
             tileLayout(a);
-            addMouseEvents(a);
         });
 
         this.brushText = new PIXI.Text("", {fontFamily: "Arial", fontSize: 11, fill: 0xeeeeee});

@@ -1,4 +1,4 @@
-import {PointLike, RectangleLike} from "../../../../_lib/math/Geometry";
+import {PointLike, RectangleLike} from "../../../_lib/math/Geometry";
 import {Brush} from "../stores/LevelDataStore";
 import {IStyler} from "./Styler";
 

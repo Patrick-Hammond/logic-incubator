@@ -1,4 +1,4 @@
-import GameComponent from "../../../_lib/GameComponent";
+import GameComponent from "../../_lib/GameComponent";
 import EditorStore from "./stores/EditorStore";
 import LevelDataStore from "./stores/LevelDataStore";
 

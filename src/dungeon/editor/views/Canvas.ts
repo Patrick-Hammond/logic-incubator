@@ -1,7 +1,7 @@
-import {AnimationSpeed, GridBounds, InitalScale, KeyCodes, TileSize} from "../Constants";
+import {AnimationSpeed, GridBounds, InitalScale, TileSize} from "../Constants";
 import EditorComponent from "../EditorComponent";
-import {EditorActions, IState} from "../stores/EditorStore";
-import {LevelDataActions, LevelDataState} from "../stores/LevelDataStore";
+import {IState} from "../stores/EditorStore";
+import {LevelDataState} from "../stores/LevelDataStore";
 
 export class Canvas extends EditorComponent {
     private grid: PIXI.Graphics = new PIXI.Graphics();
@@ -18,53 +18,6 @@ export class Canvas extends EditorComponent {
 
         this.levelDataStore.Subscribe(this.UpdateLevel, this);
         this.editorStore.Subscribe(this.UpdateLayout, this);
-
-        const paint = (type: LevelDataActions) => {
-            const currentBrush = this.editorStore.state.currentBrush;
-            if(currentBrush.name !== "") {
-                this.levelDataStore.Dispatch(
-                    {type, data: {brush: currentBrush, viewOffset: this.editorStore.state.viewOffset}, canUndo: true}
-                    );
-            }
-        }
-
-        this.grid.interactive = true;
-        this.grid.on("mousedown", (e: PIXI.interaction.InteractionEvent) => {
-            if(e.data.button === 0 && this.editorStore.state.keyCode !== KeyCodes.SPACE) { paint(LevelDataActions.PAINT) }
-        });
-        this.grid.on("rightdown", (e: PIXI.interaction.InteractionEvent) => paint(LevelDataActions.ERASE));
-
-        // mouse wheel zooming
-        this.game.view.onwheel = (e: WheelEvent) => {
-            if(GridBounds.contains(e.offsetX, e.offsetY)) {
-
-                const oldScale = this.editorStore.state.viewScale;
-
-                if(e.deltaY < 0) {
-                    this.editorStore.Dispatch({type: EditorActions.ZOOM_IN});
-                } else if(e.deltaY > 0) {
-                    this.editorStore.Dispatch({type: EditorActions.ZOOM_OUT});
-                }
-
-                // adjust offset to zoom in and out of the cursor position
-                const pos = this.game.interactionManager.mouse.global;
-                const percentPos = {x: (pos.x - GridBounds.x) / GridBounds.width, y: (pos.y - GridBounds.y) / GridBounds.height};
-
-                const oldScaledTileSize = TileSize * oldScale;
-                const newScaledTileSize = TileSize * this.editorStore.state.viewScale;
-
-                const widthDelta = (GridBounds.width / oldScaledTileSize) * newScaledTileSize - GridBounds.width;
-                const heightDelta = (GridBounds.height / oldScaledTileSize) * newScaledTileSize - GridBounds.height;
-
-                const moveDistance = {
-                    x: Math.round((widthDelta / oldScaledTileSize) * percentPos.x),
-                    y: Math.round((heightDelta / oldScaledTileSize) * percentPos.y)
-                };
-
-                this.editorStore.Dispatch({type: EditorActions.VIEW_MOVE, data: {move: moveDistance}});
-                this.levelDataStore.Dispatch({type: LevelDataActions.REFRESH});
-            }
-        }
 
         this.RedrawGrid(InitalScale);
     }

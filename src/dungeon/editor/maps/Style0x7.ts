@@ -1,5 +1,5 @@
 import RNG from "rot-js/lib/rng";
-import {PointLike, Rectangle} from "../../../../_lib/math/Geometry";
+import {PointLike, Rectangle} from "../../../_lib/math/Geometry";
 import {Brush} from "../stores/LevelDataStore";
 import {BaseStyle} from "./BaseStyle";
 

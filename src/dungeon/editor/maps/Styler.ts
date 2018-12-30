@@ -1,5 +1,5 @@
 import Dungeon from "rot-js/lib/map/dungeon";
-import {Rectangle, RectangleLike} from "../../../../_lib/math/Geometry";
+import {Rectangle, RectangleLike} from "../../../_lib/math/Geometry";
 import {Brush} from "../stores/LevelDataStore";
 import {IMap, MapType} from "./Generators";
 

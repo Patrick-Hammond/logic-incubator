@@ -1,4 +1,4 @@
-import Game from "../../../../_lib/Game";
+import Game from "../../../_lib/Game";
 
 export function ShowHelp() {
     const text = "PAINT - left mouse   ERASE - right mouse   ROTATE BRUSH - r   NUDGE BRUSH - cursor keys   " +

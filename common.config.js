@@ -133,7 +133,7 @@ exports.GetLocalFolders = function() {
     if(env == "testdev" || env == "testdist") {
       entries.bundle = './src/tests/TestInit.ts';
     } else {
-      entries.bundle ='./src/game/Main.ts';
+      entries.bundle ='./src/dungeon/Main.ts';
     }
     return entries;
   }

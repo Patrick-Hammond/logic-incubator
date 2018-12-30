@@ -41,6 +41,10 @@ export class Rectangle {
         return this;
     }
 
+    ContainsPoint(point: PointLike): boolean {
+        return this.Contains(point.x, point.y);
+    }
+
     Contains(px: number, py: number): boolean {
         if(px < this.x || px > this.right || py < this.y || py > this.bottom) {
             return false;

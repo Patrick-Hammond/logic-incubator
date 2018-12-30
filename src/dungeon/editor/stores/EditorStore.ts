@@ -1,6 +1,6 @@
-import {PointLike} from "../../../../_lib/math/Geometry";
-import Store, {IAction} from "../../../../_lib/Store";
-import {AddTypes, SubtractTypes} from "../../../../_lib/utils/EnumerateTypes";
+import {PointLike} from "../../../_lib/math/Geometry";
+import Store, {IAction} from "../../../_lib/Store";
+import {AddTypes, SubtractTypes} from "../../../_lib/utils/EnumerateTypes";
 import {InitalScale} from "../Constants";
 import {Brush} from "./LevelDataStore";
 
