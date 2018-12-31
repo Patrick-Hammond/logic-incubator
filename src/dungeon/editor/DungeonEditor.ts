@@ -6,6 +6,7 @@ import {EditorActions} from "./stores/EditorStore";
 import {ShowHelp} from "./ui/Help";
 import {BrushTool} from "./views/Brush";
 import {Canvas} from "./views/Canvas";
+import {Layers} from "./views/Layers";
 import {Palette} from "./views/Palette";
 
 export class DungeonEditor extends EditorComponent {
@@ -21,6 +22,7 @@ export class DungeonEditor extends EditorComponent {
         new Canvas();
         new BrushTool();
         new Palette();
+        new Layers();
 
         // render inital
         this.editorStore.Dispatch({type: EditorActions.REFRESH});

@@ -1,11 +1,11 @@
 import {AnimationSpeed, GridBounds} from "../Constants";
 import EditorComponent from "../EditorComponent";
 import {IState} from "../stores/EditorStore";
-import {ScrollingContainer} from "../ui/ScrollingContainer";
+import {ScrollBox} from "../ui/ScrollBox";
 
 export class Palette extends EditorComponent {
     private brushText: PIXI.Text;
-    private paletteContainer: ScrollingContainer;
+    private paletteContainer: ScrollBox;
 
     constructor() {
         super();
@@ -22,8 +22,8 @@ export class Palette extends EditorComponent {
     }
 
     private Create(): void {
-        const scrollBounds = new PIXI.Rectangle(GridBounds.right + 10, GridBounds.y, 260, GridBounds.height * 0.5);
-        this.paletteContainer = new ScrollingContainer(scrollBounds, 1);
+        const scrollBounds = new PIXI.Rectangle(GridBounds.right + 10, GridBounds.y, 260, GridBounds.height * 0.75);
+        this.paletteContainer = new ScrollBox(scrollBounds, 1);
         this.root.addChild(this.paletteContainer);
 
         const padding = 2;

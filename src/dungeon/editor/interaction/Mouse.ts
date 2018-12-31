@@ -2,7 +2,7 @@ import Game from "../../../_lib/Game";
 import {GridBounds, KeyCodes, TileSize} from "../Constants";
 import EditorStore, {EditorActions, MouseButtonState} from "../stores/EditorStore";
 import LevelDataStore, {LevelDataActions} from "../stores/LevelDataStore";
-import {ScrollingContainer} from "../ui/ScrollingContainer";
+import {ScrollBox} from "../ui/ScrollBox";
 
 export function RegisterMouseEvents(editorStore: EditorStore, levelDataStore: LevelDataStore, game: Game) {
 
@@ -61,7 +61,7 @@ export function RegisterMouseEvents(editorStore: EditorStore, levelDataStore: Le
                     levelDataStore.Dispatch({type: LevelDataActions.REFRESH});
                 }
 
-                if(e.target && e.target.parent instanceof ScrollingContainer) {
+                if(e.target && e.target.parent instanceof ScrollBox) {
                     editorStore.Dispatch({data: {name: e.target.name}, type: EditorActions.BRUSH_HOVERED});
                 } else {
                     editorStore.Dispatch({data: {name: currentBrush.name}, type: EditorActions.BRUSH_HOVERED});
@@ -71,7 +71,7 @@ export function RegisterMouseEvents(editorStore: EditorStore, levelDataStore: Le
     });
 
     game.interactionManager.on("mousedown", (e: PIXI.interaction.InteractionEvent) => {
-        if(e.target && e.target.parent instanceof ScrollingContainer && e.target.name !== editorStore.state.currentBrush.name) {
+        if(e.target && e.target.parent instanceof ScrollBox && e.target.name !== editorStore.state.currentBrush.name) {
             editorStore.Dispatch({data: {name: e.target.name}, type: EditorActions.BRUSH_CHANGED});
         }
         if(e.data.button === 0) {

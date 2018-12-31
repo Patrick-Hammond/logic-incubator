@@ -4,6 +4,8 @@ import {AddTypes, SubtractTypes} from "../../../_lib/utils/EnumerateTypes";
 import {InitalScale} from "../Constants";
 import {Brush} from "./LevelDataStore";
 
+export type Layer = {id: number, name: string, selected: boolean};
+
 export const enum EditorActions {
     BRUSH_MOVED, ROTATE_BRUSH, FLIP_BRUSH_H, FLIP_BRUSH_V,
     BRUSH_CHANGED, BRUSH_HOVERED,
@@ -12,6 +14,7 @@ export const enum EditorActions {
     MOUSE_BUTTON,
     KEY_DOWN, KEY_UP,
     VIEW_DRAG, VIEW_MOVE,
+    ADD_LAYER, REMOVE_LAYER, RENAME_LAYER, SELECT_LAYER,
     REFRESH, RESET
 };
 
@@ -20,23 +23,25 @@ export const enum MouseButtonState {
 }
 
 interface IActionData {
-    mouseButtonState?: MouseButtonState,
-    keyCode?: number,
-    name?: string,
-    position?: PointLike,
-    rotation?: number,
-    nudge?: PointLike,
-    move?: PointLike,
-    scale?: PointLike,
-    persistZoom?: boolean
+    mouseButtonState?: MouseButtonState;
+    keyCode?: number;
+    name?: string;
+    position?: PointLike;
+    rotation?: number;
+    nudge?: PointLike;
+    move?: PointLike;
+    scale?: PointLike;
+    persistZoom?: boolean;
+    layer?: Layer
 }
 
 export interface IState {
-    mouseButtonState: MouseButtonState;
-    viewOffset: PointLike;
-    keyCode: number,
     currentBrush: Brush;
-    hoveredBrushName: string,
+    hoveredBrushName: string;
+    layers: Layer[];
+    mouseButtonState: MouseButtonState;
+    keyCode: number;
+    viewOffset: PointLike;
     viewScale: number;
 }
 
@@ -46,6 +51,7 @@ export default class EditorStore extends Store<IState, IActionData> {
             currentBrush: {name: "", position: {x: 0, y: 0}, pixelOffset: {x: 0, y: 0}, rotation: 0, scale: {x: 1, y: 1}},
             hoveredBrushName: "",
             keyCode: null,
+            layers: [],
             mouseButtonState: MouseButtonState.UP,
             viewOffset: {x: 0, y: 0},
             viewScale: InitalScale
@@ -57,31 +63,12 @@ export default class EditorStore extends Store<IState, IActionData> {
             currentBrush: this.UpdateBrush(state.currentBrush, action),
             hoveredBrushName: this.UpdateHoveredBrushName(state.hoveredBrushName, action),
             keyCode: this.UpdateKeyDown(state.keyCode, action),
+            layers: this.UpdateLayers(state.layers, action),
             mouseButtonState: this.UpdateMouseButton(state.mouseButtonState, action),
             viewOffset: this.UpdateViewOffset(state.viewOffset, action),
             viewScale: this.UpdateViewScale(state.viewScale, action)
         };
         return newState as IState;
-    }
-
-    private UpdateMouseButton(mouseButtonDown: MouseButtonState, action: IAction<IActionData>): MouseButtonState {
-        switch(action.type) {
-            case EditorActions.MOUSE_BUTTON:
-                return action.data.mouseButtonState;
-            default:
-                return mouseButtonDown != null ? mouseButtonDown : this.DefaultState().mouseButtonState;
-        }
-    }
-
-    private UpdateKeyDown(keyCode: number, action: IAction<IActionData>): number {
-        switch(action.type) {
-            case EditorActions.KEY_DOWN:
-                return action.data.keyCode;
-            case EditorActions.KEY_UP:
-                return null;
-            default:
-                return keyCode != null ? keyCode : this.DefaultState().keyCode;
-        }
     }
 
     private UpdateBrush(currentBrush: Brush, action: IAction<IActionData>): Brush {
@@ -141,18 +128,45 @@ export default class EditorStore extends Store<IState, IActionData> {
         }
     }
 
-    private UpdateViewScale(scale: number, action: IAction<IActionData>): number {
+    private UpdateKeyDown(keyCode: number, action: IAction<IActionData>): number {
         switch(action.type) {
-            case EditorActions.ZOOM_IN:
-                return scale * 1.1;
-            case EditorActions.ZOOM_OUT:
-                return scale * 0.909;
-            case EditorActions.RESET:
-                if(!action.data.persistZoom) {
-                    return this.DefaultState().viewScale;
-                }
+            case EditorActions.KEY_DOWN:
+                return action.data.keyCode;
+            case EditorActions.KEY_UP:
+                return null;
             default:
-                return scale ? scale : this.DefaultState().viewScale;
+                return keyCode != null ? keyCode : this.DefaultState().keyCode;
+        }
+    }
+
+    private UpdateLayers(layers: Layer[], action: IAction<IActionData>): Layer[] {
+        switch(action.type) {
+            case EditorActions.ADD_LAYER:
+                return layers.concat(action.data.layer);
+            case EditorActions.REMOVE_LAYER:
+                return layers.filter(layer => layer.selected === false);
+            case EditorActions.RENAME_LAYER:
+                const copy = layers.concat();
+                copy.find(l => l.id === action.data.layer.id).name = action.data.name;
+                return copy;
+            case EditorActions.SELECT_LAYER:
+                return layers.map(layer => {
+                    return {
+                        ...layer,
+                        selected: layer.id === action.data.layer.id
+                    }
+                });
+            default:
+                return layers || this.DefaultState().layers;
+        }
+    }
+
+    private UpdateMouseButton(mouseButtonDown: MouseButtonState, action: IAction<IActionData>): MouseButtonState {
+        switch(action.type) {
+            case EditorActions.MOUSE_BUTTON:
+                return action.data.mouseButtonState;
+            default:
+                return mouseButtonDown != null ? mouseButtonDown : this.DefaultState().mouseButtonState;
         }
     }
 
@@ -167,6 +181,21 @@ export default class EditorStore extends Store<IState, IActionData> {
                 return this.DefaultState().viewOffset;
             default:
                 return offset ? offset : this.DefaultState().viewOffset;
+        }
+    }
+
+    private UpdateViewScale(scale: number, action: IAction<IActionData>): number {
+        switch(action.type) {
+            case EditorActions.ZOOM_IN:
+                return scale * 1.1;
+            case EditorActions.ZOOM_OUT:
+                return scale * 0.909;
+            case EditorActions.RESET:
+                if(!action.data.persistZoom) {
+                    return this.DefaultState().viewScale;
+                }
+            default:
+                return scale ? scale : this.DefaultState().viewScale;
         }
     }
 }
