@@ -1,3 +1,4 @@
+import ObjectPool from "../../../_lib/utils/ObjectPool";
 import {AnimationSpeed, GridBounds, InitalScale, TileSize} from "../Constants";
 import EditorComponent from "../EditorComponent";
 import {IState} from "../stores/EditorStore";
@@ -7,9 +8,15 @@ export class Canvas extends EditorComponent {
     private grid: PIXI.Graphics = new PIXI.Graphics();
     private mask: PIXI.Graphics = new PIXI.Graphics();
     private levelContainer = new PIXI.Container();
+    private layerContainers: ObjectPool<PIXI.Container>;
 
     constructor() {
         super();
+
+        this.layerContainers = new ObjectPool<PIXI.Container>(6,
+                () => new PIXI.Container(),
+                (item: PIXI.Container) => item.removeChildren()
+            );
 
         this.root.addChild(this.grid, this.levelContainer, this.mask);
         this.levelContainer.mask = this.mask;
@@ -32,6 +39,14 @@ export class Canvas extends EditorComponent {
         if(prevState.levelData !== state.levelData) {
             this.levelContainer.removeChildren();
 
+            this.layerContainers.Restore();
+            const layerDict: {[id: number]: PIXI.Container} = {};
+            this.editorStore.state.layers.forEach(layer => {
+                const layerContainer = this.layerContainers.Get();
+                layerDict[layer.id] = layerContainer;
+                this.levelContainer.addChild(layerContainer);
+            })
+
             const scaledTileSize = TileSize * this.editorStore.state.viewScale;
             const viewOffset = this.editorStore.state.viewOffset;
 
@@ -53,7 +68,7 @@ export class Canvas extends EditorComponent {
                         sprite.play();
                         sprite.animationSpeed = AnimationSpeed;
                     }
-                    this.levelContainer.addChild(sprite);
+                    layerDict[brush.layerId].addChild(sprite);
                 }
             });
         }

@@ -75,16 +75,19 @@ export class BrushTool extends EditorComponent {
         const mouseButtonChanged = prevState.mouseButtonState !== state.mouseButtonState;
         if(this.brush && (positionChanged || mouseButtonChanged)) {
             if(GridBounds.contains(this.brush.position.x, this.brush.position.y)) {
-
                 if(state.mouseButtonState === MouseButtonState.LEFT_DOWN && state.keyCode !== KeyCodes.SPACE) {
-                    this.levelDataStore.Dispatch(
-                        {type: LevelDataActions.PAINT, data: {brush: state.currentBrush, viewOffset: state.viewOffset}, canUndo: true}
-                        );
+                    this.levelDataStore.Dispatch({
+                        type: LevelDataActions.PAINT,
+                        data: {brush: state.currentBrush, viewOffset: state.viewOffset},
+                        canUndo: true
+                    });
                 }
                 if(state.mouseButtonState === MouseButtonState.RIGHT_DOWN) {
-                    this.levelDataStore.Dispatch(
-                        {type: LevelDataActions.ERASE, data: {brush: state.currentBrush, viewOffset: state.viewOffset}, canUndo: true}
-                        );
+                    this.levelDataStore.Dispatch({
+                        type: LevelDataActions.ERASE,
+                        data: {brush: state.currentBrush, viewOffset: state.viewOffset},
+                        canUndo: true
+                    });
                 }
             }
         }

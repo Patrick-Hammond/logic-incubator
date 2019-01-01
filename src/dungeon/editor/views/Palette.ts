@@ -1,6 +1,6 @@
 import {AnimationSpeed, GridBounds} from "../Constants";
 import EditorComponent from "../EditorComponent";
-import {IState} from "../stores/EditorStore";
+import {EditorActions, IState} from "../stores/EditorStore";
 import {ScrollBox} from "../ui/ScrollBox";
 
 export class Palette extends EditorComponent {
@@ -31,15 +31,24 @@ export class Palette extends EditorComponent {
         let x = 5;
         let y = 5;
 
-        const tileLayout = (child: PIXI.Sprite) => {
-            if((x + child.width + padding) > scrollBounds.width) {
+        const tileLayout = (s: PIXI.Sprite) => {
+            if((x + s.width + padding) > scrollBounds.width) {
                 x = 5;
                 y += maxHeight + padding;
                 maxHeight = 0;
             }
-            child.position.set(x, y);
-            maxHeight = Math.max(maxHeight, child.height);
-            x += child.width + padding;
+            s.position.set(x, y);
+            maxHeight = Math.max(maxHeight, s.height);
+            x += s.width + padding;
+        };
+
+        const addMouseEvents = (s: PIXI.Sprite) => {
+            s.on("mousedown", (e: PIXI.interaction.InteractionEvent) => {
+                if(e.target.name !== this.editorStore.state.currentBrush.name) {
+                    const selectedLayer = this.editorStore.state.layers.find(layer => layer.selected);
+                    this.editorStore.Dispatch({type: EditorActions.BRUSH_CHANGED, data: {name: e.target.name, layer: selectedLayer}});
+                }
+            });
         };
 
         this.assetFactory.SpriteNames.forEach(name => {
@@ -52,6 +61,7 @@ export class Palette extends EditorComponent {
             this.paletteContainer.addChild(s);
 
             tileLayout(s);
+            addMouseEvents(s);
         });
 
         this.assetFactory.AnimationNames.forEach(name => {
@@ -66,6 +76,7 @@ export class Palette extends EditorComponent {
             this.paletteContainer.addChild(a);
 
             tileLayout(a);
+            addMouseEvents(a);
         });
 
         this.brushText = new PIXI.Text("", {fontFamily: "Arial", fontSize: 11, fill: 0xeeeeee});

@@ -2,8 +2,8 @@ import {PointLike} from "../../../_lib/math/Geometry";
 import Store, {IAction} from "../../../_lib/Store";
 import {AddTypes} from "../../../_lib/utils/EnumerateTypes";
 
-export type Brush = {name: string; position?: PointLike; pixelOffset: PointLike, rotation: number, scale: PointLike};
-
+export type Brush = {name: string; position: PointLike; pixelOffset: PointLike, rotation: number, scale: PointLike, layerId: number};
+export type Layer = {id: number, name: string, selected: boolean};
 export type LevelDataState = {levelData: LevelData};
 
 export const enum LevelDataActions {
@@ -30,12 +30,15 @@ export default class LevelDataStore extends Store<LevelDataState, ActionData> {
             case LevelDataActions.PAINT: {
                 const levelDataCopy = levelData.concat();
 
-                // remove identical items at this position
+                // remove identical items on this layer at this position
                 const brush: Brush = {...action.data.brush};
                 brush.position = AddTypes(brush.position, action.data.viewOffset);
 
                 const existing = levelDataCopy.filter(v =>
-                    (v.position.x === brush.position.x && v.position.y === brush.position.y && v.name === brush.name)
+                    v.position.x === brush.position.x &&
+                    v.position.y === brush.position.y &&
+                    v.name === brush.name &&
+                    v.layerId === brush.layerId
                 );
                 existing.forEach(item => levelDataCopy.splice(levelDataCopy.indexOf(item), 1));
 
@@ -49,7 +52,9 @@ export default class LevelDataStore extends Store<LevelDataState, ActionData> {
                 // remove last item in the same location
                 for(let i = levelDataCopy.length - 1; i >= 0; i--) {
                     const item = levelDataCopy[i];
-                    if(item.position.x === brush.position.x && item.position.y === brush.position.y) {
+                    if(item.position.x === brush.position.x &&
+                       item.position.y === brush.position.y &&
+                       item.layerId === brush.layerId) {
                         levelDataCopy.splice(i, 1);
                         break;
                     }

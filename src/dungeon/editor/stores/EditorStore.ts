@@ -2,9 +2,7 @@ import {PointLike} from "../../../_lib/math/Geometry";
 import Store, {IAction} from "../../../_lib/Store";
 import {AddTypes, SubtractTypes} from "../../../_lib/utils/EnumerateTypes";
 import {InitalScale} from "../Constants";
-import {Brush} from "./LevelDataStore";
-
-export type Layer = {id: number, name: string, selected: boolean};
+import {Brush, Layer} from "./LevelDataStore";
 
 export const enum EditorActions {
     BRUSH_MOVED, ROTATE_BRUSH, FLIP_BRUSH_H, FLIP_BRUSH_V,
@@ -48,7 +46,7 @@ export interface IState {
 export default class EditorStore extends Store<IState, IActionData> {
     protected DefaultState(): IState {
         return {
-            currentBrush: {name: "", position: {x: 0, y: 0}, pixelOffset: {x: 0, y: 0}, rotation: 0, scale: {x: 1, y: 1}},
+            currentBrush: {name: "", position: {x: 0, y: 0}, pixelOffset: {x: 0, y: 0}, rotation: 0, scale: {x: 1, y: 1}, layerId: 0},
             hoveredBrushName: "",
             keyCode: null,
             layers: [],
@@ -82,7 +80,8 @@ export default class EditorStore extends Store<IState, IActionData> {
             case EditorActions.BRUSH_CHANGED: {
                 return {
                     ...this.DefaultState().currentBrush,
-                    name: action.data.name
+                    name: action.data.name,
+                    layerId: action.data.layer.id
                 };
             }
             case EditorActions.ROTATE_BRUSH: {
@@ -112,6 +111,11 @@ export default class EditorStore extends Store<IState, IActionData> {
                     }
                 };
             }
+            case EditorActions.SELECT_LAYER:
+            return {
+                ...currentBrush,
+                layerId: action.data.layer.id
+            };
             case EditorActions.RESET:
                 return this.DefaultState().currentBrush;
             default:
@@ -156,6 +160,8 @@ export default class EditorStore extends Store<IState, IActionData> {
                         selected: layer.id === action.data.layer.id
                     }
                 });
+            case EditorActions.RESET:
+                return this.DefaultState().layers;
             default:
                 return layers || this.DefaultState().layers;
         }

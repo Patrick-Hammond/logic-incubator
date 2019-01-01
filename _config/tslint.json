@@ -35,7 +35,8 @@
         "no-bitwise": false,
         "no-string-literal": false,
         "array-type": false,
-        "interface-over-type-literal": false
+        "interface-over-type-literal": false,
+        "object-literal-sort-keys": false
     },
     "jsRules": {
         "max-line-length": {

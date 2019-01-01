@@ -62,18 +62,15 @@ export function RegisterMouseEvents(editorStore: EditorStore, levelDataStore: Le
                 }
 
                 if(e.target && e.target.parent instanceof ScrollBox) {
-                    editorStore.Dispatch({data: {name: e.target.name}, type: EditorActions.BRUSH_HOVERED});
+                    editorStore.Dispatch({type: EditorActions.BRUSH_HOVERED, data: {name: e.target.name}});
                 } else {
-                    editorStore.Dispatch({data: {name: currentBrush.name}, type: EditorActions.BRUSH_HOVERED});
+                    editorStore.Dispatch({type: EditorActions.BRUSH_HOVERED, data: {name: currentBrush.name}});
                 }
             }
         }
     });
 
     game.interactionManager.on("mousedown", (e: PIXI.interaction.InteractionEvent) => {
-        if(e.target && e.target.parent instanceof ScrollBox && e.target.name !== editorStore.state.currentBrush.name) {
-            editorStore.Dispatch({data: {name: e.target.name}, type: EditorActions.BRUSH_CHANGED});
-        }
         if(e.data.button === 0) {
             editorStore.Dispatch({type: EditorActions.MOUSE_BUTTON, data: {mouseButtonState: MouseButtonState.LEFT_DOWN}});
         } else if(e.data.button === 1) {

@@ -1,6 +1,6 @@
 import {GridBounds} from "../Constants";
 import EditorComponent from "../EditorComponent";
-import {EditorActions, IState, Layer} from "../stores/EditorStore";
+import {EditorActions, IState} from "../stores/EditorStore";
 import {ListBox, ListBoxEvents} from "../ui/ListBox";
 import TextButton from "../ui/TextButton";
 
@@ -15,13 +15,15 @@ export class Layers extends EditorComponent {
         this.AddToStage();
 
         this.editorStore.Subscribe(this.Render, this);
-
-        this.editorStore.Dispatch({type: EditorActions.ADD_LAYER, data: {layer: {id: 0, name: "layer 0", selected: true}}});
     }
 
     private Render(prevState: IState, state: IState): void {
         if(prevState.layers !== state.layers) {
            this.layerContainer.Set(state.layers);
+        }
+
+        if(state.layers.length === 0) {
+            this.editorStore.Dispatch({type: EditorActions.ADD_LAYER, data: {layer: {id: 0, name: "layer 0", selected: true}}});
         }
     }
 

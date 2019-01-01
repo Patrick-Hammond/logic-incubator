@@ -3,7 +3,7 @@ export default class ObjectPool<T> {
     private pool: T[] = [];
     private popped: T[] = [];
 
-    constructor(initialSize: number, private ctor: () => T) {
+    constructor(initialSize: number, private ctor: () => T, private reset?: (item: T) => void) {
         while(this.pool.length < initialSize) {
             this.pool.push(this.ctor());
         }
@@ -28,6 +28,9 @@ export default class ObjectPool<T> {
     }
 
     Restore(): void {
+        if(this.reset) {
+            this.popped.forEach(this.reset);
+        }
         this.pool.push(...this.popped);
         this.popped = [];
     }
