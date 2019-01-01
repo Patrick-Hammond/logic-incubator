@@ -13,6 +13,7 @@ export const enum EditorActions {
     KEY_DOWN, KEY_UP,
     VIEW_DRAG, VIEW_MOVE,
     ADD_LAYER, REMOVE_LAYER, RENAME_LAYER, SELECT_LAYER,
+    MOVE_LAYER_UP, MOVE_LAYER_DOWN,
     REFRESH, RESET
 };
 
@@ -149,10 +150,11 @@ export default class EditorStore extends Store<IState, IActionData> {
                 return layers.concat(action.data.layer);
             case EditorActions.REMOVE_LAYER:
                 return layers.filter(layer => layer.selected === false);
-            case EditorActions.RENAME_LAYER:
+            case EditorActions.RENAME_LAYER: {
                 const copy = layers.concat();
                 copy.find(l => l.id === action.data.layer.id).name = action.data.name;
                 return copy;
+            }
             case EditorActions.SELECT_LAYER:
                 return layers.map(layer => {
                     return {
@@ -160,6 +162,31 @@ export default class EditorStore extends Store<IState, IActionData> {
                         selected: layer.id === action.data.layer.id
                     }
                 });
+            case EditorActions.MOVE_LAYER_UP: {
+                const copy = layers.concat();
+                const selectedLayer = this.state.layers.find(layer => layer.selected);
+                const index = copy.indexOf(selectedLayer);
+                if(index > 0) {
+                    const prevLayer = copy[index - 1];
+                    copy[index - 1] = selectedLayer;
+                    copy[index] = prevLayer;
+                    return copy;
+                }
+                return layers;
+            }
+            case EditorActions.MOVE_LAYER_DOWN: {
+                const copy = layers.concat();
+                const selectedLayer = this.state.layers.find(layer => layer.selected);
+                const index = copy.indexOf(selectedLayer);
+                const len = layers.length;
+                if(index < len - 1) {
+                    const nextLayer = copy[index + 1];
+                    copy[index + 1] = selectedLayer;
+                    copy[index] = nextLayer;
+                    return copy;
+                }
+                return layers;
+            }
             case EditorActions.RESET:
                 return this.DefaultState().layers;
             default:
