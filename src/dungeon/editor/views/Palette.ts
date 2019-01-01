@@ -43,11 +43,17 @@ export class Palette extends EditorComponent {
         };
 
         const addMouseEvents = (s: PIXI.Sprite) => {
-            s.on("mousedown", (e: PIXI.interaction.InteractionEvent) => {
+            s.on("pointerdown", (e: PIXI.interaction.InteractionEvent) => {
                 if(e.target.name !== this.editorStore.state.currentBrush.name) {
                     const selectedLayer = this.editorStore.state.layers.find(layer => layer.selected);
                     this.editorStore.Dispatch({type: EditorActions.BRUSH_CHANGED, data: {name: e.target.name, layer: selectedLayer}});
                 }
+            });
+            s.on("pointerover", (e: PIXI.interaction.InteractionEvent) => {
+                this.editorStore.Dispatch({type: EditorActions.BRUSH_HOVERED, data: {name: e.target.name}});
+            });
+            s.on("pointerout", (e: PIXI.interaction.InteractionEvent) => {
+                this.editorStore.Dispatch({type: EditorActions.BRUSH_HOVERED, data: {name: this.editorStore.state.currentBrush.name}});
             });
         };
 

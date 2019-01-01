@@ -71,6 +71,11 @@ export class BrushTool extends EditorComponent {
             }
         }
 
+        // visible
+        if(this.brush) {
+            this.brush.visible = state.brushVisible;
+        }
+
         // paint/erase
         const mouseButtonChanged = prevState.mouseButtonState !== state.mouseButtonState;
         if(this.brush && (positionChanged || mouseButtonChanged)) {

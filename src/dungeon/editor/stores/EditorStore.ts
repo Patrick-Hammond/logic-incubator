@@ -6,7 +6,7 @@ import {Brush, Layer} from "./LevelDataStore";
 
 export const enum EditorActions {
     BRUSH_MOVED, ROTATE_BRUSH, FLIP_BRUSH_H, FLIP_BRUSH_V,
-    BRUSH_CHANGED, BRUSH_HOVERED,
+    BRUSH_CHANGED, BRUSH_HOVERED, BRUSH_VISIBLE,
     NUDGE,
     ZOOM_IN, ZOOM_OUT,
     MOUSE_BUTTON,
@@ -31,11 +31,13 @@ interface IActionData {
     move?: PointLike;
     scale?: PointLike;
     persistZoom?: boolean;
-    layer?: Layer
+    layer?: Layer,
+    visible?: boolean
 }
 
 export interface IState {
     currentBrush: Brush;
+    brushVisible: boolean,
     hoveredBrushName: string;
     layers: Layer[];
     mouseButtonState: MouseButtonState;
@@ -48,6 +50,7 @@ export default class EditorStore extends Store<IState, IActionData> {
     protected DefaultState(): IState {
         return {
             currentBrush: {name: "", position: {x: 0, y: 0}, pixelOffset: {x: 0, y: 0}, rotation: 0, scale: {x: 1, y: 1}, layerId: 0},
+            brushVisible: false,
             hoveredBrushName: "",
             keyCode: null,
             layers: [],
@@ -60,6 +63,7 @@ export default class EditorStore extends Store<IState, IActionData> {
     protected Reduce(state: IState, action: IAction<IActionData>): IState {
         const newState = {
             currentBrush: this.UpdateBrush(state.currentBrush, action),
+            brushVisible: this.UpdateBrushVisible(state.brushVisible, action),
             hoveredBrushName: this.UpdateHoveredBrushName(state.hoveredBrushName, action),
             keyCode: this.UpdateKeyDown(state.keyCode, action),
             layers: this.UpdateLayers(state.layers, action),
@@ -121,6 +125,15 @@ export default class EditorStore extends Store<IState, IActionData> {
                 return this.DefaultState().currentBrush;
             default:
                 return currentBrush || this.DefaultState().currentBrush;
+        }
+    }
+
+    private UpdateBrushVisible(visible: boolean, action: IAction<IActionData>): boolean {
+        switch(action.type) {
+            case EditorActions.BRUSH_VISIBLE:
+                return action.data.visible;
+            default:
+                return visible != null ? visible : this.DefaultState().brushVisible;
         }
     }
 

@@ -1,13 +1,13 @@
 import {AssetPath} from "./Constants";
 import EditorComponent from "./EditorComponent";
 import {RegisterKeyboardEvents} from "./interaction/Keyboard";
-import {RegisterMouseEvents} from "./interaction/Mouse";
 import {EditorActions} from "./stores/EditorStore";
 import {ShowHelp} from "./ui/Help";
 import {BrushTool} from "./views/Brush";
 import {Canvas} from "./views/Canvas";
 import {Layers} from "./views/Layers";
 import {Palette} from "./views/Palette";
+import {SelectedBrush} from "./views/SelectedBrush";
 
 export class DungeonEditor extends EditorComponent {
     constructor() {
@@ -23,13 +23,13 @@ export class DungeonEditor extends EditorComponent {
         new BrushTool();
         new Palette();
         new Layers();
+        new SelectedBrush();
 
         // render inital
         this.editorStore.Dispatch({type: EditorActions.REFRESH});
 
         // interaction
         RegisterKeyboardEvents(this.editorStore, this.levelDataStore);
-        RegisterMouseEvents(this.editorStore, this.levelDataStore, this.game);
 
          // help
         ShowHelp();

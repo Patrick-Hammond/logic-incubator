@@ -1,9 +1,9 @@
 import {GridBounds} from "../Constants";
 import EditorComponent from "../EditorComponent";
 import {EditorActions, IState} from "../stores/EditorStore";
+import {LevelDataActions} from "../stores/LevelDataStore";
 import {ListBox, ListBoxEvents} from "../ui/ListBox";
 import TextButton from "../ui/TextButton";
-import {LevelDataActions} from "../stores/LevelDataStore";
 
 export class Layers extends EditorComponent {
 
@@ -76,7 +76,7 @@ export class Layers extends EditorComponent {
         // move up
         const upButton = new TextButton(" ↑ " , () => {
             this.editorStore.Dispatch({type: EditorActions.MOVE_LAYER_UP});
-            this.levelDataStore.Dispatch({type:LevelDataActions.REFRESH});
+            this.levelDataStore.Dispatch({type: LevelDataActions.REFRESH});
         });
         upButton.position.set(GridBounds.right + 103, GridBounds.height);
         this.root.addChild(upButton);
@@ -84,7 +84,7 @@ export class Layers extends EditorComponent {
         // move down
         const downButton = new TextButton(" ↓ " , () => {
             this.editorStore.Dispatch({type: EditorActions.MOVE_LAYER_DOWN});
-            this.levelDataStore.Dispatch({type:LevelDataActions.REFRESH});
+            this.levelDataStore.Dispatch({type: LevelDataActions.REFRESH});
         });
         downButton.position.set(GridBounds.right + 120, GridBounds.height);
         this.root.addChild(downButton);

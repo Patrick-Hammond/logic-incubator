@@ -1,8 +1,8 @@
 import ObjectPool from "../../../_lib/utils/ObjectPool";
-import {AnimationSpeed, GridBounds, InitalScale, TileSize} from "../Constants";
+import {AnimationSpeed, GridBounds, InitalScale, KeyCodes, TileSize} from "../Constants";
 import EditorComponent from "../EditorComponent";
-import {IState} from "../stores/EditorStore";
-import {LevelDataState} from "../stores/LevelDataStore";
+import {EditorActions, IState, MouseButtonState} from "../stores/EditorStore";
+import {LevelDataActions, LevelDataState} from "../stores/LevelDataStore";
 
 export class Canvas extends EditorComponent {
     private grid: PIXI.Graphics = new PIXI.Graphics();
@@ -27,6 +27,8 @@ export class Canvas extends EditorComponent {
         this.editorStore.Subscribe(this.UpdateLayout, this);
 
         this.RedrawGrid(InitalScale);
+
+        this.RegisterGridEvents();
     }
 
     private UpdateLayout(prevState: IState, state: IState): void {
@@ -90,5 +92,98 @@ export class Canvas extends EditorComponent {
             this.grid.lineStyle(1, 0x999999, 0.1);
             this.grid.moveTo(margin, row + margin).lineTo(GridBounds.width + margin, row + margin);
         }
+    }
+
+    private RegisterGridEvents(): void {
+        this.grid.interactive = true;
+        this.grid.on("pointerover", () => {
+            this.editorStore.Dispatch({type: EditorActions.BRUSH_VISIBLE, data: {visible: true}});
+        });
+        this.grid.on("pointerout", () => {
+            this.editorStore.Dispatch({type: EditorActions.BRUSH_VISIBLE, data: {visible: false}});
+        });
+
+        this.grid.on("pointermove",  (e: PIXI.interaction.InteractionEvent) => {
+            const currentBrush = this.editorStore.state.currentBrush;
+            if(currentBrush) {
+                const pos = e.data.global.clone();
+                if(GridBounds.contains(pos.x, pos.y)) {
+                    const scaledTileSize = TileSize * this.editorStore.state.viewScale;
+
+                    // snap to grid
+                    pos.x = ((pos.x - GridBounds.x) / scaledTileSize) | 0;
+                    pos.y = ((pos.y - GridBounds.y) / scaledTileSize) | 0;
+
+                    if(currentBrush.position.x !== pos.x || currentBrush.position.y !== pos.y) {
+
+                        this.editorStore.Dispatch({type: EditorActions.BRUSH_MOVED, data: {position: pos}});
+
+                        // check drag move
+                        const spaceDragging = this.editorStore.state.keyCode === KeyCodes.SPACE &&
+                        this.editorStore.state.mouseButtonState === MouseButtonState.LEFT_DOWN;
+                        const middleButtonDragging = this.editorStore.state.mouseButtonState === MouseButtonState.MIDDLE_DOWN;
+                        if(spaceDragging || middleButtonDragging) {
+                            this.editorStore.Dispatch({type: EditorActions.VIEW_DRAG, data: {position: currentBrush.position}});
+                            this.levelDataStore.Dispatch({type: LevelDataActions.REFRESH});
+                        }
+                    }
+                }
+            }
+        });
+
+        this.grid.on("pointerdown", (e: PIXI.interaction.InteractionEvent) => {
+            if(e.data.button === 0) {
+                this.editorStore.Dispatch({type: EditorActions.MOUSE_BUTTON, data: {mouseButtonState: MouseButtonState.LEFT_DOWN}});
+            } else if(e.data.button === 1) {
+                this.editorStore.Dispatch({type: EditorActions.MOUSE_BUTTON, data: {mouseButtonState: MouseButtonState.MIDDLE_DOWN}});
+            } else if(e.data.button === 2) {
+                this.editorStore.Dispatch({type: EditorActions.MOUSE_BUTTON, data: {mouseButtonState: MouseButtonState.RIGHT_DOWN}});
+            }
+        });
+
+        this.grid.on("pointerup", (e: PIXI.interaction.InteractionEvent) => {
+            this.editorStore.Dispatch({type: EditorActions.MOUSE_BUTTON, data: {mouseButtonState: MouseButtonState.UP}});
+        });
+        this.grid.on("pointerupoutside", (e: PIXI.interaction.InteractionEvent) => {
+            this.editorStore.Dispatch({type: EditorActions.MOUSE_BUTTON, data: {mouseButtonState: MouseButtonState.UP}});
+        });
+        this.grid.on("pointerup", (e: PIXI.interaction.InteractionEvent) => {
+            this.editorStore.Dispatch({type: EditorActions.MOUSE_BUTTON, data: {mouseButtonState: MouseButtonState.UP}});
+        });
+        this.grid.on("pointerupoutside", (e: PIXI.interaction.InteractionEvent) => {
+            this.editorStore.Dispatch({type: EditorActions.MOUSE_BUTTON, data: {mouseButtonState: MouseButtonState.UP}});
+        });
+
+        // mouse wheel zooming
+        this.game.view.onwheel = (e: WheelEvent) => {
+            if(GridBounds.contains(e.offsetX, e.offsetY)) {
+
+                const oldScale = this.editorStore.state.viewScale;
+
+                if(e.deltaY < 0) {
+                    this.editorStore.Dispatch({type: EditorActions.ZOOM_IN});
+                } else if(e.deltaY > 0) {
+                    this.editorStore.Dispatch({type: EditorActions.ZOOM_OUT});
+                }
+
+                // adjust offset to zoom in and out of the cursor position
+                const pos = this.game.interactionManager.mouse.global;
+                const percentPos = {x: (pos.x - GridBounds.x) / GridBounds.width, y: (pos.y - GridBounds.y) / GridBounds.height};
+
+                const oldScaledTileSize = TileSize * oldScale;
+                const newScaledTileSize = TileSize * this.editorStore.state.viewScale;
+
+                const widthDelta = (GridBounds.width / oldScaledTileSize) * newScaledTileSize - GridBounds.width;
+                const heightDelta = (GridBounds.height / oldScaledTileSize) * newScaledTileSize - GridBounds.height;
+
+                const moveDistance = {
+                    x: Math.round((widthDelta / oldScaledTileSize) * percentPos.x),
+                    y: Math.round((heightDelta / oldScaledTileSize) * percentPos.y)
+                };
+
+                this.editorStore.Dispatch({type: EditorActions.VIEW_MOVE, data: {move: moveDistance}});
+                this.levelDataStore.Dispatch({type: LevelDataActions.REFRESH});
+            }
+        };
     }
 }
