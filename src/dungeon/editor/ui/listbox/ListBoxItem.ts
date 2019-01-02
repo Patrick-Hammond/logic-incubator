@@ -1,4 +1,3 @@
-import {AdjustmentFilter} from "pixi-filters";
 import {ListBoxEvents} from "./ListBox";
 import ListItemBase from "./ListBoxItemBase";
 

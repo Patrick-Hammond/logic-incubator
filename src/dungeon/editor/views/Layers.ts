@@ -4,7 +4,7 @@ import {EditorActions, IState} from "../stores/EditorStore";
 import {LevelDataActions} from "../stores/LevelDataStore";
 import {ListBox, ListBoxEvents} from "../ui/listbox/ListBox";
 import ListBoxItem from "../ui/listbox/ListBoxItem";
-import TextButton from "../ui/TextButton";
+import Button from "../ui/Button";
 
 export default class Layers extends EditorComponent {
 
@@ -46,16 +46,16 @@ export default class Layers extends EditorComponent {
             this.editorStore.Dispatch({type: EditorActions.TOGGLE_LAYER_VISIBILITY, data: {layer: this.editorStore.state.layers[index]}});
             this.levelDataStore.Dispatch({type: LevelDataActions.REFRESH});
         });
-        this.root.addChild(this.layerContainer);
+        this.root.addChild(this.layerContainer);      
 
         // add
-        const addButton = new TextButton("ADD", () => {
-            const layerCount = this.editorStore.state.layers.length;
-            if(layerCount < 6) {
+        const addButton = new Button("icon-plus", () => {
+            if(this.editorStore.state.layers.length < 6) {
+                const nextId = this.editorStore.state.layers.reduce((prev, curr) => curr.id > prev.id ? curr : prev).id + 1;
                 this.editorStore.Dispatch({
                     type: EditorActions.ADD_LAYER,
                     data: {
-                        layer: {id: layerCount, name: "layer " + layerCount, selected: false, visible: true}
+                        layer: {id: nextId, name: "layer " + nextId, selected: false, visible: true}
                     }
                 });
             }
@@ -64,40 +64,40 @@ export default class Layers extends EditorComponent {
         this.root.addChild(addButton);
 
         // remove
-        const removeButton = new TextButton("DEL", () => {
+        const removeButton = new Button("icon-minus", () => {
             if(this.editorStore.state.layers.length > 1) {
                 this.editorStore.Dispatch({type: EditorActions.REMOVE_LAYER});
                 this.editorStore.Dispatch({type: EditorActions.SELECT_LAYER, data: {layer: this.editorStore.state.layers[0]}});
             }
         })
-        removeButton.position.set(GridBounds.right + 45, GridBounds.height);
+        removeButton.position.set(addButton.getBounds().right + 5, GridBounds.height);
         this.root.addChild(removeButton);
 
         // rename
-        const renameButton = new TextButton("REN", () => {
+        const renameButton = new Button("icon-edit", () => {
             const selectedLayer = this.editorStore.state.layers.find(layer => layer.selected);
             const name = prompt("Rename layer", selectedLayer.name);
             if(name != null) {
                 this.editorStore.Dispatch({type: EditorActions.RENAME_LAYER, data: {layer: selectedLayer, name}});
             }
         });
-        renameButton.position.set(GridBounds.right + 73, GridBounds.height);
+        renameButton.position.set(removeButton.getBounds().right + 15, GridBounds.height);
         this.root.addChild(renameButton);
 
         // move up
-        const upButton = new TextButton(" ↑ ", () => {
+        const upButton = new Button("icon-arrow-up", () => {
             this.editorStore.Dispatch({type: EditorActions.MOVE_LAYER_UP});
             this.levelDataStore.Dispatch({type: LevelDataActions.REFRESH});
         });
-        upButton.position.set(GridBounds.right + 103, GridBounds.height);
+        upButton.position.set(renameButton.getBounds().right + 15, GridBounds.height);
         this.root.addChild(upButton);
 
         // move down
-        const downButton = new TextButton(" ↓ ", () => {
+        const downButton = new Button("icon-arrow-down", () => {
             this.editorStore.Dispatch({type: EditorActions.MOVE_LAYER_DOWN});
             this.levelDataStore.Dispatch({type: LevelDataActions.REFRESH});
         });
-        downButton.position.set(GridBounds.right + 120, GridBounds.height);
+        downButton.position.set(upButton.getBounds().right + 5, GridBounds.height);
         this.root.addChild(downButton);
     }
 }

@@ -15,8 +15,13 @@ export class DungeonEditor extends EditorComponent {
 
         this.loader.LoadSpriteSheet(AssetPath + "spritesheet.json", /^.+(?=_f)/, () => {
             this.game.loader.add([
-                {name: "icon_eye", url: AssetPath + "icons/eye.svg"},
-                {name: "icon_eye_slash", url: AssetPath + "icons/eye-slash.svg"}
+                {name: "icon-eye",        url: AssetPath + "icons/eye.png"},
+                {name: "icon-eye-slash",  url: AssetPath + "icons/eye-slash.png"},
+                {name: "icon-arrow-down", url: AssetPath + "icons/arrow-down.png"},
+                {name: "icon-arrow-up",   url: AssetPath + "icons/arrow-up.png"},
+                {name: "icon-edit",       url: AssetPath + "icons/edit.png"},
+                {name: "icon-plus",       url: AssetPath + "icons/plus.png"},
+                {name: "icon-minus",      url: AssetPath + "icons/minus.png"}
             ]);
             this.game.loader.load(() => this.Create());
         });
