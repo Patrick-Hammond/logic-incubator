@@ -4,7 +4,6 @@ import {EditorActions, IState} from "../stores/EditorStore";
 import {ScrollBox} from "../ui/ScrollBox";
 
 export default class Palette extends EditorComponent {
-    private brushText: PIXI.Text;
     private paletteContainer: ScrollBox;
 
     constructor() {
@@ -12,18 +11,12 @@ export default class Palette extends EditorComponent {
 
         this.Create();
         this.AddToStage();
-        this.editorStore.Subscribe(this.Render, this);
-    }
-
-    private Render(prevState: IState, state: IState): void {
-        if(prevState.hoveredBrushName !== state.hoveredBrushName) {
-            this.brushText.text = state.hoveredBrushName;
-        }
     }
 
     private Create(): void {
         const scrollBounds = new PIXI.Rectangle(GridBounds.right + 10, GridBounds.y, 260, GridBounds.height * 0.75);
         this.paletteContainer = new ScrollBox(scrollBounds, 1);
+        this.paletteContainer.interactive = true;
         this.root.addChild(this.paletteContainer);
 
         const padding = 2;
@@ -42,20 +35,21 @@ export default class Palette extends EditorComponent {
             x += s.width + padding;
         };
 
-        const addMouseEvents = (s: PIXI.Sprite) => {
-            s.on("pointerdown", (e: PIXI.interaction.InteractionEvent) => {
-                if(e.target.name !== this.editorStore.state.currentBrush.name) {
-                    const selectedLayer = this.editorStore.state.layers.find(layer => layer.selected);
-                    this.editorStore.Dispatch({type: EditorActions.BRUSH_CHANGED, data: {name: e.target.name, layer: selectedLayer}});
-                }
-            });
+        const addRollOver = (s:PIXI.DisplayObject)=> {
             s.on("pointerover", (e: PIXI.interaction.InteractionEvent) => {
                 this.editorStore.Dispatch({type: EditorActions.BRUSH_HOVERED, data: {name: e.target.name}});
             });
-            s.on("pointerout", (e: PIXI.interaction.InteractionEvent) => {
-                this.editorStore.Dispatch({type: EditorActions.BRUSH_HOVERED, data: {name: this.editorStore.state.currentBrush.name}});
-            });
-        };
+        }
+
+        this.paletteContainer.on("pointerdown", (e: PIXI.interaction.InteractionEvent) => {
+            if(e.target.name !== this.editorStore.state.currentBrush.name) {
+                const selectedLayer = this.editorStore.state.layers.find(layer => layer.selected);
+                this.editorStore.Dispatch({type: EditorActions.BRUSH_CHANGED, data: {name: e.target.name, layer: selectedLayer}});
+            }
+        });
+        this.paletteContainer.on("pointerout", (e: PIXI.interaction.InteractionEvent) => {
+            this.editorStore.Dispatch({type: EditorActions.BRUSH_HOVERED, data: {name: this.editorStore.state.currentBrush.name}});
+        });
 
         this.assetFactory.SpriteNames.forEach(name => {
             const s = this.assetFactory.Create(name);
@@ -67,7 +61,7 @@ export default class Palette extends EditorComponent {
             this.paletteContainer.addChild(s);
 
             tileLayout(s);
-            addMouseEvents(s);
+            addRollOver(s);
         });
 
         this.assetFactory.AnimationNames.forEach(name => {
@@ -82,11 +76,7 @@ export default class Palette extends EditorComponent {
             this.paletteContainer.addChild(a);
 
             tileLayout(a);
-            addMouseEvents(a);
+            addRollOver(a);
         });
-
-        this.brushText = new PIXI.Text("", {fontFamily: "Arial", fontSize: 11, fill: 0xeeeeee});
-        this.brushText.position.set(scrollBounds.x, 3);
-        this.root.addChild(this.brushText);
     }
 }
