@@ -5,7 +5,7 @@ import {EditorActions} from "./stores/EditorStore";
 import {ShowHelp} from "./ui/Help";
 import BrushTool from "./views/Brush";
 import Canvas from "./views/Canvas";
-import Layers from "./views/Layers";
+import Layers from "./views/layers/Layers";
 import Palette from "./views/Palette";
 import SelectedBrush from "./views/SelectedBrush";
 

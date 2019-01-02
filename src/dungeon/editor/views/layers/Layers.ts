@@ -1,10 +1,10 @@
-import {GridBounds} from "../Constants";
-import EditorComponent from "../EditorComponent";
-import {EditorActions, IState} from "../stores/EditorStore";
-import {LevelDataActions} from "../stores/LevelDataStore";
-import {ListBox, ListBoxEvents} from "../ui/listbox/ListBox";
-import ListBoxItem from "../ui/listbox/ListBoxItem";
-import Button from "../ui/Button";
+import {GridBounds} from "../../Constants";
+import EditorComponent from "../../EditorComponent";
+import {EditorActions, IState} from "../../stores/EditorStore";
+import {LevelDataActions} from "../../stores/LevelDataStore";
+import {ListBox, ListBoxEvents} from "../../ui/listbox/ListBox";
+import ListBoxItem from "./LayerListBoxItem";
+import Button from "../../ui/Button";
 
 export default class Layers extends EditorComponent {
 

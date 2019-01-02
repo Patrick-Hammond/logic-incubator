@@ -1,5 +1,5 @@
-import {ListBoxEvents} from "./ListBox";
-import ListItemBase from "./ListBoxItemBase";
+import {ListBoxEvents} from "../../ui/listbox/ListBox";
+import ListItemBase from "../../ui/listbox/ListBoxItemBase";
 
 export default class ListBoxItem extends ListItemBase {
 
@@ -34,9 +34,8 @@ export default class ListBoxItem extends ListItemBase {
         });
         this.addChild(this.label);
 
-        this.eyeIcon = PIXI.Sprite.from("icon_eye");
+        this.eyeIcon = PIXI.Sprite.from("icon-eye");
         this.eyeIcon.anchor.set(0.5);
-        this.eyeIcon.scale.set(0.1);
         this.eyeIcon.alpha = 0.7;
         this.eyeIcon.position.set(bounds.width - 20, 6);
         this.eyeIcon.buttonMode = true;
@@ -57,6 +56,6 @@ export default class ListBoxItem extends ListItemBase {
 
         this.selection.visible = item.selected;
 
-        this.eyeIcon.texture = PIXI.Texture.from(item.visible ? "icon_eye" : "icon_eye_slash");
+        this.eyeIcon.texture = PIXI.Texture.from(item.visible ? "icon-eye" : "icon-eye-slash");
     }
 }
