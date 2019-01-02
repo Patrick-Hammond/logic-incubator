@@ -3,7 +3,7 @@ import Store, {IAction} from "../../../_lib/Store";
 import {AddTypes} from "../../../_lib/utils/EnumerateTypes";
 
 export type Brush = {name: string; position: PointLike; pixelOffset: PointLike, rotation: number, scale: PointLike, layerId: number};
-export type Layer = {id: number, name: string, selected: boolean, visible: boolean};
+export type Layer = {id: number, name: string, selected: boolean, visible: boolean, isData: boolean};
 export type LevelDataState = {levelData: LevelData};
 
 export const enum LevelDataActions {
