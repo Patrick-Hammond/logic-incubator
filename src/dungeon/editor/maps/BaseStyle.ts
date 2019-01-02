@@ -2,7 +2,7 @@ import {PointLike, RectangleLike} from "../../../_lib/math/Geometry";
 import {Brush} from "../stores/LevelDataStore";
 import {IStyler} from "./Styler";
 
-const defaultBrush: Brush = {name: "", position: {x: 0, y: 0}, pixelOffset: {x: 0, y: 0}, rotation: 0, scale: {x: 1, y: 1}, layerId:0};
+const defaultBrush: Brush = {name: "", position: {x: 0, y: 0}, pixelOffset: {x: 0, y: 0}, rotation: 0, scale: {x: 1, y: 1}, layerId:0, data:null};
 
 export abstract class BaseStyle implements IStyler {
 

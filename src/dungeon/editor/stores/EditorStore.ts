@@ -32,7 +32,8 @@ interface IActionData {
     scale?: PointLike;
     persistZoom?: boolean;
     layer?: Layer,
-    visible?: boolean
+    visible?: boolean,
+    data?: number
 }
 
 export interface IState {
@@ -49,7 +50,7 @@ export interface IState {
 export default class EditorStore extends Store<IState, IActionData> {
     protected DefaultState(): IState {
         return {
-            currentBrush: {name: "", position: {x: 0, y: 0}, pixelOffset: {x: 0, y: 0}, rotation: 0, scale: {x: 1, y: 1}, layerId: 0},
+            currentBrush: {name: "", position: {x: 0, y: 0}, pixelOffset: {x: 0, y: 0}, rotation: 0, scale: {x: 1, y: 1}, layerId: 0, data: null},
             brushVisible: false,
             hoveredBrushName: "",
             keyCode: null,
@@ -86,7 +87,8 @@ export default class EditorStore extends Store<IState, IActionData> {
                 return {
                     ...this.DefaultState().currentBrush,
                     name: action.data.name,
-                    layerId: action.data.layer.id
+                    layerId: action.data.layer.id,
+                    data: action.data.data
                 };
             }
             case EditorActions.ROTATE_BRUSH: {
