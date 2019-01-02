@@ -28,4 +28,12 @@ export class ScrollBox extends BaseContainer {
             }
         };
     }
+
+    SetVisible(tf:boolean): void {
+        this.children.forEach(child => {
+            if(child.name !== "mask" && child.name !== "border") {
+                child.visible = tf;
+            }
+        });
+    }
 }

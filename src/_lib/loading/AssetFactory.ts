@@ -18,7 +18,10 @@ export default class AssetFactory {
         return this.names.anims;
     }
 
-    public Add(name: string, frameNames: string[]): void {
+    public Add(name: string, frameNames: string[], textures?: PIXI.Texture[]): void {
+        if(textures){
+            frameNames.forEach((frameName, index) => PIXI.utils.TextureCache[frameName] = textures[index]);
+        }
         this.registry[ name ] = frameNames;
         frameNames.length === 1 ? this.names.sprites.push(name) : this.names.anims.push(name);
     }

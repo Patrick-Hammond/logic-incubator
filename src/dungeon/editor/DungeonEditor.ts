@@ -22,7 +22,8 @@ export class DungeonEditor extends EditorComponent {
                 {name: "icon-edit",       url: AssetPath + "icons/edit.png"},
                 {name: "icon-plus",       url: AssetPath + "icons/plus.png"},
                 {name: "icon-minus",      url: AssetPath + "icons/minus.png"},
-                {name: "icon-data",      url: AssetPath + "icons/data.png"}
+                {name: "icon-data",       url: AssetPath + "icons/data.png"},
+                {name: "data-square",     url: AssetPath + "icons/square.png"}
             ]);
             this.game.loader.load(() => this.Create());
         });

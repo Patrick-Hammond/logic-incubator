@@ -118,7 +118,7 @@ export default class EditorStore extends Store<IState, IActionData> {
             }
             case EditorActions.SELECT_LAYER:
                 return {
-                    ...currentBrush,
+                    ...this.DefaultState().currentBrush,
                     layerId: action.data.layer.id
                 };
             case EditorActions.RESET:
