@@ -59,6 +59,7 @@
     "webpack-dev-server": "^2.4.4"
   },
   "dependencies": {
+    "pixi-filters": "^2.6.2",
     "rot-js": "^2.0.2"
   }
 }

@@ -1,3 +1,5 @@
 {
-    "tslint.configFile": "_config/tslint.json"
+    "tslint.configFile": "_config/tslint.json",
+    "typescript.format.insertSpaceAfterKeywordsInControlFlowStatements": false,
+    "typescript.format.insertSpaceAfterFunctionKeywordForAnonymousFunctions": false
 }

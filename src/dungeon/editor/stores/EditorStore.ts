@@ -13,7 +13,7 @@ export const enum EditorActions {
     KEY_DOWN, KEY_UP,
     VIEW_DRAG, VIEW_MOVE,
     ADD_LAYER, REMOVE_LAYER, RENAME_LAYER, SELECT_LAYER,
-    MOVE_LAYER_UP, MOVE_LAYER_DOWN,
+    MOVE_LAYER_UP, MOVE_LAYER_DOWN, TOGGLE_LAYER_VISIBILITY,
     REFRESH, RESET
 };
 
@@ -117,10 +117,10 @@ export default class EditorStore extends Store<IState, IActionData> {
                 };
             }
             case EditorActions.SELECT_LAYER:
-            return {
-                ...currentBrush,
-                layerId: action.data.layer.id
-            };
+                return {
+                    ...currentBrush,
+                    layerId: action.data.layer.id
+                };
             case EditorActions.RESET:
                 return this.DefaultState().currentBrush;
             default:
@@ -175,9 +175,13 @@ export default class EditorStore extends Store<IState, IActionData> {
                         selected: layer.id === action.data.layer.id
                     }
                 });
+            case EditorActions.TOGGLE_LAYER_VISIBILITY: {
+                action.data.layer.visible = !action.data.layer.visible;
+                return layers.concat();
+            }
             case EditorActions.MOVE_LAYER_UP: {
                 const copy = layers.concat();
-                const selectedLayer = this.state.layers.find(layer => layer.selected);
+                const selectedLayer = copy.find(layer => layer.selected);
                 const index = copy.indexOf(selectedLayer);
                 if(index > 0) {
                     const prevLayer = copy[index - 1];

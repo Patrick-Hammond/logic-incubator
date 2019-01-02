@@ -4,7 +4,7 @@ import EditorComponent from "../EditorComponent";
 import {EditorActions, IState, MouseButtonState} from "../stores/EditorStore";
 import {LevelDataActions, LevelDataState} from "../stores/LevelDataStore";
 
-export class Canvas extends EditorComponent {
+export default class Canvas extends EditorComponent {
     private grid: PIXI.Graphics = new PIXI.Graphics();
     private mask: PIXI.Graphics = new PIXI.Graphics();
     private levelContainer = new PIXI.Container();
@@ -14,9 +14,9 @@ export class Canvas extends EditorComponent {
         super();
 
         this.layerContainers = new ObjectPool<PIXI.Container>(6,
-                () => new PIXI.Container(),
-                (item: PIXI.Container) => item.removeChildren()
-            );
+            () => new PIXI.Container(),
+            (item: PIXI.Container) => item.removeChildren()
+        );
 
         this.root.addChild(this.grid, this.levelContainer, this.mask);
         this.levelContainer.mask = this.mask;
@@ -46,6 +46,7 @@ export class Canvas extends EditorComponent {
             this.editorStore.state.layers.forEach(layer => {
                 const layerContainer = this.layerContainers.Get();
                 layerDict[layer.id] = layerContainer;
+                layerContainer.visible = layer.visible;
                 this.levelContainer.addChild(layerContainer);
             })
 
@@ -53,24 +54,26 @@ export class Canvas extends EditorComponent {
             const viewOffset = this.editorStore.state.viewOffset;
 
             state.levelData.forEach(brush => {
-                const sprite = this.assetFactory.Create(brush.name);
-                const scaleX = brush.scale.x * this.editorStore.state.viewScale;
-                const scaleY = brush.scale.y * this.editorStore.state.viewScale;
-                const flipOffsetX = scaleX < 0 ? sprite.width * this.editorStore.state.viewScale : 0;
-                const flipOffsetY = scaleY < 0 ? sprite.height * this.editorStore.state.viewScale : 0;
-                const posX = (brush.position.x - viewOffset.x) * scaledTileSize + GridBounds.x + flipOffsetX;
-                const posY = (brush.position.y - viewOffset.y) * scaledTileSize + GridBounds.y + flipOffsetY;
+                if(layerDict[brush.layerId].visible) {
+                    const sprite = this.assetFactory.Create(brush.name);
+                    const scaleX = brush.scale.x * this.editorStore.state.viewScale;
+                    const scaleY = brush.scale.y * this.editorStore.state.viewScale;
+                    const flipOffsetX = scaleX < 0 ? sprite.width * this.editorStore.state.viewScale : 0;
+                    const flipOffsetY = scaleY < 0 ? sprite.height * this.editorStore.state.viewScale : 0;
+                    const posX = (brush.position.x - viewOffset.x) * scaledTileSize + GridBounds.x + flipOffsetX;
+                    const posY = (brush.position.y - viewOffset.y) * scaledTileSize + GridBounds.y + flipOffsetY;
 
-                if(GridBounds.contains(posX, posY)) {
-                    sprite.position.set(posX, posY);
-                    sprite.rotation = brush.rotation;
-                    sprite.pivot.set(brush.pixelOffset.x, brush.pixelOffset.y);
-                    sprite.scale.set(scaleX, scaleY);
-                    if(sprite instanceof PIXI.extras.AnimatedSprite) {
-                        sprite.play();
-                        sprite.animationSpeed = AnimationSpeed;
+                    if(GridBounds.contains(posX, posY)) {
+                        sprite.position.set(posX, posY);
+                        sprite.rotation = brush.rotation;
+                        sprite.pivot.set(brush.pixelOffset.x, brush.pixelOffset.y);
+                        sprite.scale.set(scaleX, scaleY);
+                        if(sprite instanceof PIXI.extras.AnimatedSprite) {
+                            sprite.play();
+                            sprite.animationSpeed = AnimationSpeed;
+                        }
+                        layerDict[brush.layerId].addChild(sprite);
                     }
-                    layerDict[brush.layerId].addChild(sprite);
                 }
             });
         }
@@ -103,7 +106,7 @@ export class Canvas extends EditorComponent {
             this.editorStore.Dispatch({type: EditorActions.BRUSH_VISIBLE, data: {visible: false}});
         });
 
-        this.grid.on("pointermove",  (e: PIXI.interaction.InteractionEvent) => {
+        this.grid.on("pointermove", (e: PIXI.interaction.InteractionEvent) => {
             const currentBrush = this.editorStore.state.currentBrush;
             if(currentBrush) {
                 const pos = e.data.global.clone();
@@ -120,7 +123,7 @@ export class Canvas extends EditorComponent {
 
                         // check drag move
                         const spaceDragging = this.editorStore.state.keyCode === KeyCodes.SPACE &&
-                        this.editorStore.state.mouseButtonState === MouseButtonState.LEFT_DOWN;
+                            this.editorStore.state.mouseButtonState === MouseButtonState.LEFT_DOWN;
                         const middleButtonDragging = this.editorStore.state.mouseButtonState === MouseButtonState.MIDDLE_DOWN;
                         if(spaceDragging || middleButtonDragging) {
                             this.editorStore.Dispatch({type: EditorActions.VIEW_DRAG, data: {position: currentBrush.position}});

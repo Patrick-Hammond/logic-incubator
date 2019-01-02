@@ -4,7 +4,7 @@ export const EditorHeight = 720;
 export const InitalScale = 1.5;
 export const TileSize = 16;
 export const AnimationSpeed = 0.2;
-export const AssetPath = "http://localhost:4000/dist-include/spritesheet.json";
+export const AssetPath = "http://localhost:4000/dist-include/";
 
 export const GridBounds = new PIXI.Rectangle(20, 20, EditorWidth - 300, EditorHeight - 40);
 

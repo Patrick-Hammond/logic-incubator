@@ -3,7 +3,7 @@ import EditorComponent from "../EditorComponent";
 import {IState, MouseButtonState} from "../stores/EditorStore";
 import {LevelDataActions} from "../stores/LevelDataStore";
 
-export class BrushTool extends EditorComponent {
+export default class BrushTool extends EditorComponent {
 
     private brush: PIXI.Sprite | PIXI.extras.AnimatedSprite;
 
@@ -34,7 +34,7 @@ export class BrushTool extends EditorComponent {
             this.brush.position.set(
                 pos.x * scaledTileSize + GridBounds.x + flipOffset.x,
                 pos.y * scaledTileSize + GridBounds.y + flipOffset.y
-                );
+            );
         }
 
         // rotation
@@ -47,7 +47,7 @@ export class BrushTool extends EditorComponent {
             this.brush.pivot.set(state.currentBrush.pixelOffset.x, state.currentBrush.pixelOffset.y);
         }
 
-         // brush
+        // brush
         if(prevState.currentBrush.name !== state.currentBrush.name) {
 
             if(this.brush) {
@@ -62,7 +62,7 @@ export class BrushTool extends EditorComponent {
                 this.brush.position.set(
                     prevState.currentBrush.position.x * scaledTileSize,
                     prevState.currentBrush.position.y * scaledTileSize
-                    );
+                );
                 if(this.brush instanceof PIXI.extras.AnimatedSprite) {
                     this.brush.play();
                     this.brush.animationSpeed = AnimationSpeed;

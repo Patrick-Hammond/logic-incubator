@@ -3,7 +3,7 @@ import EditorComponent from "../EditorComponent";
 import {EditorActions, IState} from "../stores/EditorStore";
 import {ScrollBox} from "../ui/ScrollBox";
 
-export class Palette extends EditorComponent {
+export default class Palette extends EditorComponent {
     private brushText: PIXI.Text;
     private paletteContainer: ScrollBox;
 

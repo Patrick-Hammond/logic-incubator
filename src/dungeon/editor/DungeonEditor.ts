@@ -3,17 +3,23 @@ import EditorComponent from "./EditorComponent";
 import {RegisterKeyboardEvents} from "./interaction/Keyboard";
 import {EditorActions} from "./stores/EditorStore";
 import {ShowHelp} from "./ui/Help";
-import {BrushTool} from "./views/Brush";
-import {Canvas} from "./views/Canvas";
-import {Layers} from "./views/Layers";
-import {Palette} from "./views/Palette";
-import {SelectedBrush} from "./views/SelectedBrush";
+import BrushTool from "./views/Brush";
+import Canvas from "./views/Canvas";
+import Layers from "./views/Layers";
+import Palette from "./views/Palette";
+import SelectedBrush from "./views/SelectedBrush";
 
 export class DungeonEditor extends EditorComponent {
     constructor() {
         super();
 
-        this.loader.LoadSpriteSheet(AssetPath, /^.+(?=_f)/, () => this.Create());
+        this.loader.LoadSpriteSheet(AssetPath + "spritesheet.json", /^.+(?=_f)/, () => {
+            this.game.loader.add([
+                {name: "icon_eye", url: AssetPath + "icons/eye.svg"},
+                {name: "icon_eye_slash", url: AssetPath + "icons/eye-slash.svg"}
+            ]);
+            this.game.loader.load(() => this.Create());
+        });
     }
 
     private Create(): void {
@@ -31,7 +37,7 @@ export class DungeonEditor extends EditorComponent {
         // interaction
         RegisterKeyboardEvents(this.editorStore, this.levelDataStore);
 
-         // help
+        // help
         ShowHelp();
     }
 }

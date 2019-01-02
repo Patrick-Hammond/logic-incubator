@@ -3,7 +3,7 @@ import Store, {IAction} from "../../../_lib/Store";
 import {AddTypes} from "../../../_lib/utils/EnumerateTypes";
 
 export type Brush = {name: string; position: PointLike; pixelOffset: PointLike, rotation: number, scale: PointLike, layerId: number};
-export type Layer = {id: number, name: string, selected: boolean};
+export type Layer = {id: number, name: string, selected: boolean, visible: boolean};
 export type LevelDataState = {levelData: LevelData};
 
 export const enum LevelDataActions {
@@ -53,8 +53,8 @@ export default class LevelDataStore extends Store<LevelDataState, ActionData> {
                 for(let i = levelDataCopy.length - 1; i >= 0; i--) {
                     const item = levelDataCopy[i];
                     if(item.position.x === brush.position.x &&
-                       item.position.y === brush.position.y &&
-                       item.layerId === brush.layerId) {
+                        item.position.y === brush.position.y &&
+                        item.layerId === brush.layerId) {
                         levelDataCopy.splice(i, 1);
                         break;
                     }

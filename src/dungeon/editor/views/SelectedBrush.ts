@@ -2,7 +2,7 @@ import {GridBounds} from "../Constants";
 import EditorComponent from "../EditorComponent";
 import {IState} from "../stores/EditorStore";
 
-export class SelectedBrush extends EditorComponent {
+export default class SelectedBrush extends EditorComponent {
     private brush: PIXI.Sprite = new PIXI.Sprite();
 
     constructor() {
