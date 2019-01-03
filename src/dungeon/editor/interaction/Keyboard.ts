@@ -12,16 +12,16 @@ export function RegisterKeyboardEvents(editorStore: EditorStore, levelDataStore:
     document.onkeydown = (e: KeyboardEvent) => {
         switch(e.keyCode) {
             case KeyCodes.UP:
-                editorStore.Dispatch({type: EditorActions.NUDGE, data: {nudge: {x: 0, y: 1}}});
+                editorStore.Dispatch({type: EditorActions.BRUSH_NUDGE, data: {nudge: {x: 0, y: 1}}});
                 break;
             case KeyCodes.DOWN:
-                editorStore.Dispatch({type: EditorActions.NUDGE, data: {nudge: {x: 0, y: -1}}});
+                editorStore.Dispatch({type: EditorActions.BRUSH_NUDGE, data: {nudge: {x: 0, y: -1}}});
                 break;
             case KeyCodes.LEFT:
-                editorStore.Dispatch({type: EditorActions.NUDGE, data: {nudge: {x: 1, y: 0}}});
+                editorStore.Dispatch({type: EditorActions.BRUSH_NUDGE, data: {nudge: {x: 1, y: 0}}});
                 break;
             case KeyCodes.RIGHT:
-                editorStore.Dispatch({type: EditorActions.NUDGE, data: {nudge: {x: -1, y: 0}}});
+                editorStore.Dispatch({type: EditorActions.BRUSH_NUDGE, data: {nudge: {x: -1, y: 0}}});
                 break;
             case KeyCodes.H:
                 editorStore.Dispatch({type: EditorActions.FLIP_BRUSH_H});
@@ -38,19 +38,17 @@ export function RegisterKeyboardEvents(editorStore: EditorStore, levelDataStore:
                 }
                 break;
             case KeyCodes.PLUS:
-                editorStore.Dispatch({type: EditorActions.ZOOM_IN});
-                levelDataStore.Dispatch({type: LevelDataActions.REFRESH});
+                editorStore.Dispatch({type: EditorActions.DATA_BRUSH_INC});
                 break;
             case KeyCodes.MINUS:
-                editorStore.Dispatch({type: EditorActions.ZOOM_OUT});
-                levelDataStore.Dispatch({type: LevelDataActions.REFRESH});
+                editorStore.Dispatch({type: EditorActions.DATA_BRUSH_DEC});
                 break;
             case KeyCodes.S:
                 FileUtils.SaveTextFile("dungeonLevel.txt", levelDataStore.SerializeJSON());
                 break;
             case KeyCodes.L:
                 FileUtils.ShowOpenFileDialog().then((fileList: FileList) => {
-                    FileUtils.LoadTextFile(fileList[ 0 ]).then((text: string) => {
+                    FileUtils.LoadTextFile(fileList[0]).then((text: string) => {
                         levelDataStore.LoadJSON(text);
                     });
                 });
@@ -71,22 +69,22 @@ export function RegisterKeyboardEvents(editorStore: EditorStore, levelDataStore:
             case KeyCodes.FIVE:     // eller maze
             case KeyCodes.SIX:      // icey maze
             case KeyCodes.SEVEN: {
-                    const ok = confirm("This will delete the current map. Are you sure?");
-                    if(ok) {
-                        editorStore.Dispatch({type: EditorActions.RESET, data: {persistZoom: true}});
-                        levelDataStore.Dispatch({type: LevelDataActions.RESET});
+                const ok = confirm("This will delete the current map. Are you sure?");
+                if(ok) {
+                    editorStore.Dispatch({type: EditorActions.RESET, data: {persistZoom: true}});
+                    levelDataStore.Dispatch({type: LevelDataActions.RESET});
 
-                        const scaledTileSize = TileSize * editorStore.state.viewScale;
-                        const w = GridBounds.width / scaledTileSize;
-                        const h = GridBounds.height / scaledTileSize;
+                    const scaledTileSize = TileSize * editorStore.state.viewScale;
+                    const w = GridBounds.width / scaledTileSize;
+                    const h = GridBounds.height / scaledTileSize;
 
-                        const mapType: MapType = e.keyCode - KeyCodes.ONE;
-                        let map: IMap = GenerateMap(mapType, w, h);
-                        map = ApplyMapStyle(map, new Style0x7());
-                        levelDataStore.Load({levelData: map.levelData} as LevelDataState);
-                    }
-                    break;
+                    const mapType: MapType = e.keyCode - KeyCodes.ONE;
+                    let map: IMap = GenerateMap(mapType, w, h);
+                    map = ApplyMapStyle(map, new Style0x7());
+                    levelDataStore.Load({levelData: map.levelData} as LevelDataState);
                 }
+                break;
+            }
             default:
                 editorStore.Dispatch({type: EditorActions.KEY_DOWN, data: {keyCode: e.keyCode}});
                 break;

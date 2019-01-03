@@ -1,4 +1,4 @@
-export abstract class BaseContainer extends PIXI.Container {
+export default abstract class BaseContainer extends PIXI.Container {
     constructor(protected bounds: PIXI.Rectangle, borderWidth: number = 0) {
         super();
 

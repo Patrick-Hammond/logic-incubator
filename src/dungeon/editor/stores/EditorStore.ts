@@ -6,8 +6,8 @@ import {Brush, Layer} from "./LevelDataStore";
 
 export const enum EditorActions {
     BRUSH_MOVED, ROTATE_BRUSH, FLIP_BRUSH_H, FLIP_BRUSH_V,
-    BRUSH_CHANGED, BRUSH_HOVERED, BRUSH_VISIBLE,
-    NUDGE,
+    BRUSH_CHANGED, BRUSH_HOVERED, BRUSH_VISIBLE, BRUSH_NUDGE,
+    DATA_BRUSH_INC, DATA_BRUSH_DEC,
     ZOOM_IN, ZOOM_OUT,
     MOUSE_BUTTON,
     KEY_DOWN, KEY_UP,
@@ -21,6 +21,8 @@ export const enum MouseButtonState {
     LEFT_DOWN, RIGHT_DOWN, UP, MIDDLE_DOWN
 }
 
+export type DataBrush = {name: string, colour: number, value: number};
+
 interface IActionData {
     mouseButtonState?: MouseButtonState;
     keyCode?: number;
@@ -32,14 +34,14 @@ interface IActionData {
     scale?: PointLike;
     persistZoom?: boolean;
     layer?: Layer,
-    visible?: boolean,
-    data?: number
+    visible?: boolean
 }
 
 export interface IState {
     currentBrush: Brush;
     brushVisible: boolean,
     hoveredBrushName: string;
+    dataBrushes: DataBrush[],
     layers: Layer[];
     mouseButtonState: MouseButtonState;
     keyCode: number;
@@ -50,9 +52,24 @@ export interface IState {
 export default class EditorStore extends Store<IState, IActionData> {
     protected DefaultState(): IState {
         return {
-            currentBrush: {name: "", position: {x: 0, y: 0}, pixelOffset: {x: 0, y: 0}, rotation: 0, scale: {x: 1, y: 1}, layerId: 0, data: null},
+            currentBrush: {
+                name: "",
+                position: {x: 0, y: 0},
+                pixelOffset: {x: 0, y: 0},
+                rotation: 0,
+                scale: {x: 1, y: 1},
+                layerId: 0,
+                data: null
+            },
             brushVisible: false,
             hoveredBrushName: "",
+            dataBrushes: [
+                {name: "data-1", colour: 0xfe3464, value: null},
+                {name: "data-2", colour: 0xffd166, value: null},
+                {name: "data-3", colour: 0x06d6a0, value: null},
+                {name: "data-4", colour: 0x118ab2, value: null},
+                {name: "data-5", colour: 0xff8100, value: null}
+            ],
             keyCode: null,
             layers: [],
             mouseButtonState: MouseButtonState.UP,
@@ -66,6 +83,7 @@ export default class EditorStore extends Store<IState, IActionData> {
             currentBrush: this.UpdateBrush(state.currentBrush, action),
             brushVisible: this.UpdateBrushVisible(state.brushVisible, action),
             hoveredBrushName: this.UpdateHoveredBrushName(state.hoveredBrushName, action),
+            dataBrushes: this.UpdateDataBrushes(state.dataBrushes, action),
             keyCode: this.UpdateKeyDown(state.keyCode, action),
             layers: this.UpdateLayers(state.layers, action),
             mouseButtonState: this.UpdateMouseButton(state.mouseButtonState, action),
@@ -84,11 +102,12 @@ export default class EditorStore extends Store<IState, IActionData> {
                 };
             }
             case EditorActions.BRUSH_CHANGED: {
+                const dataBrush = this.state.dataBrushes.find(db => db.name === action.data.name);
                 return {
                     ...this.DefaultState().currentBrush,
                     name: action.data.name,
                     layerId: action.data.layer.id,
-                    data: action.data.data
+                    data: dataBrush ? dataBrush.value : null
                 };
             }
             case EditorActions.ROTATE_BRUSH: {
@@ -109,7 +128,7 @@ export default class EditorStore extends Store<IState, IActionData> {
                     scale: {x: currentBrush.scale.x, y: currentBrush.scale.y * -1}
                 };
             }
-            case EditorActions.NUDGE: {
+            case EditorActions.BRUSH_NUDGE: {
                 return {
                     ...currentBrush,
                     pixelOffset: {
@@ -136,6 +155,28 @@ export default class EditorStore extends Store<IState, IActionData> {
                 return action.data.visible;
             default:
                 return visible != null ? visible : this.DefaultState().brushVisible;
+        }
+    }
+
+    private UpdateDataBrushes(dataBrushes: DataBrush[], action: IAction<IActionData>): DataBrush[] {
+        switch(action.type) {
+            case EditorActions.DATA_BRUSH_INC:
+            case EditorActions.DATA_BRUSH_DEC:
+                const dataBrush = this.state.dataBrushes.find(db => db.name === this.state.currentBrush.name);
+                const val = action.type === EditorActions.DATA_BRUSH_INC ? 1 : -1;
+                if(dataBrush.value === null) {
+                    dataBrush.value = 0;
+                }
+                dataBrush.value += val;
+                if(dataBrush.value === -1) {
+                    dataBrush.value = null;
+                }
+                return [
+                    ...dataBrushes,
+                    dataBrush
+                ];
+            default:
+                return dataBrushes || this.DefaultState().dataBrushes;
         }
     }
 

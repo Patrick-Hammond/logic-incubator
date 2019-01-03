@@ -1,6 +1,6 @@
-import {BaseContainer} from "./BaseContainer";
+import BaseContainer from "./BaseContainer";
 
-export class ScrollBox extends BaseContainer {
+export default class ScrollBox extends BaseContainer {
     constructor(bounds: PIXI.Rectangle, borderWidth: number = 0) {
         super(bounds, borderWidth);
 

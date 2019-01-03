@@ -34,9 +34,15 @@ export function GenerateMap(type: MapType, width: number, height: number): IMap 
             );
             dungeon.create((x: number, y: number, value: number) => {
                 if(value === 0) {
-                    levelData.push(
-                        {name: "floor_1", position: {x, y}, rotation: 0, pixelOffset: {x: 0, y: 0}, scale: {x: 1, y: 1}, layerId: 0, data:null}
-                        );
+                    levelData.push({
+                        name: "floor_1",
+                        position: {x, y},
+                        rotation: 0,
+                        pixelOffset: {x: 0, y: 0},
+                        scale: {x: 1, y: 1},
+                        layerId: 0,
+                        data: null
+                    });
                 }
             });
             break;
@@ -48,9 +54,15 @@ export function GenerateMap(type: MapType, width: number, height: number): IMap 
             );
             dungeon.create((x: number, y: number, value: number) => {
                 if(value === 0) {
-                    levelData.push(
-                        {name: "floor_1", position: {x, y}, rotation: 0, pixelOffset: {x: 0, y: 0}, scale: {x: 1, y: 1}, layerId: 0, data:null}
-                        );
+                    levelData.push({
+                        name: "floor_1",
+                        position: {x, y},
+                        rotation: 0,
+                        pixelOffset: {x: 0, y: 0},
+                        scale: {x: 1, y: 1},
+                        layerId: 0,
+                        data: null
+                    });
                 }
             });
             break;
@@ -60,9 +72,15 @@ export function GenerateMap(type: MapType, width: number, height: number): IMap 
             );
             dungeon.create((x: number, y: number, value: number) => {
                 if(value === 0) {
-                    levelData.push(
-                        {name: "floor_1", position: {x, y}, rotation: 0, pixelOffset: {x: 0, y: 0}, scale: {x: 1, y: 1}, layerId: 0, data:null}
-                        );
+                    levelData.push({
+                        name: "floor_1",
+                        position: {x, y},
+                        rotation: 0,
+                        pixelOffset: {x: 0, y: 0},
+                        scale: {x: 1, y: 1},
+                        layerId: 0,
+                        data: null
+                    });
                 }
             });
             break;
@@ -70,9 +88,15 @@ export function GenerateMap(type: MapType, width: number, height: number): IMap 
             const dividedMaze = new DividedMaze(width, height);
             dividedMaze.create((x: number, y: number, value: number) => {
                 if(value === 1) {
-                    levelData.push(
-                        {name: "wall_mid", position: {x, y}, rotation: 0, pixelOffset: {x: 0, y: 0}, scale: {x: 1, y: 1}, layerId: 0, data:null}
-                    );
+                    levelData.push({
+                        name: "wall_mid",
+                        position: {x, y},
+                        rotation: 0,
+                        pixelOffset: {x: 0, y: 0},
+                        scale: {x: 1, y: 1},
+                        layerId: 0,
+                        data: null
+                    });
                 }
             });
             break;
@@ -80,9 +104,15 @@ export function GenerateMap(type: MapType, width: number, height: number): IMap 
             const ellerMaze = new EllerMaze(width, height);
             ellerMaze.create((x: number, y: number, value: number) => {
                 if(value === 1) {
-                    levelData.push(
-                        {name: "wall_mid", position: {x, y}, rotation: 0, pixelOffset: {x: 0, y: 0}, scale: {x: 1, y: 1}, layerId: 0, data:null}
-                    );
+                    levelData.push({
+                        name: "wall_mid",
+                        position: {x, y},
+                        rotation: 0,
+                        pixelOffset: {x: 0, y: 0},
+                        scale: {x: 1, y: 1},
+                        layerId: 0,
+                        data: null
+                    });
                 }
             });
             break;
@@ -90,9 +120,15 @@ export function GenerateMap(type: MapType, width: number, height: number): IMap 
             const iceyMaze = new IceyMaze(width, height, 0);
             iceyMaze.create((x: number, y: number, value: number) => {
                 if(value === 1) {
-                    levelData.push(
-                        {name: "wall_mid", position: {x, y}, rotation: 0, pixelOffset: {x: 0, y: 0}, scale: {x: 1, y: 1}, layerId: 0, data:null}
-                    );
+                    levelData.push({
+                        name: "wall_mid",
+                        position: {x, y},
+                        rotation: 0,
+                        pixelOffset: {x: 0, y: 0},
+                        scale: {x: 1, y: 1},
+                        layerId: 0,
+                        data: null
+                    });
                 }
             });
             break;
@@ -102,9 +138,15 @@ export function GenerateMap(type: MapType, width: number, height: number): IMap 
             for(let i = 0; i < 3; i++) {
                 cellular.create((x: number, y: number, value: number) => {
                     if(i === 2 && value === 0) {
-                        levelData.push(
-                            {name: "floor_1", position: {x, y}, rotation: 0, pixelOffset: {x: 0, y: 0}, scale: {x: 1, y: 1}, layerId: 0, data:null}
-                        );
+                        levelData.push({
+                            name: "floor_1",
+                            position: {x, y},
+                            rotation: 0,
+                            pixelOffset: {x: 0, y: 0},
+                            scale: {x: 1, y: 1},
+                            layerId: 0,
+                            data: null
+                        });
                     }
                 });
             }

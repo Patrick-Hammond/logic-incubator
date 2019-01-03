@@ -1,5 +1,5 @@
 import ObjectPool from "../../../../_lib/utils/ObjectPool";
-import {BaseContainer} from "../BaseContainer";
+import BaseContainer from "../BaseContainer";
 import ListItemBase from "./ListBoxItemBase";
 
 export const enum ListBoxEvents {
