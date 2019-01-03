@@ -36,6 +36,10 @@ export default class AssetFactory {
         return null;
     }
 
+    public CreateTexture(name: string): PIXI.Texture {
+        return PIXI.Texture.fromFrame(this.registry[ name ][ 0 ]);
+    }
+
     public CreateSprite(name: string): PIXI.Sprite {
         return PIXI.Sprite.fromFrame(this.registry[ name ][ 0 ]);
     }

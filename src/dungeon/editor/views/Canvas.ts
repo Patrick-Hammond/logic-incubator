@@ -9,13 +9,20 @@ export default class Canvas extends EditorComponent {
     private mask: PIXI.Graphics = new PIXI.Graphics();
     private levelContainer = new PIXI.Container();
     private layerContainers: ObjectPool<PIXI.Container>;
+    private textPool: ObjectPool<PIXI.extras.BitmapText>;
 
     constructor() {
         super();
 
-        this.layerContainers = new ObjectPool<PIXI.Container>(6,
+        this.layerContainers = new ObjectPool<PIXI.Container>(
+            6,
             () => new PIXI.Container(),
             (item: PIXI.Container) => item.removeChildren()
+        );
+
+        this.textPool = new ObjectPool<PIXI.extras.BitmapText>(
+            100,
+            () => new PIXI.extras.BitmapText("", {font:{name:"small-font"}})
         );
 
         this.root.addChild(this.grid, this.levelContainer, this.mask);
@@ -53,17 +60,20 @@ export default class Canvas extends EditorComponent {
             const scaledTileSize = TileSize * this.editorStore.state.viewScale;
             const viewOffset = this.editorStore.state.viewOffset;
 
+            this.textPool.Restore();
             state.levelData.forEach(brush => {
                 if(layerDict[brush.layerId].visible) {
-                    const sprite = this.assetFactory.Create(brush.name);
-                    const scaleX = brush.scale.x * this.editorStore.state.viewScale;
-                    const scaleY = brush.scale.y * this.editorStore.state.viewScale;
-                    const flipOffsetX = scaleX < 0 ? sprite.width * this.editorStore.state.viewScale : 0;
-                    const flipOffsetY = scaleY < 0 ? sprite.height * this.editorStore.state.viewScale : 0;
-                    const posX = (brush.position.x - viewOffset.x) * scaledTileSize + GridBounds.x + flipOffsetX;
-                    const posY = (brush.position.y - viewOffset.y) * scaledTileSize + GridBounds.y + flipOffsetY;
+                    let posX = (brush.position.x - viewOffset.x) * scaledTileSize + GridBounds.x;
+                    let posY = (brush.position.y - viewOffset.y) * scaledTileSize + GridBounds.y;
 
                     if(GridBounds.contains(posX, posY)) {
+                        const sprite = this.assetFactory.Create(brush.name);
+                        const scaleX = brush.scale.x * this.editorStore.state.viewScale;
+                        const scaleY = brush.scale.y * this.editorStore.state.viewScale;
+                        const flipOffsetX = scaleX < 0 ? sprite.width * this.editorStore.state.viewScale : 0;
+                        const flipOffsetY = scaleY < 0 ? sprite.height * this.editorStore.state.viewScale : 0;
+                        posX += flipOffsetX;
+                        posY += flipOffsetY;
                         sprite.position.set(posX, posY);
                         sprite.rotation = brush.rotation;
                         sprite.pivot.set(brush.pixelOffset.x, brush.pixelOffset.y);
@@ -71,6 +81,11 @@ export default class Canvas extends EditorComponent {
                         if(sprite instanceof PIXI.extras.AnimatedSprite) {
                             sprite.play();
                             sprite.animationSpeed = AnimationSpeed;
+                        }
+                        if(brush.data !== null){
+                            let text = this.textPool.Get();
+                            text.text = brush.data.toString();
+                            sprite.addChild(text);
                         }
                         layerDict[brush.layerId].addChild(sprite);
                     }
