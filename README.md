@@ -1,3 +1,3 @@
 ### LOGIC INCUBATOR
 
-Where code microbes form..
+code microbes.. microdes
