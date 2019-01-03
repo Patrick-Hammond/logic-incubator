@@ -1,8 +1,8 @@
+import AssetFactory from "../../../_lib/loading/AssetFactory";
 import {AnimationSpeed, GridBounds} from "../Constants";
 import EditorComponent from "../EditorComponent";
 import {EditorActions, IState} from "../stores/EditorStore";
 import {ScrollBox} from "../ui/ScrollBox";
-import AssetFactory from "../../../_lib/loading/AssetFactory";
 
 export default class Palette extends EditorComponent {
     private paletteContainer: ScrollBox;
@@ -19,17 +19,16 @@ export default class Palette extends EditorComponent {
 
     private Render(prevState: IState, state: IState): void {
         const selectedLayer = this.editorStore.state.layers.find(layer => layer.selected);
-        if(selectedLayer){
+        if(selectedLayer) {
             this.root.removeChildren();
-            if(selectedLayer.isData){
+            if(selectedLayer.isData) {
                 this.root.addChild(this.dataContainer);
             } else {
                 this.root.addChild(this.paletteContainer);
             }
-            
         }
     }
-    
+
     private Create(): void {
 
         const padding = 2;
@@ -48,13 +47,13 @@ export default class Palette extends EditorComponent {
             x += s.width + padding;
         };
 
-        const addRollOver = (s:PIXI.DisplayObject)=> {
+        const addRollOver = (s: PIXI.DisplayObject) => {
             s.on("pointerover", (e: PIXI.interaction.InteractionEvent) => {
                 this.editorStore.Dispatch({type: EditorActions.BRUSH_HOVERED, data: {name: e.target.name}});
             });
         }
 
-        const addSelect = (s:PIXI.DisplayObject)=> {
+        const addSelect = (s: PIXI.DisplayObject) => {
             s.interactive = true;
             s.on("pointerdown", (e: PIXI.interaction.InteractionEvent) => {
                 if(e.target.name !== this.editorStore.state.currentBrush.name) {
@@ -109,9 +108,10 @@ export default class Palette extends EditorComponent {
 
         this.dataContainer = new ScrollBox(scrollBounds, 1);
         addSelect(this.dataContainer);
-        
+
         const colours = [0xfe3464, 0xffd166, 0x06d6a0, 0x118ab2, 0xff8100];
         const square = PIXI.Sprite.from("data-square");
+        square.alpha = 0.5;
 
         colours.forEach((colour, index) => {
             square.tint = colour;
@@ -124,7 +124,7 @@ export default class Palette extends EditorComponent {
 
             this.dataContainer.addChild(s);
             AssetFactory.inst.Add(s.name, [s.name], [tex]);
-        
+
             tileLayout(s);
         });
     }

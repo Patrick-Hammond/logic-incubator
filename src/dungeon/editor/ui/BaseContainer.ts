@@ -1,5 +1,5 @@
 export abstract class BaseContainer extends PIXI.Container {
-    constructor(bounds: PIXI.Rectangle, borderWidth: number = 0) {
+    constructor(protected bounds: PIXI.Rectangle, borderWidth: number = 0) {
         super();
 
         this.position.set(bounds.x, bounds.y);
