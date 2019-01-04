@@ -44,6 +44,7 @@ export interface IState {
     dataBrushes: DataBrush[],
     layers: Layer[];
     mouseButtonState: MouseButtonState;
+    mouseDownPosition: PointLike,
     keyCode: number;
     viewOffset: PointLike;
     viewScale: number;
@@ -74,6 +75,7 @@ export default class EditorStore extends Store<IState, IActionData> {
             keyCode: null,
             layers: [],
             mouseButtonState: MouseButtonState.UP,
+            mouseDownPosition: null,
             viewOffset: {x: 0, y: 0},
             viewScale: InitalScale
         };
@@ -88,6 +90,7 @@ export default class EditorStore extends Store<IState, IActionData> {
             keyCode: this.UpdateKeyDown(state.keyCode, action),
             layers: this.UpdateLayers(state.layers, action),
             mouseButtonState: this.UpdateMouseButton(state.mouseButtonState, action),
+            mouseDownPosition: this.UpdateMouseDownPosition(state.mouseDownPosition, action),
             viewOffset: this.UpdateViewOffset(state.viewOffset, action),
             viewScale: this.UpdateViewScale(state.viewScale, action)
         };
@@ -193,6 +196,17 @@ export default class EditorStore extends Store<IState, IActionData> {
                 return action.data.name;
             default:
                 return hoveredBrushName || this.DefaultState().hoveredBrushName;
+        }
+    }
+
+    private UpdateMouseDownPosition(mouseDownPosition: PointLike, action: IAction<IActionData>): PointLike {
+        switch(action.type) {
+            case EditorActions.MOUSE_BUTTON:
+                if(action.data.mouseButtonState == MouseButtonState.LEFT_DOWN) {
+                    return this.state.currentBrush.position;
+                }
+            default:
+                return mouseDownPosition || this.DefaultState().mouseDownPosition;
         }
     }
 

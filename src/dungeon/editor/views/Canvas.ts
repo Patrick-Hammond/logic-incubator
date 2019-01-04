@@ -3,6 +3,8 @@ import {AnimationSpeed, GridBounds, InitalScale, KeyCodes, TileSize} from "../Co
 import EditorComponent from "../EditorComponent";
 import {EditorActions, IState, MouseButtonState} from "../stores/EditorStore";
 import {LevelDataActions, LevelDataState} from "../stores/LevelDataStore";
+import {Rectangle} from "../../../_lib/math/Geometry";
+import {AddTypes} from "../../../_lib/utils/EnumerateTypes"
 
 export default class Canvas extends EditorComponent {
     private grid: PIXI.Graphics = new PIXI.Graphics();
@@ -142,12 +144,26 @@ export default class Canvas extends EditorComponent {
                         this.editorStore.Dispatch({type: EditorActions.BRUSH_MOVED, data: {position: pos}});
 
                         // check drag move
-                        const spaceDragging = this.editorStore.state.keyCode === KeyCodes.SPACE &&
-                            this.editorStore.state.mouseButtonState === MouseButtonState.LEFT_DOWN;
+                        const spaceDragging = (
+                            this.editorStore.state.keyCode === KeyCodes.SPACE &&
+                            this.editorStore.state.mouseButtonState === MouseButtonState.LEFT_DOWN
+                            );
                         const middleButtonDragging = this.editorStore.state.mouseButtonState === MouseButtonState.MIDDLE_DOWN;
                         if(spaceDragging || middleButtonDragging) {
                             this.editorStore.Dispatch({type: EditorActions.VIEW_DRAG, data: {position: currentBrush.position}});
                             this.levelDataStore.Dispatch({type: LevelDataActions.REFRESH});
+                        }
+
+                        // check rect paint
+                        const rectPainting = (
+                            this.editorStore.state.keyCode === KeyCodes.CTRL &&
+                            this.editorStore.state.mouseButtonState === MouseButtonState.LEFT_DOWN
+                        )
+                        if(rectPainting) {
+                            const start = this.editorStore.state.mouseDownPosition;
+                            const end = AddTypes(this.editorStore.state.mouseDownPosition, currentBrush.position);
+                            const rect = new Rectangle(start.x, start.y, end.x, end.y);
+                            this.levelDataStore.Dispatch({type: LevelDataActions.PAINT_RECT, data:{rect: rect}})
                         }
                     }
                 }
