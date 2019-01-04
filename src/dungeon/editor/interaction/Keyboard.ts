@@ -37,8 +37,19 @@ export function RegisterKeyboardEvents(editorStore: EditorStore, levelDataStore:
                     levelDataStore.Undo();
                 }
                 break;
+            case KeyCodes.D:
+                if(e.shiftKey) {
+                    editorStore.Dispatch({type: EditorActions.DUPLICATE_LAYER});
+                    levelDataStore.Dispatch({
+                        type: LevelDataActions.COPY,
+                        data: {
+                            sourceLayer: editorStore.SelectedLayer,
+                            destLayer: editorStore.state.layers[editorStore.state.layers.length - 1]
+                        }
+                    });
+                }
+                break;
             case KeyCodes.PLUS:
-
                 editorStore.Dispatch({type: EditorActions.DATA_BRUSH_INC});
                 break;
             case KeyCodes.MINUS:
@@ -98,9 +109,7 @@ export function RegisterKeyboardEvents(editorStore: EditorStore, levelDataStore:
     }
 
     document.onkeyup = (e: KeyboardEvent) => {
-        if(e.keyCode === KeyCodes.SPACE) {
-            editorStore.Dispatch({type: EditorActions.KEY_UP});
-        }
+        editorStore.Dispatch({type: EditorActions.KEY_UP, data: {keyCode: e.keyCode}});
     }
 
     // disable context menu

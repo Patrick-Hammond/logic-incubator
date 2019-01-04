@@ -15,14 +15,17 @@ export type Layer = {id: number, name: string, selected: boolean, visible: boole
 export type LevelDataState = {levelData: LevelData};
 
 export const enum LevelDataActions {
-    PAINT, PAINT_RECT, ERASE, REFRESH, RESET
+    PAINT, PAINT_RECT, ERASE, ERASE_RECT, COPY, REFRESH, RESET
 };
 
 type LevelData = Brush[];
 type ActionData = {
     brush?: Brush,
     viewOffset?: PointLike,
-    rect?: RectangleLike
+    rectTopLeft?: PointLike,
+    rectBottomRight?: PointLike,
+    sourceLayer?: Layer,
+    destLayer?: Layer,
 };
 
 export default class LevelDataStore extends Store<LevelDataState, ActionData> {
@@ -57,22 +60,21 @@ export default class LevelDataStore extends Store<LevelDataState, ActionData> {
             }
             case LevelDataActions.PAINT_RECT: {
                 const levelDataCopy = levelData.concat();
-                const brush: Brush = {...action.data.brush};
-                for(let x = action.data.rect.x; x < action.data.rect.x + action.data.rect.width; x++) {
-                    for(let y = action.data.rect.y; y < action.data.rect.y + action.data.rect.height; y++) {
-                        brush.position = AddTypes({x:x, y:y}, action.data.viewOffset);
-
-                         // remove duplicates
-                        const existing = levelDataCopy.filter(v =>
+                for(let x = action.data.rectTopLeft.x; x <= action.data.rectBottomRight.x; x++) {
+                    for(let y = action.data.rectTopLeft.y; y <= action.data.rectBottomRight.y; y++) {
+                        const brush: Brush = {...action.data.brush};
+                        brush.position = AddTypes({x, y}, action.data.viewOffset);
+                        const existing = levelDataCopy.some(v =>
                             v.position.x === brush.position.x &&
                             v.position.y === brush.position.y &&
                             v.name === brush.name &&
                             v.layerId === brush.layerId
                         );
-                        existing.forEach(item => levelDataCopy.splice(levelDataCopy.indexOf(item), 1));
-                        levelDataCopy.push(brush);
+                        if(!existing) {
+                            levelDataCopy.push(brush);
                         }
                     }
+                }
                 return levelDataCopy;
             }
             case LevelDataActions.ERASE: {
@@ -92,6 +94,35 @@ export default class LevelDataStore extends Store<LevelDataState, ActionData> {
                 }
 
                 return levelDataCopy;
+            }
+            case LevelDataActions.ERASE_RECT: {
+                const levelDataCopy = levelData.concat();
+                for(let x = action.data.rectTopLeft.x; x <= action.data.rectBottomRight.x; x++) {
+                    for(let y = action.data.rectTopLeft.y; y <= action.data.rectBottomRight.y; y++) {
+                        const brush: Brush = {...action.data.brush};
+                        brush.position = AddTypes({x, y}, action.data.viewOffset);
+
+                        // remove last item in the same location
+                        for(let i = levelDataCopy.length - 1; i >= 0; i--) {
+                            const item = levelDataCopy[i];
+                            if(item.position.x === brush.position.x &&
+                                item.position.y === brush.position.y &&
+                                item.name === brush.name &&
+                                item.layerId === brush.layerId) {
+                                levelDataCopy.splice(i, 1);
+                                break;
+                            }
+                        }
+                    }
+                }
+                return levelDataCopy;
+            }
+            case LevelDataActions.COPY: {
+                const sourceData = levelData.filter(b => b.layerId === action.data.sourceLayer.id);
+                const copy = sourceData.map(b => {
+                    return {...b, layerId: action.data.destLayer.id}
+                });
+                return levelData.concat(copy);
             }
             case LevelDataActions.REFRESH: {
                 return levelData.concat();

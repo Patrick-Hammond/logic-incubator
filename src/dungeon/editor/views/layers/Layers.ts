@@ -2,9 +2,9 @@ import {GridBounds} from "../../Constants";
 import EditorComponent from "../../EditorComponent";
 import {EditorActions, IState} from "../../stores/EditorStore";
 import {LevelDataActions} from "../../stores/LevelDataStore";
+import Button from "../../ui/Button";
 import {ListBox, ListBoxEvents} from "../../ui/listbox/ListBox";
 import ListBoxItem from "./LayerListBoxItem";
-import Button from "../../ui/Button";
 
 export default class Layers extends EditorComponent {
 
@@ -24,11 +24,9 @@ export default class Layers extends EditorComponent {
             this.layerContainer.Set(state.layers);
         }
 
+        // enforce at least 1 layer
         if(state.layers.length === 0) {
-            this.editorStore.Dispatch({
-                type: EditorActions.ADD_LAYER,
-                data: {layer: {id: 0, name: "layer 0", selected: true, visible: true, isData:false}}
-            });
+            this.editorStore.Dispatch({type: EditorActions.ADD_LAYER});
         }
     }
 
@@ -46,19 +44,12 @@ export default class Layers extends EditorComponent {
             this.editorStore.Dispatch({type: EditorActions.TOGGLE_LAYER_VISIBILITY, data: {layer: this.editorStore.state.layers[index]}});
             this.levelDataStore.Dispatch({type: LevelDataActions.REFRESH});
         });
-        this.root.addChild(this.layerContainer);      
+        this.root.addChild(this.layerContainer);
 
         // add
         const addButton = new Button("icon-plus", () => {
             if(this.editorStore.state.layers.length < 6) {
-                const spriteLayers = this.editorStore.state.layers.filter(layer => layer.isData === false);
-                const nextId = spriteLayers.reduce((prev, curr) => curr.id > prev.id ? curr : prev).id + 1;
-                this.editorStore.Dispatch({
-                    type: EditorActions.ADD_LAYER,
-                    data: {
-                        layer: {id: nextId, name: "layer " + nextId, selected: false, visible: true, isData: false}
-                    }
-                });
+                this.editorStore.Dispatch({type: EditorActions.ADD_LAYER});
             }
         })
         addButton.position.set(GridBounds.right + 15, GridBounds.height);
@@ -70,7 +61,10 @@ export default class Layers extends EditorComponent {
             const spriteLayers = this.editorStore.state.layers.filter(layer => layer.isData === false);
             if(spriteLayers.length > 1 || selectedLayer.isData) {
                 this.editorStore.Dispatch({type: EditorActions.REMOVE_LAYER});
-                this.editorStore.Dispatch({type: EditorActions.SELECT_LAYER, data: {layer: this.editorStore.state.layers[0]}});
+                this.editorStore.Dispatch({
+                    type: EditorActions.SELECT_LAYER,
+                    data: {layer: this.editorStore.state.layers[0]}
+                });
             }
         })
         removeButton.position.set(addButton.getBounds().right + 5, GridBounds.height);
@@ -78,10 +72,8 @@ export default class Layers extends EditorComponent {
 
         // rename
         const renameButton = new Button("icon-edit", () => {
-            const selectedLayer = this.editorStore.state.layers.find(layer => layer.selected);
-            const name = prompt("Rename layer", selectedLayer.name);
             if(name != null) {
-                this.editorStore.Dispatch({type: EditorActions.RENAME_LAYER, data: {layer: selectedLayer, name}});
+                this.editorStore.Dispatch({type: EditorActions.RENAME_LAYER});
             }
         });
         renameButton.position.set(removeButton.getBounds().right + 10, GridBounds.height);
@@ -106,14 +98,7 @@ export default class Layers extends EditorComponent {
         // add data layer
         const dataButton = new Button("icon-data", () => {
             if(this.editorStore.state.layers.length < 6) {
-                const dataLayers = this.editorStore.state.layers.filter(layer => layer.isData);
-                const nextId = dataLayers.length ? dataLayers.reduce((prev, curr) => curr.id > prev.id ? curr : prev).id - 999 : 0;
-                this.editorStore.Dispatch({
-                    type: EditorActions.ADD_LAYER,
-                    data: {
-                        layer: {id: 1000 + nextId, name: "data layer " + nextId, selected: false, visible: true, isData: true}
-                    }
-                });
+                this.editorStore.Dispatch({type: EditorActions.ADD_DATA_LAYER});
             }
         });
         dataButton.position.set(downButton.getBounds().right + 10, GridBounds.height);

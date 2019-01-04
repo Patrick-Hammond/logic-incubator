@@ -12,8 +12,8 @@ export const enum EditorActions {
     MOUSE_BUTTON,
     KEY_DOWN, KEY_UP,
     VIEW_DRAG, VIEW_MOVE,
-    ADD_LAYER, REMOVE_LAYER, RENAME_LAYER, SELECT_LAYER,
-    MOVE_LAYER_UP, MOVE_LAYER_DOWN, TOGGLE_LAYER_VISIBILITY,
+    ADD_LAYER, REMOVE_LAYER, RENAME_LAYER, SELECT_LAYER, DUPLICATE_LAYER,
+    ADD_DATA_LAYER, MOVE_LAYER_UP, MOVE_LAYER_DOWN, TOGGLE_LAYER_VISIBILITY,
     REFRESH, RESET
 };
 
@@ -202,7 +202,7 @@ export default class EditorStore extends Store<IState, IActionData> {
     private UpdateMouseDownPosition(mouseDownPosition: PointLike, action: IAction<IActionData>): PointLike {
         switch(action.type) {
             case EditorActions.MOUSE_BUTTON:
-                if(action.data.mouseButtonState == MouseButtonState.LEFT_DOWN) {
+                if(action.data.mouseButtonState === MouseButtonState.LEFT_DOWN) {
                     return this.state.currentBrush.position;
                 }
             default:
@@ -223,18 +223,29 @@ export default class EditorStore extends Store<IState, IActionData> {
 
     private UpdateLayers(layers: Layer[], action: IAction<IActionData>): Layer[] {
         switch(action.type) {
-            case EditorActions.ADD_LAYER:
-                return layers.concat(action.data.layer);
+            case EditorActions.ADD_LAYER: {
+                const nextId = this.NextLayerId();
+                const layer = {id: nextId, name: "layer " + nextId, selected: layers.length === 0, visible: true, isData: false}
+                return layers.concat(layer);
+            }
+            case EditorActions.ADD_DATA_LAYER: {
+                const nextId = this.NextDataLayerId();
+                const layer = {id: 1000 + nextId, name: "data layer " + nextId, selected: false, visible: true, isData: true}
+                return layers.concat(layer);
+            }
             case EditorActions.REMOVE_LAYER:
                 return layers.filter(layer => layer.selected === false);
             case EditorActions.RENAME_LAYER: {
                 const selectedLayer = this.SelectedLayer;
-                return layers.map(layer => {
-                    if(layer.id === selectedLayer.id) {
-                        return {...layer, name: action.data.name};
-                    }
-                    return layer;
-                });
+                const name = prompt("Rename layer", selectedLayer.name);
+                if(name) {
+                    return layers.map(layer => {
+                        if(layer.id === selectedLayer.id) {
+                            return {...layer, name};
+                        }
+                        return layer;
+                    });
+                }
             }
             case EditorActions.SELECT_LAYER:
                 return layers.map(layer => {
@@ -275,6 +286,12 @@ export default class EditorStore extends Store<IState, IActionData> {
                     return copy;
                 }
                 return layers;
+            }
+            case EditorActions.DUPLICATE_LAYER: {
+                const selectedLayer = this.SelectedLayer;
+                const nextId = selectedLayer.isData ? this.NextDataLayerId() : this.NextLayerId();
+                const newLayer = {...selectedLayer, id: nextId, selected: false};
+                return layers.concat(newLayer);
             }
             case EditorActions.RESET:
                 return this.DefaultState().layers;
@@ -326,6 +343,18 @@ export default class EditorStore extends Store<IState, IActionData> {
     private CalcDataBrushValue(value: number, actionType: EditorActions): number {
         const inc = actionType === EditorActions.DATA_BRUSH_INC ? 1 : -1;
         return Math.max(Math.min(value + inc, 999), -999);
+    }
+
+    private NextLayerId(): number {
+        const spriteLayers = this.state.layers.filter(layer => layer.isData === false);
+        const nextId = spriteLayers.length ? spriteLayers.reduce((prev, curr) => curr.id > prev.id ? curr : prev).id + 1 : 0;
+        return nextId;
+    }
+
+    private NextDataLayerId(): number {
+        const dataLayers = this.state.layers.filter(layer => layer.isData);
+        const nextId = dataLayers.length ? dataLayers.reduce((prev, curr) => curr.id > prev.id ? curr : prev).id - 999 : 0;
+        return nextId;
     }
 
     public get SelectedDataBrush(): DataBrush {
