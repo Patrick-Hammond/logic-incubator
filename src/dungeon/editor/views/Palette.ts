@@ -18,7 +18,7 @@ export default class Palette extends EditorComponent {
     }
 
     private Render(prevState: IState, state: IState): void {
-        const selectedLayer = state.layers.find(layer => layer.selected);
+        const selectedLayer = this.editorStore.SelectedLayer;
         if(selectedLayer) {
             this.root.removeChildren();
             if(selectedLayer.isData) {
@@ -57,10 +57,9 @@ export default class Palette extends EditorComponent {
             s.interactive = true;
             s.on("pointerdown", (e: PIXI.interaction.InteractionEvent) => {
                 if(e.target.name !== this.editorStore.state.currentBrush.name) {
-                    const selectedLayer = this.editorStore.state.layers.find(layer => layer.selected);
                     this.editorStore.Dispatch({
                         type: EditorActions.BRUSH_CHANGED,
-                        data: {name: e.target.name, layer: selectedLayer}
+                        data: {name: e.target.name}
                     });
                 }
             });

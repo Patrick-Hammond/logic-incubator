@@ -15,16 +15,16 @@ export class DungeonEditor extends EditorComponent {
 
         this.loader.LoadSpriteSheet(AssetPath + "spritesheet.json", /^.+(?=_f)/, () => {
             this.game.loader.add([
-                {name: "icon-eye",        url: AssetPath + "icons/eye.png"},
-                {name: "icon-eye-slash",  url: AssetPath + "icons/eye-slash.png"},
+                {name: "icon-eye", url: AssetPath + "icons/eye.png"},
+                {name: "icon-eye-slash", url: AssetPath + "icons/eye-slash.png"},
                 {name: "icon-arrow-down", url: AssetPath + "icons/arrow-down.png"},
-                {name: "icon-arrow-up",   url: AssetPath + "icons/arrow-up.png"},
-                {name: "icon-edit",       url: AssetPath + "icons/edit.png"},
-                {name: "icon-plus",       url: AssetPath + "icons/plus.png"},
-                {name: "icon-minus",      url: AssetPath + "icons/minus.png"},
-                {name: "icon-data",       url: AssetPath + "icons/data.png"},
-                {name: "data-square",     url: AssetPath + "icons/square.png"},
-                {name: "small-font",      url: AssetPath + "fonts/small-font.fnt"}
+                {name: "icon-arrow-up", url: AssetPath + "icons/arrow-up.png"},
+                {name: "icon-edit", url: AssetPath + "icons/edit.png"},
+                {name: "icon-plus", url: AssetPath + "icons/plus.png"},
+                {name: "icon-minus", url: AssetPath + "icons/minus.png"},
+                {name: "icon-data", url: AssetPath + "icons/data.png"},
+                {name: "data-square", url: AssetPath + "icons/square.png"},
+                {name: "small-font", url: AssetPath + "fonts/small-font-export.fnt"}
             ]);
             this.game.loader.load(() => this.Create());
         });

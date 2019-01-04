@@ -1,7 +1,6 @@
 import {GridBounds} from "../Constants";
 import EditorComponent from "../EditorComponent";
 import {IState} from "../stores/EditorStore";
-import {MakeDraggable} from "../../../_lib/utils/Debug";
 
 export default class SelectedBrush extends EditorComponent {
     private brush: PIXI.Sprite = new PIXI.Sprite();
@@ -38,9 +37,12 @@ export default class SelectedBrush extends EditorComponent {
             this.UpdateBrush(state.currentBrush.name);
         }
 
-        if(prevState.dataBrushes !== state.dataBrushes) {
-            const dataBrush = state.dataBrushes.find(db => db.name === state.currentBrush.name);
-            this.dataText.text = dataBrush.value === null ? "" : dataBrush.value.toString();
+        const dataBrush = this.editorStore.SelectedDataBrush;
+        if(dataBrush) {
+            this.dataText.text = dataBrush.value.toString();
+            this.dataText.visible = true;
+        } else {
+            this.dataText.visible = false;
         }
     }
 

@@ -38,6 +38,7 @@ export function RegisterKeyboardEvents(editorStore: EditorStore, levelDataStore:
                 }
                 break;
             case KeyCodes.PLUS:
+
                 editorStore.Dispatch({type: EditorActions.DATA_BRUSH_INC});
                 break;
             case KeyCodes.MINUS:

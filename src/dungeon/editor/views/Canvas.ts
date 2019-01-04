@@ -22,7 +22,12 @@ export default class Canvas extends EditorComponent {
 
         this.textPool = new ObjectPool<PIXI.extras.BitmapText>(
             100,
-            () => new PIXI.extras.BitmapText("", {font:{name:"small-font"}})
+            () => {
+                const b = new PIXI.extras.BitmapText("", {font: {name: "small-font", size: 6}});
+                b.position.set(8, 8);
+                b.anchor = 0.5;
+                return b;
+            }
         );
 
         this.root.addChild(this.grid, this.levelContainer, this.mask);
@@ -82,8 +87,8 @@ export default class Canvas extends EditorComponent {
                             sprite.play();
                             sprite.animationSpeed = AnimationSpeed;
                         }
-                        if(brush.data !== null){
-                            let text = this.textPool.Get();
+                        if(brush.data !== null) {
+                            const text = this.textPool.Get();
                             text.text = brush.data.toString();
                             sprite.addChild(text);
                         }
