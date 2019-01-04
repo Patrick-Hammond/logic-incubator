@@ -45,12 +45,17 @@ export function RegisterKeyboardEvents(editorStore: EditorStore, levelDataStore:
                 editorStore.Dispatch({type: EditorActions.DATA_BRUSH_DEC});
                 break;
             case KeyCodes.S:
-                FileUtils.SaveTextFile("dungeonLevel.txt", levelDataStore.SerializeJSON());
+                FileUtils.SaveTextFile("dungeonLevel.txt", JSON.stringify({
+                    editorData: editorStore.state,
+                    levelData: levelDataStore.state
+                }));
                 break;
             case KeyCodes.L:
                 FileUtils.ShowOpenFileDialog().then((fileList: FileList) => {
                     FileUtils.LoadTextFile(fileList[0]).then((text: string) => {
-                        levelDataStore.LoadJSON(text);
+                        const data = JSON.parse(text);
+                        editorStore.Load(data.editorData);
+                        levelDataStore.Load(data.levelData);
                     });
                 });
                 break;
