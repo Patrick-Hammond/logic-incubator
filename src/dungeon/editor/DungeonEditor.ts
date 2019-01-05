@@ -1,11 +1,11 @@
 import {AssetPath} from "./Constants";
 import EditorComponent from "./EditorComponent";
-import {RegisterKeyboardEvents} from "./interaction/Keyboard";
 import {EditorActions} from "./stores/EditorStore";
-import {ShowHelp} from "./ui/Help";
 import BrushTool from "./views/Brush";
 import Canvas from "./views/Canvas";
+import Keyboard from "./views/Keyboard";
 import Layers from "./views/layers/Layers";
+import Menu from "./views/Menu";
 import Palette from "./views/Palette";
 import SelectedBrush from "./views/SelectedBrush";
 
@@ -38,14 +38,10 @@ export class DungeonEditor extends EditorComponent {
         new Palette();
         new Layers();
         new SelectedBrush();
+        new Keyboard();
+        new Menu();
 
         // render inital
         this.editorStore.Dispatch({type: EditorActions.REFRESH});
-
-        // interaction
-        RegisterKeyboardEvents(this.editorStore, this.levelDataStore);
-
-        // help
-        ShowHelp();
     }
 }

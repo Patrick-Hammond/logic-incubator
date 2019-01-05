@@ -1,5 +1,5 @@
 import ObjectPool from "../../../_lib/utils/ObjectPool";
-import {AnimationSpeed, GridBounds, InitalScale, KeyCodes, TileSize} from "../Constants";
+import {AnimationSpeed, GridBounds, InitalScale, KeyCodes, Scenes, TileSize} from "../Constants";
 import EditorComponent from "../EditorComponent";
 import {EditorActions, IState, MouseButtonState} from "../stores/EditorStore";
 import {LevelDataActions, LevelDataState} from "../stores/LevelDataStore";
@@ -33,7 +33,7 @@ export default class Canvas extends EditorComponent {
         this.root.addChild(this.grid, this.levelContainer, this.mask);
         this.levelContainer.mask = this.mask;
 
-        this.AddToStage();
+        this.AddToScene(Scenes.EDITOR);
 
         this.levelDataStore.Subscribe(this.UpdateLevel, this);
         this.editorStore.Subscribe(this.UpdateLayout, this);

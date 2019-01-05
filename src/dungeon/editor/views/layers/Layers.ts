@@ -1,4 +1,4 @@
-import {GridBounds} from "../../Constants";
+import {GridBounds, Scenes} from "../../Constants";
 import EditorComponent from "../../EditorComponent";
 import {EditorActions, IState} from "../../stores/EditorStore";
 import {LevelDataActions} from "../../stores/LevelDataStore";
@@ -14,7 +14,7 @@ export default class Layers extends EditorComponent {
         super();
 
         this.Create();
-        this.AddToStage();
+        this.AddToScene(Scenes.EDITOR);
 
         this.editorStore.Subscribe(this.Render, this);
     }

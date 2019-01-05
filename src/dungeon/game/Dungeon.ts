@@ -9,9 +9,8 @@ export class Dungeon extends GameComponent {
         this.game.loader.add("levelData", AssetPath + "level.json");
         this.game.loader.load((loader: loaders.Loader, resource: loaders.Resource) => {
             const levelData = resource["levelData"].data.levelData;
-
             this.loader.LoadSpriteSheet(AssetPath + "spritesheet.json", /^.+(?=_f\d)/, () => {
-                this.AddToStage();
+                // ready
             });
         });
     }

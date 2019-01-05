@@ -1,4 +1,4 @@
-import {PointLike, RectangleLike} from "../../../_lib/math/Geometry";
+import {PointLike} from "../../../_lib/math/Geometry";
 import Store, {IAction} from "../../../_lib/Store";
 import {AddTypes} from "../../../_lib/utils/EnumerateTypes";
 

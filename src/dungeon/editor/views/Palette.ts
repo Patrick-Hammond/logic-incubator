@@ -1,5 +1,5 @@
 import AssetFactory from "../../../_lib/loading/AssetFactory";
-import {AnimationSpeed, GridBounds} from "../Constants";
+import {AnimationSpeed, GridBounds, Scenes} from "../Constants";
 import EditorComponent from "../EditorComponent";
 import {EditorActions, IState} from "../stores/EditorStore";
 import ScrollBox from "../ui/ScrollBox";
@@ -12,7 +12,7 @@ export default class Palette extends EditorComponent {
         super();
 
         this.Create();
-        this.AddToStage();
+        this.AddToScene(Scenes.EDITOR);
 
         this.editorStore.Subscribe(this.Render, this);
     }

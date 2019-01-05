@@ -14,6 +14,7 @@ export const enum EditorActions {
     VIEW_DRAG, VIEW_MOVE,
     ADD_LAYER, REMOVE_LAYER, RENAME_LAYER, SELECT_LAYER, DUPLICATE_LAYER,
     ADD_DATA_LAYER, MOVE_LAYER_UP, MOVE_LAYER_DOWN, TOGGLE_LAYER_VISIBILITY,
+    CHANGE_SCENE,
     REFRESH, RESET
 };
 
@@ -48,6 +49,7 @@ export interface IState {
     keyCode: number;
     viewOffset: PointLike;
     viewScale: number;
+    currentScene: string;
 }
 
 export default class EditorStore extends Store<IState, IActionData> {
@@ -77,7 +79,8 @@ export default class EditorStore extends Store<IState, IActionData> {
             mouseButtonState: MouseButtonState.UP,
             mouseDownPosition: null,
             viewOffset: {x: 0, y: 0},
-            viewScale: InitalScale
+            viewScale: InitalScale,
+            currentScene: null
         };
     }
 
@@ -92,7 +95,8 @@ export default class EditorStore extends Store<IState, IActionData> {
             mouseButtonState: this.UpdateMouseButton(state.mouseButtonState, action),
             mouseDownPosition: this.UpdateMouseDownPosition(state.mouseDownPosition, action),
             viewOffset: this.UpdateViewOffset(state.viewOffset, action),
-            viewScale: this.UpdateViewScale(state.viewScale, action)
+            viewScale: this.UpdateViewScale(state.viewScale, action),
+            currentScene: this.UpdateCurrentScene(state.currentScene, action)
         };
         return newState as IState;
     }
@@ -335,6 +339,15 @@ export default class EditorStore extends Store<IState, IActionData> {
                 }
             default:
                 return scale ? scale : this.DefaultState().viewScale;
+        }
+    }
+
+    private UpdateCurrentScene(currentScene: string, action: IAction<IActionData>): string {
+        switch(action.type) {
+            case EditorActions.CHANGE_SCENE:
+                return action.data.name;
+            default:
+                return currentScene || this.DefaultState().currentScene;
         }
     }
 

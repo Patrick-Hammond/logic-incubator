@@ -1,4 +1,4 @@
-import {AnimationSpeed, GridBounds, KeyCodes, TileSize} from "../Constants";
+import {AnimationSpeed, GridBounds, KeyCodes, Scenes, TileSize} from "../Constants";
 import EditorComponent from "../EditorComponent";
 import {IState, MouseButtonState} from "../stores/EditorStore";
 import {LevelDataActions} from "../stores/LevelDataStore";
@@ -11,7 +11,7 @@ export default class BrushTool extends EditorComponent {
 
         super();
 
-        this.AddToStage();
+        this.AddToScene(Scenes.EDITOR);
 
         this.editorStore.Subscribe(this.Render, this);
     }

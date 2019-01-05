@@ -1,4 +1,4 @@
-import {GridBounds} from "../Constants";
+import {GridBounds, Scenes} from "../Constants";
 import EditorComponent from "../EditorComponent";
 import {IState} from "../stores/EditorStore";
 
@@ -23,7 +23,7 @@ export default class SelectedBrush extends EditorComponent {
         this.dataText.position.set(1218, 647);
 
         this.root.addChild(this.brush, this.brushText, this.dataText);
-        this.AddToStage();
+        this.AddToScene(Scenes.EDITOR);
 
         this.editorStore.Subscribe(this.Render, this);
     }
