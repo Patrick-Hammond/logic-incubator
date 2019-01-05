@@ -32,8 +32,12 @@ export default class Game extends Application {
             const scene = this.scenes[key];
             if(key === id) {
                 this.stage.addChild(scene.root);
+                scene.root.interactive = true;
+                scene.root.interactiveChildren = true;
             } else if(scene.root.parent === this.stage) {
                 this.stage.removeChild(scene.root);
+                scene.root.interactive = false;
+                scene.root.interactiveChildren = false;
             }
         });
     }

@@ -67,7 +67,7 @@ export default class BrushTool extends EditorComponent {
                     this.brush.play();
                     this.brush.animationSpeed = AnimationSpeed;
                 }
-                this.game.stage.addChild(this.brush);
+                this.root.addChild(this.brush);
             }
         }
 
