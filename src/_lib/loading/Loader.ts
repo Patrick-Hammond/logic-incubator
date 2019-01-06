@@ -1,4 +1,4 @@
-import FileUtils from "../utils/FileUtils";
+import {GetNextInImageSequence, ImageSequenceIndex, RemoveExtension} from "../utils/Storage";
 import AssetFactory from "./AssetFactory";
 
 export default class Loader {
@@ -34,15 +34,15 @@ export default class Loader {
                         const nameResult = nameRegEx.exec(frame);
                         if(nameResult) {
                             // animation
-                            const name = nameResult[ 0 ];
-                            const seqIndex = FileUtils.ImageSequenceIndex(frame);
+                            const name = nameResult[0];
+                            const seqIndex = ImageSequenceIndex(frame);
 
                             if(seqIndex === 0) {
                                 let nextFrame = frame;
                                 const animFrames: string[] = [];
-                                while(frames[ nextFrame ]) {
+                                while(frames[nextFrame]) {
                                     animFrames.push(nextFrame);
-                                    nextFrame = FileUtils.GetNextInImageSequence(nextFrame);
+                                    nextFrame = GetNextInImageSequence(nextFrame);
                                 }
 
                                 AssetFactory.inst.Add(name, animFrames);
@@ -50,8 +50,8 @@ export default class Loader {
                             }
                         } else {
                             // image
-                            const name = FileUtils.RemoveExtension(frame);
-                            AssetFactory.inst.Add(name, [ frame ]);
+                            const name = RemoveExtension(frame);
+                            AssetFactory.inst.Add(name, [frame]);
                             console.log("creating sprite " + name);
                         }
                     }

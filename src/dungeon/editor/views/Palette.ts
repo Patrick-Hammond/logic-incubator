@@ -10,26 +10,12 @@ export default class Palette extends EditorComponent {
 
     constructor() {
         super();
-
-        this.Create();
         this.AddToScene(Scenes.EDITOR);
+    }
+
+    protected Create(): void {
 
         this.editorStore.Subscribe(this.Render, this);
-    }
-
-    private Render(prevState: IState, state: IState): void {
-        const selectedLayer = this.editorStore.SelectedLayer;
-        if(selectedLayer) {
-            this.root.removeChildren();
-            if(selectedLayer.isData) {
-                this.root.addChild(this.dataContainer);
-            } else {
-                this.root.addChild(this.paletteContainer);
-            }
-        }
-    }
-
-    private Create(): void {
 
         const padding = 2;
         let maxHeight = 0;
@@ -123,4 +109,17 @@ export default class Palette extends EditorComponent {
             tileLayout(s);
         });
     }
+
+    private Render(prevState: IState, state: IState): void {
+        const selectedLayer = this.editorStore.SelectedLayer;
+        if(selectedLayer) {
+            this.root.removeChildren();
+            if(selectedLayer.isData) {
+                this.root.addChild(this.dataContainer);
+            } else {
+                this.root.addChild(this.paletteContainer);
+            }
+        }
+    }
+
 }

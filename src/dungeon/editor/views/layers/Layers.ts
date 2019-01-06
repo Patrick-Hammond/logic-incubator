@@ -12,25 +12,12 @@ export default class Layers extends EditorComponent {
 
     constructor() {
         super();
-
-        this.Create();
         this.AddToScene(Scenes.EDITOR);
+    }
+
+    protected Create(): void {
 
         this.editorStore.Subscribe(this.Render, this);
-    }
-
-    private Render(prevState: IState, state: IState): void {
-        if(prevState.layers !== state.layers) {
-            this.layerContainer.Set(state.layers);
-        }
-
-        // enforce at least 1 layer
-        if(state.layers.length === 0) {
-            this.editorStore.Dispatch({type: EditorActions.ADD_LAYER});
-        }
-    }
-
-    private Create(): void {
 
         // list
         const scrollBounds = new PIXI.Rectangle(
@@ -103,5 +90,16 @@ export default class Layers extends EditorComponent {
         });
         dataButton.position.set(downButton.getBounds().right + 10, GridBounds.height);
         this.root.addChild(dataButton);
+    }
+
+    private Render(prevState: IState, state: IState): void {
+        if(prevState.layers !== state.layers) {
+            this.layerContainer.Set(state.layers);
+        }
+
+        // enforce at least 1 layer
+        if(state.layers.length === 0) {
+            this.editorStore.Dispatch({type: EditorActions.ADD_LAYER});
+        }
     }
 }

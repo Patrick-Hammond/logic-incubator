@@ -1,7 +1,7 @@
 import {expect} from "chai";
 import * as mocha from "mocha";
 import {PointLike} from "../_lib/math/Geometry";
-import {AddTypes, MultiplyTypes, SubtractTypes} from "../_lib/utils/EnumerateTypes";
+import {AddTypes, MultiplyTypes, SubtractTypes} from "../_lib/patterns/EnumerateTypes";
 
 class TesterInit {
 

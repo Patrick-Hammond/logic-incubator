@@ -9,7 +9,10 @@ export default class SelectedBrush extends EditorComponent {
 
     constructor() {
         super();
+        this.AddToScene(Scenes.EDITOR);
+    }
 
+    protected Create(): void {
         this.brush.position.set(GridBounds.right + 160, GridBounds.y + 10 + GridBounds.height * 0.75);
         this.brush.anchor.set(0.5, 1);
         this.brush.position.set(1218, 697);
@@ -23,7 +26,6 @@ export default class SelectedBrush extends EditorComponent {
         this.dataText.position.set(1218, 647);
 
         this.root.addChild(this.brush, this.brushText, this.dataText);
-        this.AddToScene(Scenes.EDITOR);
 
         this.editorStore.Subscribe(this.Render, this);
     }

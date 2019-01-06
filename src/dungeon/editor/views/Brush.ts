@@ -8,11 +8,11 @@ export default class BrushTool extends EditorComponent {
     private brush: PIXI.Sprite | PIXI.extras.AnimatedSprite;
 
     constructor() {
-
         super();
-
         this.AddToScene(Scenes.EDITOR);
+    }
 
+    protected Create(): void {
         this.editorStore.Subscribe(this.Render, this);
     }
 

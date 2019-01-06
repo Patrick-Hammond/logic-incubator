@@ -1,4 +1,4 @@
-import ObjectPool from "../../../../_lib/utils/ObjectPool";
+import ObjectPool from "../../../../_lib/patterns/ObjectPool";
 import BaseContainer from "../BaseContainer";
 import ListItemBase from "./ListBoxItemBase";
 

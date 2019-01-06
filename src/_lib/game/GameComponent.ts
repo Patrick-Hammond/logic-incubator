@@ -1,6 +1,6 @@
+import AssetFactory from "../loading/AssetFactory";
+import Loader from "../loading/Loader";
 import Game from "./Game";
-import AssetFactory from "./loading/AssetFactory";
-import Loader from "./loading/Loader";
 
 export default abstract class GameComponent {
     public game: Game;

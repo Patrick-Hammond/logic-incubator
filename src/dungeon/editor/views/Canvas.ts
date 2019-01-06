@@ -1,4 +1,4 @@
-import ObjectPool from "../../../_lib/utils/ObjectPool";
+import ObjectPool from "../../../_lib/patterns/ObjectPool";
 import {AnimationSpeed, GridBounds, InitalScale, KeyCodes, Scenes, TileSize} from "../Constants";
 import EditorComponent from "../EditorComponent";
 import {EditorActions, IState, MouseButtonState} from "../stores/EditorStore";
@@ -13,6 +13,10 @@ export default class Canvas extends EditorComponent {
 
     constructor() {
         super();
+        this.AddToScene(Scenes.EDITOR);
+    }
+
+    protected Create(): void {
 
         this.layerContainers = new ObjectPool<PIXI.Container>(
             6,
@@ -32,8 +36,6 @@ export default class Canvas extends EditorComponent {
 
         this.root.addChild(this.grid, this.levelContainer, this.mask);
         this.levelContainer.mask = this.mask;
-
-        this.AddToScene(Scenes.EDITOR);
 
         this.levelDataStore.Subscribe(this.UpdateLevel, this);
         this.editorStore.Subscribe(this.UpdateLayout, this);

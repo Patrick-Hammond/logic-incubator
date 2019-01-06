@@ -1,4 +1,4 @@
-import FileUtils from "../../../_lib/utils/FileUtils";
+import {LoadTextFile, SaveTextFile, SaveToLocalStorage, ShowOpenFileDialog} from "../../../_lib/utils/Storage";
 import {GridBounds, KeyCodes, Scenes, TileSize} from "../Constants";
 import EditorComponent from "../EditorComponent";
 import {GenerateMap, IMap, MapType} from "../maps/Generators";
@@ -10,8 +10,12 @@ import {LevelDataActions, LevelDataState} from "../stores/LevelDataStore";
 export default class Keyboard extends EditorComponent {
 
     constructor() {
-
         super();
+
+        this.Create();
+    }
+
+    protected Create(): void {
 
         this.editorStore.Subscribe(this.Render, this);
 
@@ -19,7 +23,15 @@ export default class Keyboard extends EditorComponent {
         document.onkeydown = (e: KeyboardEvent) => {
 
             if(e.keyCode === KeyCodes.ENTER) {
-                const scene = this.editorStore.state.currentScene === Scenes.GAME ? Scenes.EDITOR : Scenes.GAME;
+                const isEditor = this.editorStore.state.currentScene === Scenes.EDITOR;
+                if(isEditor) {
+                    SaveToLocalStorage("dungeonLevel", JSON.stringify({
+                        editorData: this.editorStore.state,
+                        levelData: this.levelDataStore.state
+                    }));
+                }
+
+                const scene = isEditor ? Scenes.GAME : Scenes.EDITOR;
                 this.editorStore.Dispatch({type: EditorActions.CHANGE_SCENE, data: {name: scene}});
             }
 
@@ -70,14 +82,14 @@ export default class Keyboard extends EditorComponent {
                         this.editorStore.Dispatch({type: EditorActions.DATA_BRUSH_DEC});
                         break;
                     case KeyCodes.S:
-                        FileUtils.SaveTextFile("dungeonLevel.txt", JSON.stringify({
+                        SaveTextFile("dungeonLevel.txt", JSON.stringify({
                             editorData: this.editorStore.state,
                             levelData: this.levelDataStore.state
                         }));
                         break;
                     case KeyCodes.L:
-                        FileUtils.ShowOpenFileDialog().then((fileList: FileList) => {
-                            FileUtils.LoadTextFile(fileList[0]).then((text: string) => {
+                        ShowOpenFileDialog().then((fileList: FileList) => {
+                            LoadTextFile(fileList[0]).then((text: string) => {
                                 const data = JSON.parse(text);
                                 this.editorStore.Load(data.editorData);
                                 this.levelDataStore.Load(data.levelData);
