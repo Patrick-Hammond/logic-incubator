@@ -1,6 +1,5 @@
-import {Scenes} from "./Constants";
+import {LoadFromLocalStorage} from "../../_lib/utils/Storage";
 import EditorComponent from "./EditorComponent";
-import {EditorActions} from "./stores/EditorStore";
 import BrushTool from "./views/Brush";
 import Canvas from "./views/Canvas";
 import Keyboard from "./views/Keyboard";
@@ -22,8 +21,12 @@ export class DungeonEditor extends EditorComponent {
         new Keyboard();
         new Menu();
 
-        // render inital
-        this.editorStore.Dispatch({type: EditorActions.CHANGE_SCENE, data: {name: Scenes.EDITOR}});
-        this.editorStore.Dispatch({type: EditorActions.REFRESH});
+        // load local saved map
+        const localData = LoadFromLocalStorage("dungeonLevel");
+        if(localData) {
+            const data = JSON.parse(localData);
+            this.editorStore.Load(data.editorData);
+            this.levelDataStore.Load(data.levelData);
+        }
     }
 }

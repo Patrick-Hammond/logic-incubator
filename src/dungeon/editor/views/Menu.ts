@@ -1,4 +1,4 @@
-import {Scenes} from "../Constants";
+import {Scenes} from "../../Constants";
 import EditorComponent from "../EditorComponent";
 
 export default class Menu extends EditorComponent {

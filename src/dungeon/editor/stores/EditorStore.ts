@@ -1,7 +1,7 @@
 import {PointLike} from "../../../_lib/math/Geometry";
 import {AddTypes, SubtractTypes} from "../../../_lib/patterns/EnumerateTypes";
 import Store, {IAction} from "../../../_lib/patterns/redux/Store";
-import {InitalScale} from "../Constants";
+import {InitalScale} from "../../Constants";
 import {Brush, Layer} from "./LevelDataStore";
 
 export const enum EditorActions {

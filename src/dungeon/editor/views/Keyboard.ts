@@ -1,5 +1,5 @@
 import {LoadTextFile, SaveTextFile, SaveToLocalStorage, ShowOpenFileDialog} from "../../../_lib/utils/Storage";
-import {GridBounds, KeyCodes, Scenes, TileSize} from "../Constants";
+import {GridBounds, KeyCodes, Scenes, TileSize} from "../../Constants";
 import EditorComponent from "../EditorComponent";
 import {GenerateMap, IMap, MapType} from "../maps/Generators";
 import {Style0x7} from "../maps/Style0x7";

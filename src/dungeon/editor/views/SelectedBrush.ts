@@ -1,4 +1,4 @@
-import {GridBounds, Scenes} from "../Constants";
+import {GridBounds, Scenes} from "../../Constants";
 import EditorComponent from "../EditorComponent";
 import {IState} from "../stores/EditorStore";
 

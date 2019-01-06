@@ -1,6 +1,6 @@
 import Game from "../_lib/game/Game";
 import Loader from "../_lib/loading/Loader";
-import {AssetPath, Scenes} from "./editor/Constants";
+import {AssetPath, Scenes} from "./Constants";
 import {DungeonEditor} from "./editor/DungeonEditor";
 import {Dungeon} from "./game/Dungeon";
 

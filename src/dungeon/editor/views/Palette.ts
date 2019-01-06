@@ -1,5 +1,5 @@
 import AssetFactory from "../../../_lib/loading/AssetFactory";
-import {AnimationSpeed, GridBounds, Scenes} from "../Constants";
+import {AnimationSpeed, GridBounds, Scenes} from "../../Constants";
 import EditorComponent from "../EditorComponent";
 import {EditorActions, IState} from "../stores/EditorStore";
 import ScrollBox from "../ui/ScrollBox";

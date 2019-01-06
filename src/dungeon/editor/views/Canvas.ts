@@ -1,5 +1,5 @@
 import ObjectPool from "../../../_lib/patterns/ObjectPool";
-import {AnimationSpeed, GridBounds, InitalScale, KeyCodes, Scenes, TileSize} from "../Constants";
+import {AnimationSpeed, GridBounds, InitalScale, KeyCodes, Scenes, TileSize} from "../../Constants";
 import EditorComponent from "../EditorComponent";
 import {EditorActions, IState, MouseButtonState} from "../stores/EditorStore";
 import {LevelDataActions, LevelDataState} from "../stores/LevelDataStore";

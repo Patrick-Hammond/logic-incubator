@@ -12,10 +12,10 @@ export default abstract class EditorComponent extends GameComponent {
 
         this.root.on("added", () => {
             if(!this.created) {
-                this.Create();
                 this.created = true;
+                this.Create();
             }
-        })
+        });
     }
 
     protected get editorStore(): EditorStore {

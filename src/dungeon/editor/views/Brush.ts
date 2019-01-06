@@ -1,4 +1,4 @@
-import {AnimationSpeed, GridBounds, KeyCodes, Scenes, TileSize} from "../Constants";
+import {AnimationSpeed, GridBounds, KeyCodes, Scenes, TileSize} from "../../Constants";
 import EditorComponent from "../EditorComponent";
 import {IState, MouseButtonState} from "../stores/EditorStore";
 import {LevelDataActions} from "../stores/LevelDataStore";
