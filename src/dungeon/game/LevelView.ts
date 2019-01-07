@@ -17,16 +17,18 @@ export default class LevelView extends GameComponent {
 
     private Create(): void {
         this.viewRect = new Rectangle(0, 0, 20, 20);
+    }
+
+    Init(): void {
+        this.AddToScene(Scenes.GAME);
+
         this.level.levelData.forEach((layer, index) => {
             const l = new PIXI.Container();
             l.name = "layer" + index.toString();
             this.root.addChild(l);
             this.layers.push(l);
         })
-    }
-
-    Init(): void {
-        this.AddToScene(Scenes.GAME);
+        
         this.game.ticker.add(this.OnUpdate, this);
     }
 

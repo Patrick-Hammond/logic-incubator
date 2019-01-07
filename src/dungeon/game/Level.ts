@@ -22,26 +22,26 @@ export default class Level {
     public boundRect: Rectangle;
 
     LoadEditorData(editorLevelData: Brush[]): void {
+        let ids:number[] = [];
         const bounds = {x1: 0, y1: 0, x2: 0, y2: 0};
         editorLevelData.forEach(brush => {
             bounds.x1 = Math.min(bounds.x1, brush.position.x);
             bounds.y1 = Math.min(bounds.y1, brush.position.y);
             bounds.x2 = Math.max(bounds.x2, brush.position.x);
             bounds.y2 = Math.max(bounds.y2, brush.position.y);
+            if(ids.indexOf(brush.layerId) == -1){
+                ids.push(brush.layerId);
+            }
         });
         this.boundRect = new Rectangle(0, 0, bounds.x2 - bounds.x1 + 2, bounds.y2 - bounds.y1 + 2);
 
-        let layerCount = 4;
-
-        this.levelData = new Array<Array<Array<Tile>>>(layerCount);
-        this.levelData.forEach(layer => {
-            layer = new Array<Array<Tile>>(this.boundRect.width);
-            layer.forEach(col => {
-                col = new Array<Tile>(this.boundRect.height);
-            });
-        });
-        
-        console.log(this.levelData);
+        this.levelData = new Array<Array<Array<Tile>>>(ids.length);
+        for (let j = 0; j < ids.length; j++) {
+            this.levelData[j] = new Array<Array<Tile>>(this.boundRect.width);
+            for (let i = 0; i < this.boundRect.width; i++) {
+                this.levelData[j][i] = new Array<Tile>(this.boundRect.height);
+            }
+        }
 
         editorLevelData.forEach(brush => {
             const pos = {x: brush.position.x - bounds.x1 + 1, y: brush.position.y - bounds.y1 + 1};
