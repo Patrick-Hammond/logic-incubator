@@ -18,12 +18,12 @@ type Tile = {
 }
 
 export default class Level {
-    public level: Tile[][];
+    public levelData: Tile[][][];
     public boundRect: Rectangle;
 
-    LoadEditorData(levelData: Brush[]): void {
+    LoadEditorData(editorLevelData: Brush[]): void {
         const bounds = {x1: 0, y1: 0, x2: 0, y2: 0};
-        levelData.forEach(brush => {
+        editorLevelData.forEach(brush => {
             bounds.x1 = Math.min(bounds.x1, brush.position.x);
             bounds.y1 = Math.min(bounds.y1, brush.position.y);
             bounds.x2 = Math.max(bounds.x2, brush.position.x);
@@ -31,17 +31,25 @@ export default class Level {
         });
         this.boundRect = new Rectangle(0, 0, bounds.x2 - bounds.x1 + 2, bounds.y2 - bounds.y1 + 2);
 
-        this.level = new Array<Array<Tile>>(this.boundRect.width);
-        for(let x = 0; x <= this.boundRect.width; x++) {
-            this.level[x] = new Array<Tile>(this.boundRect.height);
-        }
+        let layerCount = 4;
 
-        levelData.forEach(brush => {
+        this.levelData = new Array<Array<Array<Tile>>>(layerCount);
+        this.levelData.forEach(layer => {
+            layer = new Array<Array<Tile>>(this.boundRect.width);
+            layer.forEach(col => {
+                col = new Array<Tile>(this.boundRect.height);
+            });
+        });
+        
+        console.log(this.levelData);
+
+        editorLevelData.forEach(brush => {
             const pos = {x: brush.position.x - bounds.x1 + 1, y: brush.position.y - bounds.y1 + 1};
-            if(this.level[pos.x][pos.y] == null) {
-                this.level[pos.x][pos.y] = {sprites: [], data: {}};
+            const layerId = brush.layerId;
+            if(this.levelData[layerId][pos.x][pos.y] == null) {
+                this.levelData[layerId][pos.x][pos.y] = {sprites: [], data: {}};
             }
-            const tile = this.level[pos.x][pos.y];
+            const tile = this.levelData[layerId][pos.x][pos.y];
             if(brush.data != null) {
                 tile.data[brush.name] = brush.data;
             } else {
