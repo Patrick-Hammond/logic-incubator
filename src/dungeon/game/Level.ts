@@ -18,7 +18,8 @@ type Tile = {
 }
 
 export default class Level {
-    private level: Tile[][];
+    public level: Tile[][];
+    public boundRect: Rectangle;
 
     LoadEditorData(levelData: Brush[]): void {
         const bounds = {x1: 0, y1: 0, x2: 0, y2: 0};
@@ -28,20 +29,20 @@ export default class Level {
             bounds.x2 = Math.max(bounds.x2, brush.position.x);
             bounds.y2 = Math.max(bounds.y2, brush.position.y);
         });
-        const boundRect = new Rectangle(0, 0, bounds.x2 - bounds.x1, bounds.y2 - bounds.y1);
+        this.boundRect = new Rectangle(0, 0, bounds.x2 - bounds.x1 + 2, bounds.y2 - bounds.y1 + 2);
 
-        this.level = new Array<Array<Tile>>(boundRect.width);
-        for(let x = 0; x <= boundRect.width; x++) {
-            this.level[x] = new Array<Tile>(boundRect.height);
+        this.level = new Array<Array<Tile>>(this.boundRect.width);
+        for(let x = 0; x <= this.boundRect.width; x++) {
+            this.level[x] = new Array<Tile>(this.boundRect.height);
         }
 
         levelData.forEach(brush => {
-            const pos = {x: brush.position.x - bounds.x1, y: brush.position.y - bounds.y1};
+            const pos = {x: brush.position.x - bounds.x1 + 1, y: brush.position.y - bounds.y1 + 1};
             if(this.level[pos.x][pos.y] == null) {
                 this.level[pos.x][pos.y] = {sprites: [], data: {}};
             }
             const tile = this.level[pos.x][pos.y];
-            if(brush.data) {
+            if(brush.data != null) {
                 tile.data[brush.name] = brush.data;
             } else {
                 const sprite = AssetFactory.inst.Create(brush.name);

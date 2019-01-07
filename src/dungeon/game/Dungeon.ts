@@ -1,14 +1,22 @@
 import GameComponent from "../../_lib/game/GameComponent";
 import {LoadFromLocalStorage} from "../../_lib/utils/Storage";
 import Level from "./Level";
+import LevelView from "./LevelView";
 
 export class Dungeon extends GameComponent {
 
-    private level: Level = new Level();
+    private level: Level;
+    private levelView: LevelView;
 
     constructor() {
         super();
+        this.Create();
         this.root.on("added", this.Init, this);
+    }
+
+    private Create(): void {
+        this.level = new Level();
+        this.levelView = new LevelView(this.level);
     }
 
     private Init(): void {
@@ -16,5 +24,7 @@ export class Dungeon extends GameComponent {
         if(localData) {
             this.level.LoadEditorData(JSON.parse(localData).levelData.levelData);
         }
+
+        this.levelView.Init();
     }
 }
