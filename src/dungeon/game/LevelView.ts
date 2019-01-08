@@ -31,17 +31,13 @@ export default class LevelView extends GameComponent {
         document.onkeydown = (e: KeyboardEvent) => {
             switch(e.keyCode) {
                 case KeyCodes.UP:
-                    if(this.viewRect.y > 0) {
-                        this.viewRect.Offset(0, -1);
-                    }
+                    this.viewRect.Offset(0, -1);
                     break;
                 case KeyCodes.DOWN:
                     this.viewRect.Offset(0, 1);
                     break;
                 case KeyCodes.LEFT:
-                    if(this.viewRect.x > 0) {
-                        this.viewRect.Offset(-1, 0);
-                    }
+                    this.viewRect.Offset(-1, 0);
                     break;
                 case KeyCodes.RIGHT:
                     this.viewRect.Offset(1, 0);
@@ -56,10 +52,19 @@ export default class LevelView extends GameComponent {
             this.needsRefresh = false;
 
             const level = this.level.levelData;
+            const w = this.viewRect.x + this.viewRect.width;
+            const h = this.viewRect.y + this.viewRect.height;
+
             for(let l = 0, layerCount = level.length; l < layerCount; l++) {
                 this.layers[l].removeChildren();
-                for(let x = this.viewRect.x, w = this.viewRect.x + this.viewRect.width; x < w; x++) {
-                    for(let y = this.viewRect.y, h = this.viewRect.y + this.viewRect.height; y < h; y++) {
+                for(let x = this.viewRect.x; x < w; x++) {
+                    if(x < 0 || x >= this.level.boundRect.width - 1) {
+                        continue;
+                    }
+                    for(let y = this.viewRect.y; y < h; y++) {
+                        if(y < 0 || y >= this.level.boundRect.height - 1) {
+                            continue;
+                        }
                         const tile = level[l][x][y];
                         if(tile && tile.data == null) {
                             const sprites = tile.sprites;
