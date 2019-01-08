@@ -52,6 +52,12 @@ export class Rectangle {
         return true;
     }
 
+    Offset(x: number, y: number): Rectangle {
+        this.x += x;
+        this.y += y;
+        return this;
+    }
+
     Clone(): Rectangle {
         return new Rectangle(this.x, this.y, this.width, this.height);
     }
