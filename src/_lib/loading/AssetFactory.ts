@@ -8,7 +8,7 @@ export default class AssetFactory {
     }
 
     private names: {sprites: string[], anims: string[]} = {sprites: [], anims: []};
-    private registry: {[ name: string ]: string[]} = {};
+    private registry: {[name: string]: string[]} = {};
 
     public get SpriteNames(): string[] {
         return this.names.sprites;
@@ -19,10 +19,10 @@ export default class AssetFactory {
     }
 
     public Add(name: string, frameNames: string[], textures?: PIXI.Texture[]): void {
-        if(textures){
+        if(textures) {
             frameNames.forEach((frameName, index) => PIXI.utils.TextureCache[frameName] = textures[index]);
         }
-        this.registry[ name ] = frameNames;
+        this.registry[name] = frameNames;
         frameNames.length === 1 ? this.names.sprites.push(name) : this.names.anims.push(name);
     }
 
@@ -37,15 +37,15 @@ export default class AssetFactory {
     }
 
     public CreateTexture(name: string): PIXI.Texture {
-        return PIXI.Texture.fromFrame(this.registry[ name ][ 0 ]);
+        return PIXI.Texture.fromFrame(this.registry[name][0]);
     }
 
     public CreateSprite(name: string): PIXI.Sprite {
-        return PIXI.Sprite.fromFrame(this.registry[ name ][ 0 ]);
+        return PIXI.Sprite.fromFrame(this.registry[name][0]);
     }
 
     public CreateAnimatedSprite(name: string): PIXI.extras.AnimatedSprite {
-        return PIXI.extras.AnimatedSprite.fromFrames(this.registry[ name ]);
+        return PIXI.extras.AnimatedSprite.fromFrames(this.registry[name]);
     }
 
     public CreateDTS(): void {
