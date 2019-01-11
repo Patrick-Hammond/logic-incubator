@@ -15,8 +15,8 @@ export default class LevelView extends GameComponent {
     constructor(private level: Level) {
         super();
 
-        this.viewRect = new Rectangle(0, 0, 300, 200);
-        this.zoomRect = new Rectangle(12, 22, 8, 6);
+        this.viewRect = new Rectangle(0, 0, 100, 50);
+        this.zoomRect = new Rectangle(12, 22, 18, 16);
     }
 
     Init(): void {
@@ -51,19 +51,20 @@ export default class LevelView extends GameComponent {
         }
 
         const moveRandom = () => {
-            TweenMax.to(this.viewRect, 0.5, {
+            TweenMax.to(this.viewRect, 2, {
                 ...this.zoomRect,
                 yoyo: true,
                 repeat: 1,
                 onUpdate: () => this.needsRefresh = true,
                 onComplete: () => {
-                    this.zoomRect.x = Math.random() * this.viewRect.width;
-                    this.zoomRect.y = Math.random() * this.viewRect.height;
+                    this.zoomRect.x = Math.random() * 300;
+                    this.zoomRect.y = Math.random() * 200;
                     moveRandom();
                 }
             });
         }
         moveRandom();
+
     }
 
     private OnUpdate(dt: number): void {
