@@ -9,6 +9,7 @@ export default class LevelView extends GameComponent {
     private directionVec: Point = new Point();
     private scaledTileSize: Point = new Point();
 
+    private keyCode: number = -1;
     private needsRefresh: boolean = true;
     private layers: PIXI.Container[] = [];
 
@@ -40,8 +41,14 @@ export default class LevelView extends GameComponent {
 
         this.game.ticker.add(this.OnUpdate, this);
 
-        document.onkeydown = (e: KeyboardEvent) => {
-            switch(e.keyCode) {
+        document.onkeydown = (e: KeyboardEvent) => this.keyCode = e.keyCode;
+        document.onkeyup = (e: KeyboardEvent) => this.keyCode = -1;
+    }
+
+    private OnUpdate(dt: number): void {
+
+        if(this.keyCode !== -1) {
+            switch(this.keyCode) {
                 case KeyCodes.UP:
                     this.directionVec.Offset(0, -1);
                     break;
@@ -56,9 +63,6 @@ export default class LevelView extends GameComponent {
                     break;
             }
         }
-    }
-
-    private OnUpdate(dt: number): void {
 
         this.root.x += this.directionVec.x * dt;
         this.root.y += this.directionVec.y * dt;
@@ -68,12 +72,12 @@ export default class LevelView extends GameComponent {
 
         if(Math.abs(this.root.x) > this.scaledTileSize.x) {
             this.root.x < 0 ? this.viewRect.Offset(1, 0) : this.viewRect.Offset(-1, 0);
-            this.root.position.set(0, 0);
+            this.root.x = 0;
             this.needsRefresh = true;
         }
         if(Math.abs(this.root.y) > this.scaledTileSize.y) {
             this.root.y < 0 ? this.viewRect.Offset(0, 1) : this.viewRect.Offset(0, -1);
-            this.root.position.set(0, 0);
+            this.root.y = 0;
             this.needsRefresh = true;
         }
 
