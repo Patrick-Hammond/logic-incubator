@@ -1,10 +1,16 @@
 export type PointLike = {x: number; y: number};
 export class Point {
-    constructor(public x: number, public y: number) {}
+    constructor(public x: number = 0, public y: number = 0) {}
 
     Set(x: number, y: number): Point {
         this.x = x;
         this.y = y;
+        return this;
+    }
+
+    Offset(x: number, y: number): Point {
+        this.x += x;
+        this.y += y;
         return this;
     }
 

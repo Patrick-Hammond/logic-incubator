@@ -1,22 +1,19 @@
-
-import {TweenMax} from "gsap";
 import GameComponent from "../../_lib/game/GameComponent";
-import {Rectangle} from "../../_lib/math/Geometry";
+import {Point, Rectangle} from "../../_lib/math/Geometry";
 import {GameHeight, GameWidth, KeyCodes, Scenes, TileSize} from "../Constants";
 import Level from "./Level";
 
 export default class LevelView extends GameComponent {
 
     private viewRect: Rectangle;
-    private zoomRect: Rectangle;
+    private directionVec: Point = new Point();
+    private scaledTileSize: Point = new Point();
+
     private needsRefresh: boolean = true;
     private layers: PIXI.Container[] = [];
 
     constructor(private level: Level) {
         super();
-
-        this.viewRect = new Rectangle(0, 0, 100, 50);
-        this.zoomRect = new Rectangle(12, 22, 18, 16);
     }
 
     Init(): void {
@@ -30,52 +27,58 @@ export default class LevelView extends GameComponent {
             this.layers.push(l);
         })
 
+        this.viewRect = new Rectangle(0, 0, GameWidth / TileSize / 2, GameHeight / TileSize / 2);
+        this.scaledTileSize.Set(GameWidth / this.viewRect.width, GameHeight / this.viewRect.height);
+
+        const maskRect = new PIXI.Graphics().beginFill(0xFF0000).drawRect(
+            this.scaledTileSize.x,
+            this.scaledTileSize.y,
+            GameWidth - this.scaledTileSize.x * 2,
+            GameHeight - this.scaledTileSize.y * 2
+        ).endFill();
+        this.root.mask = maskRect;
+
         this.game.ticker.add(this.OnUpdate, this);
 
         document.onkeydown = (e: KeyboardEvent) => {
             switch(e.keyCode) {
                 case KeyCodes.UP:
-                    this.viewRect.Offset(0, -1);
+                    this.directionVec.Offset(0, -1);
                     break;
                 case KeyCodes.DOWN:
-                    this.viewRect.Offset(0, 1);
+                    this.directionVec.Offset(0, 1);
                     break;
                 case KeyCodes.LEFT:
-                    this.viewRect.Offset(-1, 0);
+                    this.directionVec.Offset(-1, 0);
                     break;
                 case KeyCodes.RIGHT:
-                    this.viewRect.Offset(1, 0);
+                    this.directionVec.Offset(1, 0);
                     break;
             }
-            this.needsRefresh = true;
         }
-
-        const moveRandom = () => {
-            TweenMax.to(this.viewRect, 2, {
-                ...this.zoomRect,
-                yoyo: true,
-                repeat: 1,
-                onUpdate: () => this.needsRefresh = true,
-                onComplete: () => {
-                    this.zoomRect.x = Math.random() * 300;
-                    this.zoomRect.y = Math.random() * 200;
-                    moveRandom();
-                }
-            });
-        }
-        moveRandom();
-
     }
 
     private OnUpdate(dt: number): void {
 
+        this.root.x += this.directionVec.x * dt;
+        this.root.y += this.directionVec.y * dt;
+
+        this.directionVec.x *= 0.95 * dt;
+        this.directionVec.y *= 0.95 * dt;
+
+        if(Math.abs(this.root.x) > this.scaledTileSize.x) {
+            this.root.x < 0 ? this.viewRect.Offset(1, 0) : this.viewRect.Offset(-1, 0);
+            this.root.position.set(0, 0);
+            this.needsRefresh = true;
+        }
+        if(Math.abs(this.root.y) > this.scaledTileSize.y) {
+            this.root.y < 0 ? this.viewRect.Offset(0, 1) : this.viewRect.Offset(0, -1);
+            this.root.position.set(0, 0);
+            this.needsRefresh = true;
+        }
+
         if(this.needsRefresh) {
             this.needsRefresh = false;
-
-            this.viewRect.x = this.viewRect.x | 0;
-            this.viewRect.y = this.viewRect.y | 0;
-            this.viewRect.width = this.viewRect.width | 0;
-            this.viewRect.height = this.viewRect.height | 0;
 
             const level = this.level.levelData;
             const w = this.viewRect.x + this.viewRect.width;
