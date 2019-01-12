@@ -1,4 +1,5 @@
-import {AnimationSpeed, GridBounds, KeyCodes, Scenes, TileSize} from "../../Constants";
+import {Key} from "../../../_lib/io/Keyboard";
+import {AnimationSpeed, GridBounds, Scenes, TileSize} from "../../Constants";
 import EditorComponent from "../EditorComponent";
 import {IState, MouseButtonState} from "../stores/EditorStore";
 import {LevelDataActions} from "../stores/LevelDataStore";
@@ -80,7 +81,7 @@ export default class BrushTool extends EditorComponent {
         const mouseButtonChanged = prevState.mouseButtonState !== state.mouseButtonState;
         if(this.brush && (positionChanged || mouseButtonChanged)) {
             if(GridBounds.contains(this.brush.position.x, this.brush.position.y)) {
-                const modifierKeyPressed = state.keyCode === KeyCodes.SPACE || state.keyCode === KeyCodes.CTRL;
+                const modifierKeyPressed = state.keyCode === Key.Space || state.keyCode === Key.Ctrl;
                 if(state.mouseButtonState === MouseButtonState.LEFT_DOWN && !modifierKeyPressed) {
                     this.levelDataStore.Dispatch({
                         type: LevelDataActions.PAINT,

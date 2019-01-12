@@ -25,9 +25,9 @@ Loader.inst.LoadSpriteSheet(AssetPath + "spritesheet.json", /^.+(?=_f)/, () => {
     game.loader.load(() => {
 
         // init
-        game.AddScene(Scenes.GAME, new Dungeon());
-        game.AddScene(Scenes.EDITOR, new DungeonEditor());
+        game.sceneManager.AddScene(Scenes.GAME, new Dungeon());
+        game.sceneManager.AddScene(Scenes.EDITOR, new DungeonEditor());
 
-        game.ShowScene(Scenes.EDITOR);
+        game.sceneManager.ShowScene(Scenes.EDITOR);
     });
 });

@@ -1,6 +1,7 @@
 import GameComponent from "../../_lib/game/GameComponent";
+import {Key} from "../../_lib/io/Keyboard";
 import {Point, Rectangle} from "../../_lib/math/Geometry";
-import {GameHeight, GameWidth, KeyCodes, Scenes, TileSize} from "../Constants";
+import {GameHeight, GameWidth, PlayerSpeed, Scenes, TileSize} from "../Constants";
 import Level from "./Level";
 
 export default class LevelView extends GameComponent {
@@ -9,7 +10,6 @@ export default class LevelView extends GameComponent {
     private directionVec: Point = new Point();
     private scaledTileSize: Point = new Point();
 
-    private keyCode: number = -1;
     private needsRefresh: boolean = true;
     private layers: PIXI.Container[] = [];
 
@@ -20,7 +20,7 @@ export default class LevelView extends GameComponent {
     Init(): void {
         this.AddToScene(Scenes.GAME);
 
-        this.level.layerIds.forEach(id => {
+        this.level.layerIds.forEach((id, i) => {
             const l = new PIXI.Container();
             l.name = "layer" + id.toString();
             l.renderable = id < 1000;
@@ -40,35 +40,30 @@ export default class LevelView extends GameComponent {
         this.root.mask = maskRect;
 
         this.game.ticker.add(this.OnUpdate, this);
-
-        document.onkeydown = (e: KeyboardEvent) => this.keyCode = e.keyCode;
-        document.onkeyup = (e: KeyboardEvent) => this.keyCode = -1;
     }
 
     private OnUpdate(dt: number): void {
 
-        if(this.keyCode !== -1) {
-            switch(this.keyCode) {
-                case KeyCodes.UP:
-                    this.directionVec.Offset(0, -1);
-                    break;
-                case KeyCodes.DOWN:
-                    this.directionVec.Offset(0, 1);
-                    break;
-                case KeyCodes.LEFT:
-                    this.directionVec.Offset(-1, 0);
-                    break;
-                case KeyCodes.RIGHT:
-                    this.directionVec.Offset(1, 0);
-                    break;
+        if(this.game.keyboard.AnyKeyPressed()) {
+            if(this.game.keyboard.KeyPressed(Key.UpArrow)) {
+                this.directionVec.Offset(0, 1);
+            }
+            if(this.game.keyboard.KeyPressed(Key.DownArrow)) {
+                this.directionVec.Offset(0, -1);
+            }
+            if(this.game.keyboard.KeyPressed(Key.LeftArrow)) {
+                this.directionVec.Offset(1, 0);
+            }
+            if(this.game.keyboard.KeyPressed(Key.RightArrow)) {
+                this.directionVec.Offset(-1, 0);
             }
         }
 
-        this.root.x += this.directionVec.x * dt;
-        this.root.y += this.directionVec.y * dt;
+        this.root.x += this.directionVec.x * dt * PlayerSpeed;
+        this.root.y += this.directionVec.y * dt * PlayerSpeed;
 
-        this.directionVec.x *= 0.95 * dt;
-        this.directionVec.y *= 0.95 * dt;
+        this.directionVec.x *= 0.9;
+        this.directionVec.y *= 0.9;
 
         if(Math.abs(this.root.x) > this.scaledTileSize.x) {
             this.root.x < 0 ? this.viewRect.Offset(1, 0) : this.viewRect.Offset(-1, 0);

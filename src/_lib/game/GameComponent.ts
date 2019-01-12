@@ -15,6 +15,6 @@ export default abstract class GameComponent {
     }
 
     public AddToScene(id: string): void {
-        this.game.GetScene(id).root.addChild(this.root);
+        this.game.sceneManager.GetScene(id).root.addChild(this.root);
     }
 }

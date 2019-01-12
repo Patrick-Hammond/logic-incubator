@@ -1,4 +1,4 @@
-import {GetNextInImageSequence, ImageSequenceIndex, RemoveExtension} from "../utils/Storage";
+import {GetNextInImageSequence, ImageSequenceIndex, RemoveExtension} from "../io/Url";
 import AssetFactory from "./AssetFactory";
 
 export default class Loader {

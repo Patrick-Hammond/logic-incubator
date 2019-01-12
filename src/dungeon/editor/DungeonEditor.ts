@@ -1,4 +1,4 @@
-import {LoadFromLocalStorage} from "../../_lib/utils/Storage";
+import {LoadFromLocalStorage} from "../../_lib/io/Storage";
 import EditorComponent from "./EditorComponent";
 import BrushTool from "./views/Brush";
 import Canvas from "./views/Canvas";

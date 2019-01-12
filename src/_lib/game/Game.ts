@@ -1,10 +1,13 @@
 import {Application, interaction, RendererOptions} from "pixi.js";
+import {Keyboard} from "../io/Keyboard";
 import GameComponent from "./GameComponent";
+import SceneManager from "./SceneManager";
 
 export default class Game extends Application {
 
     public static inst: Game;
-    private scenes: {[id: string]: GameComponent} = {};
+    public keyboard = new Keyboard();
+    public sceneManager = new SceneManager();
 
     constructor(private width = 1280, private height = 720, rendererOptions?: RendererOptions) {
         super(width, height, rendererOptions || {backgroundColor: 0x111111, autoStart: true}, false, true, true);
@@ -16,29 +19,5 @@ export default class Game extends Application {
 
     public get interactionManager(): interaction.InteractionManager {
         return this.renderer.plugins.interaction;
-    }
-
-    public GetScene(id: string): GameComponent {
-        return this.scenes[id];
-    }
-
-    public AddScene(id: string, scene: GameComponent): void {
-        this.scenes[id] = scene;
-        scene.root.name = id;
-    }
-
-    public ShowScene(id: string): void {
-        Object.keys(this.scenes).forEach(key => {
-            const scene = this.scenes[key];
-            if(key === id) {
-                this.stage.addChild(scene.root);
-                scene.root.interactive = true;
-                scene.root.interactiveChildren = true;
-            } else if(scene.root.parent === this.stage) {
-                this.stage.removeChild(scene.root);
-                scene.root.interactive = false;
-                scene.root.interactiveChildren = false;
-            }
-        });
     }
 }

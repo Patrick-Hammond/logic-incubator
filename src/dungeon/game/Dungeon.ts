@@ -1,5 +1,5 @@
 import GameComponent from "../../_lib/game/GameComponent";
-import {LoadFromLocalStorage} from "../../_lib/utils/Storage";
+import {LoadFromLocalStorage} from "../../_lib/io/Storage";
 import Level from "./Level";
 import LevelView from "./LevelView";
 

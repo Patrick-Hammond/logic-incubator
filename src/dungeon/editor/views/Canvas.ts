@@ -1,5 +1,6 @@
+import {Key} from "../../../_lib/io/Keyboard";
 import ObjectPool from "../../../_lib/patterns/ObjectPool";
-import {AnimationSpeed, GridBounds, InitalScale, KeyCodes, Scenes, TileSize} from "../../Constants";
+import {AnimationSpeed, GridBounds, InitalScale, Scenes, TileSize} from "../../Constants";
 import EditorComponent from "../EditorComponent";
 import {EditorActions, IState, MouseButtonState} from "../stores/EditorStore";
 import {LevelDataActions, LevelDataState} from "../stores/LevelDataStore";
@@ -145,7 +146,7 @@ export default class Canvas extends EditorComponent {
 
                         // check drag move
                         const spaceDragging = (
-                            this.editorStore.state.keyCode === KeyCodes.SPACE &&
+                            this.editorStore.state.keyCode === Key.Space &&
                             this.editorStore.state.mouseButtonState === MouseButtonState.LEFT_DOWN
                         );
                         const middleButtonDragging = this.editorStore.state.mouseButtonState === MouseButtonState.MIDDLE_DOWN;
@@ -156,11 +157,11 @@ export default class Canvas extends EditorComponent {
 
                         // check rect paint/erase
                         const rectPainting = (
-                            this.editorStore.state.keyCode === KeyCodes.CTRL &&
+                            this.editorStore.state.keyCode === Key.Ctrl &&
                             this.editorStore.state.mouseButtonState === MouseButtonState.LEFT_DOWN
                         )
                         const rectErasing = (
-                            this.editorStore.state.keyCode === KeyCodes.CTRL &&
+                            this.editorStore.state.keyCode === Key.Ctrl &&
                             this.editorStore.state.mouseButtonState === MouseButtonState.RIGHT_DOWN
                         )
                         if(rectPainting || rectErasing) {
