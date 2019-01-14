@@ -81,7 +81,7 @@ export default class BrushTool extends EditorComponent {
         const mouseButtonChanged = prevState.mouseButtonState !== state.mouseButtonState;
         if(this.brush && (positionChanged || mouseButtonChanged)) {
             if(GridBounds.contains(this.brush.position.x, this.brush.position.y)) {
-                const modifierKeyPressed = state.keyCode === Key.Space || state.keyCode === Key.Ctrl;
+                const modifierKeyPressed = this.game.keyboard.KeyPressed(Key.Ctrl) || this.game.keyboard.KeyPressed(Key.Shift);
                 if(state.mouseButtonState === MouseButtonState.LEFT_DOWN && !modifierKeyPressed) {
                     this.levelDataStore.Dispatch({
                         type: LevelDataActions.PAINT,

@@ -1,3 +1,4 @@
+import CompositeRectTileLayer from "../../_extern/pixi-tilemap/CompositeRectTileLayer";
 import GameComponent from "../../_lib/game/GameComponent";
 import {Key} from "../../_lib/io/Keyboard";
 import {Point, Rectangle} from "../../_lib/math/Geometry";
@@ -11,7 +12,7 @@ export default class LevelView extends GameComponent {
     private scaledTileSize: Point = new Point();
 
     private needsRefresh: boolean = true;
-    private depthLayers: PIXI.Container[] = [];
+    private depthLayers: CompositeRectTileLayer[] = [];
 
     constructor(private level: Level) {
         super();
@@ -23,7 +24,8 @@ export default class LevelView extends GameComponent {
         this.root.interactiveChildren = false;
 
         for(let depth = 0; depth <= this.level.depthMax; depth++) {
-            const d = new PIXI.Container();
+            const d = new CompositeRectTileLayer(depth);
+
             d.name = "depth" + depth.toString();
             this.depthLayers[depth] = d;
             // d.alpha = 1 - depth * 0.1;
@@ -84,13 +86,17 @@ export default class LevelView extends GameComponent {
             const level = this.level.levelData;
             const w = this.viewRect.x + this.viewRect.width;
             const h = this.viewRect.y + this.viewRect.height;
+
             const scale = Math.min(
                 GameWidth / this.viewRect.width / TileSize,
                 GameHeight / this.viewRect.height / TileSize
             );
 
             // clear
-            this.depthLayers.forEach(l => l.removeChildren());
+            this.depthLayers.forEach((l, i) => {
+                l.scale.set(scale * 1 - i * 0.01);
+                l.removeChildren()
+            });
 
             // redraw
             for(let x = this.viewRect.x; x < w; x++) {
@@ -106,10 +112,9 @@ export default class LevelView extends GameComponent {
                         const sprites = tile.sprites;
                         for(let z = 0, len = sprites.length; z < len; z++) {
                             const s = sprites[z].sprite;
-                            s.x = (((x - this.viewRect.x) * TileSize) + sprites[z].offset.x) * scale;
-                            s.y = (((y - this.viewRect.y) * TileSize) + sprites[z].offset.y) * scale;
-                            s.scale.set(scale);
-                            this.depthLayers[tile.depth].addChild(s);
+                            s.x = (((x - this.viewRect.x) * TileSize) + sprites[z].offset.x);
+                            s.y = (((y - this.viewRect.y) * TileSize) + sprites[z].offset.y);
+                            this.depthLayers[tile.depth].addFrame(s.texture, s.x, s.y);
                         }
                     }
                 }

@@ -146,7 +146,7 @@ export default class Canvas extends EditorComponent {
 
                         // check drag move
                         const spaceDragging = (
-                            this.editorStore.state.keyCode === Key.Space &&
+                            this.game.keyboard.KeyPressed(Key.Space) &&
                             this.editorStore.state.mouseButtonState === MouseButtonState.LEFT_DOWN
                         );
                         const middleButtonDragging = this.editorStore.state.mouseButtonState === MouseButtonState.MIDDLE_DOWN;
@@ -157,11 +157,11 @@ export default class Canvas extends EditorComponent {
 
                         // check rect paint/erase
                         const rectPainting = (
-                            this.editorStore.state.keyCode === Key.Ctrl &&
+                            this.game.keyboard.KeyPressed(Key.Ctrl) &&
                             this.editorStore.state.mouseButtonState === MouseButtonState.LEFT_DOWN
                         )
                         const rectErasing = (
-                            this.editorStore.state.keyCode === Key.Ctrl &&
+                            this.game.keyboard.KeyPressed(Key.Ctrl) &&
                             this.editorStore.state.mouseButtonState === MouseButtonState.RIGHT_DOWN
                         )
                         if(rectPainting || rectErasing) {

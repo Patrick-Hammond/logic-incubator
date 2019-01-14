@@ -10,7 +10,6 @@ export const enum EditorActions {
     DATA_BRUSH_INC, DATA_BRUSH_DEC,
     ZOOM_IN, ZOOM_OUT,
     MOUSE_BUTTON,
-    KEY_DOWN, KEY_UP,
     VIEW_DRAG, VIEW_MOVE,
     ADD_LAYER, REMOVE_LAYER, RENAME_LAYER, SELECT_LAYER, DUPLICATE_LAYER,
     ADD_DATA_LAYER, MOVE_LAYER_UP, MOVE_LAYER_DOWN, TOGGLE_LAYER_VISIBILITY,
@@ -26,7 +25,6 @@ export type DataBrush = {name: string, colour: number, value: number};
 
 interface IActionData {
     mouseButtonState?: MouseButtonState;
-    keyCode?: number;
     name?: string;
     position?: PointLike;
     rotation?: number;
@@ -46,7 +44,6 @@ export interface IState {
     layers: Layer[];
     mouseButtonState: MouseButtonState;
     mouseDownPosition: PointLike,
-    keyCode: number;
     viewOffset: PointLike;
     viewScale: number;
     currentScene: string;
@@ -74,7 +71,6 @@ export default class EditorStore extends Store<IState, IActionData> {
                 {name: "data-4", colour: 0x118ab2, value: 0},
                 {name: "data-5", colour: 0xff8100, value: 0}
             ],
-            keyCode: null,
             layers: [],
             mouseButtonState: MouseButtonState.UP,
             mouseDownPosition: null,
@@ -90,7 +86,6 @@ export default class EditorStore extends Store<IState, IActionData> {
             currentBrush: this.UpdateBrush(state.currentBrush, action),
             brushVisible: this.UpdateBrushVisible(state.brushVisible, action),
             hoveredBrushName: this.UpdateHoveredBrushName(state.hoveredBrushName, action),
-            keyCode: this.UpdateKeyDown(state.keyCode, action),
             layers: this.UpdateLayers(state.layers, action),
             mouseButtonState: this.UpdateMouseButton(state.mouseButtonState, action),
             mouseDownPosition: this.UpdateMouseDownPosition(state.mouseDownPosition, action),
@@ -211,17 +206,6 @@ export default class EditorStore extends Store<IState, IActionData> {
                 }
             default:
                 return mouseDownPosition || this.DefaultState().mouseDownPosition;
-        }
-    }
-
-    private UpdateKeyDown(keyCode: number, action: IAction<IActionData>): number {
-        switch(action.type) {
-            case EditorActions.KEY_DOWN:
-                return action.data.keyCode;
-            case EditorActions.KEY_UP:
-                return null;
-            default:
-                return keyCode != null ? keyCode : this.DefaultState().keyCode;
         }
     }
 

@@ -6,7 +6,8 @@ export const GameHeight = 720;
 export const InitalScale = 1.5;
 export const TileSize = 16;
 export const AnimationSpeed = 0.2;
-export const PlayerSpeed = 0.4;
+export const PlayerSpeed = 0.8;
+export const DepthBrushName = "data-3";
 export const AssetPath = "http://localhost:4000/dist-include/";
 
 export const GridBounds = new PIXI.Rectangle(20, 20, EditorWidth - 300, EditorHeight - 40);

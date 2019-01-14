@@ -23,6 +23,9 @@ export default class Keyboard extends EditorComponent {
         // keyboard commands
         this.game.keyboard.on("keydown", (e: KeyboardEvent) => {
 
+            const shift = this.game.keyboard.KeyPressed(Key.Shift);
+            const ctrl = this.game.keyboard.KeyPressed(Key.Ctrl);
+
             if(e.keyCode === Key.Enter) {
                 const isEditor = this.editorStore.state.currentScene === Scenes.EDITOR;
                 if(isEditor) {
@@ -60,12 +63,12 @@ export default class Keyboard extends EditorComponent {
                         this.editorStore.Dispatch({type: EditorActions.ROTATE_BRUSH});
                         break;
                     case Key.Z:
-                        if(e.ctrlKey) {
+                        if(ctrl) {
                             this.levelDataStore.Undo();
                         }
                         break;
                     case Key.D:
-                        if(e.shiftKey) {
+                        if(shift) {
                             this.editorStore.Dispatch({type: EditorActions.DUPLICATE_LAYER});
                             this.levelDataStore.Dispatch({
                                 type: LevelDataActions.COPY,
@@ -76,7 +79,7 @@ export default class Keyboard extends EditorComponent {
                             });
                         }
                         break;
-                    case Key.PlusSign:
+                    case Key.Add:
                         this.editorStore.Dispatch({type: EditorActions.DATA_BRUSH_INC});
                         break;
                     case Key.Subtract:
@@ -98,7 +101,7 @@ export default class Keyboard extends EditorComponent {
                         });
                         break;
                     case Key.Q:
-                        if(e.ctrlKey) {
+                        if(ctrl) {
                             const ok = confirm("This will delete the current map. Are you sure?");
                             if(ok) {
                                 this.editorStore.Dispatch({type: EditorActions.RESET, data: {persistZoom: false}});
@@ -129,17 +132,7 @@ export default class Keyboard extends EditorComponent {
                         }
                         break;
                     }
-                    default: {
-                        this.editorStore.Dispatch({type: EditorActions.KEY_DOWN, data: {keyCode: e.keyCode}});
-                        break;
-                    }
                 }
-            }
-        });
-
-        this.game.keyboard.on("keyup", (e: KeyboardEvent) => {
-            if(this.editorStore.state.currentScene === Scenes.EDITOR) {
-                this.editorStore.Dispatch({type: EditorActions.KEY_UP, data: {keyCode: e.keyCode}});
             }
         });
 

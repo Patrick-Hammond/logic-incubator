@@ -1,5 +1,6 @@
 import AssetFactory from "../../_lib/loading/AssetFactory";
 import {PointLike, Rectangle} from "../../_lib/math/Geometry";
+import {DepthBrushName} from "../Constants";
 
 type Brush = {
     name: string;
@@ -12,8 +13,15 @@ type Brush = {
 };
 
 type Tile = {
-    sprites: {sprite: PIXI.Sprite, offset: PointLike}[],
+    sprites: TileSprite[],
+    depth: number,
     data: MetaData;
+}
+
+type TileSprite = {
+    sprite: PIXI.Sprite,
+    layerId: number,
+    offset: PointLike
 }
 
 type MetaData = {
@@ -21,10 +29,10 @@ type MetaData = {
 }
 
 export default class Level {
-    public levelData: Tile[][][];
-    public metaData: MetaData[][];
+    public levelData: Tile[][];
     public boundRect: Rectangle;
     public layerIds: number[] = [];
+    public depthMax: number = 0;
 
     LoadEditorData(editorLevelData: Brush[]): void {
 
@@ -35,55 +43,45 @@ export default class Level {
             bounds.y1 = Math.min(bounds.y1, brush.position.y);
             bounds.x2 = Math.max(bounds.x2, brush.position.x);
             bounds.y2 = Math.max(bounds.y2, brush.position.y);
-            if(this.layerIds.indexOf(brush.layerId) === -1) {
-                this.layerIds.push(brush.layerId);
-            }
         });
+
         // normalise origin to zero
         this.boundRect = new Rectangle(0, 0, bounds.x2 - bounds.x1 + 2, bounds.y2 - bounds.y1 + 2);
 
-        // for the meta data create array of MetaData[x][y]
-        this.metaData = new Array<Array<MetaData>>(this.boundRect.width);
-        for(let i = 0; i < this.boundRect.width; i++) {
-            this.metaData[i] = new Array<MetaData>(this.boundRect.height);
-        }
-
-        // parse meta data
+        // get all layer ids
         editorLevelData.forEach(brush => {
-            if(brush.data != null) {
-                const posX = brush.position.x - bounds.x1 + 1;
-                const posY = brush.position.y - bounds.y1 + 1;
-                if(this.metaData[posX][posY] == null) {
-                    this.metaData[posX][posY] = {};
-                }
-                this.metaData[posX][posY][brush.name] = brush.data;
+            if(brush.layerId < 1000 && this.layerIds.indexOf(brush.layerId) === -1) {
+                this.layerIds.push(brush.layerId);
             }
         });
 
-        // for the level data create array of Tiles[layer][x][y]
-        const layerCount = this.layerIds.length;
-        this.levelData = new Array<Array<Array<Tile>>>(layerCount);
-        for(let j = 0; j < layerCount; j++) {
-            this.levelData[j] = new Array<Array<Tile>>(this.boundRect.width);
-            for(let i = 0; i < this.boundRect.width; i++) {
-                this.levelData[j][i] = new Array<Tile>(this.boundRect.height);
+        // get depth
+        editorLevelData.forEach(brush => {
+            if(brush.name === DepthBrushName) {
+                this.depthMax = Math.max(this.depthMax, brush.data);
             }
+        });
+
+        // level data array
+        this.levelData = new Array<Array<Tile>>(this.boundRect.width);
+        for(let j = 0; j < this.boundRect.width; j++) {
+            this.levelData[j] = new Array<Tile>(this.boundRect.height);
         }
 
         // parse tile data
         editorLevelData.forEach(brush => {
-            if(brush.data == null) {
-                const layerIndex = this.layerIds.indexOf(brush.layerId);
-                const posX = brush.position.x - bounds.x1 + 1;
-                const posY = brush.position.y - bounds.y1 + 1;
-                if(this.levelData[layerIndex][posX][posY] == null) {
-                    this.levelData[layerIndex][posX][posY] = {
-                        sprites: [], data: this.metaData[posX][posX]
-                    };
-                }
-                const tile = this.levelData[layerIndex][posX][posY];
+            const posX = brush.position.x - bounds.x1 + 1;
+            const posY = brush.position.y - bounds.y1 + 1;
+            if(this.levelData[posX][posY] == null) {
+                this.levelData[posX][posY] = {
+                    sprites: [], depth: 0, data: {}
+                };
+            }
+            const tile = this.levelData[posX][posY];
+            if(brush.data === null) {
                 const s = {
                     sprite: AssetFactory.inst.Create(brush.name),
+                    layerId: brush.layerId,
                     offset: {x: brush.pixelOffset.x, y: brush.pixelOffset.y}
                 };
 
@@ -92,6 +90,11 @@ export default class Level {
                 s.offset.y -= (brush.scale.y < 0 ? s.sprite.height : 0);
 
                 tile.sprites.push(s);
+            } else {
+                if(brush.name === DepthBrushName) {
+                    tile.depth = brush.data;
+                }
+                tile.data[brush.name] = brush.data;
             }
         });
     }
