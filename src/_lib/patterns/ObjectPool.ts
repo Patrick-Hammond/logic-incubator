@@ -27,7 +27,7 @@ export default class ObjectPool<T> {
         this.pool.push(item);
     }
 
-    Restore(): void {
+    RestoreAll(): void {
         if(this.reset) {
             this.popped.forEach(this.reset);
         }

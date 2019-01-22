@@ -6,7 +6,9 @@ function _hackSubImage(tex: glCore.GLTexture, sprite: PIXI.Sprite, clearBuffer?:
     const gl = tex.gl;
     const baseTex = sprite.texture.baseTexture;
     if(clearBuffer && clearWidth > 0 && clearHeight > 0) {
-        gl.texSubImage2D(gl.TEXTURE_2D, 0, sprite.position.x, sprite.position.y, clearWidth, clearHeight, tex.format, tex.type, clearBuffer);
+        gl.texSubImage2D(
+            gl.TEXTURE_2D, 0, sprite.position.x, sprite.position.y, clearWidth, clearHeight, tex.format, tex.type, clearBuffer
+        );
     }
     gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, 1);
     gl.texSubImage2D(gl.TEXTURE_2D, 0, sprite.position.x, sprite.position.y, tex.format, tex.type, baseTex.source as HTMLImageElement);

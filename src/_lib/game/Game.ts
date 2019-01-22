@@ -1,6 +1,5 @@
 import {Application, interaction, RendererOptions} from "pixi.js";
 import {Keyboard} from "../io/Keyboard";
-import GameComponent from "./GameComponent";
 import SceneManager from "./SceneManager";
 
 export default class Game extends Application {

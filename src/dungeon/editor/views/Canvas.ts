@@ -35,7 +35,7 @@ export default class Canvas extends EditorComponent {
             }
         );
 
-        this.root.addChild(this.grid, this.levelContainer, this.mask);
+        this.root.addChild(this.mask, this.grid, this.levelContainer);
         this.levelContainer.mask = this.mask;
 
         this.levelDataStore.Subscribe(this.UpdateLevel, this);
@@ -56,7 +56,7 @@ export default class Canvas extends EditorComponent {
         if(prevState.levelData !== state.levelData) {
             this.levelContainer.removeChildren();
 
-            this.layerContainers.Restore();
+            this.layerContainers.RestoreAll();
             const layerDict: {[id: number]: PIXI.Container} = {};
             this.editorStore.state.layers.forEach(layer => {
                 const layerContainer = this.layerContainers.Get();
@@ -68,7 +68,7 @@ export default class Canvas extends EditorComponent {
             const scaledTileSize = TileSize * this.editorStore.state.viewScale;
             const viewOffset = this.editorStore.state.viewOffset;
 
-            this.textPool.Restore();
+            this.textPool.RestoreAll();
             state.levelData.forEach(brush => {
                 if(layerDict[brush.layerId].visible) {
                     let posX = (brush.position.x - viewOffset.x) * scaledTileSize + GridBounds.x;
@@ -122,10 +122,10 @@ export default class Canvas extends EditorComponent {
 
     private RegisterGridEvents(): void {
         this.grid.interactive = true;
-        this.grid.on("pointerover", () => {
+        this.grid.on("mouseover", (e: PIXI.interaction.InteractionEvent) => {
             this.editorStore.Dispatch({type: EditorActions.BRUSH_VISIBLE, data: {visible: true}});
         });
-        this.grid.on("pointerout", () => {
+        this.grid.on("mouseout", (e: PIXI.interaction.InteractionEvent) => {
             this.editorStore.Dispatch({type: EditorActions.BRUSH_VISIBLE, data: {visible: false}});
         });
 
@@ -189,13 +189,6 @@ export default class Canvas extends EditorComponent {
             } else if(e.data.button === 2) {
                 this.editorStore.Dispatch({type: EditorActions.MOUSE_BUTTON, data: {mouseButtonState: MouseButtonState.RIGHT_DOWN}});
             }
-        });
-
-        this.grid.on("pointerup", (e: PIXI.interaction.InteractionEvent) => {
-            this.editorStore.Dispatch({type: EditorActions.MOUSE_BUTTON, data: {mouseButtonState: MouseButtonState.UP}});
-        });
-        this.grid.on("pointerupoutside", (e: PIXI.interaction.InteractionEvent) => {
-            this.editorStore.Dispatch({type: EditorActions.MOUSE_BUTTON, data: {mouseButtonState: MouseButtonState.UP}});
         });
         this.grid.on("pointerup", (e: PIXI.interaction.InteractionEvent) => {
             this.editorStore.Dispatch({type: EditorActions.MOUSE_BUTTON, data: {mouseButtonState: MouseButtonState.UP}});

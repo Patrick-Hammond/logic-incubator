@@ -19,7 +19,7 @@ export class ListBox<T extends ListItemBase> extends BaseContainer {
     Set(items: {id: number, name: string, selected: boolean, visible: boolean}[]): void {
 
         this.selections.Popped.forEach(item => this.removeChild(item));
-        this.selections.Restore();
+        this.selections.RestoreAll();
 
         items.forEach((item, index) => {
             const listItem = this.selections.Get();

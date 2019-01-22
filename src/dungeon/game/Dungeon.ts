@@ -1,7 +1,8 @@
+import Stage from "../../_extern/pixi-display/Stage";
 import GameComponent from "../../_lib/game/GameComponent";
 import {LoadFromLocalStorage} from "../../_lib/io/Storage";
 import Level from "./Level";
-import LevelView from "./LevelTileView";
+import LevelView from "./LevelView";
 
 export class Dungeon extends GameComponent {
 
@@ -11,10 +12,10 @@ export class Dungeon extends GameComponent {
     constructor() {
         super();
         this.Create();
-        this.root.on("added", this.Init, this);
     }
 
     private Create(): void {
+        this.game.stage = new Stage();
         this.level = new Level();
         this.levelView = new LevelView(this.level);
     }
