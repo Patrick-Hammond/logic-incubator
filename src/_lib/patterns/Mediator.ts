@@ -1,29 +1,29 @@
 export abstract class Mediator<T = any> {
     view: T;
-    abstract initialize? (): void;
-    abstract destroy? (): void;
+    abstract initialize?(): void;
+    abstract destroy?(): void;
 }
 
 export function mediate(mediatorClass: any): ClassDecorator {
-    return function (target: any) {
+    return (target: any) => {
         // console.log(mediatorClass, target)
         // save a reference to the original constructor
-        let original = target;
+        const original = target;
 
         // a utility function to generate instances of a class
         function construct(constructor, args) {
-            let c: any = function () {
+            const c: any = function() {
                 return constructor.apply(this, args);
             }
             c.prototype = constructor.prototype;
 
-            let instance = new c();
+            const instance = new c();
 
             // create and assign the mediator to the instance
-            let mediator: Mediator = new mediatorClass();
+            const mediator: Mediator = new mediatorClass();
             mediator.view = instance;
 
-          if (mediator.initialize) {
+            if(mediator.initialize) {
                 mediator.initialize();
             }
 
@@ -38,7 +38,7 @@ export function mediate(mediatorClass: any): ClassDecorator {
         }
 
         // the new constructor behaviour
-        let f: any = function (...args) {
+        const f: any = (...args) => {
             // console.log("New: " + original.name);
             return construct(original, args);
         }
@@ -52,21 +52,21 @@ export function mediate(mediatorClass: any): ClassDecorator {
 }
 
 export function action(name: string): MethodDecorator {
-    return function (target, key, descriptor) {
+    return (target, key, descriptor) => {
         // save a reference to the original method this way we keep the values currently in the
         // descriptor and don't overwrite what another decorator might have done to the descriptor.
-        if (descriptor === undefined) {
+        if(descriptor === undefined) {
             descriptor = Object.getOwnPropertyDescriptor(target, key);
         }
 
-        var originalMethod = descriptor.value as any;
+        const originalMethod = descriptor.value as any;
 
-        //editing the descriptor/value parameter
-        (<any>descriptor).value = function () {
-            var result = originalMethod.apply(this, arguments);
+        // editing the descriptor/value parameter
+        (descriptor as any).value = function() {
+            const result = originalMethod.apply(this, arguments);
 
             // call mediator method
-            if (this.$mediator && this.$mediator[name]) {
+            if(this.$mediator && this.$mediator[name]) {
                 this.$mediator[name].apply(this.$mediator, arguments);
             }
 

@@ -1,6 +1,8 @@
+import Game from "../../_lib/game/Game";
 import AssetFactory from "../../_lib/loading/AssetFactory";
 import {PointLike, Rectangle} from "../../_lib/math/Geometry";
 import {DepthBrushName} from "../Constants";
+import {LEVEL_LOADED} from "./Events";
 
 type Brush = {
     name: string;
@@ -13,15 +15,11 @@ type Brush = {
 };
 
 type Tile = {
-    sprites: TileSprite[],
+    sprite: PIXI.Sprite,
+    scale: PointLike,
+    layerId: number,
     depth: number,
     data: MetaData;
-}
-
-type TileSprite = {
-    sprite: PIXI.Sprite,
-    layerId: number,
-    offset: PointLike
 }
 
 type MetaData = {
@@ -29,7 +27,7 @@ type MetaData = {
 }
 
 export default class Level {
-    public levelData: Tile[][];
+    public levelData: Tile[][][] = [];
     public boundRect: Rectangle;
     public layerIds: number[] = [];
     public depthMax: number = 0;
@@ -62,40 +60,38 @@ export default class Level {
             }
         });
 
-        // level data array
-        this.levelData = new Array<Array<Tile>>(this.boundRect.width);
-        for(let j = 0; j < this.boundRect.width; j++) {
-            this.levelData[j] = new Array<Tile>(this.boundRect.height);
-        }
-
         // parse tile data
         editorLevelData.forEach(brush => {
             const posX = brush.position.x - bounds.x1 + 1;
             const posY = brush.position.y - bounds.y1 + 1;
-            if(this.levelData[posX][posY] == null) {
-                this.levelData[posX][posY] = {
-                    sprites: [], depth: 0, data: {}
-                };
+            if(this.levelData[posX] == null) {
+                this.levelData[posX] = [];
             }
-            const tile = this.levelData[posX][posY];
-            if(brush.data === null) {
-                const s = {
-                    sprite: AssetFactory.inst.Create(brush.name),
-                    layerId: brush.layerId,
-                    offset: {x: brush.pixelOffset.x, y: brush.pixelOffset.y}
-                };
+            if(this.levelData[posX][posY] == null) {
+                this.levelData[posX][posY] = [];
+            }
+            const tiles = this.levelData[posX][posY];
 
-                s.sprite.rotation = brush.rotation;
-                s.offset.x -= (brush.scale.x < 0 ? s.sprite.width : 0);
-                s.offset.y -= (brush.scale.y < 0 ? s.sprite.height : 0);
+            if(brush.data == null) {
+                const s = AssetFactory.inst.Create(brush.name);
+                const offset = {x: brush.pixelOffset.x, y: brush.pixelOffset.y};
+                offset.x -= (brush.scale.x < 0 ? s.width : 0);
+                offset.y -= (brush.scale.y < 0 ? s.height : 0);
+                s.pivot.set(offset.x, offset.y);
+                s.rotation = brush.rotation;
 
-                tile.sprites.push(s);
+                const tile = {sprite: s, layerId: brush.layerId, scale: brush.scale, depth: 0, data: {}};
+                tiles.push(tile);
             } else {
-                if(brush.name === DepthBrushName) {
-                    tile.depth = brush.data;
-                }
-                tile.data[brush.name] = brush.data;
+                tiles.forEach(t => {
+                    if(brush.name === DepthBrushName) {
+                        t.depth = brush.data;
+                    }
+                    t.data[brush.name] = brush.data;
+                })
             }
         });
+
+        Game.inst.dispatcher.emit(LEVEL_LOADED);
     }
 }

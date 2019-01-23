@@ -46,13 +46,13 @@ export default class Loader {
                                 }
 
                                 AssetFactory.inst.Add(name, animFrames);
-                                console.log("creating amination " + name);
+                                // console.log("creating amination " + name);
                             }
                         } else {
                             // image
                             const name = RemoveExtension(frame);
                             AssetFactory.inst.Add(name, [frame]);
-                            console.log("creating sprite " + name);
+                            // console.log("creating sprite " + name);
                         }
                     }
                 }

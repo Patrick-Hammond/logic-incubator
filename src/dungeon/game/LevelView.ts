@@ -1,13 +1,9 @@
-import {Layerable} from "../../_extern/pixi-display/_Mixins";
-import Group from "../../_extern/pixi-display/Group";
-import {Layer} from "../../_extern/pixi-display/Layer";
 import GameComponent from "../../_lib/game/GameComponent";
 import {Key} from "../../_lib/io/Keyboard";
 import {Point, Rectangle} from "../../_lib/math/Geometry";
 import {GameHeight, GameWidth, PlayerSpeed, Scenes, TileSize} from "../Constants";
+import {LEVEL_LOADED} from "./Events";
 import Level from "./Level";
-
-type TileSprite = PIXI.Sprite & Layerable;
 
 export default class LevelView extends GameComponent {
 
@@ -16,25 +12,20 @@ export default class LevelView extends GameComponent {
     private scaledTileSize: Point = new Point();
 
     private needsRefresh: boolean = true;
-    private depthLayers: Group[] = [];
+    private depthContainers: PIXI.Container[][] = [];
+    private visibleTiles: PIXI.Sprite[] = [];
 
     constructor(private level: Level) {
         super();
+
+        this.game.dispatcher.on(LEVEL_LOADED, this.OnLevelLoaded, this);
+
+        this.AddToScene(Scenes.GAME);
     }
 
-    Init(): void {
+    protected OnInitialise() {
         this.root.interactive = false;
         this.root.interactiveChildren = false;
-        this.AddToScene(Scenes.GAME);
-
-        for(let depth = 0; depth <= this.level.depthMax; depth++) {
-            const group = new Group(depth, true);
-            const layer = new Layer(group);
-            layer.interactive = layer.interactiveChildren = false;
-            layer.name = "depth" + depth.toString();
-            this.depthLayers[depth] = group;
-            this.game.stage.addChild(layer);
-        }
 
         this.viewRect = new Rectangle(0, 0, GameWidth / TileSize / 2, GameHeight / TileSize / 2);
         this.scaledTileSize.Set(GameWidth / this.viewRect.width, GameHeight / this.viewRect.height);
@@ -50,8 +41,41 @@ export default class LevelView extends GameComponent {
         this.game.ticker.add(this.OnUpdate, this);
     }
 
-    private OnUpdate(dt: number): void {
+    private OnLevelLoaded(): void {
 
+        this.depthContainers.forEach(dl => {
+            dl.forEach(layer => {
+                layer.removeChildren();
+            });
+            const depthContainer = dl[0].parent;
+            depthContainer.removeChildren();
+            depthContainer.parent.removeChild(depthContainer);
+        });
+        this.depthContainers.length = 0;
+
+        for(let depth = 0; depth <= this.level.depthMax; depth++) {
+            const depthContainer = new PIXI.Container();
+            depthContainer.interactive = depthContainer.interactiveChildren = false;
+            depthContainer.name = "depth" + depth.toString();
+            depthContainer.alpha = 1 - depth * 0.2;
+            depthContainer.scale.set(1 - depth * 0.05);
+            this.depthContainers[depth] = [];
+            this.root.addChild(depthContainer);
+
+            this.level.layerIds.forEach((layerId) => {
+                const layerContainer = new PIXI.Container();
+                layerContainer.interactive = layerContainer.interactiveChildren = false;
+                layerContainer.name = layerId.toString();
+                depthContainer.addChild(layerContainer);
+
+                this.depthContainers[depth][layerId] = layerContainer;
+            });
+        }
+
+        this.needsRefresh = true;
+    }
+
+    private OnUpdate(dt: number): void {
         if(this.game.keyboard.AnyKeyPressed()) {
             if(this.game.keyboard.KeyPressed(Key.UpArrow)) {
                 this.directionVec.Offset(0, 1);
@@ -96,7 +120,10 @@ export default class LevelView extends GameComponent {
             );
 
             // clear
-            this.root.children.forEach(c => c.visible = false);
+            this.visibleTiles.forEach(t => {
+                t.visible = false;
+            });
+            this.visibleTiles.length = 0;
 
             // redraw
             for(let x = this.viewRect.x; x <= w; x++) {
@@ -107,20 +134,22 @@ export default class LevelView extends GameComponent {
                     if(y < 0 || y >= this.level.boundRect.height) {
                         continue;
                     }
-                    const tile = level[x][y];
-                    if(tile) {
-                        const sprites = tile.sprites;
-                        for(let z = 0, len = sprites.length; z < len; z++) {
-                            const s = sprites[z].sprite as TileSprite;
-                            s.parentGroup = this.depthLayers[tile.depth];
-                            s.zIndex = z;
-                            s.texture = sprites[z].sprite.texture;
-                            s.x = (((x - this.viewRect.x) * TileSize) + sprites[z].offset.x) * scale;
-                            s.y = (((y - this.viewRect.y) * TileSize) + sprites[z].offset.y) * scale;
-                            s.scale.set(scale);
+                    if(level[x] == null || level[x][y] == null) {
+                        continue;
+                    }
+                    const tiles = level[x][y];
+                    const len = tiles.length;
+                    if(len) {
+                        for(let j = 0; j < len; j++) {
+                            const tile = tiles[j];
+                            const s = tile.sprite;
+                            s.x = (x - this.viewRect.x) * TileSize * scale;
+                            s.y = (y - this.viewRect.y) * TileSize * scale;
+                            s.scale.set(scale * tile.scale.x, scale * tile.scale.y);
                             s.visible = true;
+                            this.visibleTiles.push(s);
                             if(!s.parent) {
-                                this.root.addChild(s);
+                                this.depthContainers[tile.depth][tile.layerId].addChild(s);
                             }
                         }
                     }

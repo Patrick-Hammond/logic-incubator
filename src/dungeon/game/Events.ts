@@ -1,0 +1,1 @@
+export const LEVEL_LOADED = "levelloaded";
