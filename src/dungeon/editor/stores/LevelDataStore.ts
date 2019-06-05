@@ -51,7 +51,6 @@ export default class LevelDataStore extends Store<LevelDataState, ActionData> {
                 const existing = levelDataCopy.filter(v =>
                     v.position.x === brush.position.x &&
                     v.position.y === brush.position.y &&
-                    v.name === brush.name &&
                     v.layerId === brush.layerId
                 );
                 existing.forEach(item => levelDataCopy.splice(levelDataCopy.indexOf(item), 1));
@@ -67,7 +66,6 @@ export default class LevelDataStore extends Store<LevelDataState, ActionData> {
                         const existing = levelDataCopy.some(v =>
                             v.position.x === brush.position.x &&
                             v.position.y === brush.position.y &&
-                            v.name === brush.name &&
                             v.layerId === brush.layerId
                         );
                         if(!existing) {
@@ -107,7 +105,6 @@ export default class LevelDataStore extends Store<LevelDataState, ActionData> {
                             const item = levelDataCopy[i];
                             if(item.position.x === brush.position.x &&
                                 item.position.y === brush.position.y &&
-                                item.name === brush.name &&
                                 item.layerId === brush.layerId) {
                                 levelDataCopy.splice(i, 1);
                                 break;

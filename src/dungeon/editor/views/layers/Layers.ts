@@ -90,6 +90,9 @@ export default class Layers extends EditorComponent {
         });
         dataButton.position.set(downButton.getBounds().right + 10, GridBounds.height);
         this.root.addChild(dataButton);
+
+        //render initial
+        this.editorStore.Dispatch({type: EditorActions.REFRESH});
     }
 
     private Render(prevState: IState, state: IState): void {

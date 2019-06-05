@@ -14,22 +14,20 @@ export default class ListBoxItem extends ListItemBase {
         this.addChild(this.selection);
 
         const hover = new PIXI.Graphics().beginFill(0x335555, 0.3).drawRect(0, 0, bounds.width - 10, 13).endFill();
-
-        const removeHover = () => {
-            if(hover.parent) {
-                this.removeChild(hover);
-            }
-        }
+        hover.interactive = true;
+        hover.buttonMode = true;
+        hover.alpha = 0;
+        this.addChild(hover);
 
         this.label = new PIXI.Text("", {fontFamily: "Arial", fontSize: 11, fill: 0xeeeeee});
-        this.label.on("pointerover", () => {
-            this.addChild(hover);
+        hover.on("pointerover", () => {
+            hover.alpha = 0.3;
         });
-        this.label.on("pointerout", () => {
-            removeHover();
+        hover.on("pointerout", () => {
+            hover.alpha = 0;
         });
-        this.label.on("pointerdown", () => {
-            removeHover();
+        hover.on("pointerdown", () => {
+            hover.alpha = 0;
             this.parent.emit(ListBoxEvents.ITEM_SELECTED, this.index);
         });
         this.addChild(this.label);
@@ -41,7 +39,7 @@ export default class ListBoxItem extends ListItemBase {
         this.eyeIcon.buttonMode = true;
         this.eyeIcon.interactive = true;
         this.eyeIcon.on("pointerdown", () => {
-            removeHover();
+            hover.alpha = 0;
             this.parent.emit(ListBoxEvents.TOGGLE_VISIBILITY, this.index);
         });
         this.addChild(this.eyeIcon);
@@ -51,8 +49,6 @@ export default class ListBoxItem extends ListItemBase {
         this.position.set(5, 5 + this.index * 20);
 
         this.label.text = item.name;
-        this.label.interactive = true;
-        this.label.buttonMode = true;
 
         this.selection.visible = item.selected;
 
