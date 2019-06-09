@@ -1,7 +1,7 @@
 import GameComponent from "../../_lib/game/GameComponent";
 import {LoadFromLocalStorage} from "../../_lib/io/Storage";
 import Level from "./Level";
-import LevelView from "./LevelView";
+import TileMapLevelView from "./TileMapLevelView";
 
 export class Dungeon extends GameComponent {
 
@@ -9,7 +9,7 @@ export class Dungeon extends GameComponent {
 
     protected OnInitialise(): void {
         this.level = new Level();
-        new LevelView(this.level);
+        new TileMapLevelView(this.level);
     }
 
     protected OnShow(): void {
