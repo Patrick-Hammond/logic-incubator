@@ -4,7 +4,7 @@ import {AssetPath, Scenes} from "./Constants";
 import {DungeonEditor} from "./editor/DungeonEditor";
 import {Dungeon} from "./game/Dungeon";
 
-const game = new Game(1280, 720, {backgroundColor: 0x111111});
+const game = new Game(1280, 720, {backgroundColor: 0x111111}, true);
 
 // load
 Loader.inst.LoadSpriteSheet(AssetPath + "spritesheet.json", /^.+(?=_f)/, () => {
