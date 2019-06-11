@@ -52,6 +52,7 @@ export default class Layers extends EditorComponent {
                     type: EditorActions.SELECT_LAYER,
                     data: {layer: this.editorStore.state.layers[0]}
                 });
+                this.levelDataStore.Dispatch({type: LevelDataActions.ERASE_LAYER, data:{destLayer:selectedLayer}});
             }
         })
         removeButton.position.set(addButton.getBounds().right + 5, GridBounds.height);

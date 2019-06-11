@@ -1,5 +1,5 @@
 import Game from "../../_lib/game/Game";
-import {PointLike, Rectangle} from "../../_lib/math/Geometry";
+import {PointLike, Rectangle, Point, Vec3Like} from "../../_lib/math/Geometry";
 import {DepthBrushName} from "../Constants";
 import {LEVEL_LOADED} from "./Events";
 import AssetFactory from "../../_lib/loading/AssetFactory";
@@ -14,7 +14,7 @@ type Brush = {
     data: number
 };
 
-type Tile = Brush & {
+export type Tile = Brush & {
     texture:PIXI.Texture;
 }
 
@@ -22,8 +22,9 @@ export default class Level {
     public levelData: Tile[][][] = [];
     public boundRect: Rectangle;
     public layerIds: number[] = [];
+    public playerStartPosition: Vec3Like;
     public depthMax: number = 0;
-
+ 
     LoadEditorData(editorLevelData: Brush[]): void {
 
         // find map bounds
@@ -40,11 +41,17 @@ export default class Level {
 
          // get all layer ids
          editorLevelData.forEach(brush => {
-            if(brush.layerId < 1000 && this.layerIds.indexOf(brush.layerId) === -1) {
-                this.layerIds.push(brush.layerId);
+            if(brush.layerId < 1000) {
+                if(this.layerIds.indexOf(brush.layerId) === -1) {
+                    this.layerIds.push(brush.layerId);
+                }
+            } else {
+                if(brush.name === "data-1") {
+                    this.playerStartPosition = {...brush.position, z:brush.layerId - 1000};
+                }
             }
         });
-
+        
         /*
         // get depth
         editorLevelData.forEach(brush => {
@@ -52,8 +59,7 @@ export default class Level {
                 this.depthMax = Math.max(this.depthMax, brush.data);
             }
         });
-*/
-
+        */
         
         // parse tile data
         editorLevelData.forEach(brush => {

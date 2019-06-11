@@ -15,7 +15,7 @@ export type Layer = {id: number, name: string, selected: boolean, visible: boole
 export type LevelDataState = {levelData: LevelData};
 
 export const enum LevelDataActions {
-    PAINT, PAINT_RECT, ERASE, ERASE_RECT, COPY, REFRESH, RESET
+    PAINT, PAINT_RECT, ERASE, ERASE_RECT, ERASE_LAYER, COPY, REFRESH, RESET
 };
 
 type LevelData = Brush[];
@@ -113,6 +113,9 @@ export default class LevelDataStore extends Store<LevelDataState, ActionData> {
                     }
                 }
                 return levelDataCopy;
+            }
+            case LevelDataActions.ERASE_LAYER: {
+                return levelData.filter(brush => brush.layerId != action.data.destLayer.id);
             }
             case LevelDataActions.COPY: {
                 const sourceData = levelData.filter(b => b.layerId === action.data.sourceLayer.id);

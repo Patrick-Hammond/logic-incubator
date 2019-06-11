@@ -213,7 +213,8 @@ export default class EditorStore extends Store<IState, IActionData> {
         switch(action.type) {
             case EditorActions.ADD_LAYER: {
                 const nextId = this.NextLayerId();
-                const layer = {id: nextId, name: "layer " + nextId, selected: layers.length === 0, visible: true, isData: false}
+                layers.forEach(layer => layer.selected = false);
+                const layer = {id: nextId, name: "layer " + nextId, selected: true, visible: true, isData: false}
                 return layers.concat(layer);
             }
             case EditorActions.ADD_DATA_LAYER: {

@@ -2,15 +2,15 @@ export type PointLike = {x: number; y: number};
 export class Point {
     constructor(public x: number = 0, public y: number = 0) {}
 
-    Set(x: number, y: number): Point {
+    Set(x: number, y?: number): Point {
         this.x = x;
-        this.y = y;
+        this.y = y !== null ? y : x;
         return this;
     }
 
-    Offset(x: number, y: number): Point {
+    Offset(x: number, y?: number): Point {
         this.x += x;
-        this.y += y;
+        this.y += y !== null ? y : x;
         return this;
     }
 
@@ -68,3 +68,5 @@ export class Rectangle {
         return new Rectangle(this.x, this.y, this.width, this.height);
     }
 }
+
+export type Vec3Like = {x:number, y:number, z:number};
