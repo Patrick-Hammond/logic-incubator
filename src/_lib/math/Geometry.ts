@@ -2,6 +2,16 @@ export type PointLike = {x: number; y: number};
 export class Point {
     constructor(public x: number = 0, public y: number = 0) {}
 
+    get length(): number {
+        return Math.sqrt(this.x * this.x + this.y * this.y);
+    }
+
+    get normalized(): PointLike {
+        const length = this.length;
+        if(length === 0) return {x:0, y:0};
+        return {x:this.x / length, y:this.y / length};
+    }
+
     Set(x: number, y?: number): Point {
         this.x = x;
         this.y = y !== null ? y : x;

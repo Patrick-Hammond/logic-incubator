@@ -10,6 +10,7 @@ import AssetFactory from "../../../_lib/loading/AssetFactory";
 export class Player extends GameComponent {
 
     private player: PIXI.extras.AnimatedSprite;
+    private inputVec: Point = new Point();
     private directionVec: Point = new Point();
     
     constructor(private level: Level, private camera:Camera) {
@@ -46,25 +47,30 @@ export class Player extends GameComponent {
     private GetInput():void {
 
         if(this.game.keyboard.AnyKeyPressed()) {
+
+            this.inputVec.Set(0, 0);
+
             if(this.game.keyboard.KeyPressed(Key.UpArrow)) {
-                this.directionVec.Offset(0, 1);
+                this.inputVec.Offset(0, 1);
             }
             if(this.game.keyboard.KeyPressed(Key.DownArrow)) {
-                this.directionVec.Offset(0, -1);
+                this.inputVec.Offset(0, -1);
             }
             if(this.game.keyboard.KeyPressed(Key.LeftArrow)) {
-                this.directionVec.Offset(1, 0);
+                this.inputVec.Offset(1, 0);
             }
             if(this.game.keyboard.KeyPressed(Key.RightArrow)) {
-                this.directionVec.Offset(-1, 0);
+                this.inputVec.Offset(-1, 0);
             }
+
+            const n = this.inputVec.normalized;
+            this.directionVec.Offset(n.x, n.y);
         }
     }
 
     private Move(dt:number):void {
-        this.camera.Move(this.directionVec.x * dt * PlayerSpeed,
-                         this.directionVec.y * dt * PlayerSpeed
-                         );
+
+        this.camera.Move(this.directionVec.x * dt * PlayerSpeed, this.directionVec.y * dt * PlayerSpeed);
 
         this.directionVec.x *= 0.9 * dt;
         this.directionVec.y *= 0.9 * dt;
