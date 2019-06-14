@@ -3,7 +3,7 @@ import {Key} from "../../../_lib/io/Keyboard";
 import {LEVEL_LOADED} from "../Events";
 import {Point} from "../../../_lib/math/Geometry";
 import Level from "../Level";
-import {PlayerSpeed, Scenes} from "../../Constants";
+import {PlayerSpeed, Scenes, GameWidth, GameHeight} from "../../Constants";
 import {Camera} from "./Camera";
 import AssetFactory from "../../../_lib/loading/AssetFactory";
 
@@ -26,11 +26,13 @@ export class Player extends GameComponent {
 
     private OnLevelLoaded(): void {
 
-        const pos = this.level.playerStartPosition;
+        const pos = this.level.playerStartPosition; 
+        this.camera.CenterOn(pos.x, pos.y);
 
-        this.player = AssetFactory.inst.CreateAnimatedSprite("knight_f_run_anim");
-        this.player.position.set(640, 300);
-        this.player.scale.set(this.camera.Scale.x, this.camera.Scale.y);
+        this.player = AssetFactory.inst.CreateAnimatedSprite("chest_full_open_anim");
+        this.player.position.set(this.camera.ViewRect.width * 0.5 * this.camera.ScaledTileSize,
+                                 this.camera.ViewRect.height * 0.5 * this.camera.ScaledTileSize);
+        this.player.scale.set(this.camera.Scale);
         this.player.interactive = this.player.interactiveChildren = false;
         this.player.play();
         this.player.animationSpeed = 0.1;

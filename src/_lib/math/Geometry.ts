@@ -14,13 +14,13 @@ export class Point {
 
     Set(x: number, y?: number): Point {
         this.x = x;
-        this.y = y !== null ? y : x;
+        this.y = y != null ? y : x;
         return this;
     }
 
     Offset(x: number, y?: number): Point {
         this.x += x;
-        this.y += y !== null ? y : x;
+        this.y += y != null ? y : x;
         return this;
     }
 
@@ -31,7 +31,7 @@ export class Point {
 
 export type RectangleLike = {x: number, y: number, width: number, height: number};
 export class Rectangle {
-    constructor(public x: number, public y: number, public width: number, public height: number) {}
+    constructor(public x: number = 0, public y: number = 0, public width: number = 0, public height: number = 0) {}
 
     get left(): number {return this.x}
     get top(): number {return this.y}

@@ -28,7 +28,7 @@ export default class Level {
     LoadEditorData(editorLevelData: Brush[]): void {
 
         // find map bounds
-        const bounds = {x1: 0, y1: 0, x2: 0, y2: 0};
+        const bounds = {x1: Number.MAX_VALUE, y1: Number.MAX_VALUE, x2: Number.MIN_VALUE, y2: Number.MIN_VALUE};
         editorLevelData.forEach(brush => {
             bounds.x1 = Math.min(bounds.x1, brush.position.x);
             bounds.y1 = Math.min(bounds.y1, brush.position.y);
@@ -47,7 +47,9 @@ export default class Level {
                 }
             } else {
                 if(brush.name === "data-1") {
-                    this.playerStartPosition = {...brush.position, z:brush.layerId - 1000};
+                    const posX = brush.position.x - bounds.x1;
+                    const posY = brush.position.y - bounds.y1;
+                    this.playerStartPosition = {x:posX, y:posY, z:brush.layerId - 1000};
                 }
             }
         });
@@ -65,8 +67,8 @@ export default class Level {
         editorLevelData.forEach(brush => {
             const index = this.layerIds.indexOf(brush.layerId);
             if(index > -1){
-                const posX = brush.position.x - bounds.x1 + 1;
-                const posY = brush.position.y - bounds.y1 + 1;
+                const posX = brush.position.x - bounds.x1;
+                const posY = brush.position.y - bounds.y1;
                 if(this.levelData[index] == null) {
                     this.levelData[index] = [];
                 }

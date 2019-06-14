@@ -37,7 +37,7 @@ export default class TileMapView extends GameComponent {
         for(let l = 0, len = this.layers.length; l < len; l++) {
             const layer = this.layers[l];
             layer.clear();
-            layer.scale.set(this.camera.Scale.x, this.camera.Scale.y);
+            layer.scale.set(this.camera.Scale);
             for(let x = this.camera.ViewRect.x | 0, w = this.camera.ViewRect.right | 0; x <= w; x++) {
                 if(x < 0 || x >= this.level.boundRect.width) {
                     continue;
