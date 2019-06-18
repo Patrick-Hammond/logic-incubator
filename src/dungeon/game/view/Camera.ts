@@ -1,7 +1,8 @@
 import GameComponent from "../../../_lib/game/GameComponent";
-import {Point, PointLike, Rectangle} from "../../../_lib/math/Geometry";
+import {Rectangle} from "../../../_lib/math/Geometry";
 import {GameWidth, TileSize, GameHeight, Scenes} from "../../Constants";
 import {CAMERA_MOVED} from "../Events";
+import {Sign, Lerp} from "../../../_lib/math/Utils";
 
 export class Camera extends GameComponent {
 
@@ -12,7 +13,6 @@ export class Camera extends GameComponent {
     constructor() {
 
         super();
-
         this.AddToScene(Scenes.GAME);
     }
 
@@ -44,16 +44,21 @@ export class Camera extends GameComponent {
         this.root.x += x;
         this.root.y += y;
 
-        if(Math.abs(this.root.x) >= this.scaledTileSize) {
-            let offsetX = -this.root.x / this.scaledTileSize;
-            this.viewRect.Offset(offsetX | 0, 0);
-            this.root.x = offsetX % 1;
+        const rootX = Math.abs(this.root.x);
+        if(rootX >= this.scaledTileSize) {
+            const dir = Sign(this.root.x);
+            const over = (rootX - (rootX | 0)) * dir;
+            this.viewRect.Offset(-dir, 0);
+            this.root.x = over;
             this.game.dispatcher.emit(CAMERA_MOVED);
         }
-        if(Math.abs(this.root.y) >= this.scaledTileSize) {
-            let offsetY = -this.root.y / this.scaledTileSize;
-            this.viewRect.Offset(0, offsetY | 0);
-            this.root.y = offsetY % 1;
+
+        const rootY = Math.abs(this.root.y);
+        if(rootY >= this.scaledTileSize) {
+            const dir = Sign(this.root.y);
+            const over = (rootY - (rootY | 0)) * dir;
+            this.viewRect.Offset(0, -dir);
+            this.root.y = over;
             this.game.dispatcher.emit(CAMERA_MOVED);
         }
     }
@@ -61,6 +66,16 @@ export class Camera extends GameComponent {
     public CenterOn(x:number, y:number):void {
 
         this.viewRect.Set(x - this.viewRect.width * 0.5, y - this.viewRect.height * 0.5, this.viewRect.width, this.viewRect.height);
+        this.root.position.set(0, 0);
+        this.game.dispatcher.emit(CAMERA_MOVED);
+    }
+
+    public Follow(pixelX:number, pixelY:number, amount:number):void {
+
+        this.viewRect.Set(
+            Lerp(this.viewRect.x, pixelX / TileSize - this.viewRect.width * 0.5, amount), 
+            Lerp(this.viewRect.y, pixelY / TileSize - this.viewRect.height * 0.5, amount)
+            );
         this.root.position.set(0, 0);
         this.game.dispatcher.emit(CAMERA_MOVED);
     }

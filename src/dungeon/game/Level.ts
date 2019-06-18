@@ -1,6 +1,5 @@
 import Game from "../../_lib/game/Game";
-import {PointLike, Rectangle, Point, Vec3Like} from "../../_lib/math/Geometry";
-import {DepthBrushName} from "../Constants";
+import {PointLike, Rectangle, Vec3Like} from "../../_lib/math/Geometry";
 import {LEVEL_LOADED} from "./Events";
 import AssetFactory from "../../_lib/loading/AssetFactory";
 
@@ -20,9 +19,10 @@ export type Tile = Brush & {
 
 export default class Level {
     public levelData: Tile[][][] = [];
+    public collisionData:boolean[][] = [];
     public boundRect: Rectangle;
     public layerIds: number[] = [];
-    public playerStartPosition: Vec3Like;
+    public playerStartPosition: {x:number, y:number, layerId:number};
     public depthMax: number = 0;
  
     LoadEditorData(editorLevelData: Brush[]): void {
@@ -39,29 +39,26 @@ export default class Level {
         // normalise origin to zero
         this.boundRect = new Rectangle(0, 0, bounds.x2 - bounds.x1 + 2, bounds.y2 - bounds.y1 + 2);
 
-         // get all layer ids
+         // get all layer ids and parse data layers
          editorLevelData.forEach(brush => {
             if(brush.layerId < 1000) {
                 if(this.layerIds.indexOf(brush.layerId) === -1) {
                     this.layerIds.push(brush.layerId);
                 }
             } else {
+                const posX = brush.position.x - bounds.x1;
+                const posY = brush.position.y - bounds.y1;
                 if(brush.name === "data-1") {
-                    const posX = brush.position.x - bounds.x1;
-                    const posY = brush.position.y - bounds.y1;
-                    this.playerStartPosition = {x:posX, y:posY, z:brush.layerId - 1000};
+                    this.playerStartPosition = {x:posX, y:posY, layerId:this.layerIds[this.layerIds.length - 1]};
+                }
+                else if(brush.name === "data-2") {
+                    if(this.collisionData[posX] == null) {
+                        this.collisionData[posX] = []
+                    }
+                    this.collisionData[posX][posY] = true;
                 }
             }
         });
-        
-        /*
-        // get depth
-        editorLevelData.forEach(brush => {
-            if(brush.name === DepthBrushName) {
-                this.depthMax = Math.max(this.depthMax, brush.data);
-            }
-        });
-        */
         
         // parse tile data
         editorLevelData.forEach(brush => {
@@ -81,5 +78,10 @@ export default class Level {
         });
 
         Game.inst.dispatcher.emit(LEVEL_LOADED);
+    }
+
+    CheckCollision(x:number, y:number):boolean
+    {
+        return this.collisionData[x] && this.collisionData[x][y];
     }
 }

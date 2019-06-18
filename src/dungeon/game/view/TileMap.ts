@@ -1,7 +1,7 @@
 import CompositeRectTileLayer from "../../../_extern/pixi-tilemap/CompositeRectTileLayer";
 import GameComponent from "../../../_lib/game/GameComponent";
 import {TileSize} from "../../Constants";
-import {LEVEL_LOADED, CAMERA_MOVED} from "../Events";
+import {LEVEL_LOADED, CAMERA_MOVED, LEVEL_CREATED} from "../Events";
 import Level, {Tile} from "../Level";
 import {Camera} from "./Camera";
 
@@ -26,9 +26,11 @@ export default class TileMapView extends GameComponent {
             layer.interactive = layer.interactiveChildren = false;
             layer.name = layerId.toString();
             this.camera.root.addChild(layer);
-
             this.layers.push(layer);
         });
+
+        this.game.dispatcher.emit(LEVEL_CREATED);
+
         this.Render();
     }
 

@@ -24,6 +24,11 @@ export class Point {
         return this;
     }
 
+    Copy(point:PointLike): void {
+        this.x = point.x;
+        this.y = point.y;
+    }
+
     Clone(): Point {
         return new Point(this.x, this.y);
     }
@@ -49,11 +54,21 @@ export class Rectangle {
     get centerBottom(): PointLike {return {x: this.x + this.width * 0.5, y: this.y + this.height}}
     get center(): PointLike {return {x: this.x + this.width * 0.5, y: this.y + this.height * 0.5}}
 
-    Set(x: number, y: number, width: number, height: number): Rectangle {
+    Set(x: number, y: number, width?: number, height?: number): Rectangle {
         this.x = x;
         this.y = y;
-        this.width = width;
-        this.height = height;
+        if(width) {
+            this.width = width;
+        }
+        if(height) {
+            this.height = height;
+        }
+        return this;
+    }
+
+    Offset(x: number, y: number): Rectangle {
+        this.x += x;
+        this.y += y;
         return this;
     }
 
@@ -66,13 +81,7 @@ export class Rectangle {
             return false;
         }
         return true;
-    }
-
-    Offset(x: number, y: number): Rectangle {
-        this.x += x;
-        this.y += y;
-        return this;
-    }
+    } 
 
     Clone(): Rectangle {
         return new Rectangle(this.x, this.y, this.width, this.height);
