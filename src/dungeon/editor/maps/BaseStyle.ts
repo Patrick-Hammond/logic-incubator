@@ -1,4 +1,4 @@
-import {PointLike, RectangleLike} from "../../../_lib/math/Geometry";
+import {Vec2Like, RectangleLike} from "../../../_lib/math/Geometry";
 import {Brush} from "../stores/LevelDataStore";
 import {IStyler} from "./Styler";
 
@@ -7,7 +7,7 @@ const defaultBrush: Brush = {name: "", position: {x: 0, y: 0}, pixelOffset: {x: 
 export abstract class BaseStyle implements IStyler {
 
     protected rect: RectangleLike;
-    protected doors: PointLike[];
+    protected doors: Vec2Like[];
 
     StyleRoom(rect: RectangleLike, doors?: {[ key: string ]: number}): Brush[] {
 
@@ -52,7 +52,7 @@ export abstract class BaseStyle implements IStyler {
         });
     }
 
-    protected FillRect(rect: RectangleLike, cb: (position: PointLike) => string): Brush[] {
+    protected FillRect(rect: RectangleLike, cb: (position: Vec2Like) => string): Brush[] {
         const result: Brush[] = [];
         for(let i = 0; i <= rect.width; i++) {
             for(let j = 0; j <= rect.height; j++) {

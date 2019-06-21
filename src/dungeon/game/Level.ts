@@ -1,14 +1,16 @@
 import Game from "../../_lib/game/Game";
-import {PointLike, Rectangle, Vec3Like} from "../../_lib/math/Geometry";
+import {Vec2Like, Rectangle, Vec3Like, Vec2} from "../../_lib/math/Geometry";
 import {LEVEL_LOADED} from "./Events";
 import AssetFactory from "../../_lib/loading/AssetFactory";
+import {TileSize} from "../Constants";
+import {CeilN} from "../../_lib/math/Utils";
 
 type Brush = {
     name: string;
-    position: PointLike;
-    pixelOffset: PointLike,
+    position: Vec2Like;
+    pixelOffset: Vec2Like,
     rotation: number,
-    scale: PointLike,
+    scale: Vec2Like,
     layerId: number,
     data: number
 };
@@ -17,7 +19,13 @@ export type Tile = Brush & {
     texture:PIXI.Texture;
 }
 
+export enum CollisionType {
+    NONE, X, Y, XY
+}
+
 export default class Level {
+    private direction = new Vec2();
+
     public levelData: Tile[][][] = [];
     public collisionData:boolean[][] = [];
     public boundRect: Rectangle;
@@ -80,8 +88,49 @@ export default class Level {
         Game.inst.dispatcher.emit(LEVEL_LOADED);
     }
 
-    CheckCollision(x:number, y:number):boolean
-    {
-        return this.collisionData[x] && this.collisionData[x][y];
+    CheckCollision(from:Vec2Like, to:Vec2Like):{type:CollisionType, distance:number} {
+        let type = CollisionType.NONE;
+
+        //pixel to grid space
+        let fromX = from.x / TileSize;
+        let toX = to.x / TileSize;
+        const movingRight = toX > fromX;
+        if(movingRight) {
+            fromX++;
+            toX++;
+        }
+
+        let fromY = from.y / TileSize;
+        let toY = to.y / TileSize;
+        const movingDown = toY > fromY;
+        if(movingDown) {
+            fromY++;
+            toY++;
+        }
+
+        this.direction.Set(toX - fromX, toY - fromY);
+        let len = Math.ceil(this.direction.length);
+        let incX = CeilN(this.direction.x / len);
+        let incY = CeilN(this.direction.y / len);
+        let x = fromX|0;
+        let y = fromY|0;
+        let distance = 0;
+
+        for (let i = 0; i < len; i++) {
+            if(this.collisionData[x+incX] && this.collisionData[x+incX][y]) {
+                type += CollisionType.X;
+            }
+            if(this.collisionData[x] && this.collisionData[x][y+incY]) {
+                type += CollisionType.Y;
+            }
+            if(type > CollisionType.NONE) {
+                distance = i;
+                break;
+            }
+            x += incX;
+            y += incY;
+        }
+
+        return {type, distance};
     }
 }

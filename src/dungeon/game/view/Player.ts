@@ -1,8 +1,8 @@
 import GameComponent from "../../../_lib/game/GameComponent";
 import {Key} from "../../../_lib/io/Keyboard";
 import {LEVEL_CREATED} from "../Events";
-import {Point} from "../../../_lib/math/Geometry";
-import Level from "../Level";
+import {Vec2} from "../../../_lib/math/Geometry";
+import Level, {CollisionType} from "../Level";
 import {PlayerSpeed, Scenes, TileSize} from "../../Constants";
 import {Camera} from "./Camera";
 import AssetFactory from "../../../_lib/loading/AssetFactory";
@@ -11,11 +11,10 @@ import CompositeRectTileLayer from "../../../_extern/pixi-tilemap/CompositeRectT
 export class Player extends GameComponent {
 
     private player: PIXI.extras.AnimatedSprite;
-    private inputVec = new Point();
-    private directionVec = new Point();
-    private boundsVec = new Point();
+    private inputVec = new Vec2();
+    private directionVec = new Vec2();
+    private newPosition = new Vec2();
     private playerLayer:CompositeRectTileLayer;
-    private startPos = new Point();
 
     constructor(private level: Level, private camera:Camera) {
 
@@ -28,12 +27,12 @@ export class Player extends GameComponent {
 
     private OnLevelCreated(): void {
 
-        const pos = this.level.playerStartPosition;
-        this.startPos.Set(pos.x * TileSize, pos.y * TileSize);
-
         this.player = AssetFactory.inst.CreateAnimatedSprite("chest_full_open_anim");
         this.player.play();
         this.player.animationSpeed = 0.1;
+
+        const pos = this.level.playerStartPosition;
+        this.player.position.set(pos.x * TileSize, pos.y * TileSize);
 
         this.playerLayer = this.camera.root.getChildByName(pos.layerId.toString()) as CompositeRectTileLayer;
 
@@ -43,7 +42,11 @@ export class Player extends GameComponent {
     private OnUpdate(dt:number): void {
 
         this.GetInput();
+
         this.Move(dt);
+        
+        this.camera.Follow(this.player.x, this.player.y, 0.05);
+
         this.Render();
     }
 
@@ -73,27 +76,46 @@ export class Player extends GameComponent {
 
     private Move(dt:number):void {
 
-        let deltaX = this.directionVec.x * dt * PlayerSpeed;
-        let deltaY = this.directionVec.y * dt * PlayerSpeed;
-/*
-        this.boundsVec.x = this.startPos.x + this.player.x - deltaX;
-        this.boundsVec.y = this.startPos.y + this.player.y - deltaY;
+        const deltaX = this.directionVec.x * dt * PlayerSpeed;
+        const deltaY = this.directionVec.y * dt * PlayerSpeed;     
 
-        let posX = (this.camera.ViewRect.x + this.boundsVec.x / this.camera.ScaledTileSize) | 0;
-        let posY = (this.camera.ViewRect.y + this.boundsVec.y / this.camera.ScaledTileSize) | 0;
-        
-        if(this.level.CheckCollision(posX, posY)){
-            console.log("hit!");
+        this.newPosition.x = this.player.x - deltaX;
+        this.newPosition.y = this.player.y - deltaY;
+
+        const movedX = Math.floor(this.player.x / TileSize) !== Math.floor(this.newPosition.x / TileSize);
+        const movedY = Math.floor(this.player.y / TileSize) !== Math.floor(this.newPosition.y / TileSize);
+
+        const collision = movedX || movedY ? this.level.CheckCollision(this.player.position, this.newPosition) : null;
+
+        if(collision) {
+            if(movedX && collision.type === CollisionType.X || collision.type === CollisionType.XY) {
+                if(deltaX > 0) {
+                    this.player.x = (this.player.x | 0) + collision.distance * TileSize;
+                }
+                else {
+                    this.player.x = (this.player.x | 0) - collision.distance * TileSize;
+                }
+                this.directionVec.x = 0;
+            } else {
+                this.player.x -= deltaX;
+            }
+            
+            if(movedY && collision.type === CollisionType.Y || collision.type === CollisionType.XY) {
+                if(deltaY > 0) {
+                    this.player.y = (this.player.y | 0) + collision.distance * TileSize;
+                }
+                else {
+                    this.player.y = (this.player.y | 0) - collision.distance * TileSize;
+                }
+                this.directionVec.y = 0;
+            } else {
+                this.player.y -= deltaY;
+            }
         }
-  */      
-        this.player.x -= deltaX;
-        this.player.y -= deltaY;
-
-        this.camera.Follow(
-            this.startPos.x + this.player.x,
-            this.startPos.y + this.player.y,
-            0.2
-        );
+        else {
+            this.player.x -= deltaX;
+            this.player.y -= deltaY;
+        }
 
         this.directionVec.x *= 0.9 * dt;
         this.directionVec.y *= 0.9 * dt;
@@ -103,8 +125,8 @@ export class Player extends GameComponent {
         this.playerLayer.clear();
         this.playerLayer.addFrame(
             this.player.texture, 
-            this.startPos.x - this.camera.ViewRect.x * TileSize + this.player.x,
-            this.startPos.y - this.camera.ViewRect.y * TileSize + this.player.y
+            this.player.x - this.camera.ViewRect.x * TileSize,
+            this.player.y - this.camera.ViewRect.y * TileSize
         )
     }
 }

@@ -1,13 +1,13 @@
-import {PointLike} from "../../../_lib/math/Geometry";
+import {Vec2Like} from "../../../_lib/math/Geometry";
 import {AddTypes} from "../../../_lib/patterns/EnumerateTypes";
 import Store, {IAction} from "../../../_lib/patterns/redux/Store";
 
 export type Brush = {
     name: string;
-    position: PointLike;
-    pixelOffset: PointLike,
+    position: Vec2Like;
+    pixelOffset: Vec2Like,
     rotation: number,
-    scale: PointLike,
+    scale: Vec2Like,
     layerId: number,
     data: number
 };
@@ -21,9 +21,9 @@ export const enum LevelDataActions {
 type LevelData = Brush[];
 type ActionData = {
     brush?: Brush,
-    viewOffset?: PointLike,
-    rectTopLeft?: PointLike,
-    rectBottomRight?: PointLike,
+    viewOffset?: Vec2Like,
+    rectTopLeft?: Vec2Like,
+    rectBottomRight?: Vec2Like,
     sourceLayer?: Layer,
     destLayer?: Layer,
 };

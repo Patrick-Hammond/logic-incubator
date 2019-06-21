@@ -1,36 +1,36 @@
-export type PointLike = {x: number; y: number};
-export class Point {
+export type Vec2Like = {x: number; y: number};
+export class Vec2 {
     constructor(public x: number = 0, public y: number = 0) {}
 
     get length(): number {
         return Math.sqrt(this.x * this.x + this.y * this.y);
     }
 
-    get normalized(): PointLike {
+    get normalized(): Vec2Like {
         const length = this.length;
         if(length === 0) return {x:0, y:0};
         return {x:this.x / length, y:this.y / length};
     }
 
-    Set(x: number, y?: number): Point {
+    Set(x: number, y?: number): Vec2 {
         this.x = x;
         this.y = y != null ? y : x;
         return this;
     }
 
-    Offset(x: number, y?: number): Point {
+    Offset(x: number, y?: number): Vec2 {
         this.x += x;
         this.y += y != null ? y : x;
         return this;
     }
 
-    Copy(point:PointLike): void {
+    Copy(point:Vec2Like): void {
         this.x = point.x;
         this.y = point.y;
     }
 
-    Clone(): Point {
-        return new Point(this.x, this.y);
+    Clone(): Vec2 {
+        return new Vec2(this.x, this.y);
     }
 }
 
@@ -43,16 +43,16 @@ export class Rectangle {
     get right(): number {return this.x + this.width}
     get bottom(): number {return this.y + this.height}
 
-    get topLeft(): PointLike {return {x: this.x, y: this.y}}
-    get topRight(): PointLike {return {x: this.x + this.width, y: this.y}}
-    get bottomLeft(): PointLike {return {x: this.x, y: this.y + this.height}}
-    get bottomRight(): PointLike {return {x: this.x + this.width, y: this.y + this.height}}
+    get topLeft(): Vec2Like {return {x: this.x, y: this.y}}
+    get topRight(): Vec2Like {return {x: this.x + this.width, y: this.y}}
+    get bottomLeft(): Vec2Like {return {x: this.x, y: this.y + this.height}}
+    get bottomRight(): Vec2Like {return {x: this.x + this.width, y: this.y + this.height}}
 
-    get centerLeft(): PointLike {return {x: this.x, y: this.y + this.height * 0.5}}
-    get centerTop(): PointLike {return {x: this.x + this.width * 0.5, y: this.y}}
-    get centerRight(): PointLike {return {x: this.x + this.width, y: this.y + this.height * 0.5}}
-    get centerBottom(): PointLike {return {x: this.x + this.width * 0.5, y: this.y + this.height}}
-    get center(): PointLike {return {x: this.x + this.width * 0.5, y: this.y + this.height * 0.5}}
+    get centerLeft(): Vec2Like {return {x: this.x, y: this.y + this.height * 0.5}}
+    get centerTop(): Vec2Like {return {x: this.x + this.width * 0.5, y: this.y}}
+    get centerRight(): Vec2Like {return {x: this.x + this.width, y: this.y + this.height * 0.5}}
+    get centerBottom(): Vec2Like {return {x: this.x + this.width * 0.5, y: this.y + this.height}}
+    get center(): Vec2Like {return {x: this.x + this.width * 0.5, y: this.y + this.height * 0.5}}
 
     Set(x: number, y: number, width?: number, height?: number): Rectangle {
         this.x = x;
@@ -72,7 +72,7 @@ export class Rectangle {
         return this;
     }
 
-    ContainsPoint(point: PointLike): boolean {
+    ContainsPoint(point: Vec2Like): boolean {
         return this.Contains(point.x, point.y);
     }
 

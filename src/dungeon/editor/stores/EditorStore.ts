@@ -1,4 +1,4 @@
-import {PointLike} from "../../../_lib/math/Geometry";
+import {Vec2Like} from "../../../_lib/math/Geometry";
 import {AddTypes, SubtractTypes} from "../../../_lib/patterns/EnumerateTypes";
 import Store, {IAction} from "../../../_lib/patterns/redux/Store";
 import {InitalScale} from "../../Constants";
@@ -26,11 +26,11 @@ export type DataBrush = {name: string, colour: number, value: number};
 interface IActionData {
     mouseButtonState?: MouseButtonState;
     name?: string;
-    position?: PointLike;
+    position?: Vec2Like;
     rotation?: number;
-    nudge?: PointLike;
-    move?: PointLike;
-    scale?: PointLike;
+    nudge?: Vec2Like;
+    move?: Vec2Like;
+    scale?: Vec2Like;
     persistZoom?: boolean;
     layer?: Layer,
     visible?: boolean
@@ -43,8 +43,8 @@ export interface IState {
     dataBrushes: DataBrush[],
     layers: Layer[];
     mouseButtonState: MouseButtonState;
-    mouseDownPosition: PointLike,
-    viewOffset: PointLike;
+    mouseDownPosition: Vec2Like,
+    viewOffset: Vec2Like;
     viewScale: number;
     currentScene: string;
 }
@@ -198,7 +198,7 @@ export default class EditorStore extends Store<IState, IActionData> {
         }
     }
 
-    private UpdateMouseDownPosition(mouseDownPosition: PointLike, action: IAction<IActionData>): PointLike {
+    private UpdateMouseDownPosition(mouseDownPosition: Vec2Like, action: IAction<IActionData>): Vec2Like {
         switch(action.type) {
             case EditorActions.MOUSE_BUTTON:
                 if(action.data.mouseButtonState === MouseButtonState.LEFT_DOWN) {
@@ -298,7 +298,7 @@ export default class EditorStore extends Store<IState, IActionData> {
         }
     }
 
-    private UpdateViewOffset(offset: PointLike, action: IAction<IActionData>): PointLike {
+    private UpdateViewOffset(offset: Vec2Like, action: IAction<IActionData>): Vec2Like {
         switch(action.type) {
             case EditorActions.VIEW_DRAG:
                 const delta = SubtractTypes(this.state.currentBrush.position, action.data.position);

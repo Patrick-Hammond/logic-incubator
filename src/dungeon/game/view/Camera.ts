@@ -76,7 +76,7 @@ export class Camera extends GameComponent {
             Lerp(this.viewRect.x, pixelX / TileSize - this.viewRect.width * 0.5, amount), 
             Lerp(this.viewRect.y, pixelY / TileSize - this.viewRect.height * 0.5, amount)
             );
-        this.root.position.set(0, 0);
+       // this.root.position.set(0, 0);
         this.game.dispatcher.emit(CAMERA_MOVED);
     }
 }

@@ -1,5 +1,5 @@
 import RNG from "rot-js/lib/rng";
-import {PointLike, Rectangle} from "../../../_lib/math/Geometry";
+import {Vec2Like, Rectangle} from "../../../_lib/math/Geometry";
 import {Brush} from "../stores/LevelDataStore";
 import {BaseStyle} from "./BaseStyle";
 
@@ -67,7 +67,7 @@ export class Style0x7 extends BaseStyle {
         const edgeDirt = {floor_1: 20, floor_4: 1, floor_6: 1, floor_7: 1, floor_8: 1};
         const floorArea = new Rectangle(this.rect.x, this.rect.y + 1, this.rect.width, this.rect.height - 1);
         const roomPerimeter = new Rectangle(this.rect.x, this.rect.y + 1, this.rect.width, this.rect.height - 1);
-        return this.FillRect(floorArea, (position: PointLike) => {
+        return this.FillRect(floorArea, (position: Vec2Like) => {
             if(position.x === roomPerimeter.left ||
                 position.x === roomPerimeter.right ||
                 position.y === roomPerimeter.top ||
