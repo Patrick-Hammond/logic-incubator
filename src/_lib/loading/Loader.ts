@@ -25,7 +25,7 @@ export default class Loader {
      * @param {()=>void} complete
      * @memberof Loader
      */
-    public LoadSpriteSheet(url: string, nameRegEx: RegExp, complete: () => void): void {
+    LoadSpriteSheet(url: string, nameRegEx: RegExp, complete: () => void): void {
         this.loader.use((resource: PIXI.loaders.Resource, next: () => void) => {
             if(resource.data && resource.data.frames) {
                 const frames = resource.data.frames;

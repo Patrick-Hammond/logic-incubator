@@ -16,19 +16,19 @@ export class Camera extends GameComponent {
         this.AddToScene(Scenes.GAME);
     }
 
-    public get Zoom():number {
+    get Zoom():number {
         return 2;
     }
 
-    public get Scale():number {
+    get Scale():number {
         return this.scale;
     }
 
-    public get ScaledTileSize():number {
+    get ScaledTileSize():number {
         return this.scaledTileSize;
     }
 
-    public get ViewRect() : Rectangle {
+    get ViewRect() : Rectangle {
         return this.viewRect;
     }
 
@@ -39,7 +39,7 @@ export class Camera extends GameComponent {
         this.scaledTileSize = TileSize * this.scale;
     }
 
-    public Move(x:number, y:number):void {
+    Move(x:number, y:number):void {
 
         this.root.x += x;
         this.root.y += y;
@@ -63,20 +63,19 @@ export class Camera extends GameComponent {
         }
     }
 
-    public CenterOn(x:number, y:number):void {
+    CenterOn(x:number, y:number):void {
 
         this.viewRect.Set(x - this.viewRect.width * 0.5, y - this.viewRect.height * 0.5, this.viewRect.width, this.viewRect.height);
         this.root.position.set(0, 0);
         this.game.dispatcher.emit(CAMERA_MOVED);
     }
 
-    public Follow(pixelX:number, pixelY:number, amount:number):void {
+    Follow(pixelX:number, pixelY:number, amount:number):void {
 
         this.viewRect.Set(
             Lerp(this.viewRect.x, pixelX / TileSize - this.viewRect.width * 0.5, amount), 
             Lerp(this.viewRect.y, pixelY / TileSize - this.viewRect.height * 0.5, amount)
             );
-       // this.root.position.set(0, 0);
         this.game.dispatcher.emit(CAMERA_MOVED);
     }
 }

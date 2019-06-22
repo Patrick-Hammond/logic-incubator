@@ -5,16 +5,16 @@ export default class SceneManager {
 
     private scenes: {[id: string]: GameComponent} = {};
 
-    public GetScene(id: string): GameComponent {
+    GetScene(id: string): GameComponent {
         return this.scenes[id];
     }
 
-    public AddScene(id: string, scene: GameComponent): void {
+    AddScene(id: string, scene: GameComponent): void {
         this.scenes[id] = scene;
         scene.root.name = id;
     }
 
-    public ShowScene(id: string): void {
+    ShowScene(id: string): void {
         Object.keys(this.scenes).forEach(key => {
             const scene = this.scenes[key];
             if(key === id) {

@@ -14,19 +14,19 @@ export default abstract class Store<T extends object, U> {
         this._state = this.Reduce(this._state, {type: null, data: null});
     }
 
-    public get state(): T {
+    get state(): T {
         return this._state;
     }
 
-    public get prevState(): T {
+    get prevState(): T {
         return this._prevState;
     }
 
-    public Subscribe(callback: (prevState: T, state: T) => void, context: any): void {
+    Subscribe(callback: (prevState: T, state: T) => void, context: any): void {
         this.subscribers.push(callback.bind(context));
     };
 
-    public Dispatch(action: IAction<U>): void {
+    Dispatch(action: IAction<U>): void {
         if(action.canUndo) {
             this.PushUndo();
         }
@@ -40,23 +40,23 @@ export default abstract class Store<T extends object, U> {
         }
     };
 
-    public Load(state: T): void {
+    Load(state: T): void {
         this._prevState = this.DefaultState();
         this._state = state;
         this.subscribers.forEach(callback => callback(this._prevState, this._state));
     }
 
-    public LoadJSON(json: string): void {
+    LoadJSON(json: string): void {
         this._prevState = this.DefaultState();
         this._state = JSON.parse(json);
         this.subscribers.forEach(callback => callback(this._prevState, this._state));
     }
 
-    public SerializeJSON(): string {
+    SerializeJSON(): string {
         return JSON.stringify(this._state);
     }
 
-    public Undo(): void {
+    Undo(): void {
         if(this._undoStates.length && this.maxUndo > 0) {
             this._state = this._undoStates.pop();
             this._prevState = this._undoStates.length ? this._undoStates[ this._undoStates.length - 1 ] : {} as T;

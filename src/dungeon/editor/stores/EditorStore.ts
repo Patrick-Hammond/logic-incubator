@@ -355,11 +355,11 @@ export default class EditorStore extends Store<IState, IActionData> {
         return nextId;
     }
 
-    public get SelectedDataBrush(): DataBrush {
+    get SelectedDataBrush(): DataBrush {
         return this.state.dataBrushes.find(db => db.name === this.state.currentBrush.name);
     }
 
-    public get SelectedLayer(): Layer {
+    get SelectedLayer(): Layer {
         return this.state.layers.find(layer => layer.selected);
     }
 }

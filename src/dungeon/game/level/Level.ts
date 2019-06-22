@@ -1,9 +1,7 @@
-import Game from "../../_lib/game/Game";
-import {Vec2Like, Rectangle, Vec3Like, Vec2} from "../../_lib/math/Geometry";
-import {LEVEL_LOADED} from "./Events";
-import AssetFactory from "../../_lib/loading/AssetFactory";
-import {TileSize} from "../Constants";
-import {CeilN} from "../../_lib/math/Utils";
+import Game from "../../../_lib/game/Game";
+import AssetFactory from "../../../_lib/loading/AssetFactory";
+import {Rectangle, Vec2Like} from "../../../_lib/math/Geometry";
+import {LEVEL_LOADED} from "../Events";
 
 type Brush = {
     name: string;
@@ -19,18 +17,13 @@ export type Tile = Brush & {
     texture:PIXI.Texture;
 }
 
-export enum CollisionType {
-    NONE, X, Y, XY
-}
-
 export default class Level {
-    private direction = new Vec2();
-
     public levelData: Tile[][][] = [];
     public collisionData:boolean[][] = [];
     public boundRect: Rectangle;
     public layerIds: number[] = [];
-    public playerStartPosition: {x:number, y:number, layerId:number};
+    public playerStartPosition: Vec2Like;
+    public playerLayerId:number;
     public depthMax: number = 0;
  
     LoadEditorData(editorLevelData: Brush[]): void {
@@ -57,7 +50,8 @@ export default class Level {
                 const posX = brush.position.x - bounds.x1;
                 const posY = brush.position.y - bounds.y1;
                 if(brush.name === "data-1") {
-                    this.playerStartPosition = {x:posX, y:posY, layerId:this.layerIds[this.layerIds.length - 1]};
+                    this.playerStartPosition = {x:posX, y:posY};
+                    this.playerLayerId = this.layerIds[this.layerIds.length - 1];
                 }
                 else if(brush.name === "data-2") {
                     if(this.collisionData[posX] == null) {
@@ -86,51 +80,5 @@ export default class Level {
         });
 
         Game.inst.dispatcher.emit(LEVEL_LOADED);
-    }
-
-    CheckCollision(from:Vec2Like, to:Vec2Like):{type:CollisionType, distance:number} {
-        let type = CollisionType.NONE;
-
-        //pixel to grid space
-        let fromX = from.x / TileSize;
-        let toX = to.x / TileSize;
-        const movingRight = toX > fromX;
-        if(movingRight) {
-            fromX++;
-            toX++;
-        }
-
-        let fromY = from.y / TileSize;
-        let toY = to.y / TileSize;
-        const movingDown = toY > fromY;
-        if(movingDown) {
-            fromY++;
-            toY++;
-        }
-
-        this.direction.Set(toX - fromX, toY - fromY);
-        let len = Math.ceil(this.direction.length);
-        let incX = CeilN(this.direction.x / len);
-        let incY = CeilN(this.direction.y / len);
-        let x = fromX|0;
-        let y = fromY|0;
-        let distance = 0;
-
-        for (let i = 0; i < len; i++) {
-            if(this.collisionData[x+incX] && this.collisionData[x+incX][y]) {
-                type += CollisionType.X;
-            }
-            if(this.collisionData[x] && this.collisionData[x][y+incY]) {
-                type += CollisionType.Y;
-            }
-            if(type > CollisionType.NONE) {
-                distance = i;
-                break;
-            }
-            x += incX;
-            y += incY;
-        }
-
-        return {type, distance};
     }
 }
