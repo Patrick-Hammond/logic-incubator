@@ -12,3 +12,7 @@ export function CeilN(val:number):number {
 export function Lerp (start:number, end:number, amt:number) {
     return (1 - amt) * start + amt * end;
 }
+
+export function Limit(val:number, limit:number):number {
+    return Math.abs(val) > limit ? limit * Sign(val) : val;
+}

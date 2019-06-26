@@ -6,6 +6,7 @@ import {Vec2, Vec2Like} from "../../../_lib/math/Geometry";
 import {PlayerSpeed, Scenes, TileSize} from "../../Constants";
 import TileCollision from "../level/TileCollision";
 import {Camera} from "./Camera";
+import {Limit} from "../../../_lib/math/Utils";
 
 export class Player extends GameComponent {
 
@@ -70,7 +71,10 @@ export class Player extends GameComponent {
 
     private Move(dt:number):void {
 
-        this.delta.Set(Math.max(-this.velocity.x * dt * PlayerSpeed, -15), Math.max(-this.velocity.y * dt * PlayerSpeed, -15));     
+        this.delta.Set(
+            Limit(-this.velocity.x * dt * PlayerSpeed, TileSize - 1),
+            Limit(-this.velocity.y * dt * PlayerSpeed, TileSize - 1)
+            );     
         this.newPosition.Set(this.player.x + this.delta.x, this.player.y + this.delta.y);
 
         if(this.player.x !== this.newPosition.x) {

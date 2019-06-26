@@ -11,7 +11,7 @@ export default class TileCollision {
 
     TestX(from:Vec2Like, dir:number):number {
 
-        this.playerBounds.Set(from.x + dir, from.y);
+        this.playerBounds.x = from.x + dir;
 
         let yTop = (from.y / TileSize) | 0;
         let yBottom = ((from.y + this.playerBounds.height) / TileSize) | 0;
@@ -32,7 +32,7 @@ export default class TileCollision {
 
     TestY(from:Vec2Like, dir:number):number {
 
-        this.playerBounds.Set(from.x, from.y + dir);
+        this.playerBounds.y = from.y + dir;
 
         let xLeft = (from.x / TileSize) | 0;
         let xRight = ((from.x + this.playerBounds.width) / TileSize) | 0;
