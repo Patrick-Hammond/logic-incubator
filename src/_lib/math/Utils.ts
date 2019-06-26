@@ -1,4 +1,7 @@
 export function Sign(val:number):number {
+    if(val === 0) {
+        return 0;
+    }
     return val > 0 ? 1 : -1;
 }
 

@@ -83,6 +83,13 @@ export class Rectangle {
         return true;
     } 
 
+    Copy(rect:Rectangle): void {
+        this.x = rect.x;
+        this.y = rect.y;
+        this.width = rect.width;
+        this.height = rect.height;
+    }
+
     Clone(): Rectangle {
         return new Rectangle(this.x, this.y, this.width, this.height);
     }

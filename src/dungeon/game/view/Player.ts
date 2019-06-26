@@ -4,15 +4,16 @@ import {Key} from "../../../_lib/io/Keyboard";
 import AssetFactory from "../../../_lib/loading/AssetFactory";
 import {Vec2, Vec2Like} from "../../../_lib/math/Geometry";
 import {PlayerSpeed, Scenes, TileSize} from "../../Constants";
+import TileCollision from "../level/TileCollision";
 import {Camera} from "./Camera";
-import TileCollision, {CollisionType} from "../level/TileCollision";
 
 export class Player extends GameComponent {
 
     private player: PIXI.extras.AnimatedSprite;
-    private inputVec = new Vec2();
-    private directionVec = new Vec2();
+    private inputVector = new Vec2();
+    private velocity = new Vec2();
     private newPosition = new Vec2();
+    private delta = new Vec2();
 
     constructor(
         playerStartPosition: Vec2Like,
@@ -47,61 +48,51 @@ export class Player extends GameComponent {
 
         if(this.game.keyboard.AnyKeyPressed()) {
 
-            this.inputVec.Set(0, 0);
+            this.inputVector.Set(0, 0);
 
             if(this.game.keyboard.KeyPressed(Key.UpArrow)) {
-                this.inputVec.Offset(0, 1);
+                this.inputVector.Offset(0, 1);
             }
             if(this.game.keyboard.KeyPressed(Key.DownArrow)) {
-                this.inputVec.Offset(0, -1);
+                this.inputVector.Offset(0, -1);
             }
             if(this.game.keyboard.KeyPressed(Key.LeftArrow)) {
-                this.inputVec.Offset(1, 0);
+                this.inputVector.Offset(1, 0);
             }
             if(this.game.keyboard.KeyPressed(Key.RightArrow)) {
-                this.inputVec.Offset(-1, 0);
+                this.inputVector.Offset(-1, 0);
             }
 
-            const n = this.inputVec.normalized;
-            this.directionVec.Offset(n.x, n.y);
+            const n = this.inputVector.normalized;
+            this.velocity.Offset(n.x, n.y);
         }
     }
 
     private Move(dt:number):void {
 
-        const deltaX = this.directionVec.x * dt * PlayerSpeed;
-        const deltaY = this.directionVec.y * dt * PlayerSpeed;     
+        this.delta.Set(Math.max(-this.velocity.x * dt * PlayerSpeed, -15), Math.max(-this.velocity.y * dt * PlayerSpeed, -15));     
+        this.newPosition.Set(this.player.x + this.delta.x, this.player.y + this.delta.y);
 
-        this.directionVec.x *= 0.9 * dt;
-        this.directionVec.y *= 0.9 * dt;
-
-        this.newPosition.x = this.player.x - deltaX;
-        this.newPosition.y = this.player.y - deltaY;
-
-        const movedX = Math.floor(this.player.x / TileSize) !== Math.floor(this.newPosition.x / TileSize);
-        const movedY = Math.floor(this.player.y / TileSize) !== Math.floor(this.newPosition.y / TileSize);
-
-        if(movedX || movedY) {
-
-            const collision = this.collision.Test(this.player.position, this.newPosition);
-            if(collision.type !== CollisionType.NONE) {
-                this.player.position.set(collision.result.x, collision.result.y);
-
-                if(collision.type == CollisionType.X || collision.type == CollisionType.XY) {
-                    this.directionVec.x = 0;
-                }
-                if(collision.type == CollisionType.Y || collision.type == CollisionType.XY) {
-                    this.directionVec.y = 0;
-                }
-            } else {
-                this.player.x -= deltaX;
-                this.player.y -= deltaY;
+        if(this.player.x !== this.newPosition.x) {
+            const collision = this.collision.TestX(this.player.position, this.delta.x);
+            if(collision != null) {
+                this.velocity.x = 0;
+                this.newPosition.x = collision;
             }
+        } 
 
-        } else {
-            this.player.x -= deltaX;
-            this.player.y -= deltaY;
+        if(this.player.y !== this.newPosition.y) {
+            const collision = this.collision.TestY(this.player.position, this.delta.y);
+            if(collision != null) {
+                this.velocity.y = 0;
+                this.newPosition.y = collision;
+            }
         }
+
+        this.player.position.set(this.newPosition.x, this.newPosition.y);
+
+        this.velocity.x *= 0.8 * dt;
+        this.velocity.y *= 0.8 * dt;
     }
 
     private Render():void {

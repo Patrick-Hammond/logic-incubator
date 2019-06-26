@@ -1,93 +1,58 @@
-import {Vec2Like, Rectangle, Vec2} from "../../../_lib/math/Geometry";
-import {Lerp} from "../../../_lib/math/Utils";
+import {Vec2Like, Rectangle} from "../../../_lib/math/Geometry";
 import {TileSize} from "../../Constants";
-
-export enum CollisionType {
-    NONE, X, Y, XY
-}
-
-export type CollisionResult = {type:CollisionType, result:Vec2Like};
 
 export default class TileCollision {
     
-    private playerBounds = new Rectangle();
-    private safe = new Vec2();
-
+    private playerBounds = new Rectangle(0, 0, TileSize - 1, TileSize - 1);
+   
     constructor(
         private collisionData: boolean[][]) {
     }
 
-    Test(from:Vec2Like, to:Vec2Like):CollisionResult {
+    TestX(from:Vec2Like, dir:number):number {
 
-        this.playerBounds.Set(from.x, from.y, TileSize, TileSize);
-        let collision = 0;
+        this.playerBounds.Set(from.x + dir, from.y);
 
-        for (let subStep = 0; subStep < 4; subStep++) {
-
-            //store un-collided position
-            this.safe.Copy(this.playerBounds);
-
-            //move player x by substep
-            this.playerBounds.x = Lerp(this.playerBounds.x, to.x, 0.25 * (subStep + 1));
-
-            //test corners
-            if(this.TestCorners(this.playerBounds)) {
-                collision = 1;
+        let yTop = (from.y / TileSize) | 0;
+        let yBottom = ((from.y + this.playerBounds.height) / TileSize) | 0;
+        if(dir > 0) {
+            let x = Math.floor((this.playerBounds.x + this.playerBounds.width) / TileSize);
+            if(this.IsColliding(x, yTop) || this.IsColliding(x, yBottom)) {
+                return (x - 1) * TileSize;
             }
-
-             //move player y by substep
-            this.playerBounds.x = this.safe.x;
-            this.playerBounds.y = Lerp(this.playerBounds.y, to.y, 0.25 * (subStep + 1));
-
-            //test corners
-            if(this.TestCorners(this.playerBounds)) {
-                collision++;
-            }
-
-            if(collision > 0) {
-                return this.ResolveCollision(collision);
+        } else {
+            let x = Math.floor(this.playerBounds.x / TileSize);
+            if(this.IsColliding(x, yTop) || this.IsColliding(x, yBottom)) {
+                return (x + 1) * TileSize;
             }
         }
-        
-        return {type:CollisionType.NONE, result:null};
+
+        return null;
     }
 
-    private TestCorners(rect:Rectangle):boolean {
-        return this.IsColliding(rect.topLeft) ||
-               this.IsColliding(rect.topRight) ||
-               this.IsColliding(rect.bottomLeft) ||
-               this.IsColliding(rect.bottomRight);
+    TestY(from:Vec2Like, dir:number):number {
+
+        this.playerBounds.Set(from.x, from.y + dir);
+
+        let xLeft = (from.x / TileSize) | 0;
+        let xRight = ((from.x + this.playerBounds.width) / TileSize) | 0;
+        if(dir > 0) {
+            let y = Math.floor((this.playerBounds.y + this.playerBounds.height) / TileSize);
+            if(this.IsColliding(xLeft, y) || this.IsColliding(xRight, y)) {
+                    return (y - 1) * TileSize;
+                }
+        } else {
+            let y = Math.floor(this.playerBounds.y / TileSize);
+            if(this.IsColliding(xLeft, y) || this.IsColliding(xRight, y)) {
+                    return (y + 1) * TileSize;
+                }
+        }
+
+        return null;
     }
 
-    private IsColliding(point:Vec2Like):boolean {
+    private IsColliding(x:number, y:number):boolean {
 
-        let x = (point.x / TileSize) | 0;
-        let y = (point.y / TileSize) | 0;
         return this.collisionData[x] && this.collisionData[x][y];
-    }
-
-    private ResolveCollision(collisionType:number):CollisionResult {
-
-        let type = CollisionType.XY;
-
-        //x collided
-        if(collisionType === 1) {
-            this.playerBounds.x = this.safe.x;
-            type = CollisionType.X;
-        }
-
-        //y collided
-        if(collisionType === 2) {
-            this.playerBounds.y = this.safe.y;
-            type = CollisionType.Y;
-        }
-
-         //both collided
-         if(collisionType === 3) {
-            this.playerBounds.Set(this.safe.x, this.safe.y);
-            type = CollisionType.XY;
-        }
-       
-        return {type, result:this.playerBounds.Clone()};
     }
 }
