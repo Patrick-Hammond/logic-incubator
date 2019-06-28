@@ -22,25 +22,6 @@ export default class PlayerControls extends GameComponent {
 
         this.keyboard = this.game.keyboard;
         this.gamePad = this.game.gamePad;
-
-        if(this.game.gamePad.IsConnected() && this.game.gamePad.controllers[0])
-        {
-            this.gamePad = this.game.gamePad;
-        }
-
-        this.gamePad.on(GamePadEvents.CONNECTED, (index:number) =>
-        {
-            if(index === 0) {
-                this.gamePad = this.game.gamePad;
-            }
-        });
-
-        this.gamePad.on(GamePadEvents.DISCONNECTED, (index:number) =>
-        {
-            if(index === 0) {
-                this.gamePad = null;
-            }
-        });
     }
 
     Get():PlayerInput {
@@ -63,7 +44,7 @@ export default class PlayerControls extends GameComponent {
             }
            
         } else {
-            if(this.gamePad) {
+            if(this.gamePad.controller[0]) {
                 this.inputVector.Copy(this.gamePad.GetStick(this.playerId, 1, 0.005))
             }
         }
