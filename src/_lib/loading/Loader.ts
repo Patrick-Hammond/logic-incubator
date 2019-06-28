@@ -1,10 +1,10 @@
-import {GetNextInImageSequence, ImageSequenceIndex, RemoveExtension} from "../io/Url";
+import { GetNextInImageSequence, ImageSequenceIndex, RemoveExtension } from "../io/Url";
 import AssetFactory from "./AssetFactory";
 
 export default class Loader {
     private static _inst: Loader;
     public static get inst(): Loader {
-        if(!Loader._inst) {
+        if (!Loader._inst) {
             Loader._inst = new Loader();
         }
         return Loader._inst;
@@ -27,20 +27,20 @@ export default class Loader {
      */
     LoadSpriteSheet(url: string, nameRegEx: RegExp, complete: () => void): void {
         this.loader.use((resource: PIXI.loaders.Resource, next: () => void) => {
-            if(resource.data && resource.data.frames) {
+            if (resource.data && resource.data.frames) {
                 const frames = resource.data.frames;
-                for(const frame in frames) {
-                    if(frames.hasOwnProperty(frame)) {
+                for (const frame in frames) {
+                    if (frames.hasOwnProperty(frame)) {
                         const nameResult = nameRegEx.exec(frame);
-                        if(nameResult) {
+                        if (nameResult) {
                             // animation
                             const name = nameResult[0];
                             const seqIndex = ImageSequenceIndex(frame);
 
-                            if(seqIndex === 0) {
+                            if (seqIndex === 0) {
                                 let nextFrame = frame;
                                 const animFrames: string[] = [];
-                                while(frames[nextFrame]) {
+                                while (frames[nextFrame]) {
                                     animFrames.push(nextFrame);
                                     nextFrame = GetNextInImageSequence(nextFrame);
                                 }

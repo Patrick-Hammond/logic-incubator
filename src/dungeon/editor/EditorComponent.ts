@@ -11,7 +11,7 @@ export default abstract class EditorComponent extends GameComponent {
         super();
 
         this.root.on("added", () => {
-            if(!this.created) {
+            if (!this.created) {
                 this.created = true;
                 this.Create();
             }
@@ -19,13 +19,13 @@ export default abstract class EditorComponent extends GameComponent {
     }
 
     protected get editorStore(): EditorStore {
-        if(!EditorComponent._editorStore) {
+        if (!EditorComponent._editorStore) {
             EditorComponent._editorStore = new EditorStore();
         }
         return EditorComponent._editorStore;
     }
     protected get levelDataStore(): LevelDataStore {
-        if(!EditorComponent._levelDataStore) {
+        if (!EditorComponent._levelDataStore) {
             EditorComponent._levelDataStore = new LevelDataStore(20);
         }
         return EditorComponent._levelDataStore;

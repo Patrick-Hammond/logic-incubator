@@ -3,7 +3,6 @@ import Loader from "../loading/Loader";
 import Game from "./Game";
 
 export default abstract class GameComponent {
-
     public root = new PIXI.Container();
 
     protected game: Game;
@@ -17,7 +16,7 @@ export default abstract class GameComponent {
         this.assetFactory = AssetFactory.inst;
         this.loader = Loader.inst;
         this.root.on("added", () => {
-            if(!this.initialised) {
+            if (!this.initialised) {
                 this.initialised = true;
                 this.OnInitialise();
             }
@@ -30,7 +29,7 @@ export default abstract class GameComponent {
     protected OnShow(): void {
         // override and do stuff
     }
-    protected AddToScene(id: string, zIndex?:number): void {
+    protected AddToScene(id: string, zIndex?: number): void {
         this.game.sceneManager.GetScene(id).root.addChild(this.root);
     }
 }

@@ -1,19 +1,19 @@
-export type Vec2Like = {x: number; y: number};
+export type Vec2Like = { x: number; y: number };
 export class Vec2 {
     constructor(public x: number = 0, public y: number = 0) {}
 
     get length(): number {
-        if(this.IsZero()) return 0;
+        if (this.IsZero()) return 0;
         return Math.sqrt(this.x * this.x + this.y * this.y);
     }
 
     get normalized(): Vec2Like {
         const length = this.length;
-        if(length === 0) return {x:0, y:0};
-        return {x:this.x / length, y:this.y / length};
+        if (length === 0) return { x: 0, y: 0 };
+        return { x: this.x / length, y: this.y / length };
     }
 
-    IsZero():boolean {
+    IsZero(): boolean {
         return this.x === 0 && this.y === 0;
     }
 
@@ -29,7 +29,7 @@ export class Vec2 {
         return this;
     }
 
-    Copy(point:Vec2Like): void {
+    Copy(point: Vec2Like): void {
         this.x = point.x;
         this.y = point.y;
     }
@@ -39,33 +39,59 @@ export class Vec2 {
     }
 }
 
-export type RectangleLike = {x: number, y: number, width: number, height: number};
+export type RectangleLike = { x: number; y: number; width: number; height: number };
 export class Rectangle {
     constructor(public x: number = 0, public y: number = 0, public width: number = 0, public height: number = 0) {}
 
-    get left(): number {return this.x}
-    get top(): number {return this.y}
-    get right(): number {return this.x + this.width}
-    get bottom(): number {return this.y + this.height}
+    get left(): number {
+        return this.x;
+    }
+    get top(): number {
+        return this.y;
+    }
+    get right(): number {
+        return this.x + this.width;
+    }
+    get bottom(): number {
+        return this.y + this.height;
+    }
 
-    get topLeft(): Vec2Like {return {x: this.x, y: this.y}}
-    get topRight(): Vec2Like {return {x: this.x + this.width, y: this.y}}
-    get bottomLeft(): Vec2Like {return {x: this.x, y: this.y + this.height}}
-    get bottomRight(): Vec2Like {return {x: this.x + this.width, y: this.y + this.height}}
+    get topLeft(): Vec2Like {
+        return { x: this.x, y: this.y };
+    }
+    get topRight(): Vec2Like {
+        return { x: this.x + this.width, y: this.y };
+    }
+    get bottomLeft(): Vec2Like {
+        return { x: this.x, y: this.y + this.height };
+    }
+    get bottomRight(): Vec2Like {
+        return { x: this.x + this.width, y: this.y + this.height };
+    }
 
-    get centerLeft(): Vec2Like {return {x: this.x, y: this.y + this.height * 0.5}}
-    get centerTop(): Vec2Like {return {x: this.x + this.width * 0.5, y: this.y}}
-    get centerRight(): Vec2Like {return {x: this.x + this.width, y: this.y + this.height * 0.5}}
-    get centerBottom(): Vec2Like {return {x: this.x + this.width * 0.5, y: this.y + this.height}}
-    get center(): Vec2Like {return {x: this.x + this.width * 0.5, y: this.y + this.height * 0.5}}
+    get centerLeft(): Vec2Like {
+        return { x: this.x, y: this.y + this.height * 0.5 };
+    }
+    get centerTop(): Vec2Like {
+        return { x: this.x + this.width * 0.5, y: this.y };
+    }
+    get centerRight(): Vec2Like {
+        return { x: this.x + this.width, y: this.y + this.height * 0.5 };
+    }
+    get centerBottom(): Vec2Like {
+        return { x: this.x + this.width * 0.5, y: this.y + this.height };
+    }
+    get center(): Vec2Like {
+        return { x: this.x + this.width * 0.5, y: this.y + this.height * 0.5 };
+    }
 
     Set(x: number, y: number, width?: number, height?: number): Rectangle {
         this.x = x;
         this.y = y;
-        if(width) {
+        if (width) {
             this.width = width;
         }
-        if(height) {
+        if (height) {
             this.height = height;
         }
         return this;
@@ -82,13 +108,13 @@ export class Rectangle {
     }
 
     Contains(px: number, py: number): boolean {
-        if(px < this.x || px > this.right || py < this.y || py > this.bottom) {
+        if (px < this.x || px > this.right || py < this.y || py > this.bottom) {
             return false;
         }
         return true;
-    } 
+    }
 
-    Copy(rect:Rectangle): void {
+    Copy(rect: Rectangle): void {
         this.x = rect.x;
         this.y = rect.y;
         this.width = rect.width;
@@ -100,4 +126,4 @@ export class Rectangle {
     }
 }
 
-export type Vec3Like = {x:number, y:number, z:number};
+export type Vec3Like = { x: number; y: number; z: number };

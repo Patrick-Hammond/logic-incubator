@@ -1,5 +1,10 @@
 {
     "tslint.configFile": "_config/tslint.json",
     "typescript.format.insertSpaceAfterKeywordsInControlFlowStatements": false,
-    "typescript.format.insertSpaceAfterFunctionKeywordForAnonymousFunctions": false
+    "typescript.format.insertSpaceAfterFunctionKeywordForAnonymousFunctions": false,
+    "typescript.format.insertSpaceAfterOpeningAndBeforeClosingNonemptyBrackets": true,
+    "typescript.format.insertSpaceAfterTypeAssertion": true,
+    "typescript.format.insertSpaceBeforeFunctionParenthesis": true,
+    "prettier.tabWidth": 4,
+    "prettier.printWidth": 140
 }

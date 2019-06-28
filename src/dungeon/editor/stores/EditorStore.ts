@@ -1,27 +1,47 @@
-import {Vec2Like} from "../../../_lib/math/Geometry";
-import {AddTypes, SubtractTypes} from "../../../_lib/patterns/EnumerateTypes";
-import Store, {IAction} from "../../../_lib/patterns/redux/Store";
-import {InitalScale} from "../../Constants";
-import {Brush, Layer} from "./LevelDataStore";
+import { Vec2Like } from "../../../_lib/math/Geometry";
+import { AddTypes, SubtractTypes } from "../../../_lib/patterns/EnumerateTypes";
+import Store, { IAction } from "../../../_lib/patterns/redux/Store";
+import { InitalScale } from "../../Constants";
+import { Brush, Layer } from "./LevelDataStore";
 
 export const enum EditorActions {
-    BRUSH_MOVED, ROTATE_BRUSH, FLIP_BRUSH_H, FLIP_BRUSH_V,
-    BRUSH_CHANGED, BRUSH_HOVERED, BRUSH_VISIBLE, BRUSH_NUDGE,
-    DATA_BRUSH_INC, DATA_BRUSH_DEC,
-    ZOOM_IN, ZOOM_OUT,
+    BRUSH_MOVED,
+    ROTATE_BRUSH,
+    FLIP_BRUSH_H,
+    FLIP_BRUSH_V,
+    BRUSH_CHANGED,
+    BRUSH_HOVERED,
+    BRUSH_VISIBLE,
+    BRUSH_NUDGE,
+    DATA_BRUSH_INC,
+    DATA_BRUSH_DEC,
+    ZOOM_IN,
+    ZOOM_OUT,
     MOUSE_BUTTON,
-    VIEW_DRAG, VIEW_MOVE,
-    ADD_LAYER, REMOVE_LAYER, RENAME_LAYER, SELECT_LAYER, DUPLICATE_LAYER,
-    ADD_DATA_LAYER, MOVE_LAYER_UP, MOVE_LAYER_DOWN, TOGGLE_LAYER_VISIBILITY,
+    VIEW_DRAG,
+    VIEW_MOVE,
+    ADD_LAYER,
+    REMOVE_LAYER,
+    RENAME_LAYER,
+    SELECT_LAYER,
+    DUPLICATE_LAYER,
+    ADD_DATA_LAYER,
+    MOVE_LAYER_UP,
+    MOVE_LAYER_DOWN,
+    TOGGLE_LAYER_VISIBILITY,
     CHANGE_SCENE,
-    REFRESH, RESET
-};
-
-export const enum MouseButtonState {
-    LEFT_DOWN, RIGHT_DOWN, UP, MIDDLE_DOWN
+    REFRESH,
+    RESET
 }
 
-export type DataBrush = {name: string, colour: number, value: number};
+export const enum MouseButtonState {
+    LEFT_DOWN,
+    RIGHT_DOWN,
+    UP,
+    MIDDLE_DOWN
+}
+
+export type DataBrush = { name: string; colour: number; value: number };
 
 interface IActionData {
     mouseButtonState?: MouseButtonState;
@@ -32,49 +52,48 @@ interface IActionData {
     move?: Vec2Like;
     scale?: Vec2Like;
     persistZoom?: boolean;
-    layer?: Layer,
-    visible?: boolean
+    layer?: Layer;
+    visible?: boolean;
 }
 
 export interface IState {
     currentBrush: Brush;
-    brushVisible: boolean,
+    brushVisible: boolean;
     hoveredBrushName: string;
-    dataBrushes: DataBrush[],
+    dataBrushes: DataBrush[];
     layers: Layer[];
     mouseButtonState: MouseButtonState;
-    mouseDownPosition: Vec2Like,
+    mouseDownPosition: Vec2Like;
     viewOffset: Vec2Like;
     viewScale: number;
     currentScene: string;
 }
 
 export default class EditorStore extends Store<IState, IActionData> {
-
     protected DefaultState(): IState {
         return {
             currentBrush: {
                 name: "",
-                position: {x: 0, y: 0},
-                pixelOffset: {x: 0, y: 0},
+                position: { x: 0, y: 0 },
+                pixelOffset: { x: 0, y: 0 },
                 rotation: 0,
-                scale: {x: 1, y: 1},
+                scale: { x: 1, y: 1 },
                 layerId: 0,
                 data: null
             },
             brushVisible: false,
             hoveredBrushName: "",
             dataBrushes: [
-                {name: "data-1", colour: 0xfe3464, value: 0},
-                {name: "data-2", colour: 0xffd166, value: 0},
-                {name: "data-3", colour: 0x06d6a0, value: 0},
-                {name: "data-4", colour: 0x118ab2, value: 0},
-                {name: "data-5", colour: 0xff8100, value: 0}
+                { name: "data-1", colour: 0xfe3464, value: 0 },
+                { name: "data-2", colour: 0xffd166, value: 0 },
+                { name: "data-3", colour: 0x06d6a0, value: 0 },
+                { name: "data-4", colour: 0x118ab2, value: 0 },
+                { name: "data-5", colour: 0xff8100, value: 0 }
             ],
             layers: [],
             mouseButtonState: MouseButtonState.UP,
             mouseDownPosition: null,
-            viewOffset: {x: 0, y: 0},
+            viewOffset: { x: 0, y: 0 },
             viewScale: InitalScale,
             currentScene: null
         };
@@ -97,7 +116,7 @@ export default class EditorStore extends Store<IState, IActionData> {
     }
 
     private UpdateBrush(currentBrush: Brush, action: IAction<IActionData>): Brush {
-        switch(action.type) {
+        switch (action.type) {
             case EditorActions.BRUSH_MOVED: {
                 return {
                     ...currentBrush,
@@ -130,13 +149,13 @@ export default class EditorStore extends Store<IState, IActionData> {
             case EditorActions.FLIP_BRUSH_H: {
                 return {
                     ...currentBrush,
-                    scale: {x: currentBrush.scale.x * -1, y: currentBrush.scale.y}
+                    scale: { x: currentBrush.scale.x * -1, y: currentBrush.scale.y }
                 };
             }
             case EditorActions.FLIP_BRUSH_V: {
                 return {
                     ...currentBrush,
-                    scale: {x: currentBrush.scale.x, y: currentBrush.scale.y * -1}
+                    scale: { x: currentBrush.scale.x, y: currentBrush.scale.y * -1 }
                 };
             }
             case EditorActions.BRUSH_NUDGE: {
@@ -161,7 +180,7 @@ export default class EditorStore extends Store<IState, IActionData> {
     }
 
     private UpdateBrushVisible(visible: boolean, action: IAction<IActionData>): boolean {
-        switch(action.type) {
+        switch (action.type) {
             case EditorActions.BRUSH_VISIBLE:
                 return action.data.visible;
             default:
@@ -170,15 +189,15 @@ export default class EditorStore extends Store<IState, IActionData> {
     }
 
     private UpdateDataBrushes(dataBrushes: DataBrush[], action: IAction<IActionData>): DataBrush[] {
-        switch(action.type) {
+        switch (action.type) {
             case EditorActions.DATA_BRUSH_INC:
             case EditorActions.DATA_BRUSH_DEC:
                 const dataBrush = this.SelectedDataBrush;
-                if(dataBrush) {
+                if (dataBrush) {
                     const val = this.CalcDataBrushValue(dataBrush.value, action.type);
                     return dataBrushes.map(db => {
-                        if(db === dataBrush) {
-                            return {...db, value: val};
+                        if (db === dataBrush) {
+                            return { ...db, value: val };
                         }
                         return db;
                     });
@@ -190,7 +209,7 @@ export default class EditorStore extends Store<IState, IActionData> {
     }
 
     private UpdateHoveredBrushName(hoveredBrushName: string, action: IAction<IActionData>): string {
-        switch(action.type) {
+        switch (action.type) {
             case EditorActions.BRUSH_HOVERED:
                 return action.data.name;
             default:
@@ -199,9 +218,9 @@ export default class EditorStore extends Store<IState, IActionData> {
     }
 
     private UpdateMouseDownPosition(mouseDownPosition: Vec2Like, action: IAction<IActionData>): Vec2Like {
-        switch(action.type) {
+        switch (action.type) {
             case EditorActions.MOUSE_BUTTON:
-                if(action.data.mouseButtonState === MouseButtonState.LEFT_DOWN) {
+                if (action.data.mouseButtonState === MouseButtonState.LEFT_DOWN) {
                     return this.state.currentBrush.position;
                 }
             default:
@@ -210,16 +229,16 @@ export default class EditorStore extends Store<IState, IActionData> {
     }
 
     private UpdateLayers(layers: Layer[], action: IAction<IActionData>): Layer[] {
-        switch(action.type) {
+        switch (action.type) {
             case EditorActions.ADD_LAYER: {
                 const nextId = this.NextLayerId();
-                layers.forEach(layer => layer.selected = false);
-                const layer = {id: nextId, name: "layer " + nextId, selected: true, visible: true, isData: false}
+                layers.forEach(layer => (layer.selected = false));
+                const layer = { id: nextId, name: "layer " + nextId, selected: true, visible: true, isData: false };
                 return layers.concat(layer);
             }
             case EditorActions.ADD_DATA_LAYER: {
                 const nextId = this.NextDataLayerId();
-                const layer = {id: 1000 + nextId, name: "data layer " + nextId, selected: false, visible: true, isData: true}
+                const layer = { id: 1000 + nextId, name: "data layer " + nextId, selected: false, visible: true, isData: true };
                 return layers.concat(layer);
             }
             case EditorActions.REMOVE_LAYER:
@@ -227,10 +246,10 @@ export default class EditorStore extends Store<IState, IActionData> {
             case EditorActions.RENAME_LAYER: {
                 const selectedLayer = this.SelectedLayer;
                 const name = prompt("Rename layer", selectedLayer.name);
-                if(name) {
+                if (name) {
                     return layers.map(layer => {
-                        if(layer.id === selectedLayer.id) {
-                            return {...layer, name};
+                        if (layer.id === selectedLayer.id) {
+                            return { ...layer, name };
                         }
                         return layer;
                     });
@@ -241,12 +260,12 @@ export default class EditorStore extends Store<IState, IActionData> {
                     return {
                         ...layer,
                         selected: layer.id === action.data.layer.id
-                    }
+                    };
                 });
             case EditorActions.TOGGLE_LAYER_VISIBILITY: {
                 return layers.map(layer => {
-                    if(layer.id === action.data.layer.id) {
-                        return {...layer, visible: !layer.visible};
+                    if (layer.id === action.data.layer.id) {
+                        return { ...layer, visible: !layer.visible };
                     }
                     return layer;
                 });
@@ -255,7 +274,7 @@ export default class EditorStore extends Store<IState, IActionData> {
                 const copy = layers.concat();
                 const selectedLayer = this.SelectedLayer;
                 const index = copy.indexOf(selectedLayer);
-                if(index > 0) {
+                if (index > 0) {
                     const prevLayer = copy[index - 1];
                     copy[index - 1] = selectedLayer;
                     copy[index] = prevLayer;
@@ -268,7 +287,7 @@ export default class EditorStore extends Store<IState, IActionData> {
                 const selectedLayer = this.SelectedLayer;
                 const index = copy.indexOf(selectedLayer);
                 const len = layers.length;
-                if(index < len - 1) {
+                if (index < len - 1) {
                     const nextLayer = copy[index + 1];
                     copy[index + 1] = selectedLayer;
                     copy[index] = nextLayer;
@@ -279,7 +298,7 @@ export default class EditorStore extends Store<IState, IActionData> {
             case EditorActions.DUPLICATE_LAYER: {
                 const selectedLayer = this.SelectedLayer;
                 const nextId = selectedLayer.isData ? this.NextDataLayerId() : this.NextLayerId();
-                const newLayer = {...selectedLayer, id: nextId, selected: false};
+                const newLayer = { ...selectedLayer, id: nextId, selected: false };
                 return layers.concat(newLayer);
             }
             case EditorActions.RESET:
@@ -290,7 +309,7 @@ export default class EditorStore extends Store<IState, IActionData> {
     }
 
     private UpdateMouseButton(mouseButtonDown: MouseButtonState, action: IAction<IActionData>): MouseButtonState {
-        switch(action.type) {
+        switch (action.type) {
             case EditorActions.MOUSE_BUTTON:
                 return action.data.mouseButtonState;
             default:
@@ -299,7 +318,7 @@ export default class EditorStore extends Store<IState, IActionData> {
     }
 
     private UpdateViewOffset(offset: Vec2Like, action: IAction<IActionData>): Vec2Like {
-        switch(action.type) {
+        switch (action.type) {
             case EditorActions.VIEW_DRAG:
                 const delta = SubtractTypes(this.state.currentBrush.position, action.data.position);
                 return SubtractTypes(offset, delta);
@@ -313,13 +332,13 @@ export default class EditorStore extends Store<IState, IActionData> {
     }
 
     private UpdateViewScale(scale: number, action: IAction<IActionData>): number {
-        switch(action.type) {
+        switch (action.type) {
             case EditorActions.ZOOM_IN:
                 return scale * 1.1;
             case EditorActions.ZOOM_OUT:
                 return scale * 0.909;
             case EditorActions.RESET:
-                if(!action.data.persistZoom) {
+                if (!action.data.persistZoom) {
                     return this.DefaultState().viewScale;
                 }
             default:
@@ -328,7 +347,7 @@ export default class EditorStore extends Store<IState, IActionData> {
     }
 
     private UpdateCurrentScene(currentScene: string, action: IAction<IActionData>): string {
-        switch(action.type) {
+        switch (action.type) {
             case EditorActions.CHANGE_SCENE:
                 return action.data.name;
             default:
@@ -345,13 +364,13 @@ export default class EditorStore extends Store<IState, IActionData> {
 
     private NextLayerId(): number {
         const spriteLayers = this.state.layers.filter(layer => layer.isData === false);
-        const nextId = spriteLayers.length ? spriteLayers.reduce((prev, curr) => curr.id > prev.id ? curr : prev).id + 1 : 0;
+        const nextId = spriteLayers.length ? spriteLayers.reduce((prev, curr) => (curr.id > prev.id ? curr : prev)).id + 1 : 0;
         return nextId;
     }
 
     private NextDataLayerId(): number {
         const dataLayers = this.state.layers.filter(layer => layer.isData);
-        const nextId = dataLayers.length ? dataLayers.reduce((prev, curr) => curr.id > prev.id ? curr : prev).id - 999 : 0;
+        const nextId = dataLayers.length ? dataLayers.reduce((prev, curr) => (curr.id > prev.id ? curr : prev)).id - 999 : 0;
         return nextId;
     }
 

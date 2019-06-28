@@ -1,15 +1,14 @@
-import {Key} from "../../../_lib/io/Keyboard";
-import {LoadTextFile, SaveTextFile, SaveToLocalStorage, ShowOpenFileDialog} from "../../../_lib/io/Storage";
-import {GridBounds, Scenes, TileSize} from "../../Constants";
+import { Key } from "../../../_lib/io/Keyboard";
+import { LoadTextFile, SaveTextFile, SaveToLocalStorage, ShowOpenFileDialog } from "../../../_lib/io/Storage";
+import { GridBounds, Scenes, TileSize } from "../../Constants";
 import EditorComponent from "../EditorComponent";
-import {GenerateMap, IMap, MapType} from "../maps/Generators";
-import {Style0x7} from "../maps/Style0x7";
-import {ApplyMapStyle} from "../maps/Styler";
-import {EditorActions, IState} from "../stores/EditorStore";
-import {LevelDataActions, LevelDataState} from "../stores/LevelDataStore";
+import { GenerateMap, IMap, MapType } from "../maps/Generators";
+import { Style0x7 } from "../maps/Style0x7";
+import { ApplyMapStyle } from "../maps/Styler";
+import { EditorActions, IState } from "../stores/EditorStore";
+import { LevelDataActions, LevelDataState } from "../stores/LevelDataStore";
 
 export default class Keyboard extends EditorComponent {
-
     constructor() {
         super();
 
@@ -17,59 +16,60 @@ export default class Keyboard extends EditorComponent {
     }
 
     protected Create(): void {
-
         this.editorStore.Subscribe(this.Render, this);
 
         // keyboard commands
         this.game.keyboard.on("keydown", (e: KeyboardEvent) => {
-
             const shift = this.game.keyboard.KeyPressed(Key.Shift);
             const ctrl = this.game.keyboard.KeyPressed(Key.Ctrl);
 
-            if(e.keyCode === Key.Enter) {
+            if (e.keyCode === Key.Enter) {
                 const isEditor = this.editorStore.state.currentScene === Scenes.EDITOR;
-                if(isEditor) {
-                    SaveToLocalStorage("dungeonLevel", JSON.stringify({
-                        editorData: this.editorStore.state,
-                        levelData: this.levelDataStore.state
-                    }));
+                if (isEditor) {
+                    SaveToLocalStorage(
+                        "dungeonLevel",
+                        JSON.stringify({
+                            editorData: this.editorStore.state,
+                            levelData: this.levelDataStore.state
+                        })
+                    );
                 }
 
                 const scene = isEditor ? Scenes.GAME : Scenes.EDITOR;
-                this.editorStore.Dispatch({type: EditorActions.CHANGE_SCENE, data: {name: scene}});
+                this.editorStore.Dispatch({ type: EditorActions.CHANGE_SCENE, data: { name: scene } });
             }
 
-            if(this.editorStore.state.currentScene === Scenes.EDITOR) {
-                switch(e.keyCode) {
+            if (this.editorStore.state.currentScene === Scenes.EDITOR) {
+                switch (e.keyCode) {
                     case Key.UpArrow:
-                        this.editorStore.Dispatch({type: EditorActions.BRUSH_NUDGE, data: {nudge: {x: 0, y: 1}}});
+                        this.editorStore.Dispatch({ type: EditorActions.BRUSH_NUDGE, data: { nudge: { x: 0, y: 1 } } });
                         break;
                     case Key.DownArrow:
-                        this.editorStore.Dispatch({type: EditorActions.BRUSH_NUDGE, data: {nudge: {x: 0, y: -1}}});
+                        this.editorStore.Dispatch({ type: EditorActions.BRUSH_NUDGE, data: { nudge: { x: 0, y: -1 } } });
                         break;
                     case Key.LeftArrow:
-                        this.editorStore.Dispatch({type: EditorActions.BRUSH_NUDGE, data: {nudge: {x: 1, y: 0}}});
+                        this.editorStore.Dispatch({ type: EditorActions.BRUSH_NUDGE, data: { nudge: { x: 1, y: 0 } } });
                         break;
                     case Key.RightArrow:
-                        this.editorStore.Dispatch({type: EditorActions.BRUSH_NUDGE, data: {nudge: {x: -1, y: 0}}});
+                        this.editorStore.Dispatch({ type: EditorActions.BRUSH_NUDGE, data: { nudge: { x: -1, y: 0 } } });
                         break;
                     case Key.H:
-                        this.editorStore.Dispatch({type: EditorActions.FLIP_BRUSH_H});
+                        this.editorStore.Dispatch({ type: EditorActions.FLIP_BRUSH_H });
                         break;
                     case Key.V:
-                        this.editorStore.Dispatch({type: EditorActions.FLIP_BRUSH_V});
+                        this.editorStore.Dispatch({ type: EditorActions.FLIP_BRUSH_V });
                         break;
                     case Key.R:
-                        this.editorStore.Dispatch({type: EditorActions.ROTATE_BRUSH});
+                        this.editorStore.Dispatch({ type: EditorActions.ROTATE_BRUSH });
                         break;
                     case Key.Z:
-                        if(ctrl) {
+                        if (ctrl) {
                             this.levelDataStore.Undo();
                         }
                         break;
                     case Key.D:
-                        if(shift) {
-                            this.editorStore.Dispatch({type: EditorActions.DUPLICATE_LAYER});
+                        if (shift) {
+                            this.editorStore.Dispatch({ type: EditorActions.DUPLICATE_LAYER });
                             this.levelDataStore.Dispatch({
                                 type: LevelDataActions.COPY,
                                 data: {
@@ -80,16 +80,19 @@ export default class Keyboard extends EditorComponent {
                         }
                         break;
                     case Key.Add:
-                        this.editorStore.Dispatch({type: EditorActions.DATA_BRUSH_INC});
+                        this.editorStore.Dispatch({ type: EditorActions.DATA_BRUSH_INC });
                         break;
                     case Key.Subtract:
-                        this.editorStore.Dispatch({type: EditorActions.DATA_BRUSH_DEC});
+                        this.editorStore.Dispatch({ type: EditorActions.DATA_BRUSH_DEC });
                         break;
                     case Key.S:
-                        SaveTextFile("dungeonLevel.txt", JSON.stringify({
-                            editorData: this.editorStore.state,
-                            levelData: this.levelDataStore.state
-                        }));
+                        SaveTextFile(
+                            "dungeonLevel.txt",
+                            JSON.stringify({
+                                editorData: this.editorStore.state,
+                                levelData: this.levelDataStore.state
+                            })
+                        );
                         break;
                     case Key.L:
                         ShowOpenFileDialog().then((fileList: FileList) => {
@@ -101,25 +104,25 @@ export default class Keyboard extends EditorComponent {
                         });
                         break;
                     case Key.Q:
-                        if(ctrl) {
+                        if (ctrl) {
                             const ok = confirm("This will delete the current map. Are you sure?");
-                            if(ok) {
-                                this.editorStore.Dispatch({type: EditorActions.RESET, data: {persistZoom: false}});
-                                this.levelDataStore.Dispatch({type: LevelDataActions.RESET});
+                            if (ok) {
+                                this.editorStore.Dispatch({ type: EditorActions.RESET, data: { persistZoom: false } });
+                                this.levelDataStore.Dispatch({ type: LevelDataActions.RESET });
                             }
                         }
                         break;
-                    case Key.One:      // digger
-                    case Key.Two:      // rogue
-                    case Key.Three:    // uniform
-                    case Key.Four:     // divided maze
-                    case Key.Five:     // eller maze
-                    case Key.Six:      // icey maze
+                    case Key.One: // digger
+                    case Key.Two: // rogue
+                    case Key.Three: // uniform
+                    case Key.Four: // divided maze
+                    case Key.Five: // eller maze
+                    case Key.Six: // icey maze
                     case Key.Seven: {
                         const ok = confirm("This will delete the current map. Are you sure?");
-                        if(ok) {
-                            this.editorStore.Dispatch({type: EditorActions.RESET, data: {persistZoom: true}});
-                            this.levelDataStore.Dispatch({type: LevelDataActions.RESET});
+                        if (ok) {
+                            this.editorStore.Dispatch({ type: EditorActions.RESET, data: { persistZoom: true } });
+                            this.levelDataStore.Dispatch({ type: LevelDataActions.RESET });
 
                             const scaledTileSize = TileSize * this.editorStore.state.viewScale;
                             const w = GridBounds.width / scaledTileSize;
@@ -128,7 +131,7 @@ export default class Keyboard extends EditorComponent {
                             const mapType: MapType = e.keyCode - Key.One;
                             let map: IMap = GenerateMap(mapType, w, h);
                             map = ApplyMapStyle(map, new Style0x7());
-                            this.levelDataStore.Load({levelData: map.levelData} as LevelDataState);
+                            this.levelDataStore.Load({ levelData: map.levelData } as LevelDataState);
                         }
                         break;
                     }
@@ -141,7 +144,7 @@ export default class Keyboard extends EditorComponent {
     }
 
     private Render(prevState: IState, state: IState): void {
-        if(prevState.currentScene !== state.currentScene) {
+        if (prevState.currentScene !== state.currentScene) {
             this.game.sceneManager.ShowScene(state.currentScene);
         }
     }

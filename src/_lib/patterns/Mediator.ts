@@ -14,7 +14,7 @@ export function mediate(mediatorClass: any): ClassDecorator {
         function construct(constructor, args) {
             const c: any = function() {
                 return constructor.apply(this, args);
-            }
+            };
             c.prototype = constructor.prototype;
 
             const instance = new c();
@@ -23,7 +23,7 @@ export function mediate(mediatorClass: any): ClassDecorator {
             const mediator: Mediator = new mediatorClass();
             mediator.view = instance;
 
-            if(mediator.initialize) {
+            if (mediator.initialize) {
                 mediator.initialize();
             }
 
@@ -41,21 +41,21 @@ export function mediate(mediatorClass: any): ClassDecorator {
         const f: any = (...args) => {
             // console.log("New: " + original.name);
             return construct(original, args);
-        }
+        };
 
         // copy prototype so intanceof operator still works
         f.prototype = original.prototype;
 
         // return new constructor (will override original)
         return f;
-    }
+    };
 }
 
 export function action(name: string): MethodDecorator {
     return (target, key, descriptor) => {
         // save a reference to the original method this way we keep the values currently in the
         // descriptor and don't overwrite what another decorator might have done to the descriptor.
-        if(descriptor === undefined) {
+        if (descriptor === undefined) {
             descriptor = Object.getOwnPropertyDescriptor(target, key);
         }
 
@@ -66,7 +66,7 @@ export function action(name: string): MethodDecorator {
             const result = originalMethod.apply(this, arguments);
 
             // call mediator method
-            if(this.$mediator && this.$mediator[name]) {
+            if (this.$mediator && this.$mediator[name]) {
                 this.$mediator[name].apply(this.$mediator, arguments);
             }
 
@@ -75,5 +75,5 @@ export function action(name: string): MethodDecorator {
 
         // return edited descriptor as opposed to overwriting the descriptor
         return descriptor;
-    }
+    };
 }

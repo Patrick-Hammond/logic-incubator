@@ -1,14 +1,14 @@
-import {EventEmitter} from "eventemitter3"
+import { EventEmitter } from "eventemitter3";
 
 export default class Keyboard extends EventEmitter {
-    private map: {[keycode: number]: boolean} = {};
+    private map: { [keycode: number]: boolean } = {};
     private keyCount: number;
 
     constructor() {
         super();
 
         document.onkeydown = document.onkeyup = (ev: KeyboardEvent) => {
-            if(ev.type === "keydown") {
+            if (ev.type === "keydown") {
                 this.map[ev.keyCode] = true;
             } else {
                 delete this.map[ev.keyCode];
@@ -16,7 +16,7 @@ export default class Keyboard extends EventEmitter {
 
             this.keyCount = Object.keys(this.map).length;
             this.emit(ev.type, ev);
-        }
+        };
     }
 
     KeyPressed(keycode: number): boolean {

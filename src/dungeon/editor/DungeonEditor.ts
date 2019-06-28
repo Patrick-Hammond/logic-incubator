@@ -1,4 +1,4 @@
-import {LoadFromLocalStorage} from "../../_lib/io/Storage";
+import { LoadFromLocalStorage } from "../../_lib/io/Storage";
 import EditorComponent from "./EditorComponent";
 import BrushTool from "./views/Brush";
 import Canvas from "./views/Canvas";
@@ -9,9 +9,7 @@ import Palette from "./views/Palette";
 import SelectedBrush from "./views/SelectedBrush";
 
 export class DungeonEditor extends EditorComponent {
-
     protected Create(): void {
-
         // views
         new Canvas();
         new BrushTool();
@@ -23,7 +21,7 @@ export class DungeonEditor extends EditorComponent {
 
         // load local saved map
         const localData = LoadFromLocalStorage("dungeonLevel");
-        if(localData) {
+        if (localData) {
             const data = JSON.parse(localData);
             this.editorStore.Load(data.editorData);
             this.levelDataStore.Load(data.levelData);

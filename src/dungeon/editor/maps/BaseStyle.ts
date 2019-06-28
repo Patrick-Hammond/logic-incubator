@@ -1,23 +1,29 @@
-import {Vec2Like, RectangleLike} from "../../../_lib/math/Geometry";
-import {Brush} from "../stores/LevelDataStore";
-import {IStyler} from "./Styler";
+import { Vec2Like, RectangleLike } from "../../../_lib/math/Geometry";
+import { Brush } from "../stores/LevelDataStore";
+import { IStyler } from "./Styler";
 
-const defaultBrush: Brush = {name: "", position: {x: 0, y: 0}, pixelOffset: {x: 0, y: 0}, rotation: 0, scale: {x: 1, y: 1}, layerId:0, data:null};
+const defaultBrush: Brush = {
+    name: "",
+    position: { x: 0, y: 0 },
+    pixelOffset: { x: 0, y: 0 },
+    rotation: 0,
+    scale: { x: 1, y: 1 },
+    layerId: 0,
+    data: null
+};
 
 export abstract class BaseStyle implements IStyler {
-
     protected rect: RectangleLike;
     protected doors: Vec2Like[];
 
-    StyleRoom(rect: RectangleLike, doors?: {[ key: string ]: number}): Brush[] {
-
+    StyleRoom(rect: RectangleLike, doors?: { [key: string]: number }): Brush[] {
         this.rect = rect;
 
         this.doors = [];
-        for(const key in doors) {
-            if(doors.hasOwnProperty(key)) {
+        for (const key in doors) {
+            if (doors.hasOwnProperty(key)) {
                 const pos = key.split(",");
-                this.doors.push({x: parseInt(pos[ 0 ]), y: parseInt(pos[ 1 ])});
+                this.doors.push({ x: parseInt(pos[0]), y: parseInt(pos[1]) });
             }
         }
 
@@ -33,7 +39,7 @@ export abstract class BaseStyle implements IStyler {
             ...this.RightWall(),
             ...this.Doors()
         ];
-    };
+    }
 
     abstract TopLeft(): Brush[];
     abstract TopRight(): Brush[];
@@ -48,16 +54,16 @@ export abstract class BaseStyle implements IStyler {
 
     protected Fill(tileNames: string[], x: number, y: number): Brush[] {
         return tileNames.map(name => {
-            return {...defaultBrush, name, position: {x, y}};
+            return { ...defaultBrush, name, position: { x, y } };
         });
     }
 
     protected FillRect(rect: RectangleLike, cb: (position: Vec2Like) => string): Brush[] {
         const result: Brush[] = [];
-        for(let i = 0; i <= rect.width; i++) {
-            for(let j = 0; j <= rect.height; j++) {
-                const position = {x: rect.x + i, y: rect.y + j};
-                result.push({...defaultBrush, name: cb(position), position});
+        for (let i = 0; i <= rect.width; i++) {
+            for (let j = 0; j <= rect.height; j++) {
+                const position = { x: rect.x + i, y: rect.y + j };
+                result.push({ ...defaultBrush, name: cb(position), position });
             }
         }
         return result;

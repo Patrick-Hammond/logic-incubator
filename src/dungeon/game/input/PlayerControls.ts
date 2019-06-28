@@ -1,63 +1,53 @@
 import GameComponent from "../../../_lib/game/GameComponent";
-import {Vec2} from "../../../_lib/math/Geometry";
-import Keyboard, {Key} from "../../../_lib/io/Keyboard";
-import GamePad, {GamePadEvents} from "../../../_lib/io/GamePad";
+import { Vec2 } from "../../../_lib/math/Geometry";
+import Keyboard, { Key } from "../../../_lib/io/Keyboard";
+import GamePad, { GamePadEvents } from "../../../_lib/io/GamePad";
 
 export interface PlayerInput {
-    direction:Vec2;
+    direction: Vec2;
 }
 
 export default class PlayerControls extends GameComponent {
-
     private inputVector = new Vec2();
-    private playerInput:PlayerInput = {direction:new Vec2()};
-    private keyboard:Keyboard;
-    private gamePad:GamePad;
+    private playerInput: PlayerInput = { direction: new Vec2() };
+    private keyboard: Keyboard;
+    private gamePad: GamePad;
 
-    constructor(
-        private playerId:number
-        ){
-
+    constructor(private playerId: number) {
         super();
 
         this.keyboard = this.game.keyboard;
         this.gamePad = this.game.gamePad;
     }
 
-    Get():PlayerInput {
-
+    Get(): PlayerInput {
         this.inputVector.Set(0, 0);
 
-        if(this.keyboard.AnyKeyPressed()) {
-
-            if(this.keyboard.KeyPressed(Key.UpArrow)) {
+        if (this.keyboard.AnyKeyPressed()) {
+            if (this.keyboard.KeyPressed(Key.UpArrow)) {
                 this.inputVector.Offset(0, -1);
             }
-            if(this.keyboard.KeyPressed(Key.DownArrow)) {
+            if (this.keyboard.KeyPressed(Key.DownArrow)) {
                 this.inputVector.Offset(0, 1);
             }
-            if(this.keyboard.KeyPressed(Key.LeftArrow)) {
+            if (this.keyboard.KeyPressed(Key.LeftArrow)) {
                 this.inputVector.Offset(-1, 0);
             }
-            if(this.keyboard.KeyPressed(Key.RightArrow)) {
+            if (this.keyboard.KeyPressed(Key.RightArrow)) {
                 this.inputVector.Offset(1, 0);
             }
-           
         } else {
-            if(this.gamePad.controller[0]) {
-                this.inputVector.Copy(this.gamePad.GetStick(this.playerId, 1, 0.005))
+            if (this.gamePad.controllers[this.playerId]) {
+                this.inputVector.Copy(this.gamePad.GetStick(this.playerId, 1, 0.005));
             }
         }
 
-        if(this.inputVector.length > 1)
-        {
+        if (this.inputVector.length > 1) {
             this.playerInput.direction.Copy(this.inputVector.normalized);
-        }
-        else
-        {
+        } else {
             this.playerInput.direction.Copy(this.inputVector);
         }
-        
+
         return this.playerInput;
     }
 }

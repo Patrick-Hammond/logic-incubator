@@ -1,14 +1,14 @@
 export default class AssetFactory {
     private static _inst: AssetFactory;
     public static get inst(): AssetFactory {
-        if(!AssetFactory._inst) {
+        if (!AssetFactory._inst) {
             AssetFactory._inst = new AssetFactory();
         }
         return AssetFactory._inst;
     }
 
-    private names: {sprites: string[], anims: string[]} = {sprites: [], anims: []};
-    private registry: {[name: string]: string[]} = {};
+    private names: { sprites: string[]; anims: string[] } = { sprites: [], anims: [] };
+    private registry: { [name: string]: string[] } = {};
 
     get SpriteNames(): string[] {
         return this.names.sprites;
@@ -19,17 +19,17 @@ export default class AssetFactory {
     }
 
     Add(name: string, frameNames: string[], textures?: PIXI.Texture[]): void {
-        if(textures) {
-            frameNames.forEach((frameName, index) => PIXI.utils.TextureCache[frameName] = textures[index]);
+        if (textures) {
+            frameNames.forEach((frameName, index) => (PIXI.utils.TextureCache[frameName] = textures[index]));
         }
         this.registry[name] = frameNames;
         frameNames.length === 1 ? this.names.sprites.push(name) : this.names.anims.push(name);
     }
 
     Create(name: string): PIXI.Sprite | PIXI.extras.AnimatedSprite {
-        if(this.SpriteNames.indexOf(name) > -1) {
+        if (this.SpriteNames.indexOf(name) > -1) {
             return this.CreateSprite(name);
-        } else if(this.AnimationNames.indexOf(name) > -1) {
+        } else if (this.AnimationNames.indexOf(name) > -1) {
             return this.CreateAnimatedSprite(name);
         }
 

@@ -1,7 +1,7 @@
 import AssetFactory from "../../../_lib/loading/AssetFactory";
-import {AnimationSpeed, GridBounds, Scenes} from "../../Constants";
+import { AnimationSpeed, GridBounds, Scenes } from "../../Constants";
 import EditorComponent from "../EditorComponent";
-import {EditorActions, IState} from "../stores/EditorStore";
+import { EditorActions, IState } from "../stores/EditorStore";
 import ScrollBox from "../ui/ScrollBox";
 
 export default class Palette extends EditorComponent {
@@ -14,7 +14,6 @@ export default class Palette extends EditorComponent {
     }
 
     protected Create(): void {
-
         this.editorStore.Subscribe(this.Render, this);
 
         const padding = 2;
@@ -23,7 +22,7 @@ export default class Palette extends EditorComponent {
         let y = 5;
 
         const tileLayout = (s: PIXI.Sprite) => {
-            if((x + s.width + padding) > scrollBounds.width) {
+            if (x + s.width + padding > scrollBounds.width) {
                 x = 5;
                 y += maxHeight + padding;
                 maxHeight = 0;
@@ -35,22 +34,22 @@ export default class Palette extends EditorComponent {
 
         const addRollOver = (s: PIXI.DisplayObject) => {
             s.on("pointerover", (e: PIXI.interaction.InteractionEvent) => {
-                this.editorStore.Dispatch({type: EditorActions.BRUSH_HOVERED, data: {name: e.target.name}});
+                this.editorStore.Dispatch({ type: EditorActions.BRUSH_HOVERED, data: { name: e.target.name } });
             });
-        }
+        };
 
         const addSelect = (s: PIXI.DisplayObject) => {
             s.interactive = true;
             s.on("pointerdown", (e: PIXI.interaction.InteractionEvent) => {
-                if(e.target.name !== this.editorStore.state.currentBrush.name) {
+                if (e.target.name !== this.editorStore.state.currentBrush.name) {
                     this.editorStore.Dispatch({
                         type: EditorActions.BRUSH_CHANGED,
-                        data: {name: e.target.name}
+                        data: { name: e.target.name }
                     });
                 }
             });
             s.on("pointerout", (e: PIXI.interaction.InteractionEvent) => {
-                this.editorStore.Dispatch({type: EditorActions.BRUSH_HOVERED, data: {name: this.editorStore.state.currentBrush.name}});
+                this.editorStore.Dispatch({ type: EditorActions.BRUSH_HOVERED, data: { name: this.editorStore.state.currentBrush.name } });
             });
         };
 
@@ -112,14 +111,13 @@ export default class Palette extends EditorComponent {
 
     private Render(prevState: IState, state: IState): void {
         const selectedLayer = this.editorStore.SelectedLayer;
-        if(selectedLayer) {
+        if (selectedLayer) {
             this.root.removeChildren();
-            if(selectedLayer.isData) {
+            if (selectedLayer.isData) {
                 this.root.addChild(this.dataContainer);
             } else {
                 this.root.addChild(this.paletteContainer);
             }
         }
     }
-
 }

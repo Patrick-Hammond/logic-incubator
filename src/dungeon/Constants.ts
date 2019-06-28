@@ -12,4 +12,7 @@ export const AssetPath = "http://localhost:4000/dist-include/";
 
 export const GridBounds = new PIXI.Rectangle(20, 20, EditorWidth - 300, EditorHeight - 40);
 
-export const enum Scenes {GAME = "game", EDITOR = "editor"};
+export const enum Scenes {
+    GAME = "game",
+    EDITOR = "editor"
+}

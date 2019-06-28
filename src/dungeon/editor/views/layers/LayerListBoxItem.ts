@@ -1,8 +1,7 @@
-import {ListBoxEvents} from "../../ui/listbox/ListBox";
+import { ListBoxEvents } from "../../ui/listbox/ListBox";
 import ListItemBase from "../../ui/listbox/ListBoxItemBase";
 
 export default class ListBoxItem extends ListItemBase {
-
     protected label: PIXI.Text;
     protected selection: PIXI.Graphics;
     protected eyeIcon = new PIXI.Sprite();
@@ -10,16 +9,22 @@ export default class ListBoxItem extends ListItemBase {
     constructor(bounds: PIXI.Rectangle) {
         super();
 
-        this.selection = new PIXI.Graphics().beginFill(0x3355AA, 0.4).drawRect(0, 0, bounds.width - 10, 13).endFill();
+        this.selection = new PIXI.Graphics()
+            .beginFill(0x3355aa, 0.4)
+            .drawRect(0, 0, bounds.width - 10, 13)
+            .endFill();
         this.addChild(this.selection);
 
-        const hover = new PIXI.Graphics().beginFill(0x335555, 0.3).drawRect(0, 0, bounds.width - 10, 13).endFill();
+        const hover = new PIXI.Graphics()
+            .beginFill(0x335555, 0.3)
+            .drawRect(0, 0, bounds.width - 10, 13)
+            .endFill();
         hover.interactive = true;
         hover.buttonMode = true;
         hover.alpha = 0;
         this.addChild(hover);
 
-        this.label = new PIXI.Text("", {fontFamily: "Arial", fontSize: 11, fill: 0xeeeeee});
+        this.label = new PIXI.Text("", { fontFamily: "Arial", fontSize: 11, fill: 0xeeeeee });
         hover.on("pointerover", () => {
             hover.alpha = 0.3;
         });
@@ -45,7 +50,7 @@ export default class ListBoxItem extends ListItemBase {
         this.addChild(this.eyeIcon);
     }
 
-    Update(item: {id: number, name: string, selected: boolean, visible: boolean}): void {
+    Update(item: { id: number; name: string; selected: boolean; visible: boolean }): void {
         this.position.set(5, 5 + this.index * 20);
 
         this.label.text = item.name;

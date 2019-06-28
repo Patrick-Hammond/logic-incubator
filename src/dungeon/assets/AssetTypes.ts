@@ -86,7 +86,7 @@ export const enum Sprites {
     weapon_saw_sword = "weapon_saw_sword",
     wizzart_f_hit_anim = "wizzart_f_hit_anim",
     wizzart_m_hit_anim = "wizzart_m_hit_anim"
-};
+}
 
 export const enum Animations {
     big_demon_idle_anim = "big_demon_idle_anim",
@@ -144,4 +144,4 @@ export const enum Animations {
     wogol_run_anim = "wogol_run_anim",
     zombie_idle_anim = "zombie_idle_anim",
     zombie_run_anim = "zombie_run_anim"
-};
+}

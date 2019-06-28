@@ -1,15 +1,14 @@
 import Dungeon from "rot-js/lib/map/dungeon";
-import {Rectangle, RectangleLike} from "../../../_lib/math/Geometry";
-import {Brush} from "../stores/LevelDataStore";
-import {IMap, MapType} from "./Generators";
+import { Rectangle, RectangleLike } from "../../../_lib/math/Geometry";
+import { Brush } from "../stores/LevelDataStore";
+import { IMap, MapType } from "./Generators";
 
 export interface IStyler {
-    StyleRoom(rect: RectangleLike, doors?: {[key: string]: number}): Brush[];
+    StyleRoom(rect: RectangleLike, doors?: { [key: string]: number }): Brush[];
 }
 
 export function ApplyMapStyle(map: IMap, styler: IStyler): IMap {
-
-    switch(map.type) {
+    switch (map.type) {
         case MapType.DIGGER:
         case MapType.UNIFORM:
             return StyleDungeon(map, styler);
@@ -21,11 +20,9 @@ export function ApplyMapStyle(map: IMap, styler: IStyler): IMap {
 }
 
 function StyleDungeon(map: IMap, styler: IStyler): IMap {
-
     let result = map.levelData;
 
     (map.dungeon as Dungeon)._rooms.forEach(room => {
-
         const roomRect = new Rectangle(room._x1, room._y1, room._x2 - room._x1, room._y2 - room._y1);
 
         // remove old room
@@ -33,21 +30,17 @@ function StyleDungeon(map: IMap, styler: IStyler): IMap {
 
         // style room
         result.push(...styler.StyleRoom(roomRect, room._doors));
-
     });
-    return {...map, levelData: result};
+    return { ...map, levelData: result };
 }
 
-type RogueRoom = {connections: number[][], cellx: number, celly: number} & RectangleLike;
+type RogueRoom = { connections: number[][]; cellx: number; celly: number } & RectangleLike;
 
 function StyleRogue(map: IMap, styler: IStyler): IMap {
-
     let result = map.levelData;
 
     (map.dungeon["rooms"] as RogueRoom[][]).forEach(cell => {
-
         cell.forEach(room => {
-
             const roomRect = new Rectangle(room.x, room.y, room.width, room.height);
 
             // remove old room
@@ -56,7 +49,6 @@ function StyleRogue(map: IMap, styler: IStyler): IMap {
             // style room
             result.push(...styler.StyleRoom(roomRect));
         });
-
     });
-    return {...map, levelData: result};
+    return { ...map, levelData: result };
 }

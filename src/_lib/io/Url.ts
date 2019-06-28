@@ -1,8 +1,7 @@
-
 export function ImageSequenceIndex(url: string): number {
     const filename = RemoveExtension(url);
     const result = filename.match(/[0-9]+\b/);
-    if(result) {
+    if (result) {
         return parseInt(result[0]);
     }
 
@@ -12,7 +11,7 @@ export function ImageSequenceIndex(url: string): number {
 export function GetNextInImageSequence(url: string): string {
     const filename = RemoveExtension(url);
     const result = filename.match(/[0-9]+\b/);
-    if(result) {
+    if (result) {
         const nextFrameNum = String(parseInt(result[0]) + 1);
         return filename.slice(0, -nextFrameNum.length) + nextFrameNum + GetExtension(url);
     }
@@ -21,7 +20,7 @@ export function GetNextInImageSequence(url: string): string {
 }
 
 export function GetExtension(url: string): string {
-    const result = url.match(/(\.\w+$)/igm);
+    const result = url.match(/(\.\w+$)/gim);
     return result.length ? result[0] : "";
 }
 
