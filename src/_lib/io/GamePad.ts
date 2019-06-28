@@ -1,109 +1,126 @@
-var haveEvents = 'GamepadEvent' in window;
-var haveWebkitEvents = 'WebKitGamepadEvent' in window;
-var controllers = {};
-var rAF = window.mozRequestAnimationFrame ||
-  window.webkitRequestAnimationFrame ||
-  window.requestAnimationFrame;
+import {EventEmitter} from "eventemitter3"
+import Game from "../game/Game";
+import {Vec2Like, Vec2} from "../math/Geometry";
+import {LowerLimit} from "../math/Utils";
 
-function connecthandler(e) {
-  addgamepad(e.gamepad);
-}
-function addgamepad(gamepad) {
-  controllers[gamepad.index] = gamepad; var d = document.createElement("div");
-  d.setAttribute("id", "controller" + gamepad.index);
-  var t = document.createElement("h1");
-  t.appendChild(document.createTextNode("gamepad: " + gamepad.id));
-  d.appendChild(t);
-  var b = document.createElement("div");
-  b.className = "buttons";
-  for (var i=0; i<gamepad.buttons.length; i++) {
-    var e = document.createElement("span");
-    e.className = "button";
-    //e.id = "b" + i;
-    e.innerHTML = i;
-    b.appendChild(e);
-  }
-  d.appendChild(b);
-  var a = document.createElement("div");
-  a.className = "axes";
-  for (i=0; i<gamepad.axes.length; i++) {
-    e = document.createElement("meter");
-    e.className = "axis";
-    //e.id = "a" + i;
-    e.setAttribute("min", "-1");
-    e.setAttribute("max", "1");
-    e.setAttribute("value", "0");
-    e.innerHTML = i;
-    a.appendChild(e);
-  }
-  d.appendChild(a);
-  document.getElementById("start").style.display = "none";
-  document.body.appendChild(d);
-  rAF(updateStatus);
+export enum GamePadEvents {
+  CONNECTED = "connected", DISCONNECTED = "disconnected"
 }
 
-function disconnecthandler(e) {
-  removegamepad(e.gamepad);
-}
-
-function removegamepad(gamepad) {
-  var d = document.getElementById("controller" + gamepad.index);
-  document.body.removeChild(d);
-  delete controllers[gamepad.index];
-}
-
-function updateStatus() {
-  scangamepads();
-  for (j in controllers) {
-    var controller = controllers[j];
-    var d = document.getElementById("controller" + j);
-    var buttons = d.getElementsByClassName("button");
-    for (var i=0; i<controller.buttons.length; i++) {
-      var b = buttons[i];
-      var val = controller.buttons[i];
-      var pressed = val == 1.0;
-      if (typeof(val) == "object") {
-        pressed = val.pressed;
-        val = val.value;
-      }
-      var pct = Math.round(val * 100) + "%";
-      b.style.backgroundSize = pct + " " + pct;
-      if (pressed) {
-        b.className = "button pressed";
-      } else {
-        b.className = "button";
-      }
-    }
-
-    var axes = d.getElementsByClassName("axis");
-    for (var i=0; i<controller.axes.length; i++) {
-      var a = axes[i];
-      a.innerHTML = i + ": " + controller.axes[i].toFixed(4);
-      a.setAttribute("value", controller.axes[i]);
+export default class GamePad extends EventEmitter {
+  
+  public controllers: Gamepad[] = [];
+  private button:{touched:boolean, pressed:boolean, value:number} = {touched:false, pressed:false, value:0};
+  private stick = new Vec2();
+  private debugLog: boolean = false;
+  
+  constructor() {
+    
+    super();
+    
+    const haveEvents = 'GamepadEvent' in window;
+    const haveWebkitEvents = 'WebKitGamepadEvent' in window;
+    
+    if(haveEvents) {
+      window.addEventListener("gamepadconnected", (e) => this.ConnectHandler(e));
+      window.addEventListener("gamepaddisconnected", (e) => this.DisconnectHandler(e));
+    } else if(haveWebkitEvents) {
+      window.addEventListener("webkitgamepadconnected", (e) => this.ConnectHandler(e));
+      window.addEventListener("webkitgamepaddisconnected", (e) => this.DisconnectHandler(e));
+    } else {
+      setInterval(this.ScanGamePads, 500);
     }
   }
-  rAF(updateStatus);
-}
+  
+  private ConnectHandler(e) {
+    this.AddGamePad(e.gamepad);
+  }
+  
+  private DisconnectHandler(e) {
+    this.RemoveGamePad(e.gamepad);
+  }
+  
+  private AddGamePad(gamepad: Gamepad) {
+    
+    this.Log("connected! " + gamepad.index);
+    this.Log("gamepad: " + gamepad.id);
+    this.Log("button count " + gamepad.buttons.length);
+    this.Log("axes count " + gamepad.axes.length);
+        
+    this.controllers[gamepad.index] = gamepad;
+    
+    this.emit(GamePadEvents.CONNECTED, gamepad.index);
+  }
+  
+  private RemoveGamePad(gamepad) {
+    
+    this.Log("disconnected! " + gamepad.index);
+    
+    this.emit(GamePadEvents.DISCONNECTED, gamepad.index);
+    
+    this.controllers[gamepad.index] = null;
+  }
+  
+  public IsConnected():boolean {
+    return this.controllers.some(e => e != null);
+  }
 
-function scangamepads() {
-  var gamepads = navigator.getGamepads ? navigator.getGamepads() : (navigator.webkitGetGamepads ? navigator.webkitGetGamepads() : []);
-  for (var i = 0; i < gamepads.length; i++) {
-    if (gamepads[i]) {
-      if (!(gamepads[i].index in controllers)) {
-        addgamepad(gamepads[i]);
-      } else {
-        controllers[gamepads[i].index] = gamepads[i];
+  public GetButton(controllerId:number, buttonId:number):GamepadButton {
+
+    const controller = this.controllers[controllerId];
+
+    if(!controller) {
+      return null;
+    }
+
+    let val = controller.buttons[buttonId] as any;
+    this.button.pressed = val === 1;
+    if(typeof (val) == "object") {
+      this.button.pressed = val.pressed;
+      val = val.value;
+    }
+
+    this.button.value = val;
+
+    return this.button;
+  }
+
+  public GetStick(controllerId:number, stickId:number, threshold:number):Vec2 {
+
+    const controller = this.controllers[controllerId];
+
+    if(!controller) {
+      return null;
+    }
+
+    if(stickId * 2 > controller.axes.length) {
+      return null;
+    }
+
+    this.stick.Set(
+      LowerLimit(controller.axes[stickId * 2], threshold),
+      LowerLimit(controller.axes[stickId * 2 + 1], threshold)
+      );
+    return this.stick;
+  }
+
+
+  private ScanGamePads() {
+    const gamepads = navigator.getGamepads ? navigator.getGamepads() : (navigator["webkitGetGamepads"] ? navigator["webkitGetGamepads"]() : []);
+    for(let i = 0; i < gamepads.length; i++) {
+      if(gamepads[i]) {
+        if(!(gamepads[i].index in this.controllers)) {
+          this.AddGamePad(gamepads[i]);
+        } else {
+          this.controllers[gamepads[i].index] = gamepads[i];
+        }
       }
     }
   }
-}
-
-if (haveEvents) {
-  window.addEventListener("gamepadconnected", connecthandler);
-  window.addEventListener("gamepaddisconnected", disconnecthandler);
-} else if (haveWebkitEvents) {
-  window.addEventListener("webkitgamepadconnected", connecthandler);
-  window.addEventListener("webkitgamepaddisconnected", disconnecthandler);
-} else {
-  setInterval(scangamepads, 500);
+  
+  private Log(val: string) {
+    if(this.debugLog) {
+      this.Log(val);
+    }
+  }
 }

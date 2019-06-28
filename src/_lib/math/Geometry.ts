@@ -3,6 +3,7 @@ export class Vec2 {
     constructor(public x: number = 0, public y: number = 0) {}
 
     get length(): number {
+        if(this.IsZero()) return 0;
         return Math.sqrt(this.x * this.x + this.y * this.y);
     }
 
@@ -10,6 +11,10 @@ export class Vec2 {
         const length = this.length;
         if(length === 0) return {x:0, y:0};
         return {x:this.x / length, y:this.y / length};
+    }
+
+    IsZero():boolean {
+        return this.x === 0 && this.y === 0;
     }
 
     Set(x: number, y?: number): Vec2 {

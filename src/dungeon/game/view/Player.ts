@@ -6,12 +6,13 @@ import {Vec2, Vec2Like} from "../../../_lib/math/Geometry";
 import {PlayerSpeed, Scenes, TileSize} from "../../Constants";
 import TileCollision from "../level/TileCollision";
 import {Camera} from "./Camera";
-import {Limit} from "../../../_lib/math/Utils";
+import {UpperLimit} from "../../../_lib/math/Utils";
+import PlayerControls from "../input/PlayerControls";
 
 export class Player extends GameComponent {
 
+    private controls:PlayerControls;
     private player: PIXI.extras.AnimatedSprite;
-    private inputVector = new Vec2();
     private velocity = new Vec2();
     private newPosition = new Vec2();
     private delta = new Vec2();
@@ -28,6 +29,8 @@ export class Player extends GameComponent {
         this.player.play();
         this.player.animationSpeed = 0.1;
         this.player.position.set(playerStartPosition.x * TileSize, playerStartPosition.y * TileSize);
+
+        this.controls = new PlayerControls(0);
 
         this.game.ticker.add(this.OnUpdate, this);
         
@@ -47,33 +50,15 @@ export class Player extends GameComponent {
 
     private GetInput():void {
 
-        if(this.game.keyboard.AnyKeyPressed()) {
-
-            this.inputVector.Set(0, 0);
-
-            if(this.game.keyboard.KeyPressed(Key.UpArrow)) {
-                this.inputVector.Offset(0, 1);
-            }
-            if(this.game.keyboard.KeyPressed(Key.DownArrow)) {
-                this.inputVector.Offset(0, -1);
-            }
-            if(this.game.keyboard.KeyPressed(Key.LeftArrow)) {
-                this.inputVector.Offset(1, 0);
-            }
-            if(this.game.keyboard.KeyPressed(Key.RightArrow)) {
-                this.inputVector.Offset(-1, 0);
-            }
-
-            const n = this.inputVector.normalized;
-            this.velocity.Offset(n.x, n.y);
-        }
+        let n = this.controls.Get().direction;
+        this.velocity.Offset(n.x, n.y);
     }
 
     private Move(dt:number):void {
 
         this.delta.Set(
-            Limit(-this.velocity.x * dt * PlayerSpeed, TileSize - 1),
-            Limit(-this.velocity.y * dt * PlayerSpeed, TileSize - 1)
+            UpperLimit(this.velocity.x * dt * PlayerSpeed, TileSize - 1),
+            UpperLimit(this.velocity.y * dt * PlayerSpeed, TileSize - 1)
             );     
         this.newPosition.Set(this.player.x + this.delta.x, this.player.y + this.delta.y);
 

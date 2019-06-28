@@ -13,6 +13,10 @@ export function Lerp (start:number, end:number, amt:number) {
     return (1 - amt) * start + amt * end;
 }
 
-export function Limit(val:number, limit:number):number {
+export function UpperLimit(val:number, limit:number):number {
     return Math.abs(val) > limit ? limit * Sign(val) : val;
+}
+
+export function LowerLimit(val:number, limit:number):number {
+    return Math.abs(val) < limit ? 0 : val;
 }
