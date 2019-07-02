@@ -17,3 +17,8 @@ export function UpperLimit(val: number, limit: number): number {
 export function LowerLimit(val: number, limit: number): number {
     return Math.abs(val) < limit ? 0 : val;
 }
+
+export function Truncate(n: number, digits: number):number {
+  const factor = Math.pow(10, digits);
+  return Math.round(n * factor) / factor;
+}
