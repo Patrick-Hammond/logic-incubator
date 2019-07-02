@@ -1,8 +1,5 @@
 export function Sign(val: number): number {
-    if (val === 0) {
-        return 0;
-    }
-    return val > 0 ? 1 : -1;
+    return val > 0 ? 1 : val < 0 ? -1 : 0;
 }
 
 export function CeilN(val: number): number {
