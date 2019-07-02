@@ -1,10 +1,12 @@
 import { Vec2Like, Rectangle } from "../../../_lib/math/Geometry";
 import { TileSize } from "../../Constants";
+import Level from "./Level";
 
 export default class TileCollision {
+    private collisionData: boolean[][];
     private playerBounds = new Rectangle(0, 0, TileSize - 1, TileSize - 1);
 
-    constructor(private collisionData: boolean[][]) {}
+    constructor(private level:Level) {}
 
     TestX(from: Vec2Like, dir: number): number {
         this.playerBounds.x = from.x + dir;
@@ -47,6 +49,6 @@ export default class TileCollision {
     }
 
     private IsColliding(x: number, y: number): boolean {
-        return this.collisionData[x] && this.collisionData[x][y];
+        return this.level.collisionData[x] && this.level.collisionData[x][y];
     }
 }

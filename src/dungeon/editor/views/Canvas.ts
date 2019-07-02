@@ -2,7 +2,7 @@ import { Key } from "../../../_lib/io/Keyboard";
 import ObjectPool from "../../../_lib/patterns/ObjectPool";
 import { AnimationSpeed, GridBounds, InitalScale, Scenes, TileSize } from "../../Constants";
 import EditorComponent from "../EditorComponent";
-import { EditorActions, IState, MouseButtonState } from "../stores/EditorStore";
+import { EditorActions, IEditorState, MouseButtonState } from "../stores/EditorStore";
 import { LevelDataActions, LevelDataState } from "../stores/LevelDataStore";
 
 export default class Canvas extends EditorComponent {
@@ -42,7 +42,7 @@ export default class Canvas extends EditorComponent {
         this.RegisterGridEvents();
     }
 
-    private UpdateLayout(prevState: IState, state: IState): void {
+    private UpdateLayout(prevState: IEditorState, state: IEditorState): void {
         if (prevState.viewScale !== state.viewScale) {
             this.RedrawGrid(state.viewScale);
         }

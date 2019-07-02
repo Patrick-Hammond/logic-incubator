@@ -1,12 +1,12 @@
-import { Key } from "../../../_lib/io/Keyboard";
-import { LoadTextFile, SaveTextFile, SaveToLocalStorage, ShowOpenFileDialog } from "../../../_lib/io/Storage";
-import { GridBounds, Scenes, TileSize } from "../../Constants";
+import {Key} from "../../../_lib/io/Keyboard";
+import {LoadTextFile, SaveTextFile, SaveToLocalStorage, ShowOpenFileDialog} from "../../../_lib/io/Storage";
+import {GridBounds, Scenes, TileSize} from "../../Constants";
 import EditorComponent from "../EditorComponent";
-import { GenerateMap, IMap, MapType } from "../maps/Generators";
-import { Style0x7 } from "../maps/Style0x7";
-import { ApplyMapStyle } from "../maps/Styler";
-import { EditorActions, IState } from "../stores/EditorStore";
-import { LevelDataActions, LevelDataState } from "../stores/LevelDataStore";
+import {GenerateMap, IMap, MapType} from "../maps/Generators";
+import {Style0x7} from "../maps/Style0x7";
+import {ApplyMapStyle} from "../maps/Styler";
+import {EditorActions, IEditorState} from "../stores/EditorStore";
+import {LevelDataActions, LevelDataState} from "../stores/LevelDataStore";
 
 export default class Keyboard extends EditorComponent {
     constructor() {
@@ -143,7 +143,7 @@ export default class Keyboard extends EditorComponent {
         document.body.oncontextmenu = () => false;
     }
 
-    private Render(prevState: IState, state: IState): void {
+    private Render(prevState: IEditorState, state: IEditorState): void {
         if (prevState.currentScene !== state.currentScene) {
             this.game.sceneManager.ShowScene(state.currentScene);
         }

@@ -17,13 +17,21 @@ export default class TileMapView extends GameComponent {
     }
 
     private OnLevelLoaded(): void {
+       
+        while(this.layers.length) {
+            this.layers[0].clear();
+            this.camera.root.removeChild(this.layers.shift());
+        };
+
         this.levelData = this.level.levelData;
-        this.level.layerIds.forEach(layerId => {
-            const layer = new CompositeRectTileLayer(layerId);
-            layer.interactive = layer.interactiveChildren = false;
-            layer.name = layerId.toString();
-            this.camera.root.addChild(layer);
-            this.layers.push(layer);
+        this.level.tileLayers.forEach(layer => {
+            if(!layer.isData) {
+                const tileLayer = new CompositeRectTileLayer(layer.id);
+                tileLayer.interactive = tileLayer.interactiveChildren = false;
+                tileLayer.name = layer.name;
+                this.camera.root.addChild(tileLayer);
+                this.layers.push(tileLayer);
+            }
         });
 
         this.game.dispatcher.emit(LEVEL_CREATED);
@@ -33,7 +41,7 @@ export default class TileMapView extends GameComponent {
 
     private Render(): void {
         for (let l = 0, len = this.layers.length; l < len; l++) {
-            const layer = this.layers[l];
+            const layer = this.layers[l];          
             layer.clear();
             layer.scale.set(this.camera.Scale);
             for (let x = this.camera.ViewRect.x | 0, w = this.camera.ViewRect.right | 0; x <= w; x++) {
@@ -48,7 +56,7 @@ export default class TileMapView extends GameComponent {
                         continue;
                     }
                     const tile = this.levelData[l][x][y];
-                    if (tile) {
+                    if (tile && tile.texture) {
                         layer.addFrame(tile.texture, (x - this.camera.ViewRect.x) * TileSize, (y - this.camera.ViewRect.y) * TileSize);
                     }
                 }

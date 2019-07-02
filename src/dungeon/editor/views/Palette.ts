@@ -1,7 +1,7 @@
 import AssetFactory from "../../../_lib/loading/AssetFactory";
 import { AnimationSpeed, GridBounds, Scenes } from "../../Constants";
 import EditorComponent from "../EditorComponent";
-import { EditorActions, IState } from "../stores/EditorStore";
+import { EditorActions, IEditorState } from "../stores/EditorStore";
 import ScrollBox from "../ui/ScrollBox";
 
 export default class Palette extends EditorComponent {
@@ -109,7 +109,7 @@ export default class Palette extends EditorComponent {
         });
     }
 
-    private Render(prevState: IState, state: IState): void {
+    private Render(prevState: IEditorState, state: IEditorState): void {
         const selectedLayer = this.editorStore.SelectedLayer;
         if (selectedLayer) {
             this.root.removeChildren();

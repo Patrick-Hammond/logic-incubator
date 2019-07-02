@@ -1,6 +1,6 @@
 import { GridBounds, Scenes } from "../../../Constants";
 import EditorComponent from "../../EditorComponent";
-import { EditorActions, IState } from "../../stores/EditorStore";
+import { EditorActions, IEditorState } from "../../stores/EditorStore";
 import { LevelDataActions } from "../../stores/LevelDataStore";
 import Button from "../../ui/Button";
 import { ListBox, ListBoxEvents } from "../../ui/listbox/ListBox";
@@ -100,7 +100,7 @@ export default class Layers extends EditorComponent {
         this.editorStore.Dispatch({ type: EditorActions.REFRESH });
     }
 
-    private Render(prevState: IState, state: IState): void {
+    private Render(prevState: IEditorState, state: IEditorState): void {
         if (prevState.layers !== state.layers) {
             this.layerContainer.Set(state.layers);
         }

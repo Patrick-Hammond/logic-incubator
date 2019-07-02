@@ -1,7 +1,7 @@
 import { Key } from "../../../_lib/io/Keyboard";
 import { AnimationSpeed, GridBounds, Scenes, TileSize } from "../../Constants";
 import EditorComponent from "../EditorComponent";
-import { IState, MouseButtonState } from "../stores/EditorStore";
+import { IEditorState, MouseButtonState } from "../stores/EditorStore";
 import { LevelDataActions } from "../stores/LevelDataStore";
 
 export default class BrushTool extends EditorComponent {
@@ -16,7 +16,7 @@ export default class BrushTool extends EditorComponent {
         this.editorStore.Subscribe(this.Render, this);
     }
 
-    private Render(prevState: IState, state: IState): void {
+    private Render(prevState: IEditorState, state: IEditorState): void {
         // scale
         const scaleChanged = state.viewScale !== prevState.viewScale || prevState.currentBrush.scale !== state.currentBrush.scale;
         if (this.brush && scaleChanged) {

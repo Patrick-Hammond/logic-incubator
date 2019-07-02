@@ -1,6 +1,6 @@
 import { GridBounds, Scenes } from "../../Constants";
 import EditorComponent from "../EditorComponent";
-import { IState } from "../stores/EditorStore";
+import { IEditorState } from "../stores/EditorStore";
 
 export default class SelectedBrush extends EditorComponent {
     private brush: PIXI.Sprite = new PIXI.Sprite();
@@ -30,7 +30,7 @@ export default class SelectedBrush extends EditorComponent {
         this.editorStore.Subscribe(this.Render, this);
     }
 
-    private Render(prevState: IState, state: IState): void {
+    private Render(prevState: IEditorState, state: IEditorState): void {
         if (prevState.hoveredBrushName !== state.hoveredBrushName) {
             this.UpdateBrush(state.hoveredBrushName);
         }

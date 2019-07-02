@@ -56,7 +56,7 @@ interface IActionData {
     visible?: boolean;
 }
 
-export interface IState {
+export interface IEditorState {
     currentBrush: Brush;
     brushVisible: boolean;
     hoveredBrushName: string;
@@ -69,8 +69,8 @@ export interface IState {
     currentScene: string;
 }
 
-export default class EditorStore extends Store<IState, IActionData> {
-    protected DefaultState(): IState {
+export default class EditorStore extends Store<IEditorState, IActionData> {
+    protected DefaultState(): IEditorState {
         return {
             currentBrush: {
                 name: "",
@@ -99,7 +99,7 @@ export default class EditorStore extends Store<IState, IActionData> {
         };
     }
 
-    protected Reduce(state: IState, action: IAction<IActionData>): IState {
+    protected Reduce(state: IEditorState, action: IAction<IActionData>): IEditorState {
         const newState = {
             dataBrushes: this.UpdateDataBrushes(state.dataBrushes, action),
             currentBrush: this.UpdateBrush(state.currentBrush, action),
@@ -112,7 +112,7 @@ export default class EditorStore extends Store<IState, IActionData> {
             viewScale: this.UpdateViewScale(state.viewScale, action),
             currentScene: this.UpdateCurrentScene(state.currentScene, action)
         };
-        return newState as IState;
+        return newState as IEditorState;
     }
 
     private UpdateBrush(currentBrush: Brush, action: IAction<IActionData>): Brush {
@@ -238,7 +238,7 @@ export default class EditorStore extends Store<IState, IActionData> {
             }
             case EditorActions.ADD_DATA_LAYER: {
                 const nextId = this.NextDataLayerId();
-                const layer = { id: 1000 + nextId, name: "data layer " + nextId, selected: false, visible: true, isData: true };
+                const layer = { id: nextId, name: "data layer " + nextId, selected: false, visible: true, isData: true };
                 return layers.concat(layer);
             }
             case EditorActions.REMOVE_LAYER:

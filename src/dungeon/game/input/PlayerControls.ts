@@ -1,7 +1,7 @@
 import GameComponent from "../../../_lib/game/GameComponent";
-import { Vec2 } from "../../../_lib/math/Geometry";
-import Keyboard, { Key } from "../../../_lib/io/Keyboard";
-import GamePad, { GamePadEvents } from "../../../_lib/io/GamePad";
+import GamePad from "../../../_lib/io/GamePad";
+import Keyboard, {Key} from "../../../_lib/io/Keyboard";
+import {Vec2} from "../../../_lib/math/Geometry";
 
 export interface PlayerInput {
     direction: Vec2;

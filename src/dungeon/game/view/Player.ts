@@ -12,13 +12,12 @@ import PlayerControls from "../input/PlayerControls";
 export class Player extends GameComponent {
     private controls: PlayerControls;
     private player: PIXI.extras.AnimatedSprite;
+    private targetLayer: CompositeRectTileLayer;
     private velocity = new Vec2();
     private newPosition = new Vec2();
     private delta = new Vec2();
 
     constructor(
-        playerStartPosition: Vec2Like,
-        private playerLayer: CompositeRectTileLayer,
         private camera: Camera,
         private collision: TileCollision
     ) {
@@ -27,13 +26,17 @@ export class Player extends GameComponent {
         this.player = AssetFactory.inst.CreateAnimatedSprite("chest_full_open_anim");
         this.player.play();
         this.player.animationSpeed = 0.1;
-        this.player.position.set(playerStartPosition.x * TileSize, playerStartPosition.y * TileSize);
-
+       
         this.controls = new PlayerControls(0);
 
         this.game.ticker.add(this.OnUpdate, this);
 
         this.AddToScene(Scenes.GAME);
+    }
+
+    Init(playerStartPosition: Vec2Like) {
+        this.player.position.set(playerStartPosition.x * TileSize, playerStartPosition.y * TileSize);
+        this.targetLayer = this.camera.root.getChildByName("player") as CompositeRectTileLayer;
     }
 
     private OnUpdate(dt: number): void {
@@ -81,8 +84,8 @@ export class Player extends GameComponent {
     }
 
     private Render(): void {
-        this.playerLayer.clear();
-        this.playerLayer.addFrame(
+        this.targetLayer.clear();
+        this.targetLayer.addFrame(
             this.player.texture,
             this.player.x - this.camera.ViewRect.x * TileSize,
             this.player.y - this.camera.ViewRect.y * TileSize
