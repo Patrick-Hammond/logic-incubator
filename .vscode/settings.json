@@ -6,5 +6,8 @@
     "typescript.format.insertSpaceAfterTypeAssertion": true,
     "typescript.format.insertSpaceBeforeFunctionParenthesis": true,
     "prettier.tabWidth": 4,
-    "prettier.printWidth": 140
+    "prettier.printWidth": 140,
+    "editor.codeActionsOnSave": {
+        "source.fixAll.tslint": true
+    }
 }

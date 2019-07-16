@@ -3,13 +3,13 @@ export class Vec2 {
     constructor(public x: number = 0, public y: number = 0) {}
 
     get length(): number {
-        if (this.IsZero()) return 0;
+        if (this.IsZero()) { return 0; }
         return Math.sqrt(this.x * this.x + this.y * this.y);
     }
 
     get normalized(): Vec2Like {
         const length = this.length;
-        if (length === 0) return { x: 0, y: 0 };
+        if (length === 0) { return { x: 0, y: 0 }; }
         return { x: this.x / length, y: this.y / length };
     }
 
@@ -41,7 +41,6 @@ export class Vec2 {
 
 export type RectangleLike = { x: number; y: number; width: number; height: number };
 export class Rectangle {
-    constructor(public x: number = 0, public y: number = 0, public width: number = 0, public height: number = 0) {}
 
     get left(): number {
         return this.x;
@@ -85,6 +84,14 @@ export class Rectangle {
         return { x: this.x + this.width * 0.5, y: this.y + this.height * 0.5 };
     }
 
+    static TEMP = new Rectangle();
+
+    static Equals(rect: RectangleLike): boolean {
+        return Rectangle.TEMP.Equals(rect);
+    }
+
+    constructor(public x: number = 0, public y: number = 0, public width: number = 0, public height: number = 0) {}
+
     Set(x: number, y: number, width?: number, height?: number): Rectangle {
         this.x = x;
         this.y = y;
@@ -114,7 +121,17 @@ export class Rectangle {
         return true;
     }
 
-    Copy(rect: Rectangle): void {
+    Equals(rect: RectangleLike): boolean {
+        if(!rect) {
+            return false;
+        }
+        return  rect.x === this.x &&
+                rect.y === this.y &&
+                rect.width === this.width &&
+                rect.height === this.height;
+    }
+
+    Copy(rect: RectangleLike): void {
         this.x = rect.x;
         this.y = rect.y;
         this.width = rect.width;

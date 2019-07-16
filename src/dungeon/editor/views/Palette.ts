@@ -2,7 +2,8 @@ import AssetFactory from "../../../_lib/loading/AssetFactory";
 import { AnimationSpeed, GridBounds, Scenes } from "../../Constants";
 import EditorComponent from "../EditorComponent";
 import { EditorActions, IEditorState } from "../stores/EditorStore";
-import ScrollBox from "../ui/ScrollBox";
+import ScrollBox from "../ui/components/ScrollBox";
+import ContainerSkin from "../ui/skins/flat/ContainerSkin";
 
 export default class Palette extends EditorComponent {
     private paletteContainer: ScrollBox;
@@ -54,7 +55,7 @@ export default class Palette extends EditorComponent {
         };
 
         const scrollBounds = new PIXI.Rectangle(GridBounds.right + 10, GridBounds.y, 260, GridBounds.height * 0.75);
-        this.paletteContainer = new ScrollBox(scrollBounds, 1);
+        this.paletteContainer = new ScrollBox(scrollBounds, new ContainerSkin());
         this.root.addChild(this.paletteContainer);
         addSelect(this.paletteContainer);
 
@@ -84,7 +85,7 @@ export default class Palette extends EditorComponent {
             addRollOver(a);
         });
 
-        this.dataContainer = new ScrollBox(scrollBounds, 1);
+        this.dataContainer = new ScrollBox(scrollBounds, new ContainerSkin());
         addSelect(this.dataContainer);
 
         maxHeight = 0;

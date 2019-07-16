@@ -1,16 +1,15 @@
 import CompositeRectTileLayer from "../../../_extern/pixi-tilemap/CompositeRectTileLayer";
 import GameComponent from "../../../_lib/game/GameComponent";
-import { Key } from "../../../_lib/io/Keyboard";
 import AssetFactory from "../../../_lib/loading/AssetFactory";
-import { Vec2, Vec2Like } from "../../../_lib/math/Geometry";
-import { PlayerSpeed, Scenes, TileSize } from "../../Constants";
+import {Vec2, Vec2Like} from "../../../_lib/math/Geometry";
+import {UpperLimit} from "../../../_lib/math/Utils";
+import {PlayerSpeed, Scenes, TileSize} from "../../Constants";
+import PlayerControl from "../input/PlayerControl";
 import TileCollision from "../level/TileCollision";
-import { Camera } from "./Camera";
-import { UpperLimit } from "../../../_lib/math/Utils";
-import PlayerControls from "../input/PlayerControls";
+import {Camera} from "./Camera";
 
 export class Player extends GameComponent {
-    private controls: PlayerControls;
+    private controls: PlayerControl;
     private player: PIXI.extras.AnimatedSprite;
     private targetLayer: CompositeRectTileLayer;
     private velocity = new Vec2();
@@ -27,7 +26,7 @@ export class Player extends GameComponent {
         this.player.play();
         this.player.animationSpeed = 0.1;
        
-        this.controls = new PlayerControls(0);
+        this.controls = new PlayerControl(0);
 
         this.game.ticker.add(this.OnUpdate, this);
 

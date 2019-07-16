@@ -3,25 +3,22 @@ import { TileSize } from "../../Constants";
 import Level from "./Level";
 
 export default class TileCollision {
-    private collisionData: boolean[][];
     private playerBounds = new Rectangle(0, 0, TileSize - 1, TileSize - 1);
 
     constructor(private level:Level) {}
 
     TestX(from: Vec2Like, dir: number): number {
         this.playerBounds.x = from.x + dir;
-
-        let yTop = (from.y / TileSize) | 0;
-        let yBottom = ((from.y + this.playerBounds.height) / TileSize) | 0;
+        let yBottom = from.y + this.playerBounds.height;
         if (dir > 0) {
-            let x = Math.floor((this.playerBounds.x + this.playerBounds.width) / TileSize);
-            if (this.IsColliding(x, yTop) || this.IsColliding(x, yBottom)) {
-                return (x - 1) * TileSize;
+            let x = this.playerBounds.x + this.playerBounds.width;
+            if (this.IsColliding(x, from.y) || this.IsColliding(x, yBottom)) {
+                return (Math.floor(x / TileSize) - 1) * TileSize;
             }
         } else {
-            let x = Math.floor(this.playerBounds.x / TileSize);
-            if (this.IsColliding(x, yTop) || this.IsColliding(x, yBottom)) {
-                return (x + 1) * TileSize;
+            let x = this.playerBounds.x;
+            if (this.IsColliding(x, from.y) || this.IsColliding(x, yBottom)) {
+                return (Math.floor(x / TileSize) + 1) * TileSize;
             }
         }
 
@@ -30,18 +27,16 @@ export default class TileCollision {
 
     TestY(from: Vec2Like, dir: number): number {
         this.playerBounds.y = from.y + dir;
-
-        let xLeft = (from.x / TileSize) | 0;
-        let xRight = ((from.x + this.playerBounds.width) / TileSize) | 0;
+        let xRight = from.x + this.playerBounds.width;
         if (dir > 0) {
-            let y = Math.floor((this.playerBounds.y + this.playerBounds.height) / TileSize);
-            if (this.IsColliding(xLeft, y) || this.IsColliding(xRight, y)) {
-                return (y - 1) * TileSize;
+            let y = this.playerBounds.y + this.playerBounds.height;
+            if (this.IsColliding(from.x, y) || this.IsColliding(xRight, y)) {
+                return (Math.floor(y / TileSize) - 1) * TileSize;
             }
         } else {
-            let y = Math.floor(this.playerBounds.y / TileSize);
-            if (this.IsColliding(xLeft, y) || this.IsColliding(xRight, y)) {
-                return (y + 1) * TileSize;
+            let y = this.playerBounds.y;
+            if (this.IsColliding(from.x, y) || this.IsColliding(xRight, y)) {
+                return (Math.floor(y / TileSize) + 1) * TileSize;
             }
         }
 
@@ -49,6 +44,8 @@ export default class TileCollision {
     }
 
     private IsColliding(x: number, y: number): boolean {
+        x = (x / TileSize) | 0;
+        y = (y / TileSize) | 0;
         return this.level.collisionData[x] && this.level.collisionData[x][y];
     }
 }

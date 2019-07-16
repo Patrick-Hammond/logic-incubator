@@ -118,7 +118,7 @@ export default class LevelDataStore extends Store<LevelDataState, ActionData> {
                 return levelDataCopy;
             }
             case LevelDataActions.ERASE_LAYER: {
-                return levelData.filter(brush => brush.layerId != action.data.destLayer.id);
+                return levelData.filter(brush => brush.layerId !== action.data.destLayer.id);
             }
             case LevelDataActions.COPY: {
                 const sourceData = levelData.filter(b => b.layerId === action.data.sourceLayer.id);

@@ -1,9 +1,10 @@
-import { GridBounds, Scenes } from "../../../Constants";
+import {GridBounds, Scenes} from "../../../Constants";
 import EditorComponent from "../../EditorComponent";
-import { EditorActions, IEditorState } from "../../stores/EditorStore";
-import { LevelDataActions } from "../../stores/LevelDataStore";
-import Button from "../../ui/Button";
-import { ListBox, ListBoxEvents } from "../../ui/listbox/ListBox";
+import {EditorActions, IEditorState} from "../../stores/EditorStore";
+import {LevelDataActions} from "../../stores/LevelDataStore";
+import Button from "../../ui/components/Button";
+import {ListBox, ListBoxEvents} from "../../ui/components/listbox/ListBox";
+import ContainerSkin from "../../ui/skins/flat/ContainerSkin";
 import ListBoxItem from "./LayerListBoxItem";
 
 export default class Layers extends EditorComponent {
@@ -24,7 +25,7 @@ export default class Layers extends EditorComponent {
             145,
             GridBounds.height * 0.25 - 10
         );
-        this.layerContainer = new ListBox<ListBoxItem>(() => new ListBoxItem(scrollBounds), scrollBounds, 1);
+        this.layerContainer = new ListBox<ListBoxItem>(() => new ListBoxItem(scrollBounds), scrollBounds, new ContainerSkin());
         this.layerContainer.on(ListBoxEvents.ITEM_SELECTED, (index: number) => {
             this.editorStore.Dispatch({ type: EditorActions.SELECT_LAYER, data: { layer: this.editorStore.state.layers[index] } });
         });
@@ -96,7 +97,7 @@ export default class Layers extends EditorComponent {
         dataButton.position.set(downButton.getBounds().right + 10, GridBounds.height);
         this.root.addChild(dataButton);
 
-        //render initial
+        // render initial
         this.editorStore.Dispatch({ type: EditorActions.REFRESH });
     }
 

@@ -7,7 +7,7 @@ export interface PlayerInput {
     direction: Vec2;
 }
 
-export default class PlayerControls extends GameComponent {
+export default class PlayerControl extends GameComponent {
     private inputVector = new Vec2();
     private playerInput: PlayerInput = { direction: new Vec2() };
     private keyboard: Keyboard;

@@ -1,5 +1,5 @@
-import { ListBoxEvents } from "../../ui/listbox/ListBox";
-import ListItemBase from "../../ui/listbox/ListBoxItemBase";
+import { ListBoxEvents } from "../../ui/components/listbox/ListBox";
+import ListItemBase from "../../ui/components/listbox/ListBoxItemBase";
 
 export default class ListBoxItem extends ListItemBase {
     protected label: PIXI.Text;
