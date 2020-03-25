@@ -9,8 +9,9 @@ export class TreasureGrab extends GameComponent {
         this.map = new Map();
         this.root.addChild(this.map.background, this.map.foreground);
     }
-
+/*
     protected OnShow(): void {
 
     }
+    */
 }
