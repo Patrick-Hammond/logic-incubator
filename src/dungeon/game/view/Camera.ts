@@ -1,20 +1,11 @@
 import GameComponent from "../../../_lib/game/GameComponent";
 import { Rectangle } from "../../../_lib/math/Geometry";
-import { GameWidth, TileSize, GameHeight, Scenes } from "../../Constants";
+import { Lerp, Sign } from "../../../_lib/math/Utils";
+import { GameHeight, GameWidth, Scenes, TileSize } from "../../Constants";
 import { CAMERA_MOVED } from "../Events";
-import { Sign, Lerp } from "../../../_lib/math/Utils";
 import CameraControl from "../input/CameraControl";
 
 export class Camera extends GameComponent {
-    private viewRect: Rectangle;
-    private scale: number;
-    private scaledTileSize: number;
-    private control:CameraControl;
-
-    constructor() {
-        super();
-        this.AddToScene(Scenes.GAME);
-    }
 
     get Zoom(): number {
         return 2;
@@ -31,21 +22,14 @@ export class Camera extends GameComponent {
     get ViewRect(): Rectangle {
         return this.viewRect;
     }
+    private viewRect: Rectangle;
+    private scale: number;
+    private scaledTileSize: number;
+    private control: CameraControl;
 
-    protected OnInitialise() {
-        this.control = new CameraControl(0);
-        this.viewRect = new Rectangle(0, 0, Math.floor(GameWidth / TileSize / this.Zoom), Math.floor(GameHeight / TileSize / this.Zoom));
-        this.scale = Math.min(GameWidth / this.viewRect.width / TileSize, GameHeight / this.viewRect.height / TileSize);
-        this.scaledTileSize = TileSize * this.scale;
-
-        //this.game.sceneManager.GetScene(Scenes.GAME).root.pivot.set(640, 360);
-        //this.game.sceneManager.GetScene(Scenes.GAME).root.position.set(640, 360);
-        //this.game.ticker.add(this.GetInput, this);
-    }
-
-    private GetInput(): void {
-        let n = this.control.Get().rotation;
-        this.game.sceneManager.GetScene(Scenes.GAME).root.rotation += n.x * 0.1;
+    constructor() {
+        super();
+        this.AddToScene(Scenes.GAME);
     }
 
     Move(x: number, y: number): void {
@@ -83,5 +67,21 @@ export class Camera extends GameComponent {
             Lerp(this.viewRect.y, pixelY / TileSize - this.viewRect.height * 0.5, amount)
         );
         this.game.dispatcher.emit(CAMERA_MOVED);
+    }
+
+    protected OnInitialise() {
+        this.control = new CameraControl(0);
+        this.viewRect = new Rectangle(0, 0, Math.floor(GameWidth / TileSize / this.Zoom), Math.floor(GameHeight / TileSize / this.Zoom));
+        this.scale = Math.min(GameWidth / this.viewRect.width / TileSize, GameHeight / this.viewRect.height / TileSize);
+        this.scaledTileSize = TileSize * this.scale;
+
+        // this.game.sceneManager.GetScene(Scenes.GAME).root.pivot.set(640, 360);
+        // this.game.sceneManager.GetScene(Scenes.GAME).root.position.set(640, 360);
+        // this.game.ticker.add(this.GetInput, this);
+    }
+
+    private GetInput(): void {
+        const n = this.control.Get().rotation;
+        this.game.sceneManager.GetScene(Scenes.GAME).root.rotation += n.x * 0.1;
     }
 }

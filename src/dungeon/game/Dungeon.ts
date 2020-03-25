@@ -11,7 +11,7 @@ export class Dungeon extends GameComponent {
     private level: Level;
     private player: Player;
 
-    protected OnInitialise (): void {
+    protected OnInitialise(): void {
         this.level = new Level();
 
         const camera = new Camera();
@@ -26,10 +26,10 @@ export class Dungeon extends GameComponent {
         });
     }
 
-    protected OnShow (): void {
+    protected OnShow(): void {
         const localData = LoadFromLocalStorage("dungeonLevel");
         if(localData) {
-            let data = JSON.parse(localData);
+            const data = JSON.parse(localData);
             this.level.LoadEditorData(data);
         }
     }

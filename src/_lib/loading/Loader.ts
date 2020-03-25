@@ -21,17 +21,17 @@ export default class Loader {
      * sprites and animations with the AssetFactory
      *
      * @param {string} url
-     * @param {RegExp} nameRegEx
+     * @param {RegExp} animRegEx
      * @param {()=>void} complete
      * @memberof Loader
      */
-    LoadSpriteSheet(url: string, nameRegEx: RegExp, complete: () => void): void {
+    LoadSpriteSheet(url: string, animRegEx: RegExp, complete: () => void): void {
         this.loader.use((resource: PIXI.loaders.Resource, next: () => void) => {
             if (resource.data && resource.data.frames) {
                 const frames = resource.data.frames;
                 for (const frame in frames) {
                     if (frames.hasOwnProperty(frame)) {
-                        const nameResult = nameRegEx.exec(frame);
+                        const nameResult = animRegEx.exec(frame);
                         if (nameResult) {
                             // animation
                             const name = nameResult[0];

@@ -1,7 +1,7 @@
 import CompositeRectTileLayer from "../../../_extern/pixi-tilemap/CompositeRectTileLayer";
 import GameComponent from "../../../_lib/game/GameComponent";
 import { TileSize } from "../../Constants";
-import { LEVEL_LOADED, CAMERA_MOVED, LEVEL_CREATED } from "../Events";
+import { CAMERA_MOVED, LEVEL_CREATED, LEVEL_LOADED } from "../Events";
 import Level, { Tile } from "../level/Level";
 import { Camera } from "./Camera";
 
@@ -17,7 +17,7 @@ export default class TileMapView extends GameComponent {
     }
 
     private OnLevelLoaded(): void {
-       
+
         while(this.layers.length) {
             this.layers[0].clear();
             this.camera.root.removeChild(this.layers.shift());
@@ -41,7 +41,7 @@ export default class TileMapView extends GameComponent {
 
     private Render(): void {
         for (let l = 0, len = this.layers.length; l < len; l++) {
-            const layer = this.layers[l];          
+            const layer = this.layers[l];
             layer.clear();
             layer.scale.set(this.camera.Scale);
             for (let x = this.camera.ViewRect.x | 0, w = this.camera.ViewRect.right | 0; x <= w; x++) {

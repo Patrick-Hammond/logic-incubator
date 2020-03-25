@@ -25,7 +25,7 @@ export class Player extends GameComponent {
         this.player = AssetFactory.inst.CreateAnimatedSprite("chest_full_open_anim");
         this.player.play();
         this.player.animationSpeed = 0.1;
-       
+
         this.controls = new PlayerControl(0);
 
         this.game.ticker.add(this.OnUpdate, this);
@@ -49,7 +49,7 @@ export class Player extends GameComponent {
     }
 
     private GetInput(): void {
-        let n = this.controls.Get().direction;
+        const n = this.controls.Get().direction;
         this.velocity.Offset(n.x, n.y);
     }
 

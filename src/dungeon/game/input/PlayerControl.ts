@@ -3,13 +3,13 @@ import GamePad from "../../../_lib/io/GamePad";
 import Keyboard, {Key} from "../../../_lib/io/Keyboard";
 import {Vec2} from "../../../_lib/math/Geometry";
 
-export interface PlayerInput {
+export interface IPlayerInput {
     direction: Vec2;
 }
 
 export default class PlayerControl extends GameComponent {
     private inputVector = new Vec2();
-    private playerInput: PlayerInput = { direction: new Vec2() };
+    private playerInput: IPlayerInput = { direction: new Vec2() };
     private keyboard: Keyboard;
     private gamePad: GamePad;
 
@@ -20,7 +20,7 @@ export default class PlayerControl extends GameComponent {
         this.gamePad = this.game.gamePad;
     }
 
-    Get(): PlayerInput {
+    Get(): IPlayerInput {
         this.inputVector.Set(0, 0);
 
         if (this.keyboard.AnyKeyPressed()) {
@@ -38,7 +38,7 @@ export default class PlayerControl extends GameComponent {
             }
         } else {
             if (this.gamePad.controllers[this.playerId]) {
-                this.inputVector.Copy(this.gamePad.GetStick(this.playerId, 1, 0.005));
+                this.inputVector.Copy(this.gamePad.GetStick(this.playerId, 0, 0.005));
             }
         }
 

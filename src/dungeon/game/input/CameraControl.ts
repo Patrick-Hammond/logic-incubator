@@ -3,14 +3,14 @@ import GamePad from "../../../_lib/io/GamePad";
 import Keyboard, {Key} from "../../../_lib/io/Keyboard";
 import {Vec2} from "../../../_lib/math/Geometry";
 
-export interface CameraInput {
+export interface ICameraInput {
     rotation: Vec2;
 }
 
 export default class CameraControl extends GameComponent {
 
     private rotationVector = new Vec2();
-    private cameraInput: CameraInput = { rotation: new Vec2() };
+    private cameraInput: ICameraInput = { rotation: new Vec2() };
     private keyboard: Keyboard;
     private gamePad: GamePad;
 
@@ -21,13 +21,13 @@ export default class CameraControl extends GameComponent {
         this.gamePad = this.game.gamePad;
     }
 
-    Get(): CameraInput {
+    Get(): ICameraInput {
         this.rotationVector.Set(0, 0);
 
         if (this.gamePad.controllers[this.playerId]) {
             this.rotationVector.Copy(this.gamePad.GetStick(this.playerId, 0, 0.005));
         }
-      
+
         this.cameraInput.rotation.Copy(this.rotationVector);
 
         return this.cameraInput;

@@ -7,6 +7,8 @@ module.exports = (function () {
     For all the values below, pay attention to trailing slashes, they are there for a reason :)
   */
 
+  var GAME_NAME = "treasure_grab"
+
   //set to false to just use localhost, otherwise it will make best-guess at the local ip and use that in dev mode
   var DEV_LAN_MODE = false;
 
@@ -133,7 +135,7 @@ exports.GetLocalFolders = function() {
     if(env == "testdev" || env == "testdist") {
       entries.bundle = './src/tests/TestInit.ts';
     } else {
-      entries.bundle ='./src/dungeon/Main.ts';
+      entries.bundle ='./src/' + GAME_NAME + '/Main.ts';
     }
     return entries;
   }

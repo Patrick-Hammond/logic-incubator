@@ -15,7 +15,7 @@ export default class GamePad extends EventEmitter {
         value: 0
     };
     private stick = new Vec2();
-    private debugLog: boolean = false;
+    private debugLog: boolean = true;
 
     constructor() {
         super();
@@ -36,25 +36,6 @@ export default class GamePad extends EventEmitter {
         }
     }
 
-    private AddGamePad(gamepad: Gamepad) {
-        this.Log("connected! " + gamepad.index);
-        this.Log("gamepad: " + gamepad.id);
-        this.Log("button count " + gamepad.buttons.length);
-        this.Log("axes count " + gamepad.axes.length);
-
-        this.controllers[gamepad.index] = gamepad;
-
-        this.emit(GamePadEvents.CONNECTED, gamepad.index);
-    }
-
-    private RemoveGamePad(gamepad) {
-        this.Log("disconnected! " + gamepad.index);
-
-        this.emit(GamePadEvents.DISCONNECTED, gamepad.index);
-
-        this.controllers[gamepad.index] = null;
-    }
-
     public IsConnected(): boolean {
         return this.controllers.some(e => e != null);
     }
@@ -68,7 +49,7 @@ export default class GamePad extends EventEmitter {
 
         let val = controller.buttons[buttonId] as any;
         this.button.pressed = val === 1;
-        if (typeof val == "object") {
+        if (typeof val === "object") {
             this.button.pressed = val.pressed;
             val = val.value;
         }
@@ -94,6 +75,25 @@ export default class GamePad extends EventEmitter {
         return this.stick;
     }
 
+    private AddGamePad(gamepad: Gamepad) {
+        this.Log("connected! " + gamepad.index);
+        this.Log("gamepad: " + gamepad.id);
+        this.Log("button count " + gamepad.buttons.length);
+        this.Log("axes count " + gamepad.axes.length);
+
+        this.controllers[gamepad.index] = gamepad;
+
+        this.emit(GamePadEvents.CONNECTED, gamepad.index);
+    }
+
+    private RemoveGamePad(gamepad) {
+        this.Log("disconnected! " + gamepad.index);
+
+        this.emit(GamePadEvents.DISCONNECTED, gamepad.index);
+
+        this.controllers[gamepad.index] = null;
+    }
+
     private ScanGamePads() {
         const gamepads = navigator.getGamepads
             ? navigator.getGamepads()
@@ -101,6 +101,7 @@ export default class GamePad extends EventEmitter {
             ? navigator["webkitGetGamepads"]()
             : [];
 
+        // tslint:disable-next-line: prefer-for-of
         for (let i = 0; i < gamepads.length; i++) {
             if (gamepads[i]) {
                 if (!(gamepads[i].index in this.controllers)) {
@@ -112,9 +113,9 @@ export default class GamePad extends EventEmitter {
         }
     }
 
-    private Log(val: string) {
+    private Log(msg: string) {
         if (this.debugLog) {
-            this.Log(val);
+            console.log(msg);
         }
     }
 }
