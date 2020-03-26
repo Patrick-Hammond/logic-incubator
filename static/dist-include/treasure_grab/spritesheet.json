@@ -20,89 +20,89 @@
 				"h": 768
 			}
 		},
-		"player_1_f1.png": {
+		"player_1_f0.png": {
 			"frame": {
 				"x": 1027,
 				"y": 1,
-				"w": 250,
-				"h": 250
+				"w": 128,
+				"h": 128
 			},
 			"rotated": false,
 			"trimmed": false,
 			"spriteSourceSize": {
 				"x": 0,
 				"y": 0,
-				"w": 250,
-				"h": 250
+				"w": 128,
+				"h": 128
 			},
 			"sourceSize": {
-				"w": 250,
-				"h": 250
+				"w": 128,
+				"h": 128
+			}
+		},
+		"player_1_f1.png": {
+			"frame": {
+				"x": 1027,
+				"y": 131,
+				"w": 128,
+				"h": 128
+			},
+			"rotated": false,
+			"trimmed": false,
+			"spriteSourceSize": {
+				"x": 0,
+				"y": 0,
+				"w": 128,
+				"h": 128
+			},
+			"sourceSize": {
+				"w": 128,
+				"h": 128
 			}
 		},
 		"player_1_f2.png": {
 			"frame": {
 				"x": 1027,
-				"y": 253,
-				"w": 250,
-				"h": 250
+				"y": 261,
+				"w": 128,
+				"h": 128
 			},
 			"rotated": false,
 			"trimmed": false,
 			"spriteSourceSize": {
 				"x": 0,
 				"y": 0,
-				"w": 250,
-				"h": 250
+				"w": 128,
+				"h": 128
 			},
 			"sourceSize": {
-				"w": 250,
-				"h": 250
+				"w": 128,
+				"h": 128
 			}
 		},
 		"player_1_f3.png": {
 			"frame": {
 				"x": 1027,
-				"y": 505,
-				"w": 250,
-				"h": 250
+				"y": 391,
+				"w": 128,
+				"h": 128
 			},
 			"rotated": false,
 			"trimmed": false,
 			"spriteSourceSize": {
 				"x": 0,
 				"y": 0,
-				"w": 250,
-				"h": 250
+				"w": 128,
+				"h": 128
 			},
 			"sourceSize": {
-				"w": 250,
-				"h": 250
-			}
-		},
-		"player_1_f4.png": {
-			"frame": {
-				"x": 1027,
-				"y": 757,
-				"w": 250,
-				"h": 250
-			},
-			"rotated": false,
-			"trimmed": false,
-			"spriteSourceSize": {
-				"x": 0,
-				"y": 0,
-				"w": 250,
-				"h": 250
-			},
-			"sourceSize": {
-				"w": 250,
-				"h": 250
+				"w": 128,
+				"h": 128
 			}
 		},
 		"treasure.png": {
 			"frame": {
-				"x": 1279,
+				"x": 1157,
 				"y": 1,
 				"w": 47,
 				"h": 42
@@ -122,7 +122,7 @@
 		},
 		"trees.png": {
 			"frame": {
-				"x": 1328,
+				"x": 1206,
 				"y": 1,
 				"w": 1024,
 				"h": 768
@@ -147,8 +147,8 @@
 		"image": "spritesheet.png",
 		"format": "RGBA8888",
 		"size": {
-			"w": 2353,
-			"h": 1008
+			"w": 2231,
+			"h": 770
 		},
 		"scale": "1"
 	}

@@ -1,6 +1,7 @@
 import { EventEmitter } from "eventemitter3";
 import { Vec2 } from "../math/Geometry";
 import { LowerLimit } from "../math/Utils";
+import {Directions} from "../utils/Types";
 
 export enum GamePadEvents {
     CONNECTED = "connected",
@@ -73,6 +74,30 @@ export default class GamePad extends EventEmitter {
         this.stick.Set(LowerLimit(controller.axes[stickId * 2], threshold), LowerLimit(controller.axes[stickId * 2 + 1], threshold));
 
         return this.stick;
+    }
+
+    public GetStickDirection(controllerId: number, stickId: number, threshold: number): Directions {
+        const controller = this.controllers[controllerId];
+
+        if (!controller) {
+            return null;
+        }
+
+        if (stickId * 2 + 1 > controller.axes.length) {
+            return null;
+        }
+
+        this.stick.Set(LowerLimit(controller.axes[stickId * 2], threshold), LowerLimit(controller.axes[stickId * 2 + 1], threshold));
+
+        if(this.stick.IsZero()) {
+            return "none";
+        }
+
+        if(Math.abs(this.stick.x) > Math.abs(this.stick.y)) {
+            return this.stick.x > 0 ? "right" : "left";
+        }
+
+        return this.stick.y > 0 ? "down" : "up";
     }
 
     private AddGamePad(gamepad: Gamepad) {
