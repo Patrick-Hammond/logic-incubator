@@ -23,7 +23,6 @@ export default class Player extends GameComponent {
         this.anim = this.assetFactory.CreateAnimatedSprite("player_1");
         this.anim.anchor.set(0.5);
         this.anim.animationSpeed = 0.1;
-        this.anim.play();
         this.root.addChild(this.anim);
     }
 
@@ -35,6 +34,7 @@ export default class Player extends GameComponent {
     public Move(direction: Directions): void {
         if(this.state === PlayerState.IDLE && this.map.CanMove(this.position, direction)) {
             this.state = PlayerState.MOVING;
+            this.anim.play();
 
             switch(direction) {
                 case "left":
@@ -55,9 +55,14 @@ export default class Player extends GameComponent {
 
             TweenMax.to(this.anim, 1, {
                 x: this.PositionXPixels, y: this.PositionYPixels, ease: Linear.easeNone,
-                onComplete: () => this.state = PlayerState.IDLE
+                onComplete: () => this.MoveComplete()
             });
          }
+    }
+
+    private MoveComplete(): void {
+        this.state = PlayerState.IDLE;
+        this.anim.stop();
     }
 
     private get PositionXPixels(): number {
