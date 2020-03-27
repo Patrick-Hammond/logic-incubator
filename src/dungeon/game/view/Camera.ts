@@ -1,33 +1,31 @@
+
+import {ICameraControl} from "../../../_lib/game/display/CameraControl";
 import GameComponent from "../../../_lib/game/GameComponent";
 import { Rectangle } from "../../../_lib/math/Geometry";
 import { Lerp, Sign } from "../../../_lib/math/Utils";
 import { GameHeight, GameWidth, Scenes, TileSize } from "../../Constants";
-import { CAMERA_MOVED } from "../Events";
-import CameraControl from "../input/CameraControl";
+import { CAMERA_MOVED } from ".././Events";
 
 export class Camera extends GameComponent {
-
-    get Zoom(): number {
-        return 2;
-    }
-
-    get Scale(): number {
-        return this.scale;
-    }
-
-    get ScaledTileSize(): number {
-        return this.scaledTileSize;
-    }
-
     get ViewRect(): Rectangle {
         return this.viewRect;
     }
+    get Scale(): number {
+        return this.scale;
+    }
+    get ScaledTileSize(): number {
+        return this.scaledTileSize;
+    }
+    get Zoom(): number {
+        return this.zoom;
+    }
+
     private viewRect: Rectangle;
     private scale: number;
     private scaledTileSize: number;
-    private control: CameraControl;
+    private zoom: number = 2;
 
-    constructor() {
+    constructor(private cameraControl?: ICameraControl) {
         super();
         this.AddToScene(Scenes.GAME);
     }
@@ -69,19 +67,19 @@ export class Camera extends GameComponent {
         this.game.dispatcher.emit(CAMERA_MOVED);
     }
 
-    protected OnInitialise() {
-        this.control = new CameraControl(0);
+     protected OnInitialise() {
+
         this.viewRect = new Rectangle(0, 0, Math.floor(GameWidth / TileSize / this.Zoom), Math.floor(GameHeight / TileSize / this.Zoom));
         this.scale = Math.min(GameWidth / this.viewRect.width / TileSize, GameHeight / this.viewRect.height / TileSize);
         this.scaledTileSize = TileSize * this.scale;
 
-        // this.game.sceneManager.GetScene(Scenes.GAME).root.pivot.set(640, 360);
-        // this.game.sceneManager.GetScene(Scenes.GAME).root.position.set(640, 360);
-        // this.game.ticker.add(this.GetInput, this);
+        if(this.cameraControl) {
+            this.game.ticker.add(this.GetInput, this);
+        }
     }
 
     private GetInput(): void {
-        const n = this.control.Get().rotation;
+        const n = this.cameraControl.Get().rotation;
         this.game.sceneManager.GetScene(Scenes.GAME).root.rotation += n.x * 0.1;
     }
 }

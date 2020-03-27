@@ -3,6 +3,7 @@ import GameComponent from "../../_lib/game/GameComponent";
 import {Vec2, Vec2Like} from "../../_lib/math/Geometry";
 import {Directions} from "../../_lib/utils/Types";
 import {TileSize} from "../Constants";
+import {Camera} from "./Camera";
 import Map from "./Map";
 
 enum PlayerState {
@@ -15,7 +16,7 @@ export default class Player extends GameComponent {
     private position = new Vec2();
     private state: PlayerState;
 
-    public constructor(private map: Map) {
+    public constructor(private map: Map, private camera: Camera) {
         super();
 
         this.state = PlayerState.IDLE;
@@ -55,6 +56,7 @@ export default class Player extends GameComponent {
 
             TweenMax.to(this.anim, 1, {
                 x: this.PositionXPixels, y: this.PositionYPixels, ease: Linear.easeNone,
+                onUpdate: () => this.camera.Follow(this.anim),
                 onComplete: () => this.MoveComplete()
             });
          }
