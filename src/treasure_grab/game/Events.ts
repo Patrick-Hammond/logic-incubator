@@ -1,0 +1,1 @@
+export const CAT_FOUND = "catFound";

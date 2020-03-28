@@ -1,9 +1,9 @@
 import { EventEmitter } from "eventemitter3";
 import { Application, interaction, RendererOptions } from "pixi.js";
-import Keyboard from "../io/Keyboard";
 import GamePad from "../io/GamePad";
-import SceneManager from "./SceneManager";
+import Keyboard from "../io/Keyboard";
 import { StatsTicker } from "../utils/StatsTicker";
+import SceneManager from "./SceneManager";
 
 export default class Game extends Application {
     public static inst: Game;

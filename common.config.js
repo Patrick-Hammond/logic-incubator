@@ -133,7 +133,7 @@ exports.GetLocalFolders = function() {
       }
     }
     if(env == "testdev" || env == "testdist") {
-      entries.bundle = './src/tests/TestInit.ts';
+      entries.bundle = './src/_tests/RunUnitTests.ts';
     } else {
       entries.bundle ='./src/' + GAME_NAME + '/Main.ts';
     }
