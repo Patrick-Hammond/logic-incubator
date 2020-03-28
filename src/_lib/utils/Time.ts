@@ -1,3 +1,5 @@
+import {Ticker} from "pixi.js";
+
 export function GetInterval(ms: number, callback: () => void): () => void {
 
     let endTime = Date.now() + ms;
@@ -8,9 +10,9 @@ export function GetInterval(ms: number, callback: () => void): () => void {
         }
     }
 
-    PIXI.ticker.shared.add(tick);
+    Ticker.shared.add(tick);
 
-    const cancel = () => PIXI.ticker.shared.remove(tick);
+    const cancel = () => Ticker.shared.remove(tick);
     return cancel;
 }
 

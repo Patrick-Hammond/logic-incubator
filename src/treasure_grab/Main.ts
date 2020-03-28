@@ -3,7 +3,7 @@ import Loader from "../_lib/loading/Loader";
 import { AssetPath, GameHeight, GameWidth, Scenes } from "./Constants";
 import {TreasureGrab} from "./game/TreasureGrab";
 
-const game = new Game(GameWidth, GameHeight);
+const game = new Game({width: GameWidth, height: GameHeight});
 
 // load
 Loader.inst.LoadSpriteSheet(AssetPath + "spritesheet.json", /^.+(?=_f)/, () => {

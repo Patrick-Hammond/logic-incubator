@@ -1,10 +1,11 @@
+import {Graphics, Rectangle} from "pixi.js";
 import {ISkinUI} from "../skins/ISkinUI";
 import BaseContainer from "./BaseContainer";
 
 export default class ScrollBox extends BaseContainer {
-    protected scrollBar = new PIXI.Graphics();
+    protected scrollBar = new Graphics();
 
-    constructor(bounds: PIXI.Rectangle, skin: ISkinUI) {
+    constructor(bounds: Rectangle, skin: ISkinUI) {
         super(bounds, skin);
 
         this.on("added", () => (document.onwheel = e => this.OnScrollWheel(e)));

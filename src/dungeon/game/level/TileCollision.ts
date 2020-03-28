@@ -1,22 +1,22 @@
-import { Vec2Like, Rectangle } from "../../../_lib/math/Geometry";
+import { Rectangle, Vec2Like } from "../../../_lib/math/Geometry";
 import { TileSize } from "../../Constants";
 import Level from "./Level";
 
 export default class TileCollision {
     private playerBounds = new Rectangle(0, 0, TileSize - 1, TileSize - 1);
 
-    constructor(private level:Level) {}
+    constructor(private level: Level) {}
 
     TestX(from: Vec2Like, dir: number): number {
         this.playerBounds.x = from.x + dir;
-        let yBottom = from.y + this.playerBounds.height;
+        const yBottom = from.y + this.playerBounds.height;
         if (dir > 0) {
-            let x = this.playerBounds.x + this.playerBounds.width;
+            const x = this.playerBounds.x + this.playerBounds.width;
             if (this.IsColliding(x, from.y) || this.IsColliding(x, yBottom)) {
                 return (Math.floor(x / TileSize) - 1) * TileSize;
             }
         } else {
-            let x = this.playerBounds.x;
+            const x = this.playerBounds.x;
             if (this.IsColliding(x, from.y) || this.IsColliding(x, yBottom)) {
                 return (Math.floor(x / TileSize) + 1) * TileSize;
             }
@@ -27,14 +27,14 @@ export default class TileCollision {
 
     TestY(from: Vec2Like, dir: number): number {
         this.playerBounds.y = from.y + dir;
-        let xRight = from.x + this.playerBounds.width;
+        const xRight = from.x + this.playerBounds.width;
         if (dir > 0) {
-            let y = this.playerBounds.y + this.playerBounds.height;
+            const y = this.playerBounds.y + this.playerBounds.height;
             if (this.IsColliding(from.x, y) || this.IsColliding(xRight, y)) {
                 return (Math.floor(y / TileSize) - 1) * TileSize;
             }
         } else {
-            let y = this.playerBounds.y;
+            const y = this.playerBounds.y;
             if (this.IsColliding(from.x, y) || this.IsColliding(xRight, y)) {
                 return (Math.floor(y / TileSize) + 1) * TileSize;
             }

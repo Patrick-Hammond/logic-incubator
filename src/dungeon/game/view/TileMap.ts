@@ -1,4 +1,8 @@
-import CompositeRectTileLayer from "../../../_extern/pixi-tilemap/CompositeRectTileLayer";
+
+import * as PIXI from "pixi.js"
+window["PIXI"] = PIXI
+import "pixi-tilemap";
+
 import GameComponent from "../../../_lib/game/GameComponent";
 import { TileSize } from "../../Constants";
 import { CAMERA_MOVED, LEVEL_CREATED, LEVEL_LOADED } from "../Events";
@@ -6,7 +10,7 @@ import Level, { Tile } from "../level/Level";
 import { Camera } from "./Camera";
 
 export default class TileMapView extends GameComponent {
-    private layers: CompositeRectTileLayer[] = [];
+    private layers: PIXI.tilemap.CompositeRectTileLayer[] = [];
     private levelData: Tile[][][];
 
     constructor(private level: Level, private camera: Camera) {
@@ -26,7 +30,7 @@ export default class TileMapView extends GameComponent {
         this.levelData = this.level.levelData;
         this.level.tileLayers.forEach(layer => {
             if(!layer.isData) {
-                const tileLayer = new CompositeRectTileLayer(layer.id);
+                const tileLayer = new PIXI.tilemap.CompositeRectTileLayer(layer.id);
                 tileLayer.interactive = tileLayer.interactiveChildren = false;
                 tileLayer.name = layer.name;
                 this.camera.root.addChild(tileLayer);

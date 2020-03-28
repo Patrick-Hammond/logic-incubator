@@ -1,4 +1,6 @@
-export function MakeDraggable(sprite: PIXI.DisplayObject): void {
+import {DisplayObject} from "pixi.js";
+
+export function MakeDraggable(sprite: DisplayObject): void {
     sprite.interactive = true;
 
     sprite.on("mousedown", function(event) {

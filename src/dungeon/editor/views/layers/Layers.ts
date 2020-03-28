@@ -1,3 +1,4 @@
+import {Rectangle} from "pixi.js";
 import {GridBounds, Scenes} from "../../../Constants";
 import EditorComponent from "../../EditorComponent";
 import {EditorActions, IEditorState} from "../../stores/EditorStore";
@@ -19,7 +20,7 @@ export default class Layers extends EditorComponent {
         this.editorStore.Subscribe(this.Render, this);
 
         // list
-        const scrollBounds = new PIXI.Rectangle(
+        const scrollBounds = new Rectangle(
             GridBounds.right + 10,
             GridBounds.y + 10 + GridBounds.height * 0.75,
             145,

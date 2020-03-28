@@ -1,6 +1,8 @@
-export default class Button extends PIXI.Sprite {
+import {Sprite, Texture} from "pixi.js";
+
+export default class Button extends Sprite {
     constructor(icon: string, onClick: () => void) {
-        super(PIXI.Texture.from(icon));
+        super(Texture.from(icon));
 
         this.buttonMode = true;
         this.interactive = true;

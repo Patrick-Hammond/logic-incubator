@@ -1,4 +1,5 @@
 
+import {DisplayObject} from "pixi.js";
 import GameComponent from "../../_lib/game/GameComponent";
 import { GameHeight, GameWidth, Scenes } from "../Constants";
 
@@ -14,7 +15,7 @@ export class Camera extends GameComponent {
         this.root.scale.set(this.scale);
     }
 
-    Follow(sprite: PIXI.DisplayObject): void {
+    Follow(sprite: DisplayObject): void {
         const halfWidth = GameWidth / 2 / this.scale;
         const halfHeight = GameHeight / 2 / this.scale;
 

@@ -1,3 +1,4 @@
+import {AnimatedSprite, BitmapText, Container, Graphics, interaction} from "pixi.js";
 import { Key } from "../../../_lib/io/Keyboard";
 import ObjectPool from "../../../_lib/patterns/ObjectPool";
 import { AnimationSpeed, GridBounds, InitalScale, Scenes, TileSize } from "../../Constants";
@@ -6,11 +7,11 @@ import { EditorActions, IEditorState, MouseButtonState } from "../stores/EditorS
 import { LevelDataActions, LevelDataState } from "../stores/LevelDataStore";
 
 export default class Canvas extends EditorComponent {
-    private grid: PIXI.Graphics = new PIXI.Graphics();
-    private mask: PIXI.Graphics = new PIXI.Graphics();
-    private levelContainer = new PIXI.Container();
-    private layerContainers: ObjectPool<PIXI.Container>;
-    private textPool: ObjectPool<PIXI.extras.BitmapText>;
+    private grid: Graphics = new Graphics();
+    private mask: Graphics = new Graphics();
+    private levelContainer = new Container();
+    private layerContainers: ObjectPool<Container>;
+    private textPool: ObjectPool<BitmapText>;
 
     constructor() {
         super();
@@ -18,14 +19,14 @@ export default class Canvas extends EditorComponent {
     }
 
     protected Create(): void {
-        this.layerContainers = new ObjectPool<PIXI.Container>(
+        this.layerContainers = new ObjectPool<Container>(
             6,
-            () => new PIXI.Container(),
-            (item: PIXI.Container) => item.removeChildren()
+            () => new Container(),
+            (item: Container) => item.removeChildren()
         );
 
-        this.textPool = new ObjectPool<PIXI.extras.BitmapText>(100, () => {
-            const b = new PIXI.extras.BitmapText("", { font: { name: "small-font", size: 6 } });
+        this.textPool = new ObjectPool<BitmapText>(100, () => {
+            const b = new BitmapText("", { font: { name: "small-font", size: 6 } });
             b.position.set(8, 8);
             b.anchor = 0.5;
             return b;
@@ -53,7 +54,7 @@ export default class Canvas extends EditorComponent {
             this.levelContainer.removeChildren();
 
             this.layerContainers.RestoreAll();
-            const layerDict: { [id: number]: PIXI.Container } = {};
+            const layerDict: { [id: number]: Container } = {};
             this.editorStore.state.layers.forEach(layer => {
                 const layerContainer = this.layerContainers.Get();
                 layerDict[layer.id] = layerContainer;
@@ -82,7 +83,7 @@ export default class Canvas extends EditorComponent {
                         sprite.rotation = brush.rotation;
                         sprite.pivot.set(brush.pixelOffset.x, brush.pixelOffset.y);
                         sprite.scale.set(scaleX, scaleY);
-                        if (sprite instanceof PIXI.extras.AnimatedSprite) {
+                        if (sprite instanceof AnimatedSprite) {
                             sprite.play();
                             sprite.animationSpeed = AnimationSpeed;
                         }
@@ -124,14 +125,14 @@ export default class Canvas extends EditorComponent {
 
     private RegisterGridEvents(): void {
         this.grid.interactive = true;
-        this.grid.on("mouseover", (e: PIXI.interaction.InteractionEvent) => {
+        this.grid.on("mouseover", (e: interaction.InteractionEvent) => {
             this.editorStore.Dispatch({ type: EditorActions.BRUSH_VISIBLE, data: { visible: true } });
         });
-        this.grid.on("mouseout", (e: PIXI.interaction.InteractionEvent) => {
+        this.grid.on("mouseout", (e: interaction.InteractionEvent) => {
             this.editorStore.Dispatch({ type: EditorActions.BRUSH_VISIBLE, data: { visible: false } });
         });
 
-        this.grid.on("pointermove", (e: PIXI.interaction.InteractionEvent) => {
+        this.grid.on("pointermove", (e: interaction.InteractionEvent) => {
             const currentBrush = this.editorStore.state.currentBrush;
             if (currentBrush) {
                 const pos = e.data.global.clone();
@@ -179,7 +180,7 @@ export default class Canvas extends EditorComponent {
             }
         });
 
-        this.grid.on("pointerdown", (e: PIXI.interaction.InteractionEvent) => {
+        this.grid.on("pointerdown", (e: interaction.InteractionEvent) => {
             if (e.data.button === 0) {
                 this.editorStore.Dispatch({ type: EditorActions.MOUSE_BUTTON, data: { mouseButtonState: MouseButtonState.LEFT_DOWN } });
             } else if (e.data.button === 1) {
@@ -188,10 +189,10 @@ export default class Canvas extends EditorComponent {
                 this.editorStore.Dispatch({ type: EditorActions.MOUSE_BUTTON, data: { mouseButtonState: MouseButtonState.RIGHT_DOWN } });
             }
         });
-        this.grid.on("pointerup", (e: PIXI.interaction.InteractionEvent) => {
+        this.grid.on("pointerup", (e: interaction.InteractionEvent) => {
             this.editorStore.Dispatch({ type: EditorActions.MOUSE_BUTTON, data: { mouseButtonState: MouseButtonState.UP } });
         });
-        this.grid.on("pointerupoutside", (e: PIXI.interaction.InteractionEvent) => {
+        this.grid.on("pointerupoutside", (e: interaction.InteractionEvent) => {
             this.editorStore.Dispatch({ type: EditorActions.MOUSE_BUTTON, data: { mouseButtonState: MouseButtonState.UP } });
         });
 

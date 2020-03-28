@@ -1,4 +1,9 @@
-import CompositeRectTileLayer from "../../../_extern/pixi-tilemap/CompositeRectTileLayer";
+
+import * as PIXI from "pixi.js"
+window["PIXI"] = PIXI
+import "pixi-tilemap";
+
+import {AnimatedSprite} from "pixi.js";
 import GameComponent from "../../../_lib/game/GameComponent";
 import AssetFactory from "../../../_lib/loading/AssetFactory";
 import {Vec2, Vec2Like} from "../../../_lib/math/Geometry";
@@ -10,8 +15,8 @@ import {Camera} from "./Camera";
 
 export class Player extends GameComponent {
     private controls: PlayerControl;
-    private player: PIXI.extras.AnimatedSprite;
-    private targetLayer: CompositeRectTileLayer;
+    private player: AnimatedSprite;
+    private targetLayer: PIXI.tilemap.CompositeRectTileLayer;
     private velocity = new Vec2();
     private newPosition = new Vec2();
     private delta = new Vec2();
@@ -35,7 +40,7 @@ export class Player extends GameComponent {
 
     Init(playerStartPosition: Vec2Like) {
         this.player.position.set(playerStartPosition.x * TileSize, playerStartPosition.y * TileSize);
-        this.targetLayer = this.camera.root.getChildByName("player") as CompositeRectTileLayer;
+        this.targetLayer = this.camera.root.getChildByName("player") as PIXI.tilemap.CompositeRectTileLayer;
     }
 
     private OnUpdate(dt: number): void {

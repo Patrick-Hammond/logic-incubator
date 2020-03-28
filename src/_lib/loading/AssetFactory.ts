@@ -1,3 +1,5 @@
+import {AnimatedSprite, Sprite, Texture, utils} from "pixi.js";
+
 export default class AssetFactory {
     private static _inst: AssetFactory;
     public static get inst(): AssetFactory {
@@ -18,15 +20,15 @@ export default class AssetFactory {
         return this.names.anims;
     }
 
-    Add(name: string, frameNames: string[], textures?: PIXI.Texture[]): void {
+    Add(name: string, frameNames: string[], textures?: Texture[]): void {
         if (textures) {
-            frameNames.forEach((frameName, index) => (PIXI.utils.TextureCache[frameName] = textures[index]));
+            frameNames.forEach((frameName, index) => (utils.TextureCache[frameName] = textures[index]));
         }
         this.registry[name] = frameNames;
         frameNames.length === 1 ? this.names.sprites.push(name) : this.names.anims.push(name);
     }
 
-    Create(name: string): PIXI.Sprite | PIXI.extras.AnimatedSprite {
+    Create(name: string): Sprite | AnimatedSprite {
         if (this.SpriteNames.indexOf(name) > -1) {
             return this.CreateSprite(name);
         } else if (this.AnimationNames.indexOf(name) > -1) {
@@ -36,16 +38,16 @@ export default class AssetFactory {
         return null;
     }
 
-    CreateTexture(name: string): PIXI.Texture {
-        return PIXI.Texture.fromFrame(this.registry[name][0]);
+    CreateTexture(name: string): Texture {
+        return Texture.from(this.registry[name][0]);
     }
 
-    CreateSprite(name: string): PIXI.Sprite {
-        return PIXI.Sprite.fromFrame(this.registry[name][0]);
+    CreateSprite(name: string): Sprite {
+        return Sprite.from(this.registry[name][0]);
     }
 
-    CreateAnimatedSprite(name: string): PIXI.extras.AnimatedSprite {
-        return PIXI.extras.AnimatedSprite.fromFrames(this.registry[name]);
+    CreateAnimatedSprite(name: string): AnimatedSprite {
+        return AnimatedSprite.fromFrames(this.registry[name]);
     }
 
     CreateDTS(): void {

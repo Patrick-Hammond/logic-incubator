@@ -34,6 +34,10 @@ export default class Cat extends GameComponent {
 
         this.catState = CatState.IDLE;
 
+        const r = Math.random() > 0.6 ? Math.random() : 1;
+        const g = Math.random() > 0.6 ? Math.random() : 1;
+        const b = Math.random() > 0.6 ? Math.random() : 1;
+
         const pos = TileToPixel(this.position);
         this.anim.root.position.set(pos.x, pos.y);
         this.anim.Play("cat_sit");
@@ -77,6 +81,7 @@ export default class Cat extends GameComponent {
 
     private GoHome(): void {
         this.MoveTo(14, 2, () => {
+            this.Create();
             this.game.dispatcher.emit(CAT_HOME);
         });
     }

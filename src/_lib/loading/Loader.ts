@@ -1,5 +1,9 @@
+import {Loader as PixiLoader} from "pixi.js";
+import {LoaderResource, SpritesheetLoader} from "pixi.js";
 import { GetNextInImageSequence, ImageSequenceIndex, RemoveExtension } from "../io/Url";
 import AssetFactory from "./AssetFactory";
+
+type LoaderMiddlewareFn = (resource: LoaderResource, next: (...params: any[]) => any) => void;
 
 export default class Loader {
     private static _inst: Loader;
@@ -10,10 +14,10 @@ export default class Loader {
         return Loader._inst;
     }
 
-    private loader: PIXI.loaders.Loader;
+    private loader: PixiLoader;
 
     constructor() {
-        this.loader = new PIXI.loaders.Loader();
+        this.loader = new PixiLoader();
     }
 
     /**
@@ -26,7 +30,8 @@ export default class Loader {
      * @memberof Loader
      */
     LoadSpriteSheet(url: string, animRegEx: RegExp, complete: () => void): void {
-        this.loader.use((resource: PIXI.loaders.Resource, next: () => void) => {
+
+        this.loader.use((resource: LoaderResource, next: (...params: any[]) => any) => {
             if (resource.data && resource.data.frames) {
                 const frames = resource.data.frames;
                 for (const frame in frames) {

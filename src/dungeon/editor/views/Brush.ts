@@ -1,3 +1,4 @@
+import {AnimatedSprite, Sprite} from "pixi.js";
 import { Key } from "../../../_lib/io/Keyboard";
 import { AnimationSpeed, GridBounds, Scenes, TileSize } from "../../Constants";
 import EditorComponent from "../EditorComponent";
@@ -5,7 +6,7 @@ import { IEditorState, MouseButtonState } from "../stores/EditorStore";
 import { LevelDataActions } from "../stores/LevelDataStore";
 
 export default class BrushTool extends EditorComponent {
-    private brush: PIXI.Sprite | PIXI.extras.AnimatedSprite;
+    private brush: Sprite | AnimatedSprite;
 
     constructor() {
         super();
@@ -61,7 +62,7 @@ export default class BrushTool extends EditorComponent {
                     prevState.currentBrush.position.x * scaledTileSize,
                     prevState.currentBrush.position.y * scaledTileSize
                 );
-                if (this.brush instanceof PIXI.extras.AnimatedSprite) {
+                if (this.brush instanceof AnimatedSprite) {
                     this.brush.play();
                     this.brush.animationSpeed = AnimationSpeed;
                 }

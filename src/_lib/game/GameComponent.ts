@@ -1,9 +1,10 @@
+import {Container} from "pixi.js";
 import AssetFactory from "../loading/AssetFactory";
 import Loader from "../loading/Loader";
 import Game from "./Game";
 
 export default abstract class GameComponent {
-    public root = new PIXI.Container();
+    public root = new Container();
 
     protected game: Game;
     protected assetFactory: AssetFactory;

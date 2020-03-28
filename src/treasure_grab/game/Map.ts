@@ -1,3 +1,4 @@
+import {Sprite} from "pixi.js";
 import GameComponent from "../../_lib/game/GameComponent";
 import {Vec2, Vec2Like} from "../../_lib/math/Geometry";
 import {Directions} from "../../_lib/utils/Types";
@@ -11,8 +12,8 @@ type Tile = {type: TileType, visited?: boolean, parent?: Tile, pos?: Vec2Like};
 
 export default class Map extends GameComponent {
 
-    public background: PIXI.Sprite;
-    public foreground: PIXI.Sprite;
+    public background: Sprite;
+    public foreground: Sprite;
 
     private map: Tile[][] = [
         [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],

@@ -1,9 +1,29 @@
 import { EventEmitter } from "eventemitter3";
-import { Application, interaction, RendererOptions } from "pixi.js";
+import {Application, interaction} from "pixi.js";
 import GamePad from "../io/GamePad";
 import Keyboard from "../io/Keyboard";
 import { StatsTicker } from "../utils/StatsTicker";
 import SceneManager from "./SceneManager";
+
+export interface IGameOptions {
+        autoStart?: boolean;
+        width?: number;
+        height?: number;
+        view?: HTMLCanvasElement;
+        transparent?: boolean;
+        autoDensity?: boolean;
+        antialias?: boolean;
+        preserveDrawingBuffer?: boolean;
+        resolution?: number;
+        forceCanvas?: boolean;
+        backgroundColor?: number;
+        clearBeforeRender?: boolean;
+        forceFXAA?: boolean;
+        powerPreference?: string;
+        sharedTicker?: boolean;
+        sharedLoader?: boolean;
+        resizeTo?: Window | HTMLElement;
+}
 
 export default class Game extends Application {
     public static inst: Game;
@@ -12,8 +32,8 @@ export default class Game extends Application {
     public sceneManager = new SceneManager();
     public dispatcher = new EventEmitter();
 
-    constructor(private width = 1280, private height = 720, rendererOptions?: RendererOptions, showStats: boolean = false) {
-        super(width, height, rendererOptions || { backgroundColor: 0x111111, autoStart: true }, false, !showStats, true);
+    constructor(options: IGameOptions, showStats: boolean = false) {
+        super(options);
 
         Game.inst = this;
         this.stage.name = "stage";

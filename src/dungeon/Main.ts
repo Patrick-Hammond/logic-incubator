@@ -4,7 +4,7 @@ import { AssetPath, GameHeight, GameWidth, Scenes } from "./Constants";
 import { DungeonEditor } from "./editor/DungeonEditor";
 import { Dungeon } from "./game/Dungeon";
 
-const game = new Game(GameWidth, GameHeight, { backgroundColor: 0x111111 }, true);
+const game = new Game({width: GameWidth, height: GameHeight, backgroundColor: 0x111111 }, true);
 
 // load
 Loader.inst.LoadSpriteSheet(AssetPath + "spritesheet.json", /^.+(?=_f)/, () => {

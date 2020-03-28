@@ -1,11 +1,12 @@
+import {Container, Graphics, Sprite} from "pixi.js";
 import {Rectangle, RectangleLike} from "../../../../../_lib/math/Geometry";
 import {ISkinUI} from "../ISkinUI";
 
 export default class ContainerSkin implements ISkinUI {
 
-    protected root = new PIXI.Container();
-    protected skinMask = new PIXI.Graphics();
-    protected border =  new PIXI.Graphics();
+    protected root = new Container();
+    protected skinMask = new Graphics();
+    protected border =  new Graphics();
 
     private currentBounds = new Rectangle();
 
@@ -13,11 +14,11 @@ export default class ContainerSkin implements ISkinUI {
         this.root.addChild(this.skinMask);
     }
 
-    get Mask(): PIXI.Graphics | PIXI.Sprite {
+    get Mask(): Graphics | Sprite {
         return this.skinMask;
     }
 
-    SetParent(parent: PIXI.Container): void {
+    SetParent(parent: Container): void {
         parent.addChild(this.root);
     }
 

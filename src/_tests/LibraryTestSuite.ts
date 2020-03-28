@@ -7,7 +7,7 @@ import {Wait} from "../_lib/utils/Time";
 
 export function RunLibraryTestSuite(): void {
 
-    new Game(1, 1);
+    new Game({width: 1, height: 1});
 
     TestEnumerateTypes();
     TestDelayedCall();

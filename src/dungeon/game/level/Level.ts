@@ -1,3 +1,4 @@
+import {Texture} from "pixi.js";
 import Game from "../../../_lib/game/Game";
 import AssetFactory from "../../../_lib/loading/AssetFactory";
 import {Rectangle, Vec2Like} from "../../../_lib/math/Geometry";
@@ -16,7 +17,7 @@ type Brush = {
 };
 
 export type Tile = Brush & {
-    texture: PIXI.Texture;
+    texture: Texture;
 };
 
 export default class Level {

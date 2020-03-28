@@ -1,4 +1,5 @@
 import {Linear, TweenMax} from "gsap";
+import {AnimatedSprite} from "pixi.js";
 import GameComponent from "../../_lib/game/GameComponent";
 import {Vec2} from "../../_lib/math/Geometry";
 import {Directions} from "../../_lib/utils/Types";
@@ -13,7 +14,7 @@ enum PlayerState {
 
 export default class Player extends GameComponent {
 
-    private anim: PIXI.extras.AnimatedSprite;
+    private anim: AnimatedSprite;
     private position = new Vec2();
     private state: PlayerState;
 

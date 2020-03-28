@@ -1,11 +1,12 @@
+import {Sprite, Text, Texture} from "pixi.js";
 import { GridBounds, Scenes } from "../../Constants";
 import EditorComponent from "../EditorComponent";
 import { IEditorState } from "../stores/EditorStore";
 
 export default class SelectedBrush extends EditorComponent {
-    private brush: PIXI.Sprite = new PIXI.Sprite();
-    private brushText: PIXI.Text;
-    private dataText: PIXI.Text;
+    private brush = new Sprite();
+    private brushText: Text;
+    private dataText: Text;
 
     constructor() {
         super();
@@ -17,11 +18,11 @@ export default class SelectedBrush extends EditorComponent {
         this.brush.anchor.set(0.5, 1);
         this.brush.position.set(1218, 697);
 
-        this.brushText = new PIXI.Text("", { fontFamily: "Arial", fontSize: 11, fill: 0xeeeeee });
+        this.brushText = new Text("", { fontFamily: "Arial", fontSize: 11, fill: 0xeeeeee });
         this.brushText.anchor.x = 1;
         this.brushText.position.set(1270, 702);
 
-        this.dataText = new PIXI.Text("", { fontFamily: "Arial", fontSize: 30, fill: 0xeeeeee });
+        this.dataText = new Text("", { fontFamily: "Arial", fontSize: 30, fill: 0xeeeeee });
         this.dataText.anchor.set(0.5);
         this.dataText.position.set(1218, 647);
 
@@ -54,7 +55,7 @@ export default class SelectedBrush extends EditorComponent {
             this.brush.texture = this.assetFactory.Create(name).texture;
             this.brush.scale.set(100 / Math.max(this.brush.texture.width, this.brush.texture.height));
         } else {
-            this.brush.texture = PIXI.Texture.EMPTY;
+            this.brush.texture = Texture.EMPTY;
         }
     }
 }

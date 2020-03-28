@@ -1,7 +1,7 @@
-import { ticker } from "pixi.js";
+import { Ticker } from "pixi.js";
 import * as Stats from "stats.js";
 
-export class StatsTicker extends ticker.Ticker {
+export class StatsTicker extends Ticker {
     private stats: Stats;
 
     constructor() {

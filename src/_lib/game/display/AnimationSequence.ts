@@ -1,10 +1,11 @@
+import {AnimatedSprite, Sprite} from "pixi.js";
 import AssetFactory from "../../loading/AssetFactory";
 import {Dictionary} from "../../utils/Types";
 
 export class AnimationSequence {
 
-    public root = new PIXI.Container();
-    private animations: Dictionary<PIXI.extras.AnimatedSprite> = {};
+    public root = new Sprite();
+    private animations: Dictionary<AnimatedSprite> = {};
 
     constructor(clipNames: string[]) {
         clipNames.forEach(name => {
@@ -14,7 +15,7 @@ export class AnimationSequence {
         });
     }
 
-    Play(clipName: string, onComplete ?: () => void): PIXI.extras.AnimatedSprite {
+    Play(clipName: string, onComplete ?: () => void): AnimatedSprite {
         const clip = this.animations[clipName];
         clip.loop = false;
         clip.play();
@@ -26,7 +27,7 @@ export class AnimationSequence {
         return clip;
     }
 
-    PlayLooped(clipName: string, onLoop ?: () => void): PIXI.extras.AnimatedSprite {
+    PlayLooped(clipName: string, onLoop ?: () => void): AnimatedSprite {
         const clip = this.animations[clipName];
         clip.loop = true;
         clip.play();

@@ -1,7 +1,8 @@
+import {Container} from "pixi.js";
 import {RectangleLike} from "../../../../_lib/math/Geometry";
 import {ISkinUI} from "../skins/ISkinUI";
 
-export default abstract class BaseContainer extends PIXI.Container {
+export default abstract class BaseContainer extends Container {
 
     constructor(protected rect: RectangleLike, skin: ISkinUI) {
         super();

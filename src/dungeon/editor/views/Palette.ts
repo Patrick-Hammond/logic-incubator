@@ -1,3 +1,4 @@
+import {DisplayObject, interaction, Rectangle, SCALE_MODES, Sprite} from "pixi.js";
 import AssetFactory from "../../../_lib/loading/AssetFactory";
 import { AnimationSpeed, GridBounds, Scenes } from "../../Constants";
 import EditorComponent from "../EditorComponent";
@@ -22,7 +23,7 @@ export default class Palette extends EditorComponent {
         let x = 5;
         let y = 5;
 
-        const tileLayout = (s: PIXI.Sprite) => {
+        const tileLayout = (s: Sprite) => {
             if (x + s.width + padding > scrollBounds.width) {
                 x = 5;
                 y += maxHeight + padding;
@@ -33,15 +34,15 @@ export default class Palette extends EditorComponent {
             x += s.width + padding;
         };
 
-        const addRollOver = (s: PIXI.DisplayObject) => {
-            s.on("pointerover", (e: PIXI.interaction.InteractionEvent) => {
+        const addRollOver = (s: DisplayObject) => {
+            s.on("pointerover", (e: interaction.InteractionEvent) => {
                 this.editorStore.Dispatch({ type: EditorActions.BRUSH_HOVERED, data: { name: e.target.name } });
             });
         };
 
-        const addSelect = (s: PIXI.DisplayObject) => {
+        const addSelect = (s: DisplayObject) => {
             s.interactive = true;
-            s.on("pointerdown", (e: PIXI.interaction.InteractionEvent) => {
+            s.on("pointerdown", (e: interaction.InteractionEvent) => {
                 if (e.target.name !== this.editorStore.state.currentBrush.name) {
                     this.editorStore.Dispatch({
                         type: EditorActions.BRUSH_CHANGED,
@@ -49,19 +50,19 @@ export default class Palette extends EditorComponent {
                     });
                 }
             });
-            s.on("pointerout", (e: PIXI.interaction.InteractionEvent) => {
+            s.on("pointerout", (e: interaction.InteractionEvent) => {
                 this.editorStore.Dispatch({ type: EditorActions.BRUSH_HOVERED, data: { name: this.editorStore.state.currentBrush.name } });
             });
         };
 
-        const scrollBounds = new PIXI.Rectangle(GridBounds.right + 10, GridBounds.y, 260, GridBounds.height * 0.75);
+        const scrollBounds = new Rectangle(GridBounds.right + 10, GridBounds.y, 260, GridBounds.height * 0.75);
         this.paletteContainer = new ScrollBox(scrollBounds, new ContainerSkin());
         this.root.addChild(this.paletteContainer);
         addSelect(this.paletteContainer);
 
         this.assetFactory.SpriteNames.forEach(name => {
             const s = this.assetFactory.Create(name);
-            s.texture.baseTexture.scaleMode = PIXI.SCALE_MODES.NEAREST;
+            s.texture.baseTexture.scaleMode = SCALE_MODES.NEAREST;
             s.scale.set(2);
             s.name = name;
             s.interactive = true;
@@ -73,7 +74,7 @@ export default class Palette extends EditorComponent {
 
         this.assetFactory.AnimationNames.forEach(name => {
             const a = this.assetFactory.CreateAnimatedSprite(name);
-            a.texture.baseTexture.scaleMode = PIXI.SCALE_MODES.NEAREST;
+            a.texture.baseTexture.scaleMode = SCALE_MODES.NEAREST;
             a.scale.set(2);
             a.animationSpeed = AnimationSpeed;
             a.play();
@@ -92,13 +93,13 @@ export default class Palette extends EditorComponent {
         x = 5;
         y = 5;
 
-        const square = PIXI.Sprite.from("data-square");
+        const square = Sprite.from("data-square");
         square.alpha = 0.5;
         this.editorStore.state.dataBrushes.forEach(dataBrush => {
             square.tint = dataBrush.colour;
-            const tex = this.game.renderer.generateTexture(square, PIXI.SCALE_MODES.NEAREST, 1);
-            const s = new PIXI.Sprite(tex);
-            s.texture.baseTexture.scaleMode = PIXI.SCALE_MODES.NEAREST;
+            const tex = this.game.renderer.generateTexture(square, SCALE_MODES.NEAREST, 1);
+            const s = new Sprite(tex);
+            s.texture.baseTexture.scaleMode = SCALE_MODES.NEAREST;
             s.scale.set(2);
             s.name = dataBrush.name;
             s.interactive = true;

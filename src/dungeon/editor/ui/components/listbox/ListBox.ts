@@ -1,3 +1,4 @@
+import {Rectangle} from "pixi.js";
 import ObjectPool from "../../../../../_lib/patterns/ObjectPool";
 import {ISkinUI} from "../../skins/ISkinUI";
 import BaseContainer from "../BaseContainer";
@@ -11,7 +12,7 @@ export const enum ListBoxEvents {
 export class ListBox<T extends ListItemBase> extends BaseContainer {
     private selections: ObjectPool<T>;
 
-    constructor(itemCtor: () => T, bounds: PIXI.Rectangle, skin: ISkinUI) {
+    constructor(itemCtor: () => T, bounds: Rectangle, skin: ISkinUI) {
         super(bounds, skin);
 
         this.selections = new ObjectPool<T>(5, () => itemCtor());

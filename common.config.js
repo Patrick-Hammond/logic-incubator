@@ -7,7 +7,8 @@ module.exports = (function () {
     For all the values below, pay attention to trailing slashes, they are there for a reason :)
   */
 
-  var GAME_NAME = "treasure_grab"
+  var GAME_NAME = "dungeon";
+  //var GAME_NAME = "treasure_grab";
 
   //set to false to just use localhost, otherwise it will make best-guess at the local ip and use that in dev mode
   var DEV_LAN_MODE = false;
