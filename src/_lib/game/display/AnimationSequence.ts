@@ -7,10 +7,14 @@ export class AnimationSequence {
     private animations: Dictionary<PIXI.extras.AnimatedSprite> = {};
 
     constructor(clipNames: string[]) {
-        clipNames.forEach(name => this.animations[name] = AssetFactory.inst.CreateAnimatedSprite(name));
+        clipNames.forEach(name => {
+            const anim = AssetFactory.inst.CreateAnimatedSprite(name);
+            anim.animationSpeed = 0.1;
+            this.animations[name] = anim;
+        });
     }
 
-    Play(clipName: string, onComplete?: () => void): PIXI.extras.AnimatedSprite {
+    Play(clipName: string, onComplete ?: () => void): PIXI.extras.AnimatedSprite {
         const clip = this.animations[clipName];
         clip.loop = false;
         clip.play();
@@ -22,7 +26,7 @@ export class AnimationSequence {
         return clip;
     }
 
-    PlayLooped(clipName: string, onLoop?: () => void): PIXI.extras.AnimatedSprite {
+    PlayLooped(clipName: string, onLoop ?: () => void): PIXI.extras.AnimatedSprite {
         const clip = this.animations[clipName];
         clip.loop = true;
         clip.play();
@@ -34,7 +38,7 @@ export class AnimationSequence {
         return clip;
     }
 
-    PlaySequence(clipsNames: string[], onComplete?: () => void): void {
+    PlaySequence(clipsNames: string[], onComplete ?: () => void): void {
         const playNext = (index: number = 0) => {
             if(index < clipsNames.length) {
                 this.Play(clipsNames[index], () => playNext(++index));

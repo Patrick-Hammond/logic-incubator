@@ -24,6 +24,7 @@ export default class Player extends GameComponent {
 
         this.anim = this.assetFactory.CreateAnimatedSprite("player_1");
         this.anim.anchor.set(0.5);
+        this.anim.pivot.x = 32;
         this.anim.scale.x = -1;
         this.anim.animationSpeed = 0.1;
         this.root.addChild(this.anim);
@@ -49,10 +50,12 @@ export default class Player extends GameComponent {
                     case "left":
                         this.position.x -= 1;
                         this.anim.scale.x = -1;
+                        this.anim.pivot.x = 32;
                         break;
                     case "right":
                         this.position.x += 1;
                         this.anim.scale.x = 1;
+                        this.anim.pivot.x = -32;
                         break;
                     case "up":
                         this.position.y -= 1;

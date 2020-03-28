@@ -37,6 +37,10 @@ export class Vec2 {
     Clone(): Vec2 {
         return new Vec2(this.x, this.y);
     }
+
+    Equals(x: number, y: number): boolean {
+        return this.x === x && this.y === y;
+    }
 }
 
 export type RectangleLike = { x: number; y: number; width: number; height: number };

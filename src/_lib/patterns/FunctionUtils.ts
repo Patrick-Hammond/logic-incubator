@@ -1,4 +1,4 @@
-export const Memoize = fn => {
+export function Memoize(fn) {
     const cache = {};
     return (...args) => {
         const n = args[0]; // just taking one argument here

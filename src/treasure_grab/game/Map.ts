@@ -91,7 +91,8 @@ export default class Map extends GameComponent {
 
         getPath(this.BredthFirstSearch(start, end));
 
-        return path;
+        path.pop();
+        return path.reverse();
     }
 
     GetRandomPosition(): Vec2Like {
