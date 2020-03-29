@@ -1,8 +1,8 @@
 import {Sprite} from "pixi.js";
-import GameComponent from "../../_lib/game/GameComponent";
-import {Vec2, Vec2Like} from "../../_lib/math/Geometry";
-import {Directions} from "../../_lib/utils/Types";
-import {MapHeight, MapWidth} from "../Constants";
+import GameComponent from "../../../_lib/game/GameComponent";
+import {Vec2, Vec2Like} from "../../../_lib/math/Geometry";
+import {Directions} from "../../../_lib/utils/Types";
+import {MapHeight, MapWidth} from "../../Constants";
 
 export enum TileType {
     BLOCKED, TRAVERSABLE, CAT

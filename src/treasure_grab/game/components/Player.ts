@@ -1,12 +1,12 @@
 import {Linear, TweenMax} from "gsap";
 import {AnimatedSprite} from "pixi.js";
-import GameComponent from "../../_lib/game/GameComponent";
-import {Vec2} from "../../_lib/math/Geometry";
-import {Directions} from "../../_lib/utils/Types";
+import GameComponent from "../../../_lib/game/GameComponent";
+import {Vec2} from "../../../_lib/math/Geometry";
+import {Directions} from "../../../_lib/utils/Types";
+import {CAT_FOUND} from "../Events";
+import {TileToPixel} from "../Utils";
 import {Camera} from "./Camera";
-import {CAT_FOUND} from "./Events";
 import Map, {TileType} from "./Map";
-import {TileToPixel} from "./Utils";
 
 enum PlayerState {
     IDLE, MOVING
@@ -67,7 +67,7 @@ export default class Player extends GameComponent {
                     }
 
                 const pos = TileToPixel(this.position);
-                TweenMax.to(this.anim, 1, {
+                TweenMax.to(this.anim, .5, {
                     x: pos.x, y: pos.y, ease: Linear.easeNone,
                     onUpdate: () => this.camera.Follow(this.anim),
                     onComplete: () => this.MoveComplete()

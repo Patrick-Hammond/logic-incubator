@@ -1,7 +1,7 @@
 
 import {DisplayObject} from "pixi.js";
-import GameComponent from "../../_lib/game/GameComponent";
-import { GameHeight, GameWidth, Scenes } from "../Constants";
+import GameComponent from "../../../_lib/game/GameComponent";
+import { GameHeight, GameWidth, Scenes } from "../../Constants";
 
 export class Camera extends GameComponent {
 

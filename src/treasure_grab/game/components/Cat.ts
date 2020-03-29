@@ -1,11 +1,12 @@
 import {Linear, TweenMax} from "gsap";
-import {AnimationSequence} from "../../_lib/game/display/AnimationSequence";
-import GameComponent from "../../_lib/game/GameComponent";
-import {Vec2} from "../../_lib/math/Geometry";
-import {GetInterval} from "../../_lib/utils/Time";
-import {CAT_FOUND, CAT_HOME} from "./Events";
+import {AdjustmentFilter} from "pixi-filters";
+import {AnimationSequence} from "../../../_lib/game/display/AnimationSequence";
+import GameComponent from "../../../_lib/game/GameComponent";
+import {Vec2} from "../../../_lib/math/Geometry";
+import {GetInterval} from "../../../_lib/utils/Time";
+import {CAT_FOUND, CAT_HOME} from "../Events";
+import {TileToPixel} from "../Utils";
 import Map, {TileType} from "./Map";
-import {TileToPixel} from "./Utils";
 
 enum CatState {
     IDLE, FOLLOWING
@@ -15,12 +16,14 @@ export default class Cat extends GameComponent {
     private anim: AnimationSequence;
     private position = new Vec2();
     private catState: CatState;
+    private tint = new AdjustmentFilter();
 
     constructor(private map: Map) {
         super();
 
         this.anim = new AnimationSequence(["cat_sit", "cat_walkr", "cat_walkl", "cat_walku", "cat_walkd"]);
         this.anim.root.pivot.set(-14, -14);
+        this.anim.root.filters = [this.tint];
         this.root.addChild(this.anim.root);
         this.Create();
 
@@ -34,9 +37,9 @@ export default class Cat extends GameComponent {
 
         this.catState = CatState.IDLE;
 
-        const r = Math.random() > 0.6 ? Math.random() : 1;
-        const g = Math.random() > 0.6 ? Math.random() : 1;
-        const b = Math.random() > 0.6 ? Math.random() : 1;
+        this.tint.red   = Math.random() > 0.6 ? 0.7 + Math.random() * 0.3 : 1;
+        this.tint.green = Math.random() > 0.6 ? 0.7 + Math.random() * 0.3 : 1;
+        this.tint.blue  = Math.random() > 0.6 ? 0.7 + Math.random() * 0.3 : 1;
 
         const pos = TileToPixel(this.position);
         this.anim.root.position.set(pos.x, pos.y);
@@ -81,8 +84,8 @@ export default class Cat extends GameComponent {
 
     private GoHome(): void {
         this.MoveTo(14, 2, () => {
+            this.game.dispatcher.emit(CAT_HOME, {r: this.tint.red, g: this.tint.green, b: this.tint.blue});
             this.Create();
-            this.game.dispatcher.emit(CAT_HOME);
         });
     }
 }

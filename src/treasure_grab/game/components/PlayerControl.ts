@@ -1,7 +1,7 @@
-import GameComponent from "../../_lib/game/GameComponent";
-import GamePad from "../../_lib/io/GamePad";
-import Keyboard, {Key} from "../../_lib/io/Keyboard";
-import {Directions} from "../../_lib/utils/Types";
+import GameComponent from "../../../_lib/game/GameComponent";
+import GamePad from "../../../_lib/io/GamePad";
+import Keyboard, {Key} from "../../../_lib/io/Keyboard";
+import {Directions} from "../../../_lib/utils/Types";
 
 export default class PlayerControl extends GameComponent {
     private keyboard: Keyboard;
