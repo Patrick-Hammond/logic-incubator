@@ -262,8 +262,8 @@
 		},
 		"path.png": {
 			"frame": {
-				"x": 1,
-				"y": 39,
+				"x": 495,
+				"y": 1,
 				"w": 1024,
 				"h": 768
 			},
@@ -282,7 +282,7 @@
 		},
 		"player_1_f0.png": {
 			"frame": {
-				"x": 1027,
+				"x": 1521,
 				"y": 1,
 				"w": 128,
 				"h": 128
@@ -302,7 +302,7 @@
 		},
 		"player_1_f1.png": {
 			"frame": {
-				"x": 1157,
+				"x": 1651,
 				"y": 1,
 				"w": 128,
 				"h": 128
@@ -322,8 +322,8 @@
 		},
 		"player_1_f2.png": {
 			"frame": {
-				"x": 1027,
-				"y": 131,
+				"x": 1781,
+				"y": 1,
 				"w": 128,
 				"h": 128
 			},
@@ -342,8 +342,8 @@
 		},
 		"player_1_f3.png": {
 			"frame": {
-				"x": 1157,
-				"y": 131,
+				"x": 1911,
+				"y": 1,
 				"w": 128,
 				"h": 128
 			},
@@ -358,31 +358,11 @@
 			"sourceSize": {
 				"w": 128,
 				"h": 128
-			}
-		},
-		"treasure.png": {
-			"frame": {
-				"x": 1027,
-				"y": 261,
-				"w": 47,
-				"h": 42
-			},
-			"rotated": false,
-			"trimmed": false,
-			"spriteSourceSize": {
-				"x": 0,
-				"y": 0,
-				"w": 47,
-				"h": 42
-			},
-			"sourceSize": {
-				"w": 47,
-				"h": 42
 			}
 		},
 		"trees.png": {
 			"frame": {
-				"x": 1287,
+				"x": 2041,
 				"y": 1,
 				"w": 1024,
 				"h": 768
@@ -399,6 +379,86 @@
 				"w": 1024,
 				"h": 768
 			}
+		},
+		"viking_f1.png": {
+			"frame": {
+				"x": 3067,
+				"y": 1,
+				"w": 64,
+				"h": 64
+			},
+			"rotated": false,
+			"trimmed": false,
+			"spriteSourceSize": {
+				"x": 0,
+				"y": 0,
+				"w": 64,
+				"h": 64
+			},
+			"sourceSize": {
+				"w": 64,
+				"h": 64
+			}
+		},
+		"viking_f2.png": {
+			"frame": {
+				"x": 3133,
+				"y": 1,
+				"w": 64,
+				"h": 64
+			},
+			"rotated": false,
+			"trimmed": false,
+			"spriteSourceSize": {
+				"x": 0,
+				"y": 0,
+				"w": 64,
+				"h": 64
+			},
+			"sourceSize": {
+				"w": 64,
+				"h": 64
+			}
+		},
+		"viking_f3.png": {
+			"frame": {
+				"x": 3199,
+				"y": 1,
+				"w": 64,
+				"h": 64
+			},
+			"rotated": false,
+			"trimmed": false,
+			"spriteSourceSize": {
+				"x": 0,
+				"y": 0,
+				"w": 64,
+				"h": 64
+			},
+			"sourceSize": {
+				"w": 64,
+				"h": 64
+			}
+		},
+		"viking_f4.png": {
+			"frame": {
+				"x": 3265,
+				"y": 1,
+				"w": 64,
+				"h": 64
+			},
+			"rotated": false,
+			"trimmed": false,
+			"spriteSourceSize": {
+				"x": 0,
+				"y": 0,
+				"w": 64,
+				"h": 64
+			},
+			"sourceSize": {
+				"w": 64,
+				"h": 64
+			}
 		}
 	},
 	"meta": {
@@ -407,8 +467,8 @@
 		"image": "spritesheet.png",
 		"format": "RGBA8888",
 		"size": {
-			"w": 2312,
-			"h": 808
+			"w": 3330,
+			"h": 770
 		},
 		"scale": "1"
 	}
