@@ -1,15 +1,15 @@
 import {Linear, TweenMax} from "gsap";
 import {AdjustmentFilter} from "pixi-filters";
+import {FindShortestPath} from "../../../_lib/algorithms/Search";
 import {AnimationSequence} from "../../../_lib/game/display/AnimationSequence";
 import GameComponent from "../../../_lib/game/GameComponent";
-import {Vec2} from "../../../_lib/math/Geometry";
-import {GetInterval} from "../../../_lib/utils/Time";
-import {CAT_FOUND, CAT_HOME} from "../Events";
+import {Vec2, Vec2Like} from "../../../_lib/math/Geometry";
+import {CAT_FOUND, CAT_HOME, PLAYER_MOVED} from "../Events";
 import {TileToPixel} from "../Utils";
 import Map, {TileType} from "./Map";
 
 enum CatState {
-    IDLE, FOLLOWING
+    IDLE, FOLLOWING, MOVING, HOME
 }
 
 export default class Cat extends GameComponent {
@@ -27,7 +27,15 @@ export default class Cat extends GameComponent {
         this.root.addChild(this.anim.root);
         this.Create();
 
-        this.game.dispatcher.addListener(CAT_FOUND, this.Follow, this);
+        this.game.dispatcher.addListener(CAT_FOUND, (target: Vec2) => {
+            this.catState = CatState.FOLLOWING;
+            this.Follow(target);
+        });
+        this.game.dispatcher.addListener(PLAYER_MOVED, (target: Vec2) => {
+            if(this.catState === CatState.FOLLOWING) {
+                this.Follow(target);
+            }
+        });
     }
 
     Create(): void {
@@ -47,15 +55,13 @@ export default class Cat extends GameComponent {
     }
 
     MoveTo(x: number, y: number, onComplete?: () => void): void {
+
+        this.catState = CatState.MOVING;
+
         this.position.Set(x, y);
         const pos = TileToPixel({x, y});
         const root = this.anim.root;
-        TweenMax.to(root, 1.5, {x: pos.x, y: pos.y, ease: Linear.easeNone, onComplete: () => {
-            this.anim.Play("cat_sit");
-            if(onComplete) {
-                onComplete();
-            }
-        }});
+        TweenMax.to(root, 1.5, {x: pos.x, y: pos.y, ease: Linear.easeNone, onComplete});
 
         if(pos.x !== root.x) {
             this.anim.PlayLooped(pos.x > root.x ? "cat_walkr" : "cat_walkl");
@@ -65,25 +71,20 @@ export default class Cat extends GameComponent {
     }
 
     private Follow(target: Vec2): void {
-        if(this.catState === CatState.IDLE) {
+        const path = FindShortestPath(this.map, this.position, target);
+        if(path.length > 1) {
+            this.MoveTo(path[1].x, path[1].y, () => this.Follow(target));
+        } else if (target.Equals(14, 2)) {
+            this.GoHome();
+        } else {
             this.catState = CatState.FOLLOWING;
-
-            this.map.SetTile(this.position.x, this.position.y, TileType.TRAVERSABLE);
-
-            const stopFollowing = GetInterval(1500, () => {
-                const path = this.map.FindShortestPath(this.position, target);
-                if(path.length > 1) {
-                    this.MoveTo(path[0].x, path[0].y);
-                } else if (target.Equals(14, 2)) {
-                    stopFollowing();
-                    this.GoHome();
-                }
-            });
+            this.anim.Play("cat_sit");
         }
     }
 
     private GoHome(): void {
         this.MoveTo(14, 2, () => {
+            this.catState = CatState.HOME;
             this.game.dispatcher.emit(CAT_HOME, {r: this.tint.red, g: this.tint.green, b: this.tint.blue});
             this.Create();
         });

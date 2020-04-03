@@ -1,32 +1,34 @@
 import {Linear, TweenMax} from "gsap";
 import {AnimatedSprite} from "pixi.js";
+import {FindShortestPath} from "../../../_lib/algorithms/Search";
 import GameComponent from "../../../_lib/game/GameComponent";
 import {Vec2} from "../../../_lib/math/Geometry";
 import {Directions} from "../../../_lib/utils/Types";
-import {CAT_FOUND, PLAYER_MOVED} from "../Events";
+import {CAT_FOUND} from "../Events";
 import {TileToPixel} from "../Utils";
-import {Camera} from "./Camera";
 import Map, {TileType} from "./Map";
 
-enum PlayerState {
+enum VikingState {
     IDLE, MOVING
 }
 
-export default class Player extends GameComponent {
+export default class Viking extends GameComponent {
 
     private anim: AnimatedSprite;
     private position = new Vec2();
-    private state: PlayerState;
+    private state: VikingState;
 
-    public constructor(private map: Map, private camera: Camera) {
+    public constructor(private map: Map) {
         super();
 
-        this.state = PlayerState.IDLE;
+        this.state = VikingState.IDLE;
 
-        this.anim = this.assetFactory.CreateAnimatedSprite("player_1");
+        this.anim = this.assetFactory.CreateAnimatedSprite("viking");
         this.anim.anchor.set(0.5);
-        this.anim.pivot.x = -32;
+        this.anim.scale.set(-2, 2);
+        this.anim.pivot.x = 16;
         this.anim.animationSpeed = 0.1;
+        this.anim.play();
         this.root.addChild(this.anim);
     }
 
@@ -34,28 +36,27 @@ export default class Player extends GameComponent {
         this.position.Set(x, y);
         const pos = TileToPixel(this.position);
         this.anim.position.set(pos.x, pos.y);
-        this.camera.Follow(this.anim);
     }
 
     Move(direction: Directions): void {
 
-        if(this.state === PlayerState.IDLE) {
+        if(this.state !== VikingState.MOVING) {
             const tileType = this.map.GetTile(this.position, direction).type;
 
             if(tileType === TileType.TRAVERSABLE) {
-                this.state = PlayerState.MOVING;
+                this.state = VikingState.MOVING;
                 this.anim.play();
 
                 switch(direction) {
                     case "left":
                         this.position.x -= 1;
-                        this.anim.scale.x = -1;
-                        this.anim.pivot.x = 32;
+                        this.anim.scale.x = -2;
+                        this.anim.pivot.x = 16;
                         break;
                     case "right":
                         this.position.x += 1;
-                        this.anim.scale.x = 1;
-                        this.anim.pivot.x = -32;
+                        this.anim.scale.x = 2;
+                        this.anim.pivot.x = -16;
                         break;
                     case "up":
                         this.position.y -= 1;
@@ -66,22 +67,27 @@ export default class Player extends GameComponent {
                     }
 
                 const pos = TileToPixel(this.position);
-                TweenMax.to(this.anim, .5, {
+                TweenMax.to(this.anim, .75, {
                     x: pos.x, y: pos.y, ease: Linear.easeNone,
-                    onUpdate: () => this.camera.Follow(this.anim),
-                    onComplete: () => this.MoveComplete()
+                    onComplete: () => this.Think()
                 });
-
-                this.game.dispatcher.emit(PLAYER_MOVED, this.position);
-
             } else if(tileType === TileType.CAT) {
                 this.game.dispatcher.emit(CAT_FOUND, this.position);
             }
         }
     }
 
-    private MoveComplete(): void {
-        this.state = PlayerState.IDLE;
-        this.anim.stop();
+    Think(): void {
+        this.state = VikingState.IDLE;
+
+        const path = FindShortestPath(this.map, this.position, {x: 5, y: 5});
+        if(path.length > 1) {
+            const p = path[1];
+            if(p.x !== this.position.x) {
+                this.Move(p.x < this.position.x ? "left" : "right");
+            } else {
+                this.Move(p.y < this.position.y ? "up" : "down");
+            }
+        }
     }
 }

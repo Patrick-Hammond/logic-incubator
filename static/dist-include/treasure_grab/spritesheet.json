@@ -360,9 +360,29 @@
 				"h": 128
 			}
 		},
-		"trees.png": {
+		"treasure.png": {
 			"frame": {
 				"x": 2041,
+				"y": 1,
+				"w": 47,
+				"h": 42
+			},
+			"rotated": false,
+			"trimmed": false,
+			"spriteSourceSize": {
+				"x": 0,
+				"y": 0,
+				"w": 47,
+				"h": 42
+			},
+			"sourceSize": {
+				"w": 47,
+				"h": 42
+			}
+		},
+		"trees.png": {
+			"frame": {
+				"x": 2090,
 				"y": 1,
 				"w": 1024,
 				"h": 768
@@ -380,9 +400,29 @@
 				"h": 768
 			}
 		},
+		"viking_f0.png": {
+			"frame": {
+				"x": 3116,
+				"y": 1,
+				"w": 64,
+				"h": 64
+			},
+			"rotated": false,
+			"trimmed": false,
+			"spriteSourceSize": {
+				"x": 0,
+				"y": 0,
+				"w": 64,
+				"h": 64
+			},
+			"sourceSize": {
+				"w": 64,
+				"h": 64
+			}
+		},
 		"viking_f1.png": {
 			"frame": {
-				"x": 3067,
+				"x": 3182,
 				"y": 1,
 				"w": 64,
 				"h": 64
@@ -402,7 +442,7 @@
 		},
 		"viking_f2.png": {
 			"frame": {
-				"x": 3133,
+				"x": 3248,
 				"y": 1,
 				"w": 64,
 				"h": 64
@@ -422,27 +462,7 @@
 		},
 		"viking_f3.png": {
 			"frame": {
-				"x": 3199,
-				"y": 1,
-				"w": 64,
-				"h": 64
-			},
-			"rotated": false,
-			"trimmed": false,
-			"spriteSourceSize": {
-				"x": 0,
-				"y": 0,
-				"w": 64,
-				"h": 64
-			},
-			"sourceSize": {
-				"w": 64,
-				"h": 64
-			}
-		},
-		"viking_f4.png": {
-			"frame": {
-				"x": 3265,
+				"x": 3314,
 				"y": 1,
 				"w": 64,
 				"h": 64
@@ -467,7 +487,7 @@
 		"image": "spritesheet.png",
 		"format": "RGBA8888",
 		"size": {
-			"w": 3330,
+			"w": 3379,
 			"h": 770
 		},
 		"scale": "1"
