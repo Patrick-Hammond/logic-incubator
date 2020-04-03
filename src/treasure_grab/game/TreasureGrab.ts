@@ -1,4 +1,8 @@
+import {Container} from "pixi.js";
 import GameComponent from "../../_lib/game/GameComponent";
+import {Vec2, Vec2Like} from "../../_lib/math/Geometry";
+import ObjectPool from "../../_lib/patterns/ObjectPool";
+import {GetInterval} from "../../_lib/utils/Time";
 import {Camera} from "./components/Camera";
 import Cat from "./components/Cat";
 import Home from "./components/Home";
@@ -6,6 +10,7 @@ import Map from "./components/Map";
 import Player from "./components/Player";
 import PlayerControl from "./components/PlayerControl";
 import Viking from "./components/Viking";
+import {PLAYER_MOVED} from "./Events";
 
 export class TreasureGrab extends GameComponent {
 
@@ -14,7 +19,8 @@ export class TreasureGrab extends GameComponent {
     private player: Player;
     private viking: Viking;
     private home: Home;
-    private cat: Cat;
+    private cats: ObjectPool<Cat>;
+    private catLayer = new Container();
     private playerControl: PlayerControl;
 
     protected OnInitialise(): void {
@@ -33,12 +39,17 @@ export class TreasureGrab extends GameComponent {
 
         this.home = new Home();
 
-        this.cat = new Cat(this.map);
+        this.cats = new ObjectPool<Cat>(6, () => new Cat(this.map));
 
         this.camera.root.addChild(this.map.background);
-        this.camera.root.addChild( this.viking.root, this.player.root, this.cat.root, this.home.root);
+        this.camera.root.addChild(this.catLayer, this.viking.root, this.player.root, this.home.root);
         this.camera.root.addChild(this.map.foreground);
         this.game.ticker.add(this.OnUpdate, this);
+
+        GetInterval(10000, this.DispatchCats, this);
+        this.DispatchCats();
+
+        this.game.dispatcher.on(PLAYER_MOVED, this.CheckCollisions, this);
     }
 
     private OnUpdate(dt: number): void {
@@ -46,5 +57,21 @@ export class TreasureGrab extends GameComponent {
         if(direction && direction !== "none") {
             this.player.Move(direction);
         }
+    }
+
+    private DispatchCats(): void {
+        if(this.cats.Popped.length < 6) {
+            const cat = this.cats.Get();
+            cat.Create(this.catLayer);
+            this.camera.root.addChild(cat.root);
+        }
+    }
+
+    private CheckCollisions(position: Vec2): void {
+        this.cats.Popped.forEach(cat => {
+            if(cat.CheckCollision(position)) {
+                cat.Follow(position);
+            }
+        })
     }
 }

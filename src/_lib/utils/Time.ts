@@ -1,12 +1,12 @@
 import {Ticker} from "pixi.js";
 
-export function GetInterval(ms: number, callback: () => void): () => void {
+export function GetInterval(ms: number, callback: () => void, context?: any): () => void {
 
     let endTime = Date.now() + ms;
     const tick = () => {
         if(Date.now() > endTime) {
             endTime = Date.now() + ms;
-            callback();
+            callback.call(context);
         }
     }
 
@@ -16,10 +16,10 @@ export function GetInterval(ms: number, callback: () => void): () => void {
     return cancel;
 }
 
-export function Wait(ms: number, callback: () => void): () => void {
+export function Wait(ms: number, callback: () => void, context?: any): () => void {
     const cancel = GetInterval(ms, () => {
         cancel();
-        callback();
+        callback.call(context);
     });
     return cancel;
 }

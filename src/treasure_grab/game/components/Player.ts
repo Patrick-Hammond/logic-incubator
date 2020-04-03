@@ -3,7 +3,7 @@ import {AnimatedSprite} from "pixi.js";
 import GameComponent from "../../../_lib/game/GameComponent";
 import {Vec2} from "../../../_lib/math/Geometry";
 import {Directions} from "../../../_lib/utils/Types";
-import {CAT_FOUND, PLAYER_MOVED} from "../Events";
+import {PLAYER_MOVED} from "../Events";
 import {TileToPixel} from "../Utils";
 import {Camera} from "./Camera";
 import Map, {TileType} from "./Map";
@@ -73,9 +73,6 @@ export default class Player extends GameComponent {
                 });
 
                 this.game.dispatcher.emit(PLAYER_MOVED, this.position);
-
-            } else if(tileType === TileType.CAT) {
-                this.game.dispatcher.emit(CAT_FOUND, this.position);
             }
         }
     }
