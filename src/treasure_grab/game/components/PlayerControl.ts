@@ -32,7 +32,9 @@ export default class PlayerControl extends GameComponent {
         }
 
         if (this.gamePad.controllers[this.playerId]) {
-            return this.gamePad.GetStickDirection(this.playerId, 0, 0.005);
+            const stick = this.gamePad.GetStickDirection(this.playerId, 0, 0.005);
+            const dpad = this.gamePad.GetDPad(this.playerId);
+            return stick !== "none" ? stick : dpad;
         }
 
         return "none";

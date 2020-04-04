@@ -9,7 +9,7 @@ export enum GamePadEvents {
 }
 
 export default class GamePad extends EventEmitter {
-    public controllers: Gamepad[] = [];
+    controllers: Gamepad[] = [];
     private button: { touched: boolean; pressed: boolean; value: number } = {
         touched: false,
         pressed: false,
@@ -37,11 +37,11 @@ export default class GamePad extends EventEmitter {
         }
     }
 
-    public IsConnected(): boolean {
+    IsConnected(): boolean {
         return this.controllers.some(e => e != null);
     }
 
-    public GetButton(controllerId: number, buttonId: number): GamepadButton {
+    GetButton(controllerId: number, buttonId: number): GamepadButton {
         const controller = this.controllers[controllerId];
 
         if (!controller) {
@@ -60,7 +60,7 @@ export default class GamePad extends EventEmitter {
         return this.button;
     }
 
-    public GetStick(controllerId: number, stickId: number, threshold: number): Vec2 {
+    GetStick(controllerId: number, stickId: number, threshold: number): Vec2 {
         const controller = this.controllers[controllerId];
 
         if (!controller) {
@@ -76,7 +76,7 @@ export default class GamePad extends EventEmitter {
         return this.stick;
     }
 
-    public GetStickDirection(controllerId: number, stickId: number, threshold: number): Directions {
+    GetStickDirection(controllerId: number, stickId: number, threshold: number): Directions {
         const controller = this.controllers[controllerId];
 
         if (!controller) {
@@ -98,6 +98,28 @@ export default class GamePad extends EventEmitter {
         }
 
         return this.stick.y > 0 ? "down" : "up";
+    }
+
+    GetDPad(controllerId: number): Directions {
+
+        // my 2563-0526-HJD-X reports the dpad as axis 9
+
+        const controller = this.controllers[controllerId];
+
+        if (!controller) {
+            return null;
+        }
+
+        const axis = controller.axes[9];
+        if(axis == null || axis === 0 || axis > 1) {
+            return "none";
+        }
+
+        if(axis < 0) {
+            return axis === -1 ? "up" : "right";
+        } else {
+            return axis > 0.5 ? "left" : "down";
+        }
     }
 
     private AddGamePad(gamepad: Gamepad) {
