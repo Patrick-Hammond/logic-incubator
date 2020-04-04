@@ -23,3 +23,5 @@ export function Wait(ms: number, callback: () => void, context?: any): () => voi
     });
     return cancel;
 }
+
+export type Cancel = () => void;
