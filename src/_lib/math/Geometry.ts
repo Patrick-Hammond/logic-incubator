@@ -38,8 +38,14 @@ export class Vec2 {
         return new Vec2(this.x, this.y);
     }
 
-    Equals(x: number, y: number): boolean {
-        return this.x === x && this.y === y;
+    Equals(point: Vec2Like): boolean;
+    Equals(x: number, y: number): boolean;
+    Equals(x: number | Vec2Like, y?: number): boolean {
+        if(typeof x === "number") {
+            return this.x === x && this.y === y;
+        }
+
+        return this.x === x.x && this.y === x.y;
     }
 }
 

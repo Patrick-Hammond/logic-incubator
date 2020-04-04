@@ -69,16 +69,13 @@ export default class Player extends GameComponent {
                 TweenMax.to(this.anim, .5, {
                     x: pos.x, y: pos.y, ease: Linear.easeNone,
                     onUpdate: () => this.camera.Follow(this.anim),
-                    onComplete: () => this.MoveComplete()
+                    onComplete: () => {
+                        this.state = PlayerState.IDLE;
+                        this.anim.stop();
+                        this.game.dispatcher.emit(PLAYER_MOVED, this.position);
+                    }
                 });
-
-                this.game.dispatcher.emit(PLAYER_MOVED, this.position);
             }
         }
-    }
-
-    private MoveComplete(): void {
-        this.state = PlayerState.IDLE;
-        this.anim.stop();
     }
 }

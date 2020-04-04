@@ -26,10 +26,10 @@ export default class Loader {
      *
      * @param {string} url
      * @param {RegExp} animRegEx
-     * @param {()=>void} complete
+     * @param {()=>void} onComplete
      * @memberof Loader
      */
-    LoadSpriteSheet(url: string, animRegEx: RegExp, complete: () => void): void {
+    LoadSpriteSheet(url: string, animRegEx: RegExp, onComplete: () => void): void {
 
         this.loader.use((resource: LoaderResource, next: (...params: any[]) => any) => {
             if (resource.data && resource.data.frames) {
@@ -66,6 +66,6 @@ export default class Loader {
         });
 
         this.loader.add(url);
-        this.loader.load(complete);
+        this.loader.load(onComplete);
     }
 }

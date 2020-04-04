@@ -6,7 +6,7 @@ import {Directions as Direction} from "../../../_lib/utils/Types";
 import {MapHeight, MapWidth} from "../../Constants";
 
 export enum TileType {
-    BLOCKED, TRAVERSABLE, CAT
+    BLOCKED, TRAVERSABLE
 }
 
 class Tile extends SearchNode {

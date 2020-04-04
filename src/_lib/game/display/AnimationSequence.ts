@@ -1,6 +1,7 @@
 import {AnimatedSprite, Sprite} from "pixi.js";
 import AssetFactory from "../../loading/AssetFactory";
 import {Dictionary} from "../../utils/Types";
+import {CallbackDone} from "./Utils";
 
 export class AnimationSequence {
 
@@ -43,10 +44,14 @@ export class AnimationSequence {
         const playNext = (index: number = 0) => {
             if(index < clipsNames.length) {
                 this.Play(clipsNames[index], () => playNext(++index));
-            } else if(onComplete) {
-                onComplete();
+            } else {
+                CallbackDone(onComplete);
             }
         }
         playNext(0);
+    }
+
+    Stop(): void {
+        Object.keys(this.animations).forEach(key => this.animations[key].stop());
     }
 }

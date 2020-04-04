@@ -2,9 +2,9 @@ import {AdjustmentFilter} from "pixi-filters";
 import {RenderTexture, Sprite} from "pixi.js";
 import GameComponent from "../../../_lib/game/GameComponent";
 import {RGB} from "../../../_lib/utils/Types";
-import {ALL_CATS_HOME, CAT_HOME} from "../Events";
+import {ALL_CATS_HOME, CAT_HOME_VIKING} from "../Events";
 
-export default class Home extends GameComponent {
+export default class HomeViking extends GameComponent {
 
     private tint = new AdjustmentFilter();
     private cat: Sprite;
@@ -23,21 +23,21 @@ export default class Home extends GameComponent {
             this.cats.push(cat);
         }
 
-        this.game.dispatcher.addListener(CAT_HOME, this.OnCatHome, this);
+        this.game.dispatcher.addListener(CAT_HOME_VIKING, this.OnCatHome, this);
     }
 
     private OnCatHome(tint: RGB): void {
-        this.tint.red   = tint.r;
-        this.tint.green = tint.g;
-        this.tint.blue  = tint.b;
+        if(this.catCount < 6) {
+            this.tint.red   = tint.r;
+            this.tint.green = tint.g;
+            this.tint.blue  = tint.b;
 
-        const cat = this.cats[this.catCount];
-        this.game.renderer.render(this.cat, cat.texture as RenderTexture);
-        this.root.addChild(cat);
+            const cat = this.cats[this.catCount];
+            this.game.renderer.render(this.cat, cat.texture as RenderTexture);
+            this.root.addChild(cat);
 
-        this.catCount++;
-
-        if(this.catCount === 6) {
+            this.catCount++;
+        } else {
             this.game.dispatcher.emit(ALL_CATS_HOME);
         }
     }
