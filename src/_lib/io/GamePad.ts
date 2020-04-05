@@ -23,15 +23,15 @@ export default class GamePad extends EventEmitter {
 
         const haveEvents = "GamepadEvent" in window;
         const haveWebkitEvents = "WebKitGamepadEvent" in window;
-        const connectHandler = e => this.AddGamePad(e.gamepad);
-        const disconnectHandler = e => this.RemoveGamePad(e.gamepad);
+        const connectHandler = (e:GamepadEvent) => this.AddGamePad(e.gamepad);
+        const disconnectHandler = (e:GamepadEvent) => this.RemoveGamePad(e.gamepad);
 
         if (haveEvents) {
-            window.addEventListener("gamepadconnected", e => connectHandler(e));
-            window.addEventListener("gamepaddisconnected", e => disconnectHandler(e));
+            window.addEventListener("gamepadconnected", (e:GamepadEvent) => connectHandler(e));
+            window.addEventListener("gamepaddisconnected", (e:GamepadEvent) => disconnectHandler(e));
         } else if (haveWebkitEvents) {
-            window.addEventListener("webkitgamepadconnected", e => connectHandler(e));
-            window.addEventListener("webkitgamepaddisconnected", e => disconnectHandler(e));
+            window.addEventListener("webkitgamepadconnected", (e:GamepadEvent) => connectHandler(e));
+            window.addEventListener("webkitgamepaddisconnected", (e:GamepadEvent) => disconnectHandler(e));
         } else {
             setInterval(this.ScanGamePads, 500);
         }
@@ -133,7 +133,7 @@ export default class GamePad extends EventEmitter {
         this.emit(GamePadEvents.CONNECTED, gamepad.index);
     }
 
-    private RemoveGamePad(gamepad) {
+    private RemoveGamePad(gamepad : Gamepad) {
         this.Log("disconnected! " + gamepad.index);
 
         this.emit(GamePadEvents.DISCONNECTED, gamepad.index);

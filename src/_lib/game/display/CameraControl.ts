@@ -1,5 +1,4 @@
 import GamePad from "../../io/GamePad";
-import Keyboard from "../../io/Keyboard";
 import {Vec2} from "../../math/Geometry";
 import GameComponent from "../GameComponent";
 
@@ -15,13 +14,11 @@ export default class CameraControl extends GameComponent implements ICameraContr
 
     private rotationVector = new Vec2();
     private cameraInput: ICameraTransform = { rotation: new Vec2() };
-    private keyboard: Keyboard;
     private gamePad: GamePad;
 
     constructor(private playerId: number) {
         super();
 
-        this.keyboard = this.game.keyboard;
         this.gamePad = this.game.gamePad;
     }
 

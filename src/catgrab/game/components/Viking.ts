@@ -5,7 +5,7 @@ import {CallbackDone} from "../../../_lib/game/display/Utils";
 import GameComponent from "../../../_lib/game/GameComponent";
 import {Vec2} from "../../../_lib/math/Geometry";
 import {NullFunction} from "../../../_lib/patterns/FunctionUtils";
-import {Cancel, Wait} from "../../../_lib/utils/Time";
+import {Cancel, Wait} from "../../../_lib/game/Timing";
 import {Directions} from "../../../_lib/utils/Types";
 import {HomeViking} from "../../Constants";
 import {CAT_FOLLOWING, VIKING_MOVED} from "../Events";

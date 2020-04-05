@@ -7,7 +7,7 @@ import {Camera} from "./view/Camera";
 import {Player} from "./view/Player";
 import TileMapView from "./view/TileMap";
 
-export class Dungeon extends GameComponent {
+export class DungeonMain extends GameComponent {
     private level: Level;
     private player: Player;
 

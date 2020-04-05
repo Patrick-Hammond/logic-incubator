@@ -30,7 +30,7 @@ export default abstract class GameComponent {
     protected OnShow(): void {
         // override and do stuff
     }
-    protected AddToScene(id: string, zIndex?: number): void {
+    protected AddToScene(id: string): void {
         this.game.sceneManager.GetScene(id).root.addChild(this.root);
     }
 }

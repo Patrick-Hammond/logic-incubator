@@ -1,9 +1,7 @@
 import {Loader as PixiLoader} from "pixi.js";
-import {LoaderResource, SpritesheetLoader} from "pixi.js";
+import {LoaderResource} from "pixi.js";
 import { GetNextInImageSequence, ImageSequenceIndex, RemoveExtension } from "../io/Url";
 import AssetFactory from "./AssetFactory";
-
-type LoaderMiddlewareFn = (resource: LoaderResource, next: (...params: any[]) => any) => void;
 
 export default class Loader {
     private static _inst: Loader;

@@ -6,7 +6,7 @@ import {AnimationSequence} from "../../../_lib/game/display/AnimationSequence";
 import {RemoveFromParent} from "../../../_lib/game/display/Utils";
 import GameComponent from "../../../_lib/game/GameComponent";
 import {Vec2, Vec2Like} from "../../../_lib/math/Geometry";
-import {Wait} from "../../../_lib/utils/Time";
+import {Wait} from "../../../_lib/game/Timing";
 import {HomePlayer, HomeViking} from "../../Constants";
 import {CAT_FOLLOWING, CAT_HOME_PLAYER, CAT_HOME_VIKING} from "../Events";
 import {TileToPixel} from "../Utils";

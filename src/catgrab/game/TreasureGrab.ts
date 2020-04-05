@@ -2,8 +2,7 @@ import {Container} from "pixi.js";
 import GameComponent from "../../_lib/game/GameComponent";
 import {Vec2} from "../../_lib/math/Geometry";
 import ObjectPool from "../../_lib/patterns/ObjectPool";
-import {GetInterval} from "../../_lib/utils/Time";
-import {RGB} from "../../_lib/utils/Types";
+import {GetInterval} from "../../_lib/game/Timing";
 import {Camera} from "./components/Camera";
 import Cat from "./components/Cat";
 import HomePlayer from "./components/HomePlayer";
@@ -12,7 +11,7 @@ import Map from "./components/Map";
 import Player from "./components/Player";
 import PlayerControl from "./components/PlayerControl";
 import Viking from "./components/Viking";
-import {CAT_HOME_PLAYER, CAT_HOME_VIKING, PLAYER_MOVED, VIKING_MOVED} from "./Events";
+import {PLAYER_MOVED, VIKING_MOVED} from "./Events";
 
 export class TreasureGrab extends GameComponent {
 
@@ -56,11 +55,11 @@ export class TreasureGrab extends GameComponent {
 
         this.game.dispatcher.on(PLAYER_MOVED, this.CheckCollisions, this);
         this.game.dispatcher.on(VIKING_MOVED, this.CheckCollisions, this);
-        this.game.dispatcher.addListener(CAT_HOME_PLAYER, this.OnCatHome, this);
-        this.game.dispatcher.addListener(CAT_HOME_VIKING, this.OnCatHome, this);
+        //this.game.dispatcher.addListener(CAT_HOME_PLAYER, this.OnCatHome, this);
+        //this.game.dispatcher.addListener(CAT_HOME_VIKING, this.OnCatHome, this);
     }
 
-    private OnUpdate(dt: number): void {
+    private OnUpdate(): void {
         const direction = this.playerControl.Get();
         if(direction && direction !== "none") {
             this.player.Move(direction);
@@ -83,7 +82,9 @@ export class TreasureGrab extends GameComponent {
         })
     }
 
+    /*
     private OnCatHome(colour: RGB, cat: Cat): void {
-        // this.cats.Put(cat);
+        this.cats.Put(cat);
     }
+    */
 }

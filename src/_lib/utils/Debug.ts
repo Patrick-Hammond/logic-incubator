@@ -13,7 +13,7 @@ export function MakeDraggable(sprite: DisplayObject): void {
         }
     });
 
-    sprite.on("mouseup", function(event) {
+    sprite.on("mouseup", function() {
         if (this.dragging) {
             this.alpha = 1;
             this.dragging = false;
@@ -33,7 +33,7 @@ export function MakeDraggable(sprite: DisplayObject): void {
         }
     });
 
-    sprite.on("click", function(event) {
+    sprite.on("click", function() {
         console.log("(" + this.x + ", " + this.y + ")");
     });
 }

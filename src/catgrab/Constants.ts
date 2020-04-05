@@ -6,7 +6,7 @@ export const MapWidth = 16;
 export const MapHeight = 12;
 export const HomePlayer = {x:1, y:2};
 export const HomeViking = {x:14, y:2};
-export const AssetPath = "http://localhost:4000/dist-include/treasure_grab/";
+export const AssetPath = "/assets/catgrab/";
 
 export const enum Scenes {
     GAME = "game"
