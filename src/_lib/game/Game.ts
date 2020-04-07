@@ -5,13 +5,13 @@ import Keyboard from "../io/Keyboard";
 import { StatsTicker } from "../utils/StatsTicker";
 import SceneManager from "./SceneManager";
 import ScreenFull from 'screenfull-es6';
-import { IResizeStrategy, GetResizeStrategy } from "./display/ResizeStrategies";
+import { IResizeStrategy, GetResizeStrategy, ResizeStrategies } from "./display/ResizeStrategies";
 
 export interface IGameOptions {
         autoStart?: boolean;
         width?: number;
         height?: number;
-        fit?: "border" | "no border",
+        fit?: ResizeStrategies,
         fullscreen?: boolean;
         view?: HTMLCanvasElement;
         transparent?: boolean;

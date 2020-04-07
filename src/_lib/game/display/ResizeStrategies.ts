@@ -1,9 +1,39 @@
+export type ResizeStrategies = "none" | "border" | "centered";
+
 export interface IResizeStrategy {
     Resize(canvas: HTMLCanvasElement): void;
 }
 
-export function GetResizeStrategy(fit: "border" | "no border"): IResizeStrategy {
-    return fit === "border" ? new BorderResizeStrategy() : new NoBorderResizeStrategy();
+/*
+FACTORY
+*/
+
+export function GetResizeStrategy(fit: ResizeStrategies): IResizeStrategy {
+    switch(fit)
+    {
+        case "none":     return new NoResizeStrategy();
+        case "centered": return new CenteredResizeStrategy();
+        case "border":   return new BorderResizeStrategy();
+    }
+}
+
+/*
+STRATEGIES
+*/
+
+class NoResizeStrategy implements IResizeStrategy {
+    // tslint:disable-next-line:no-empty
+    Resize(canvas: HTMLCanvasElement): void {}
+}
+
+class CenteredResizeStrategy implements IResizeStrategy {
+    Resize(canvas: HTMLCanvasElement): void {
+        const marginH = (window.innerWidth - canvas.offsetWidth) / 2;
+        canvas.style.marginLeft = marginH + "px"; canvas.style.marginRight = marginH + "px";
+
+        const marginV = (window.innerHeight - canvas.offsetHeight) / 2;
+        canvas.style.marginTop  = marginV + "px"; canvas.style.marginBottom = marginV + "px";
+    }
 }
 
 class BorderResizeStrategy implements IResizeStrategy {
@@ -32,11 +62,5 @@ class BorderResizeStrategy implements IResizeStrategy {
         canvas.style.paddingLeft = 0 + "px"; canvas.style.paddingRight  = 0 + "px";
         canvas.style.paddingTop  = 0 + "px"; canvas.style.paddingBottom = 0 + "px";
         canvas.style.display = "-webkit-inline-box";
-    }
-}
-
-class NoBorderResizeStrategy implements IResizeStrategy {
-    Resize(canvas: HTMLCanvasElement): void {
-      // TO DO
     }
 }
