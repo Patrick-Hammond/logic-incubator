@@ -1,4 +1,4 @@
-import {Linear, TweenMax} from "gsap";
+import gsap, {Linear} from "gsap";
 import {AnimatedSprite} from "pixi.js";
 import GameComponent from "../../../_lib/game/GameComponent";
 import {Vec2} from "../../../_lib/math/Geometry";
@@ -66,7 +66,7 @@ export default class Player extends GameComponent {
                     }
 
                 const pos = TileToPixel(this.position);
-                TweenMax.to(this.anim, .5, {
+                gsap.to(this.anim, .5, {
                     x: pos.x, y: pos.y, ease: Linear.easeNone,
                     onUpdate: () => this.camera.Follow(this.anim),
                     onComplete: () => {

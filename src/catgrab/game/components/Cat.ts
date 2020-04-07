@@ -1,4 +1,4 @@
-import {Linear, TweenMax} from "gsap";
+import gsap, {Linear} from "gsap";
 import {AdjustmentFilter} from "pixi-filters";
 import {Container} from "pixi.js";
 import {FindShortestPath} from "../../../_lib/algorithms/Search";
@@ -46,7 +46,7 @@ export default class Cat extends GameComponent {
         this.anim.root.position.set(pos.x, pos.y);
         this.anim.Play("cat_fall");
 
-        TweenMax.from(this.anim.root, 5, {x: pos.x, y: pos.y - 400, ease: Linear.easeNone, onComplete: () => {
+        gsap.from(this.anim.root, 5, {x: pos.x, y: pos.y - 400, ease: Linear.easeNone, onComplete: () => {
             this.state = CatState.ACTIVE;
             this.anim.Play("cat_sit");
             parent.addChild(this.root);
@@ -57,7 +57,7 @@ export default class Cat extends GameComponent {
         this.position.Set(x, y);
         const pos = TileToPixel({x, y});
         const root = this.anim.root;
-        TweenMax.to(root, this.speed, {x: pos.x, y: pos.y, ease: Linear.easeNone, onComplete});
+        gsap.to(root, this.speed, {x: pos.x, y: pos.y, ease: Linear.easeNone, onComplete});
 
         if(pos.x !== root.x) {
             this.anim.PlayLooped(pos.x > root.x ? "cat_walkr" : "cat_walkl");
@@ -71,9 +71,12 @@ export default class Cat extends GameComponent {
     }
 
     Follow(target: Vec2): void {
+        const startFollowing = this.followTartget == null;
         if(this.state === CatState.ACTIVE && target !== this.followTartget) {
             this.followTartget = target;
-            this.MoveToFollowTarget();
+            if(startFollowing) {
+                this.MoveToFollowTarget();
+            }
         }
 
         this.game.dispatcher.emit(CAT_FOLLOWING, target);

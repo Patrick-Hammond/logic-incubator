@@ -1,4 +1,4 @@
-import {Linear, TweenMax} from "gsap";
+import gsap, {Linear} from "gsap";
 import {AnimatedSprite} from "pixi.js";
 import {FindShortestPath} from "../../../_lib/algorithms/Search";
 import {CallbackDone} from "../../../_lib/game/display/Utils";
@@ -70,7 +70,7 @@ export default class Viking extends GameComponent {
                 }
 
             const pos = TileToPixel(this.position);
-            TweenMax.to(this.anim, .75, {x: pos.x, y: pos.y, ease: Linear.easeNone, onComplete: () => {
+            gsap.to(this.anim, .75, {x: pos.x, y: pos.y, ease: Linear.easeNone, onComplete: () => {
                 if(this.state === VikingState.END_PATROL) {
                     this.GoHome();
                 } else {
