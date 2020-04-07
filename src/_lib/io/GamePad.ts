@@ -1,7 +1,7 @@
 import { EventEmitter } from "eventemitter3";
 import { Vec2 } from "../math/Geometry";
 import { LowerLimit } from "../math/Utils";
-import {Directions} from "../utils/Types";
+import {Direction} from "../utils/Types";
 
 export enum GamePadEvents {
     CONNECTED = "connected",
@@ -23,15 +23,15 @@ export default class GamePad extends EventEmitter {
 
         const haveEvents = "GamepadEvent" in window;
         const haveWebkitEvents = "WebKitGamepadEvent" in window;
-        const connectHandler = (e:GamepadEvent) => this.AddGamePad(e.gamepad);
-        const disconnectHandler = (e:GamepadEvent) => this.RemoveGamePad(e.gamepad);
+        const connectHandler = (e: GamepadEvent) => this.AddGamePad(e.gamepad);
+        const disconnectHandler = (e: GamepadEvent) => this.RemoveGamePad(e.gamepad);
 
         if (haveEvents) {
-            window.addEventListener("gamepadconnected", (e:GamepadEvent) => connectHandler(e));
-            window.addEventListener("gamepaddisconnected", (e:GamepadEvent) => disconnectHandler(e));
+            window.addEventListener("gamepadconnected", (e: GamepadEvent) => connectHandler(e));
+            window.addEventListener("gamepaddisconnected", (e: GamepadEvent) => disconnectHandler(e));
         } else if (haveWebkitEvents) {
-            window.addEventListener("webkitgamepadconnected", (e:GamepadEvent) => connectHandler(e));
-            window.addEventListener("webkitgamepaddisconnected", (e:GamepadEvent) => disconnectHandler(e));
+            window.addEventListener("webkitgamepadconnected", (e: GamepadEvent) => connectHandler(e));
+            window.addEventListener("webkitgamepaddisconnected", (e: GamepadEvent) => disconnectHandler(e));
         } else {
             setInterval(this.ScanGamePads, 500);
         }
@@ -76,7 +76,7 @@ export default class GamePad extends EventEmitter {
         return this.stick;
     }
 
-    GetStickDirection(controllerId: number, stickId: number, threshold: number): Directions {
+    GetStickDirection(controllerId: number, stickId: number, threshold: number): Direction {
         const controller = this.controllers[controllerId];
 
         if (!controller) {
@@ -100,7 +100,7 @@ export default class GamePad extends EventEmitter {
         return this.stick.y > 0 ? "down" : "up";
     }
 
-    GetDPad(controllerId: number): Directions {
+    GetDPad(controllerId: number): Direction {
 
         // my 2563-0526-HJD-X reports the dpad as axis 9
 

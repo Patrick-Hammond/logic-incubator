@@ -2,7 +2,7 @@ import {Sprite} from "pixi.js";
 import {ISearchGraph, SearchNode} from "../../../_lib/algorithms/Search";
 import GameComponent from "../../../_lib/game/GameComponent";
 import {Vec2Like} from "../../../_lib/math/Geometry";
-import {Directions as Direction} from "../../../_lib/utils/Types";
+import {Direction} from "../../../_lib/utils/Types";
 import {MapHeight, MapWidth} from "../../Constants";
 
 export enum TileType {

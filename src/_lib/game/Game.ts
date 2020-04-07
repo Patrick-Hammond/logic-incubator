@@ -4,11 +4,15 @@ import GamePad from "../io/GamePad";
 import Keyboard from "../io/Keyboard";
 import { StatsTicker } from "../utils/StatsTicker";
 import SceneManager from "./SceneManager";
+import ScreenFull from 'screenfull-es6';
+import { IResizeStrategy, GetResizeStrategy } from "./display/ResizeStrategies";
 
 export interface IGameOptions {
         autoStart?: boolean;
         width?: number;
         height?: number;
+        fit?: "border" | "no border",
+        fullscreen?: boolean;
         view?: HTMLCanvasElement;
         transparent?: boolean;
         autoDensity?: boolean;
@@ -31,6 +35,7 @@ export default class Game extends Application {
     public gamePad = new GamePad();
     public sceneManager = new SceneManager();
     public dispatcher = new EventEmitter();
+    public resizeStrategy: IResizeStrategy;
 
     constructor(options: IGameOptions, showStats: boolean = false) {
         super(options);
@@ -42,6 +47,14 @@ export default class Game extends Application {
         if (showStats) {
             this.ticker = new StatsTicker();
         }
+
+        if(options.fullscreen && ScreenFull.enabled) {
+            this.interactionManager.once("pointerdown", () => ScreenFull.request(this.view));
+        }
+
+        this.resizeStrategy = GetResizeStrategy(options.fit || "border");
+        const onResize = window.onresize = () => this.resizeStrategy.Resize(this.view);
+        onResize();
     }
 
     public get interactionManager(): interaction.InteractionManager {

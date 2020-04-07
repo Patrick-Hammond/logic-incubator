@@ -2,7 +2,7 @@ import {Linear, TweenMax} from "gsap";
 import {AnimatedSprite} from "pixi.js";
 import GameComponent from "../../../_lib/game/GameComponent";
 import {Vec2} from "../../../_lib/math/Geometry";
-import {Directions} from "../../../_lib/utils/Types";
+import {Direction} from "../../../_lib/utils/Types";
 import {PLAYER_MOVED} from "../Events";
 import {TileToPixel} from "../Utils";
 import {Camera} from "./Camera";
@@ -37,7 +37,7 @@ export default class Player extends GameComponent {
         this.camera.Follow(this.anim);
     }
 
-    Move(direction: Directions): void {
+    Move(direction: Direction): void {
 
         if(this.state === PlayerState.IDLE) {
             const tileType = this.map.GetTile(this.position, direction).type;

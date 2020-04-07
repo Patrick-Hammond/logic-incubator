@@ -6,7 +6,7 @@ import GameComponent from "../../../_lib/game/GameComponent";
 import {Vec2} from "../../../_lib/math/Geometry";
 import {NullFunction} from "../../../_lib/patterns/FunctionUtils";
 import {Cancel, Wait} from "../../../_lib/game/Timing";
-import {Directions} from "../../../_lib/utils/Types";
+import {Direction} from "../../../_lib/utils/Types";
 import {HomeViking} from "../../Constants";
 import {CAT_FOLLOWING, VIKING_MOVED} from "../Events";
 import {TileToPixel} from "../Utils";
@@ -43,7 +43,7 @@ export default class Viking extends GameComponent {
         this.anim.position.set(pos.x, pos.y);
     }
 
-    Move(direction: Directions, onComplete?: () => void): void {
+    Move(direction: Direction, onComplete?: () => void): void {
 
         const tileType = this.map.GetTile(this.position, direction).type;
 

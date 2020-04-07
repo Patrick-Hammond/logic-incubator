@@ -13,7 +13,7 @@ import PlayerControl from "./components/PlayerControl";
 import Viking from "./components/Viking";
 import {PLAYER_MOVED, VIKING_MOVED} from "./Events";
 
-export class TreasureGrab extends GameComponent {
+export class CatGrabMain extends GameComponent {
 
     private camera: Camera;
     private map: Map;
@@ -55,8 +55,6 @@ export class TreasureGrab extends GameComponent {
 
         this.game.dispatcher.on(PLAYER_MOVED, this.CheckCollisions, this);
         this.game.dispatcher.on(VIKING_MOVED, this.CheckCollisions, this);
-        //this.game.dispatcher.addListener(CAT_HOME_PLAYER, this.OnCatHome, this);
-        //this.game.dispatcher.addListener(CAT_HOME_VIKING, this.OnCatHome, this);
     }
 
     private OnUpdate(): void {
@@ -81,10 +79,4 @@ export class TreasureGrab extends GameComponent {
             }
         })
     }
-
-    /*
-    private OnCatHome(colour: RGB, cat: Cat): void {
-        this.cats.Put(cat);
-    }
-    */
 }

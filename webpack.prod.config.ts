@@ -7,8 +7,8 @@ const TsconfigPathsPlugin = require('tsconfig-paths-webpack-plugin');
 
 module.exports = {
   entry: './src/Main.ts',
-  devtool: 'eval',
-  mode: 'development',
+  devtool: 'none',
+  mode: 'production',
   devServer: {
     contentBase: './dist',
     hot: true,
@@ -17,7 +17,8 @@ module.exports = {
   plugins: [
     new CleanWebpackPlugin(['dist']),
     new HtmlWebpackPlugin({
-      title: 'Symbol Shift'
+      title: 'Symbol Shift',
+      template: './src/index.template'
     }),
     new CopyWebpackPlugin([{ from: './src/assets', to: 'assets' }]),
     new webpack.NamedModulesPlugin(),
