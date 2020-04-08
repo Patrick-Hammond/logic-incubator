@@ -380,9 +380,29 @@
 				"h": 128
 			}
 		},
-		"treasure.png": {
+		"spring.png": {
 			"frame": {
 				"x": 2079,
+				"y": 1,
+				"w": 36,
+				"h": 36
+			},
+			"rotated": false,
+			"trimmed": false,
+			"spriteSourceSize": {
+				"x": 0,
+				"y": 0,
+				"w": 36,
+				"h": 36
+			},
+			"sourceSize": {
+				"w": 36,
+				"h": 36
+			}
+		},
+		"treasure.png": {
+			"frame": {
+				"x": 2117,
 				"y": 1,
 				"w": 47,
 				"h": 42
@@ -402,7 +422,7 @@
 		},
 		"trees.png": {
 			"frame": {
-				"x": 2128,
+				"x": 2166,
 				"y": 1,
 				"w": 1024,
 				"h": 768
@@ -422,7 +442,7 @@
 		},
 		"viking_f0.png": {
 			"frame": {
-				"x": 3154,
+				"x": 3192,
 				"y": 1,
 				"w": 64,
 				"h": 64
@@ -442,7 +462,7 @@
 		},
 		"viking_f1.png": {
 			"frame": {
-				"x": 3220,
+				"x": 3258,
 				"y": 1,
 				"w": 64,
 				"h": 64
@@ -462,7 +482,7 @@
 		},
 		"viking_f2.png": {
 			"frame": {
-				"x": 3286,
+				"x": 3324,
 				"y": 1,
 				"w": 64,
 				"h": 64
@@ -482,7 +502,7 @@
 		},
 		"viking_f3.png": {
 			"frame": {
-				"x": 3352,
+				"x": 3390,
 				"y": 1,
 				"w": 64,
 				"h": 64
@@ -507,7 +527,7 @@
 		"image": "spritesheet.png",
 		"format": "RGBA8888",
 		"size": {
-			"w": 3417,
+			"w": 3455,
 			"h": 770
 		},
 		"scale": "1"

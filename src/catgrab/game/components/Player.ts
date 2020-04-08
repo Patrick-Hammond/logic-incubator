@@ -3,7 +3,7 @@ import {AnimatedSprite} from "pixi.js";
 import GameComponent from "../../../_lib/game/GameComponent";
 import {Vec2} from "../../../_lib/math/Geometry";
 import {Direction} from "../../../_lib/utils/Types";
-import {PLAYER_MOVED} from "../Events";
+import {PLAYER_MOVED, SPRING_DROPPED} from "../Events";
 import {TileToPixel} from "../Utils";
 import {Camera} from "./Camera";
 import Map, {TileType} from "./Map";
@@ -17,6 +17,7 @@ export default class Player extends GameComponent {
     private anim: AnimatedSprite;
     private position = new Vec2();
     private state: PlayerState;
+    private springCount: number;
 
     public constructor(private map: Map, private camera: Camera) {
         super();
@@ -27,7 +28,10 @@ export default class Player extends GameComponent {
         this.anim.anchor.set(0.5);
         this.anim.pivot.x = -32;
         this.anim.animationSpeed = 0.1;
+
         this.root.addChild(this.anim);
+
+        this.springCount = 200;
     }
 
     SetPosition(x: number, y: number): void {
@@ -76,6 +80,13 @@ export default class Player extends GameComponent {
                     }
                 });
             }
+        }
+    }
+
+    DropSpring() : void {
+        if(this.springCount > 0) {
+            this.springCount--;
+            this.game.dispatcher.emit(SPRING_DROPPED, this.position);
         }
     }
 }

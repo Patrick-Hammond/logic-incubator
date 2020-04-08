@@ -5,6 +5,8 @@ import {Direction} from "../../../_lib/utils/Types";
 import VirtualJoystick from "_lib/io/VirtualJoystick";
 import { utils } from "pixi.js";
 
+export type PlayerInput =  Direction | "fire";
+
 export default class PlayerControl extends GameComponent {
     private keyboard: Keyboard;
     private gamePad: GamePad;
@@ -22,35 +24,44 @@ export default class PlayerControl extends GameComponent {
         }
     }
 
-    Get(): Direction {
-
-        if (this.keyboard.AnyKeyPressed()) {
-            if (this.keyboard.KeyPressed(Key.UpArrow)) {
-                return "up";
-            }
-            if (this.keyboard.KeyPressed(Key.DownArrow)) {
-                return "down";
-            }
-            if (this.keyboard.KeyPressed(Key.LeftArrow)) {
-                return "left";
-            }
-            if (this.keyboard.KeyPressed(Key.RightArrow)) {
-                return "right";
-            }
-        }
+    Get(): PlayerInput[] {
 
         if(this.virtualJoystick) {
             const dir = this.virtualJoystick.GetDirection(0);
-            console.log(dir);
-            return dir;
+            return dir === "none" ? [] : [dir];
+        }
+
+        if (this.keyboard.AnyKeyPressed()) {
+
+            const keys: PlayerInput[] = [];
+
+            if (this.keyboard.KeyPressed(Key.UpArrow)) {
+                keys.push("up");
+            }
+            if (this.keyboard.KeyPressed(Key.DownArrow)) {
+                keys.push("down");
+            }
+            if (this.keyboard.KeyPressed(Key.LeftArrow)) {
+                keys.push("left");
+            }
+            if (this.keyboard.KeyPressed(Key.RightArrow)) {
+                keys.push("right");
+            }
+            if (this.keyboard.KeyPressedMinTime(500, Key.A)) {
+                keys.push("fire");
+            }
+
+            return keys;
         }
 
         if (this.gamePad.controllers[this.playerId]) {
             const stick = this.gamePad.GetStickDirection(this.playerId, 0, 0.005);
             const dpad = this.gamePad.GetDPad(this.playerId);
-            return stick !== "none" ? stick : dpad;
+            const button = this.gamePad.GetButtonMinTime(500, 0, 0);
+            const buttonVal = !button || button.value === 0 ? "none" : "fire" as PlayerInput;
+            return [stick, dpad, buttonVal].filter(f => f !== "none");
         }
 
-        return "none";
+        return [];
     }
 }

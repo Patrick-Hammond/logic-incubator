@@ -1,7 +1,9 @@
 import { EventEmitter } from "eventemitter3";
+import { Wait, Cancel } from "_lib/game/Timing";
 
 export default class Keyboard extends EventEmitter {
     private map: { [keycode: number]: boolean } = {};
+    private timestampMap: { [keycode: number]: Cancel } = {};
     private keyCount: number;
 
     constructor() {
@@ -19,12 +21,22 @@ export default class Keyboard extends EventEmitter {
         };
     }
 
+    AnyKeyPressed(): boolean {
+        return this.keyCount > 0;
+    }
+
     KeyPressed(keycode: number): boolean {
         return this.map[keycode];
     }
 
-    AnyKeyPressed(): boolean {
-        return this.keyCount > 0;
+    KeyPressedMinTime(ms: number, keycode: number): boolean {
+        const key = this.map[keycode];
+        if(key && !this.timestampMap[keycode]) {
+            this.timestampMap[keycode] = Wait(ms, () => this.timestampMap[keycode] = null);
+            return key;
+        }
+
+        return false;
     }
 }
 

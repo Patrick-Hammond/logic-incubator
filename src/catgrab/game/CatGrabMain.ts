@@ -11,7 +11,8 @@ import Map from "./components/Map";
 import Player from "./components/Player";
 import PlayerControl from "./components/PlayerControl";
 import Viking from "./components/Viking";
-import {PLAYER_MOVED, VIKING_MOVED} from "./Events";
+import {PLAYER_MOVED, VIKING_MOVED, SPRING_DROPPED} from "./Events";
+import { Springs } from "./components/Springs";
 
 export class CatGrabMain extends GameComponent {
 
@@ -24,6 +25,7 @@ export class CatGrabMain extends GameComponent {
     private vikingHome: HomeViking;
     private cats: ObjectPool<Cat>;
     private catLayer = new Container();
+    private springs: Springs;
 
     protected OnInitialise(): void {
 
@@ -45,7 +47,9 @@ export class CatGrabMain extends GameComponent {
 
         this.cats = new ObjectPool<Cat>(6, () => new Cat(this.map));
 
-        this.camera.root.addChild(this.map.background);
+        this.springs = new Springs();
+
+        this.camera.root.addChild(this.map.background, this.springs.root);
         this.camera.root.addChild(this.catLayer, this.viking.root, this.player.root, this.playerHome.root, this.vikingHome.root);
         this.camera.root.addChild(this.map.foreground);
         this.game.ticker.add(this.OnUpdate, this);
@@ -55,12 +59,13 @@ export class CatGrabMain extends GameComponent {
 
         this.game.dispatcher.on(PLAYER_MOVED, this.CheckCollisions, this);
         this.game.dispatcher.on(VIKING_MOVED, this.CheckCollisions, this);
+        this.game.dispatcher.on(SPRING_DROPPED, this.DropSpring, this);
     }
 
     private OnUpdate(): void {
-        const direction = this.playerControl.Get();
-        if(direction && direction !== "none") {
-            this.player.Move(direction);
+        const input = this.playerControl.Get();
+        if(input && input.length) {
+            input.forEach(i => i === "fire" ? this.player.DropSpring() : this.player.Move(i));
         }
     }
 
@@ -78,5 +83,9 @@ export class CatGrabMain extends GameComponent {
                 cat.Follow(position);
             }
         })
+    }
+
+    private DropSpring(position: Vec2): void {
+        this.springs.Drop(position);
     }
 }

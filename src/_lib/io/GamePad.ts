@@ -2,6 +2,7 @@ import { EventEmitter } from "eventemitter3";
 import { Vec2 } from "../math/Geometry";
 import { LowerLimit } from "../math/Utils";
 import {Direction} from "../utils/Types";
+import { Cancel, Wait } from "_lib/game/Timing";
 
 export enum GamePadEvents {
     CONNECTED = "connected",
@@ -10,6 +11,7 @@ export enum GamePadEvents {
 
 export default class GamePad extends EventEmitter {
     controllers: Gamepad[] = [];
+    private timestampMap: { [buttonId: string]: Cancel } = {};
     private button: { touched: boolean; pressed: boolean; value: number } = {
         touched: false,
         pressed: false,
@@ -58,6 +60,17 @@ export default class GamePad extends EventEmitter {
         this.button.value = val;
 
         return this.button;
+    }
+
+    GetButtonMinTime(ms: number, controllerId: number, buttonId: number): GamepadButton {
+        const id = controllerId.toString() + buttonId.toString();
+        const button = this.GetButton(controllerId, buttonId);
+        if(button.value === 1 && !this.timestampMap[id]) {
+            this.timestampMap[id] = Wait(ms, () => this.timestampMap[id] = null);
+            return button;
+        }
+
+        return null;
     }
 
     GetStick(controllerId: number, stickId: number, threshold: number): Vec2 {
