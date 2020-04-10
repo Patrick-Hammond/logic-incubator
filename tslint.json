@@ -49,6 +49,8 @@
   },"linterOptions": {
         "exclude": [
             "node_modules/**",
+            "webpack.config.ts",
+            "webpack.prod.config.ts",
             "**/*.d.ts"
         ]
     }

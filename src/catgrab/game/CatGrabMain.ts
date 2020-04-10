@@ -11,8 +11,7 @@ import Map from "./components/Map";
 import Player from "./components/Player";
 import PlayerControl from "./components/PlayerControl";
 import Viking from "./components/Viking";
-import {PLAYER_MOVED, VIKING_MOVED, SPRING_DROPPED} from "./Events";
-import { Springs } from "./components/Springs";
+import {PLAYER_MOVED, VIKING_MOVED, CAT_MOVED} from "./Events";
 
 export class CatGrabMain extends GameComponent {
 
@@ -25,7 +24,7 @@ export class CatGrabMain extends GameComponent {
     private vikingHome: HomeViking;
     private cats: ObjectPool<Cat>;
     private catLayer = new Container();
-    private springs: Springs;
+
 
     protected OnInitialise(): void {
 
@@ -45,11 +44,9 @@ export class CatGrabMain extends GameComponent {
 
         this.vikingHome = new HomeViking();
 
-        this.cats = new ObjectPool<Cat>(6, () => new Cat(this.map));
+        this.cats = new ObjectPool<Cat>(6, () => new Cat(this.catLayer, this.map));
 
-        this.springs = new Springs();
-
-        this.camera.root.addChild(this.map.background, this.springs.root);
+        this.camera.root.addChild(this.map.background, this.player.Springs.root);
         this.camera.root.addChild(this.catLayer, this.viking.root, this.player.root, this.playerHome.root, this.vikingHome.root);
         this.camera.root.addChild(this.map.foreground);
         this.game.ticker.add(this.OnUpdate, this);
@@ -57,9 +54,9 @@ export class CatGrabMain extends GameComponent {
         GetInterval(5000, this.DispatchCats, this);
         this.DispatchCats();
 
-        this.game.dispatcher.on(PLAYER_MOVED, this.CheckCollisions, this);
-        this.game.dispatcher.on(VIKING_MOVED, this.CheckCollisions, this);
-        this.game.dispatcher.on(SPRING_DROPPED, this.DropSpring, this);
+        this.game.dispatcher.on(PLAYER_MOVED, this.CheckCollisionWithCat, this);
+        this.game.dispatcher.on(VIKING_MOVED, this.CheckCollisionWithCat, this);
+        this.game.dispatcher.on(CAT_MOVED,    this.CheckCatCollideWithSpring, this);
     }
 
     private OnUpdate(): void {
@@ -71,21 +68,21 @@ export class CatGrabMain extends GameComponent {
 
     private DispatchCats(): void {
         if(this.cats.Popped.length < 6) {
-            const cat = this.cats.Get();
-            cat.Create(this.catLayer);
-            this.camera.root.addChild(cat.root);
+            this.cats.Get().Start();
         }
     }
 
-    private CheckCollisions(position: Vec2): void {
+    private CheckCollisionWithCat(position: Vec2): void {
         this.cats.Popped.forEach(cat => {
             if(cat.CheckCollision(position)) {
                 cat.Follow(position);
             }
-        })
+        });
     }
 
-    private DropSpring(position: Vec2): void {
-        this.springs.Drop(position);
+    private CheckCatCollideWithSpring(cat : Cat): void {
+        if(this.player.Springs.Collides(cat.Position)) {
+            cat.HitSpring();
+        }
     }
 }
