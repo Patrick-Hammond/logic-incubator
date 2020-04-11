@@ -37,13 +37,8 @@ export default class Cat extends GameComponent {
     }
 
     Start(): void {
-
-        // random tint
-        this.tint.red   = Math.random() > 0.6 ? 0.7 + Math.random() * 0.5 : 1;
-        this.tint.green = Math.random() > 0.6 ? 0.7 + Math.random() * 0.5 : 1;
-        this.tint.blue  = Math.random() > 0.6 ? 0.7 + Math.random() * 0.5 : 1;
-
-       this.FallIn();
+        this.SetRandomTint();
+        this.FallIn();
     }
 
     MoveTo(x: number, y: number, onComplete?: () => void): void {
@@ -75,38 +70,41 @@ export default class Cat extends GameComponent {
     }
 
     Follow(target: Vec2): void {
-        if(this.state === CatState.ACTIVE && target !== this.followTartget) {
-            const startFollowing = this.followTartget == null;
-            this.followTartget = target;
-            if(startFollowing) {
-                this.MoveToFollowTarget();
-                this.game.dispatcher.emit(CAT_FOLLOWING, target);
+        if(this.state === CatState.ACTIVE) {
+            if(target !== this.followTartget) {
+                const startFollowing = this.followTartget == null;
+                this.followTartget = target;
+                if(startFollowing) {
+                    this.MoveToFollowTarget();
+                }
             }
+            this.game.dispatcher.emit(CAT_FOLLOWING, target);
         }
     }
 
     private MoveToFollowTarget(): void {
+
+        if(this.CheckIsHome()) {
+            return;
+        }
+
         const path = FindShortestPath(this.map, this.position, this.followTartget);
         if(path.length > 1) {
             this.MoveTo(path[1].x, path[1].y, () => this.MoveToFollowTarget());
         } else {
-            const homePlayer = this.followTartget.Equals(HomePlayer);
-            const homeViking = this.followTartget.Equals(HomeViking);
-            if (homePlayer || homeViking) {
-                this.state = CatState.HOME;
-                this.anim.Stop();
-                RemoveFromParent(this.root);
-                this.game.dispatcher.emit(homePlayer ? CAT_HOME_PLAYER : CAT_HOME_VIKING,
-                    {r: this.tint.red, g: this.tint.green, b: this.tint.blue}, this);
-            } else {
-                this.anim.Play("cat_sit");
-                Wait(1000, this.MoveToFollowTarget, this);
-            }
+            this.anim.Play("cat_sit");
+            Wait(1000, this.MoveToFollowTarget, this);
         }
     }
 
+    private SetRandomTint(): void {
+        this.tint.red   = Math.random() > 0.6 ? 0.7 + Math.random() * 0.5 : 1;
+        this.tint.green = Math.random() > 0.6 ? 0.7 + Math.random() * 0.5 : 1;
+        this.tint.blue  = Math.random() > 0.6 ? 0.7 + Math.random() * 0.5 : 1;
+    }
+
     private FallIn(): void {
-        this.parent.parent.addChild(this.anim.root);
+        this.parent.parent.addChild(this.root);
         this.state = CatState.FALLING;
         this.position.Copy(this.map.GetRandomPosition());
         const pos = TileToPixel(this.position);
@@ -116,7 +114,21 @@ export default class Cat extends GameComponent {
         gsap.from(this.anim.root, 5, {x: pos.x, y: pos.y - 400, ease: Linear.easeNone, onComplete: () => {
             this.state = CatState.ACTIVE;
             this.anim.Play("cat_sit");
-            this.parent.addChild(this.anim.root);
+            this.parent.addChild(this.root);
         }});
+    }
+
+    private CheckIsHome(): boolean {
+        const homePlayer = this.position.Equals(HomePlayer);
+        const homeViking = this.position.Equals(HomeViking);
+        const isHome = homePlayer || homeViking;
+        if (isHome) {
+            this.state = CatState.HOME;
+            this.anim.Stop();
+            RemoveFromParent(this.root);
+            this.game.dispatcher.emit(homePlayer ? CAT_HOME_PLAYER : CAT_HOME_VIKING,
+                {r: this.tint.red, g: this.tint.green, b: this.tint.blue}, this);
+        }
+        return isHome;
     }
 }
