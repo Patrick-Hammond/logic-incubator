@@ -1,6 +1,6 @@
 import gsap, {Linear} from "gsap";
 import {AnimatedSprite} from "pixi.js";
-import {FindShortestPath} from "../../../_lib/algorithms/Search";
+import {FindShortestPath, SearchNode, FindClosestNode, GetPath} from "../../../_lib/algorithms/Search";
 import {CallbackDone} from "../../../_lib/game/display/Utils";
 import GameComponent from "../../../_lib/game/GameComponent";
 import {Vec2, Vec2Like} from "../../../_lib/math/Geometry";
@@ -8,7 +8,7 @@ import {NullFunction} from "../../../_lib/patterns/FunctionUtils";
 import {Cancel, Wait} from "../../../_lib/game/Timing";
 import {Direction} from "../../../_lib/utils/Types";
 import {VikingHomeLocation} from "../../Constants";
-import {CAT_FOLLOWING, VIKING_MOVED} from "../Events";
+import {CAT_FOLLOWING, VIKING_MOVED, CAT_POSITIONS} from "../Events";
 import {TileToPixel} from "../Utils";
 import Map, {TileType} from "./Map";
 
@@ -21,6 +21,7 @@ export default class Viking extends GameComponent {
     private anim: AnimatedSprite;
     private position = new Vec2();
     private state: VikingState;
+    private catPositions: SearchNode[] = [];
     private cancelDelayedPatrol: Cancel = NullFunction;
 
     public constructor(private map: Map) {
@@ -35,6 +36,7 @@ export default class Viking extends GameComponent {
         this.root.addChild(this.anim);
 
         this.game.dispatcher.on(CAT_FOLLOWING, this.OnCatFollowing, this);
+        this.game.dispatcher.on(CAT_POSITIONS, (cats) => this.catPositions = cats);
     }
 
     Start(position: Vec2Like): void {
@@ -53,6 +55,14 @@ export default class Viking extends GameComponent {
 
     private Patrol(): void {
         this.state = VikingState.PATROLLING;
+
+        if(this.catPositions.length) {
+            const closestCat = FindClosestNode(this.map, this.position, this.catPositions);
+            if(closestCat) {
+                this.MoveTo(closestCat.position.x, closestCat.position.y, () => this.Patrol());
+                return;
+            }
+        }
 
         const route = Math.random();
         if(route < 0.3) {

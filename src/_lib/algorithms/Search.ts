@@ -13,20 +13,30 @@ export abstract class SearchNode {
     abstract CheckValid(): boolean;
 };
 
-export function FindShortestPath<T extends SearchNode>(graph: ISearchGraph<T>, start: Vec2Like, end: Vec2Like): Vec2Like[] {
-
-    const path: Vec2Like[] = [];
-    const getPath = (t: SearchNode) => {
-        if(t) {
-            path.push(t.position);
-            if(t.parent) {
-                getPath(t.parent);
-            }
+export function GetPath<T extends SearchNode>(node: T, pathInOut: Vec2Like[] = []): Vec2Like[] {
+    if(node) {
+        pathInOut.push(node.position);
+        if(node.parent) {
+            GetPath(node.parent, pathInOut);
         }
     }
+    return pathInOut;
+}
 
-    getPath(BredthFirstSearch(graph, start, end));
-    return path.reverse();
+export function FindShortestPath<T extends SearchNode>(graph: ISearchGraph<T>, start: Vec2Like, end: Vec2Like): Vec2Like[] {
+
+    return GetPath(BredthFirstSearch(graph, start, end)).reverse();
+}
+
+export function FindClosestNode<T extends SearchNode>(graph: ISearchGraph<T>, position: Vec2Like, nodes: T[]): T {
+
+    let shortest = Number.MAX_VALUE;
+    const closest = nodes.find(node => {
+        const path = GetPath(BredthFirstSearch(graph, position, node.position));
+        shortest = Math.min(path.length, shortest);
+        return path.length === shortest;
+    });
+    return closest;
 }
 
 export function BredthFirstSearch<T extends SearchNode>(graph: ISearchGraph<T>, start: Vec2Like, end: Vec2Like): SearchNode {
