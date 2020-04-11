@@ -6,7 +6,7 @@ import {RemoveFromParent, CallbackDone} from "../../../_lib/game/display/Utils";
 import GameComponent from "../../../_lib/game/GameComponent";
 import {Vec2, Vec2Like} from "../../../_lib/math/Geometry";
 import {Wait} from "../../../_lib/game/Timing";
-import {HomePlayer, HomeViking} from "../../Constants";
+import {PlayerHomeLocation, VikingHomeLocation} from "../../Constants";
 import {CAT_FOLLOWING, CAT_HOME_PLAYER, CAT_HOME_VIKING, CAT_MOVED} from "../Events";
 import {TileToPixel} from "../Utils";
 import Map from "./Map";
@@ -41,22 +41,6 @@ export default class Cat extends GameComponent {
         this.FallIn();
     }
 
-    MoveTo(x: number, y: number, onComplete?: () => void): void {
-        this.position.Set(x, y);
-        const pos = TileToPixel({x, y});
-        const root = this.anim.root;
-        gsap.to(root, this.speed, {x: pos.x, y: pos.y, ease: Linear.easeNone, onComplete: () => {
-            this.game.dispatcher.emit(CAT_MOVED, this);
-            CallbackDone(onComplete);
-        }});
-
-        if(pos.x !== root.x) {
-            this.anim.PlayLooped(pos.x > root.x ? "cat_walkr" : "cat_walkl");
-        } else if(pos.y !== root.y) {
-            this.anim.PlayLooped(pos.y > root.y ? "cat_walkd" : "cat_walku");
-        }
-    }
-
     CheckCollision(position: Vec2Like): boolean {
         return this.state === CatState.ACTIVE && this.position.Equals(position.x, position.y);
     }
@@ -79,6 +63,22 @@ export default class Cat extends GameComponent {
                 }
             }
             this.game.dispatcher.emit(CAT_FOLLOWING, target);
+        }
+    }
+
+    private MoveTo(x: number, y: number, onComplete?: () => void): void {
+        this.position.Set(x, y);
+        const pos = TileToPixel({x, y});
+        const root = this.anim.root;
+        gsap.to(root, this.speed, {x: pos.x, y: pos.y, ease: Linear.easeNone, onComplete: () => {
+            this.game.dispatcher.emit(CAT_MOVED, this);
+            CallbackDone(onComplete);
+        }});
+
+        if(pos.x !== root.x) {
+            this.anim.PlayLooped(pos.x > root.x ? "cat_walkr" : "cat_walkl");
+        } else if(pos.y !== root.y) {
+            this.anim.PlayLooped(pos.y > root.y ? "cat_walkd" : "cat_walku");
         }
     }
 
@@ -119,8 +119,8 @@ export default class Cat extends GameComponent {
     }
 
     private CheckIsHome(): boolean {
-        const homePlayer = this.position.Equals(HomePlayer);
-        const homeViking = this.position.Equals(HomeViking);
+        const homePlayer = this.position.Equals(PlayerHomeLocation);
+        const homeViking = this.position.Equals(VikingHomeLocation);
         const isHome = homePlayer || homeViking;
         if (isHome) {
             this.state = CatState.HOME;

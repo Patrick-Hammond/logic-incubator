@@ -1,13 +1,14 @@
 import gsap, {Linear} from "gsap";
 import {AnimatedSprite} from "pixi.js";
 import GameComponent from "../../../_lib/game/GameComponent";
-import {Vec2} from "../../../_lib/math/Geometry";
+import {Vec2, Vec2Like} from "../../../_lib/math/Geometry";
 import {Direction} from "../../../_lib/utils/Types";
 import {PLAYER_MOVED} from "../Events";
 import {TileToPixel} from "../Utils";
 import {Camera} from "./Camera";
 import Map, {TileType} from "./Map";
 import { Springs } from "./Springs";
+import PlayerControl from "./PlayerControl";
 
 enum PlayerState {
     IDLE, MOVING
@@ -15,6 +16,7 @@ enum PlayerState {
 
 export default class Player extends GameComponent {
 
+    private playerControl: PlayerControl;
     private anim: AnimatedSprite;
     private position = new Vec2();
     private state: PlayerState;
@@ -29,24 +31,33 @@ export default class Player extends GameComponent {
         this.anim.anchor.set(0.5);
         this.anim.pivot.x = -32;
         this.anim.animationSpeed = 0.1;
-
         this.root.addChild(this.anim);
 
         this.springs = new Springs();
+        this.playerControl = new PlayerControl(0);
+
+        this.game.ticker.add(this.OnUpdate, this);
     }
 
     get Springs(): Springs {
         return this.springs;
     }
 
-    SetPosition(x: number, y: number): void {
-        this.position.Set(x, y);
+    Start(position: Vec2Like): void {
+        this.position.Copy(position);
         const pos = TileToPixel(this.position);
         this.anim.position.set(pos.x, pos.y);
         this.camera.Follow(this.anim);
     }
 
-    Move(direction: Direction): void {
+    private OnUpdate(): void {
+        const input = this.playerControl.Get();
+        if(input && input.length) {
+            input.forEach(i => i === "fire" ? this.DropSpring() : this.Move(i));
+        }
+    }
+
+    private Move(direction: Direction): void {
 
         if(this.state === PlayerState.IDLE) {
             const tileType = this.map.GetTile(this.position, direction).type;
@@ -88,7 +99,7 @@ export default class Player extends GameComponent {
         }
     }
 
-    DropSpring() : void {
+    private DropSpring() : void {
         this.springs.Drop(this.position, 2);
     }
 }

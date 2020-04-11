@@ -15,7 +15,7 @@ export class Springs extends GameComponent {
         super();
     }
 
-    OnInitialise(): void {
+    protected OnInitialise(): void {
         this.springPool = new ObjectPool<Spring>(2, () => new Spring());
     }
 
@@ -39,7 +39,7 @@ export class Springs extends GameComponent {
         return hit != null;
     }
 
-    Restore(spring: Spring): void {
+    private Restore(spring: Spring): void {
         RemoveFromParent(spring);
         this.springPool.Put(spring);
     }
