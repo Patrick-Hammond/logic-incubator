@@ -5,10 +5,11 @@ import {AnimationSequence} from "../../../_lib/game/display/AnimationSequence";
 import {RemoveFromParent, CallbackDone} from "../../../_lib/game/display/Utils";
 import GameComponent from "../../../_lib/game/GameComponent";
 import {Vec2, Vec2Like} from "../../../_lib/math/Geometry";
-import {Wait} from "../../../_lib/game/Timing";
+import {Wait, Cancel} from "../../../_lib/game/Timing";
 import {PlayerHomeLocation, VikingHomeLocation} from "../../Constants";
 import {CAT_FOLLOWING, CAT_HOME_PLAYER, CAT_HOME_VIKING, CAT_MOVED} from "../Events";
 import {TileToPixel} from "../Utils";
+import {NullFunction} from "../../../_lib/patterns/FunctionUtils";
 import Map from "./Map";
 
 enum CatState {
@@ -22,6 +23,7 @@ export default class Cat extends GameComponent {
     private tint = new AdjustmentFilter();
     private speed = Math.random() * 0.5 + 1;
     private state: CatState;
+    private cancelDelay: Cancel = NullFunction;
 
     constructor(private parent: PIXI.Container, private map: Map) {
         super();
@@ -38,6 +40,8 @@ export default class Cat extends GameComponent {
 
     Start(): void {
         this.SetRandomTint();
+
+        this.position.Copy(this.map.GetRandomPosition());
         this.FallIn();
     }
 
@@ -46,11 +50,14 @@ export default class Cat extends GameComponent {
     }
 
     HitSpring(): void {
+        this.cancelDelay();
         gsap.killTweensOf(this.anim.root);
         this.state = CatState.FALLING;
         this.followTartget = null;
+
+        this.position.Copy(this.map.GetRandomPosition());
         const pos = TileToPixel(this.position);
-        gsap.to(this.anim.root, 1, {x: pos.x, y: pos.y - 1000, ease: Power3.easeOut, onComplete: () => this.FallIn()});
+        gsap.to(this.anim.root, 1, {x: pos.x, y: pos.y - 400, ease: Power3.easeOut, onComplete: () => this.FallIn()});
     }
 
     Follow(target: Vec2): void {
@@ -71,7 +78,6 @@ export default class Cat extends GameComponent {
         const pos = TileToPixel({x, y});
         const root = this.anim.root;
         gsap.to(root, this.speed, {x: pos.x, y: pos.y, ease: Linear.easeNone, onComplete: () => {
-            this.game.dispatcher.emit(CAT_MOVED, this);
             CallbackDone(onComplete);
         }});
 
@@ -80,6 +86,8 @@ export default class Cat extends GameComponent {
         } else if(pos.y !== root.y) {
             this.anim.PlayLooped(pos.y > root.y ? "cat_walkd" : "cat_walku");
         }
+
+        Wait(this.speed * 0.75, () => this.game.dispatcher.emit(CAT_MOVED, this));
     }
 
     private MoveToFollowTarget(): void {
@@ -93,7 +101,7 @@ export default class Cat extends GameComponent {
             this.MoveTo(path[1].x, path[1].y, () => this.MoveToFollowTarget());
         } else {
             this.anim.Play("cat_sit");
-            Wait(1000, this.MoveToFollowTarget, this);
+            this.cancelDelay = Wait(1000, this.MoveToFollowTarget, this);
         }
     }
 
@@ -106,7 +114,6 @@ export default class Cat extends GameComponent {
     private FallIn(): void {
         this.parent.parent.addChild(this.root);
         this.state = CatState.FALLING;
-        this.position.Copy(this.map.GetRandomPosition());
         const pos = TileToPixel(this.position);
         this.anim.root.position.set(pos.x, pos.y);
         this.anim.Play("cat_fall");

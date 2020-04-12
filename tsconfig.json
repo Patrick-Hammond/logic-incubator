@@ -2,7 +2,7 @@
   "compileOnSave": false,
   "compilerOptions": {
     "outDir": "./dist/out-tsc",
-    "sourceMap": true,
+    "sourceMap": false,
     "declaration": false,
     "moduleResolution": "node",
     "target": "es5",
@@ -21,5 +21,5 @@
       "@assets/*": ["assets/*"]
     }
   },
-  "exclude": ["./node_modules", "./webpack.config.ts", "./webpack.prod.config.ts"]
+  "exclude": ["./node_modules", "webpack.config.ts", "webpack.prod.config.ts"]
 }

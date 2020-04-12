@@ -40,7 +40,7 @@ export default class Map extends GameComponent implements ISearchGraph<Tile> {
         [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
     ];
 
-    private catPositions: Vec2Like[] = [];
+    private randomPositions: Vec2Like[] = [];
     private _data: Tile[][];
     get data(): Tile[][] {
         return this._data;
@@ -96,7 +96,7 @@ export default class Map extends GameComponent implements ISearchGraph<Tile> {
     }
 
     GetRandomPosition(): Vec2Like {
-        return this.catPositions[(Math.random() * this.catPositions.length) | 0];
+        return this.randomPositions[(Math.random() * this.randomPositions.length) | 0];
     }
 
     GetAdjacent(node: Tile): Tile[] {
@@ -111,7 +111,7 @@ export default class Map extends GameComponent implements ISearchGraph<Tile> {
         for (let x = 3; x < 12; x++) {
            for (let y = 3; y < 9; y++) {
                 if(this.data[y][x].type !== TileType.BLOCKED) {
-                    this.catPositions.push({x, y});
+                    this.randomPositions.push({x, y});
                 }
            }
         }

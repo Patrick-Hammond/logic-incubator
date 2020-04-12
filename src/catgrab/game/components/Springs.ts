@@ -16,7 +16,7 @@ export class Springs extends GameComponent {
     }
 
     protected OnInitialise(): void {
-        this.springPool = new ObjectPool<Spring>(2, () => new Spring());
+        this.springPool = new ObjectPool<Spring>(1, () => new Spring());
     }
 
     Drop(position: Vec2Like, max: number): boolean {

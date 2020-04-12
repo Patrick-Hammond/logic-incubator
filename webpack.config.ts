@@ -7,7 +7,7 @@ const TsconfigPathsPlugin = require('tsconfig-paths-webpack-plugin');
 
 module.exports = {
   entry: './src/Main.ts',
-  devtool: 'eval',
+  devtool: 'source-map',
   mode: 'development',
   devServer: {
     contentBase: './dist',
@@ -45,6 +45,7 @@ module.exports = {
   },
   output: {
     filename: '[name].bundle.js',
+    sourceMapFilename: "[file].map[query]",
     path: path.resolve(__dirname, 'dist')
   }
 };

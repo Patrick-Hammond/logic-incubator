@@ -1,6 +1,6 @@
-import gsap, {Linear} from "gsap";
+import gsap, {Linear, Power3} from "gsap";
 import {AnimatedSprite} from "pixi.js";
-import {FindShortestPath, SearchNode, FindClosestNode, GetPath} from "../../../_lib/algorithms/Search";
+import {FindShortestPath, SearchNode, FindClosestNode} from "../../../_lib/algorithms/Search";
 import {CallbackDone} from "../../../_lib/game/display/Utils";
 import GameComponent from "../../../_lib/game/GameComponent";
 import {Vec2, Vec2Like} from "../../../_lib/math/Geometry";
@@ -11,9 +11,10 @@ import {VikingHomeLocation} from "../../Constants";
 import {CAT_FOLLOWING, VIKING_MOVED, CAT_POSITIONS} from "../Events";
 import {TileToPixel} from "../Utils";
 import Map, {TileType} from "./Map";
+import { Springs } from "./Springs";
 
 enum VikingState {
-    PATROLLING, END_PATROL, GOING_HOME
+    PATROLLING, END_PATROL, GOING_HOME, FALLING
 }
 
 export default class Viking extends GameComponent {
@@ -23,6 +24,7 @@ export default class Viking extends GameComponent {
     private state: VikingState;
     private catPositions: SearchNode[] = [];
     private cancelDelayedPatrol: Cancel = NullFunction;
+    private springs: Springs;
 
     public constructor(private map: Map) {
         super();
@@ -35,8 +37,14 @@ export default class Viking extends GameComponent {
         this.anim.play();
         this.root.addChild(this.anim);
 
+        this.springs = new Springs();
+
         this.game.dispatcher.on(CAT_FOLLOWING, this.OnCatFollowing, this);
         this.game.dispatcher.on(CAT_POSITIONS, (cats) => this.catPositions = cats);
+    }
+
+    get Springs(): Springs {
+        return this.springs;
     }
 
     Start(position: Vec2Like): void {
@@ -46,6 +54,21 @@ export default class Viking extends GameComponent {
         this.Patrol();
     }
 
+    HitSpring(): void {
+        this.cancelDelayedPatrol();
+        gsap.killTweensOf(this.anim);
+        this.state = VikingState.FALLING;
+
+        this.position.Copy(this.map.GetRandomPosition());
+        const pos = TileToPixel(this.position);
+        gsap.to(this.anim, 0.75, {x: pos.x, y: pos.y - 400, ease: Power3.easeOut});
+        gsap.to(this.anim, 1, {x: pos.x, y: pos.y, delay: 0.75, ease: Power3.easeIn, onComplete: () => this.ChaseCat()});
+    }
+
+    DropSpring() : void {
+        this.springs.Drop(this.position, 1);
+    }
+
     private OnCatFollowing(target: Vec2): void {
         if(this.state === VikingState.PATROLLING && target === this.position) {
             this.state = VikingState.END_PATROL;
@@ -53,7 +76,7 @@ export default class Viking extends GameComponent {
         }
     }
 
-    private Patrol(): void {
+    private ChaseCat(): void {
         this.state = VikingState.PATROLLING;
 
         if(this.catPositions.length) {
@@ -64,14 +87,15 @@ export default class Viking extends GameComponent {
             }
         }
 
-        const route = Math.random();
-        if(route < 0.3) {
-            this.MoveTo(8, 1, () => this.MoveTo(1, 10, () => this.MoveTo(15, 8, () => this.Patrol())));
-        } else if(route < 0.6) {
-            this.MoveTo(8, 9, () => this.MoveTo(5, 5, () => this.MoveTo(1, 7, () => this.Patrol())));
-        } else {
-            this.MoveTo(2, 3, () => this.MoveTo(14, 3, () => this.Patrol()));
-        }
+        this.Patrol();
+    }
+
+    private Patrol(): void {
+        this.state = VikingState.PATROLLING;
+
+        const routes = [[8, 1], [1, 10], [15, 8], [8, 9], [5, 5], [2, 3], [14, 3]];
+        const route = routes[((Math.random() * routes.length) | 0)];
+        this.MoveTo(route[0], route[1], () => this.ChaseCat());
     }
 
     private MoveTo(x: number, y: number, onComplete?: () => void): void {
@@ -123,14 +147,14 @@ export default class Viking extends GameComponent {
                 }
             }});
 
-            this.game.dispatcher.emit(VIKING_MOVED, this.position);
+            Wait(500, () => this.game.dispatcher.emit(VIKING_MOVED, this.position));
         }
     }
 
     private GoHome(): void {
         this.state = VikingState.GOING_HOME;
         this.MoveTo(VikingHomeLocation.x, VikingHomeLocation.y, () => {
-            this.cancelDelayedPatrol = Wait(5000, () => this.Patrol());
+            this.cancelDelayedPatrol = Wait(5000, () => this.ChaseCat());
         });
     }
 }

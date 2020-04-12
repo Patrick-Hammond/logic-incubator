@@ -1,28 +1,49 @@
 import GameComponent from "../../../_lib/game/GameComponent";
-import {Vec2} from "../../../_lib/math/Geometry";
-import Cat from ".././components/Cat";
+import {Vec2, Vec2Like} from "../../../_lib/math/Geometry";
 import Player from ".././components/Player";
-import {PLAYER_MOVED, VIKING_MOVED, CAT_MOVED} from ".././Events";
+import {PLAYER_MOVED, VIKING_MOVED} from ".././Events";
 import { Cats } from "./Cats";
+import Viking from "./Viking";
+import { Queue } from "_lib/datastructures/Queue";
 
 export class Collisions extends GameComponent {
 
-    constructor(private player: Player, private cats: Cats) {
+    private trail = Queue.Create<Vec2Like>(5);
+
+    constructor(private player: Player, private viking: Viking, private cats: Cats) {
 
         super();
 
-        this.game.dispatcher.on(PLAYER_MOVED, this.CheckCollisionWithCat, this);
-        this.game.dispatcher.on(VIKING_MOVED, this.CheckCollisionWithCat, this);
-        this.game.dispatcher.on(CAT_MOVED,    this.CheckCatCollideWithSpring, this);
+        this.game.dispatcher.on(PLAYER_MOVED, this.OnPlayerMoved, this);
+        this.game.dispatcher.on(VIKING_MOVED, this.OnVikingMoved, this);
+    }
+
+    private OnPlayerMoved(position: Vec2): void {
+
+        if(this.viking.Springs.Collides(position)) {
+            this.player.HitSpring();
+            return;
+        }
+
+        this.CheckCollisionWithCat(position);
+    }
+
+    private OnVikingMoved(position: Vec2): void {
+
+        if(this.player.Springs.Collides(position)) {
+            this.viking.HitSpring();
+            return;
+        }
+
+        this.CheckCollisionWithCat(position);
+
+        const playerChasing = this.trail.Queue(position.Clone()).Read().some(pos => this.player.Position.Equals(pos));
+        if(playerChasing && Math.random() > 0.6) {
+            this.viking.DropSpring();
+        }
     }
 
     private CheckCollisionWithCat(position: Vec2): void {
         this.cats.CheckCollision(position).forEach(cat => cat.Follow(position));
-    }
-
-    private CheckCatCollideWithSpring(cat : Cat): void {
-        if(this.player.Springs.Collides(cat.Position)) {
-            cat.HitSpring();
-        }
     }
 }

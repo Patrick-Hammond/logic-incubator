@@ -1,4 +1,4 @@
-import gsap, {Linear} from "gsap";
+import gsap, {Linear, Power3} from "gsap";
 import {AnimatedSprite} from "pixi.js";
 import GameComponent from "../../../_lib/game/GameComponent";
 import {Vec2, Vec2Like} from "../../../_lib/math/Geometry";
@@ -11,7 +11,7 @@ import { Springs } from "./Springs";
 import PlayerControl from "./PlayerControl";
 
 enum PlayerState {
-    IDLE, MOVING
+    IDLE, MOVING, FALLING
 }
 
 export default class Player extends GameComponent {
@@ -43,11 +43,30 @@ export default class Player extends GameComponent {
         return this.springs;
     }
 
+    get Position() : Vec2 {
+        return this.position;
+    }
+
     Start(position: Vec2Like): void {
         this.position.Copy(position);
         const pos = TileToPixel(this.position);
         this.anim.position.set(pos.x, pos.y);
         this.camera.Follow(this.anim);
+    }
+
+    HitSpring(): void {
+        gsap.killTweensOf(this.anim);
+        this.state = PlayerState.FALLING;
+
+        this.position.Copy(this.map.GetRandomPosition());
+        const pos = TileToPixel(this.position);
+        gsap.to(this.anim, 0.75, {x: pos.x, y: pos.y - 400, ease: Power3.easeOut});
+        gsap.to(this.anim, 1, {x: pos.x, y: pos.y, delay: 0.75, ease: Power3.easeIn,
+            onComplete: () => {
+                this.state = PlayerState.IDLE
+                this.camera.Follow(this.anim);
+            }
+        });
     }
 
     private OnUpdate(): void {
@@ -100,6 +119,6 @@ export default class Player extends GameComponent {
     }
 
     private DropSpring() : void {
-        this.springs.Drop(this.position, 2);
+        this.springs.Drop(this.position, 1);
     }
 }

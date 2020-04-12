@@ -37,12 +37,13 @@ export class CatGrabMain extends GameComponent {
         const cats = new Cats(this.map);
         cats.Start();
 
-        new Collisions(this.player, cats);
+        new Collisions(this.player, this.viking, cats);
 
         this.camera.root.addChild(
             this.map.background,
-            this.player.Springs.root, cats.root, this.viking.root,
-            this.player.root, this.playerHome.root, this.vikingHome.root,
+            this.player.Springs.root, this.viking.Springs.root,
+            cats.root, this.viking.root, this.player.root,
+            this.playerHome.root, this.vikingHome.root,
             this.map.foreground
             );
     }
