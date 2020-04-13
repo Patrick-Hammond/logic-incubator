@@ -8,6 +8,9 @@ export function CatGrab(): void {
 
     // load
     Loader.inst.LoadSpriteSheet(AssetPath + "spritesheet.json", /^.+(?=_f)/, () => {
+        game.loader.add(AssetPath + "numbers.fnt");
+        game.loader.load();
+
         // init
         game.sceneManager.AddScene(Scenes.GAME, new CatGrabMain());
         game.sceneManager.ShowScene(Scenes.GAME);

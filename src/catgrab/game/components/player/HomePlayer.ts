@@ -1,8 +1,8 @@
 import {AdjustmentFilter} from "pixi-filters";
 import {RenderTexture, Sprite} from "pixi.js";
-import GameComponent from "../../../_lib/game/GameComponent";
-import {RGB} from "../../../_lib/utils/Types";
-import {ALL_CATS_HOME, CAT_HOME_PLAYER} from "../Events";
+import GameComponent from "../../../../_lib/game/GameComponent";
+import {RGB} from "../../../../_lib/utils/Types";
+import {ALL_CATS_HOME, CAT_HOME_PLAYER} from "../../Events";
 
 export default class HomePlayer extends GameComponent {
 

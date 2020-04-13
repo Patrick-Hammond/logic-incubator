@@ -1,9 +1,9 @@
 import GameComponent from "../../../_lib/game/GameComponent";
 import {Vec2, Vec2Like} from "../../../_lib/math/Geometry";
-import Player from ".././components/Player";
+import Player from "./player/Player";
 import {PLAYER_MOVED, VIKING_MOVED} from ".././Events";
-import { Cats } from "./Cats";
-import Viking from "./Viking";
+import { Cats } from "./cat/Cats";
+import Viking from "./viking/Viking";
 import { Queue } from "_lib/datastructures/Queue";
 
 export class Collisions extends GameComponent {

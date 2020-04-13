@@ -24,6 +24,5 @@ export class Camera extends GameComponent {
         const y = Math.min(Math.max(sprite.y - halfHeight, 0), GameHeight / 2);
 
         gsap.to(this.root, 0.5, {x: -x, y: -y});
-       // this.root.position.set(-x, -y);
     }
 }

@@ -1,7 +1,7 @@
-import GameComponent from "../../../_lib/game/GameComponent";
-import GamePad from "../../../_lib/io/GamePad";
-import Keyboard, {Key} from "../../../_lib/io/Keyboard";
-import {Direction} from "../../../_lib/utils/Types";
+import GameComponent from "../../../../_lib/game/GameComponent";
+import GamePad from "../../../../_lib/io/GamePad";
+import Keyboard, {Key} from "../../../../_lib/io/Keyboard";
+import {Direction} from "../../../../_lib/utils/Types";
 import VirtualJoystick from "_lib/io/VirtualJoystick";
 import { utils } from "pixi.js";
 

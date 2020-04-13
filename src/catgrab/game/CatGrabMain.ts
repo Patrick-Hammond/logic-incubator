@@ -1,12 +1,12 @@
 import GameComponent from "../../_lib/game/GameComponent";
 import {Camera} from "./components/Camera";
-import HomePlayer from "./components/HomePlayer";
-import HomeViking from "./components/HomeViking";
+import HomePlayer from "./components/player/HomePlayer";
+import HomeViking from "./components/viking/HomeViking";
 import Map from "./components/Map";
-import Player from "./components/Player";
-import Viking from "./components/Viking";
+import Player from "./components/player/Player";
+import Viking from "./components/viking/Viking";
 import { Collisions } from "./components/Collisions";
-import { Cats } from "./components/Cats";
+import { Cats } from "./components/cat/Cats";
 import {PlayerHomeLocation, VikingHomeLocation} from "../Constants";
 
 export class CatGrabMain extends GameComponent {

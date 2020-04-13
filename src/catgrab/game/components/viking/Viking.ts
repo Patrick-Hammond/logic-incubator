@@ -1,17 +1,17 @@
 import gsap, {Linear, Power3} from "gsap";
 import {AnimatedSprite} from "pixi.js";
-import {FindShortestPath, SearchNode, FindClosestNode} from "../../../_lib/algorithms/Search";
-import {CallbackDone} from "../../../_lib/game/display/Utils";
-import GameComponent from "../../../_lib/game/GameComponent";
-import {Vec2, Vec2Like} from "../../../_lib/math/Geometry";
-import {NullFunction} from "../../../_lib/patterns/FunctionUtils";
-import {Cancel, Wait} from "../../../_lib/game/Timing";
-import {Direction} from "../../../_lib/utils/Types";
-import {VikingHomeLocation} from "../../Constants";
-import {CAT_FOLLOWING, VIKING_MOVED, CAT_POSITIONS} from "../Events";
-import {TileToPixel} from "../Utils";
-import Map, {TileType} from "./Map";
-import { Springs } from "./Springs";
+import {FindShortestPath, SearchNode, FindClosestNode} from "../../../../_lib/algorithms/Search";
+import {CallbackDone} from "../../../../_lib/game/display/Utils";
+import GameComponent from "../../../../_lib/game/GameComponent";
+import {Vec2, Vec2Like} from "../../../../_lib/math/Geometry";
+import {NullFunction} from "../../../../_lib/patterns/FunctionUtils";
+import {Cancel, Wait} from "../../../../_lib/game/Timing";
+import {Direction} from "../../../../_lib/utils/Types";
+import {VikingHomeLocation} from "../../../Constants";
+import {CAT_FOLLOWING, VIKING_MOVED, CAT_POSITIONS} from "../../Events";
+import {TileToPixel} from "../../Utils";
+import Map, {TileType} from "../Map";
+import { Springs } from "../Springs";
 
 enum VikingState {
     PATROLLING, END_PATROL, GOING_HOME, FALLING

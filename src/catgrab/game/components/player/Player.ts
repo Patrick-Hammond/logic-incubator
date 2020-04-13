@@ -1,13 +1,13 @@
 import gsap, {Linear, Power3} from "gsap";
 import {AnimatedSprite} from "pixi.js";
-import GameComponent from "../../../_lib/game/GameComponent";
-import {Vec2, Vec2Like} from "../../../_lib/math/Geometry";
-import {Direction} from "../../../_lib/utils/Types";
-import {PLAYER_MOVED} from "../Events";
-import {TileToPixel} from "../Utils";
-import {Camera} from "./Camera";
-import Map, {TileType} from "./Map";
-import { Springs } from "./Springs";
+import GameComponent from "../../../../_lib/game/GameComponent";
+import {Vec2, Vec2Like} from "../../../../_lib/math/Geometry";
+import {Direction} from "../../../../_lib/utils/Types";
+import {PLAYER_MOVED} from "../../Events";
+import {TileToPixel} from "../../Utils";
+import {Camera} from "../Camera";
+import Map, {TileType} from "../Map";
+import { Springs } from "../Springs";
 import PlayerControl from "./PlayerControl";
 
 enum PlayerState {
@@ -60,7 +60,11 @@ export default class Player extends GameComponent {
 
         this.position.Copy(this.map.GetRandomPosition());
         const pos = TileToPixel(this.position);
-        gsap.to(this.anim, 0.75, {x: pos.x, y: pos.y - 400, ease: Power3.easeOut});
+        gsap.to(this.anim, 0.75, {x: pos.x, y: pos.y - 400, ease: Power3.easeOut,
+            onUpdate: () => {
+                this.camera.Follow(this.anim);
+            }
+        });
         gsap.to(this.anim, 1, {x: pos.x, y: pos.y, delay: 0.75, ease: Power3.easeIn,
             onComplete: () => {
                 this.state = PlayerState.IDLE
