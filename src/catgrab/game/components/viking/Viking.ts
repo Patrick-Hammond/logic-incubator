@@ -8,13 +8,13 @@ import {NullFunction} from "../../../../_lib/patterns/FunctionUtils";
 import {Cancel, Wait} from "../../../../_lib/game/Timing";
 import {Direction} from "../../../../_lib/utils/Types";
 import {VikingHomeLocation} from "../../../Constants";
-import {CAT_FOLLOWING, VIKING_MOVED, CAT_POSITIONS} from "../../Events";
+import {CAT_FOLLOWING, VIKING_MOVED, CAT_POSITIONS, ROUND_FINISHED, NEXT_ROUND} from "../../Events";
 import {TileToPixel} from "../../Utils";
 import Map, {TileType} from "../Map";
-import { Springs } from "../Springs";
+import Springs from "../Springs";
 
 enum VikingState {
-    PATROLLING, END_PATROL, GOING_HOME, FALLING
+    PATROLLING, END_PATROL, GOING_HOME, FALLING, DISABLED
 }
 
 export default class Viking extends GameComponent {
@@ -41,6 +41,8 @@ export default class Viking extends GameComponent {
 
         this.game.dispatcher.on(CAT_FOLLOWING, this.OnCatFollowing, this);
         this.game.dispatcher.on(CAT_POSITIONS, (cats) => this.catPositions = cats);
+        this.game.dispatcher.on(ROUND_FINISHED, this.OnRoundFinished, this);
+        this.game.dispatcher.on(NEXT_ROUND, this.OnNextRound, this);
     }
 
     get Springs(): Springs {
@@ -156,5 +158,16 @@ export default class Viking extends GameComponent {
         this.MoveTo(VikingHomeLocation.x, VikingHomeLocation.y, () => {
             this.cancelDelayedPatrol = Wait(5000, () => this.ChaseCat());
         });
+    }
+
+    private OnRoundFinished(): void {
+        this.state = VikingState.DISABLED;
+    }
+
+    private OnNextRound(): void {
+        this.cancelDelayedPatrol();
+        gsap.killTweensOf(this.anim);
+
+        this.Start(VikingHomeLocation);
     }
 }

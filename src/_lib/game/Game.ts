@@ -1,5 +1,5 @@
 import { EventEmitter } from "eventemitter3";
-import {Application, interaction} from "pixi.js";
+import {Application, interaction, settings, SCALE_MODES} from "pixi.js";
 import GamePad from "../io/GamePad";
 import Keyboard from "../io/Keyboard";
 import { StatsTicker } from "../utils/StatsTicker";
@@ -13,6 +13,7 @@ export interface IGameOptions {
         height?: number;
         fit?: ResizeStrategies,
         fullscreen?: boolean;
+        pixelArt?: boolean,
         view?: HTMLCanvasElement;
         transparent?: boolean;
         autoDensity?: boolean;
@@ -42,10 +43,15 @@ export default class Game extends Application {
 
         Game.inst = this;
         this.stage.name = "stage";
+
         document.body.appendChild(this.view);
 
         if (showStats) {
             this.ticker = new StatsTicker();
+        }
+
+        if(options.pixelArt) {
+            settings.SCALE_MODE = SCALE_MODES.NEAREST;
         }
 
         if(options.fullscreen && ScreenFull.enabled) {

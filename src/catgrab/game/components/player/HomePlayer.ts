@@ -2,7 +2,7 @@ import {AdjustmentFilter} from "pixi-filters";
 import {RenderTexture, Sprite} from "pixi.js";
 import GameComponent from "../../../../_lib/game/GameComponent";
 import {RGB} from "../../../../_lib/utils/Types";
-import {ALL_CATS_HOME, CAT_HOME_PLAYER} from "../../Events";
+import {CAT_HOME_PLAYER} from "../../Events";
 
 export default class HomePlayer extends GameComponent {
 
@@ -24,7 +24,7 @@ export default class HomePlayer extends GameComponent {
             this.cats.push(cat);
         }
 
-        this.game.dispatcher.addListener(CAT_HOME_PLAYER, this.OnCatHome, this);
+        this.game.dispatcher.on(CAT_HOME_PLAYER, this.OnCatHome, this);
     }
 
     private OnCatHome(tint: RGB): void {
@@ -38,9 +38,6 @@ export default class HomePlayer extends GameComponent {
             this.root.addChild(cat);
 
             this.catCount++;
-
-        } else if (this.catCount === 6) {
-            this.game.dispatcher.emit(ALL_CATS_HOME);
         }
     }
 }

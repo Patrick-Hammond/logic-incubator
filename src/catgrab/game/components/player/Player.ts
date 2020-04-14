@@ -3,15 +3,16 @@ import {AnimatedSprite} from "pixi.js";
 import GameComponent from "../../../../_lib/game/GameComponent";
 import {Vec2, Vec2Like} from "../../../../_lib/math/Geometry";
 import {Direction} from "../../../../_lib/utils/Types";
-import {PLAYER_MOVED} from "../../Events";
+import {PLAYER_MOVED, ROUND_FINISHED, NEXT_ROUND} from "../../Events";
 import {TileToPixel} from "../../Utils";
-import {Camera} from "../Camera";
+import Camera from "../Camera";
 import Map, {TileType} from "../Map";
-import { Springs } from "../Springs";
+import Springs from "../Springs";
 import PlayerControl from "./PlayerControl";
+import { PlayerHomeLocation } from "catgrab/Constants";
 
 enum PlayerState {
-    IDLE, MOVING, FALLING
+    IDLE, MOVING, FALLING, DISABLED
 }
 
 export default class Player extends GameComponent {
@@ -25,8 +26,6 @@ export default class Player extends GameComponent {
     public constructor(private map: Map, private camera: Camera) {
         super();
 
-        this.state = PlayerState.IDLE;
-
         this.anim = this.assetFactory.CreateAnimatedSprite("player_1");
         this.anim.anchor.set(0.5);
         this.anim.pivot.x = -32;
@@ -37,6 +36,9 @@ export default class Player extends GameComponent {
         this.playerControl = new PlayerControl(0);
 
         this.game.ticker.add(this.OnUpdate, this);
+
+        this.game.dispatcher.on(NEXT_ROUND, this.OnNextRound, this);
+        this.game.dispatcher.on(ROUND_FINISHED, this.OnRoundFinished, this);
     }
 
     get Springs(): Springs {
@@ -48,6 +50,7 @@ export default class Player extends GameComponent {
     }
 
     Start(position: Vec2Like): void {
+        this.state = PlayerState.IDLE;
         this.position.Copy(position);
         const pos = TileToPixel(this.position);
         this.anim.position.set(pos.x, pos.y);
@@ -124,5 +127,13 @@ export default class Player extends GameComponent {
 
     private DropSpring() : void {
         this.springs.Drop(this.position, 1);
+    }
+
+    private OnRoundFinished(): void {
+        this.state = PlayerState.DISABLED;
+    }
+
+    private OnNextRound(): void {
+        this.Start(PlayerHomeLocation);
     }
 }

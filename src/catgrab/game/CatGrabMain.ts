@@ -1,15 +1,16 @@
 import GameComponent from "../../_lib/game/GameComponent";
-import {Camera} from "./components/Camera";
+import Camera from "./components/Camera";
 import HomePlayer from "./components/player/HomePlayer";
 import HomeViking from "./components/viking/HomeViking";
 import Map from "./components/Map";
 import Player from "./components/player/Player";
 import Viking from "./components/viking/Viking";
-import { Collisions } from "./components/Collisions";
-import { Cats } from "./components/cat/Cats";
+import Collisions from "./components/Collisions";
+import Cats from "./components/cat/Cats";
 import {PlayerHomeLocation, VikingHomeLocation} from "../Constants";
+import ScoreKeeper from "./components/ScoreKeeper";
 
-export class CatGrabMain extends GameComponent {
+export default class CatGrabMain extends GameComponent {
 
     private camera: Camera;
     private map: Map;
@@ -38,6 +39,8 @@ export class CatGrabMain extends GameComponent {
         cats.Start();
 
         new Collisions(this.player, this.viking, cats);
+
+        new ScoreKeeper();
 
         this.camera.root.addChild(
             this.map.background,

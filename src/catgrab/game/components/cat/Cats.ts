@@ -5,12 +5,12 @@ import Map from "../Map";
 import {CAT_POSITIONS, CAT_HOME_PLAYER, CAT_HOME_VIKING} from "../../Events";
 import { GetInterval, Wait } from "_lib/game/Timing";
 import { Vec2Like } from "_lib/math/Geometry";
-import { RGB } from "_lib/utils/Types";
 
-export class Cats extends GameComponent {
+export default class Cats extends GameComponent {
 
     private cats: ObjectPool<Cat>;
-    private catCount: number;
+    private catDispatched: number;
+
 
     constructor(map: Map) {
 
@@ -18,12 +18,12 @@ export class Cats extends GameComponent {
 
         this.cats = new ObjectPool<Cat>(6, () => new Cat(this.root, map));
 
-        this.game.dispatcher.on(CAT_HOME_PLAYER, this.OnCatHome, this);
-        this.game.dispatcher.on(CAT_HOME_VIKING, this.OnCatHome, this);
+        this.game.dispatcher.on(CAT_HOME_PLAYER, (tint, cat) => this.OnCatHome(cat));
+        this.game.dispatcher.on(CAT_HOME_VIKING, (tint, cat) => this.OnCatHome(cat));
     }
 
     Start(): void {
-        this.catCount = 0;
+        this.catDispatched = 0;
 
         GetInterval(5000, this.DispatchNext, this);
         Wait(500, this.DispatchNext, this);
@@ -36,9 +36,9 @@ export class Cats extends GameComponent {
     }
 
     private DispatchNext(): void {
-        if(this.catCount < 6) {
+        if(this.catDispatched < 6) {
             this.cats.Get().Start();
-            this.catCount++;
+            this.catDispatched++;
         }
     }
 
@@ -46,7 +46,7 @@ export class Cats extends GameComponent {
         this.game.dispatcher.emit(CAT_POSITIONS, this.cats.Popped);
     }
 
-    private OnCatHome(tint: RGB, cat: Cat) : void {
+    private OnCatHome(cat: Cat) : void {
         this.cats.Put(cat);
     }
 }

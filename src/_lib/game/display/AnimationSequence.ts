@@ -7,6 +7,7 @@ export class AnimationSequence {
 
     public root = new Sprite();
     private animations: Dictionary<AnimatedSprite> = {};
+    private currentClip: AnimatedSprite;
 
     constructor(clipNames: string[]) {
         clipNames.forEach(name => {
@@ -16,27 +17,29 @@ export class AnimationSequence {
         });
     }
 
+    get Current(): AnimatedSprite {
+        return this.currentClip;
+    }
+
     Play(clipName: string, onComplete ?: () => void): AnimatedSprite {
         const clip = this.animations[clipName];
+        clip.name = clipName;
         clip.loop = false;
         clip.play();
         clip.onComplete = onComplete;
+        clip.onLoop = null;
 
         this.root.removeChildren();
         this.root.addChild(clip);
 
+        this.currentClip = clip;
         return clip;
     }
 
     PlayLooped(clipName: string, onLoop ?: () => void): AnimatedSprite {
-        const clip = this.animations[clipName];
+        const clip = this.Play(clipName);
         clip.loop = true;
-        clip.play();
         clip.onLoop = onLoop;
-
-        this.root.removeChildren();
-        this.root.addChild(clip);
-
         return clip;
     }
 

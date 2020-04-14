@@ -1,15 +1,14 @@
-import gsap, {Linear, Power3} from "gsap";
+import gsap, {Linear} from "gsap";
 import {AdjustmentFilter} from "pixi-filters";
 import {FindShortestPath} from "../../../../_lib/algorithms/Search";
 import {AnimationSequence} from "../../../../_lib/game/display/AnimationSequence";
 import {RemoveFromParent, CallbackDone} from "../../../../_lib/game/display/Utils";
 import GameComponent from "../../../../_lib/game/GameComponent";
 import {Vec2, Vec2Like} from "../../../../_lib/math/Geometry";
-import {Wait, Cancel} from "../../../../_lib/game/Timing";
+import {Wait} from "../../../../_lib/game/Timing";
 import {PlayerHomeLocation, VikingHomeLocation} from "../../../Constants";
 import {CAT_FOLLOWING, CAT_HOME_PLAYER, CAT_HOME_VIKING, CAT_MOVED} from "../../Events";
 import {TileToPixel} from "../../Utils";
-import {NullFunction} from "../../../../_lib/patterns/FunctionUtils";
 import Map from "../Map";
 
 enum CatState {
@@ -23,7 +22,6 @@ export default class Cat extends GameComponent {
     private tint = new AdjustmentFilter();
     private speed = Math.random() * 0.5 + 1;
     private state: CatState;
-    private cancelDelay: Cancel = NullFunction;
 
     constructor(private parent: PIXI.Container, private map: Map) {
         super();
@@ -47,17 +45,6 @@ export default class Cat extends GameComponent {
 
     CheckCollision(position: Vec2Like): boolean {
         return this.state === CatState.ACTIVE && this.position.Equals(position.x, position.y);
-    }
-
-    HitSpring(): void {
-        this.cancelDelay();
-        gsap.killTweensOf(this.anim.root);
-        this.state = CatState.FALLING;
-        this.followTartget = null;
-
-        this.position.Copy(this.map.GetRandomPosition());
-        const pos = TileToPixel(this.position);
-        gsap.to(this.anim.root, 1, {x: pos.x, y: pos.y - 400, ease: Power3.easeOut, onComplete: () => this.FallIn()});
     }
 
     Follow(target: Vec2): void {
@@ -101,7 +88,7 @@ export default class Cat extends GameComponent {
             this.MoveTo(path[1].x, path[1].y, () => this.MoveToFollowTarget());
         } else {
             this.anim.Play("cat_sit");
-            this.cancelDelay = Wait(1000, this.MoveToFollowTarget, this);
+            Wait(1000, this.MoveToFollowTarget, this);
         }
     }
 

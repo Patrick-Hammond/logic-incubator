@@ -1,4 +1,4 @@
-import {AnimatedSprite, Sprite, Texture, utils} from "pixi.js";
+import {AnimatedSprite, Sprite, Texture, utils, BitmapText} from "pixi.js";
 
 export default class AssetFactory {
     private static _inst: AssetFactory;
@@ -48,6 +48,10 @@ export default class AssetFactory {
 
     CreateAnimatedSprite(name: string): AnimatedSprite {
         return AnimatedSprite.fromFrames(this.registry[name]);
+    }
+
+    CreateBitmapText(name: string, size: number): BitmapText {
+        return new BitmapText("", { font: { name, size } });
     }
 
     CreateDTS(): void {

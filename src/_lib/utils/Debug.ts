@@ -1,4 +1,6 @@
 import {DisplayObject} from "pixi.js";
+import { Key } from "_lib/io/Keyboard";
+import Game from "_lib/game/Game";
 
 export function MakeDraggable(sprite: DisplayObject): void {
     sprite.interactive = true;
@@ -36,4 +38,27 @@ export function MakeDraggable(sprite: DisplayObject): void {
     sprite.on("click", function() {
         console.log("(" + this.x + ", " + this.y + ")");
     });
+}
+
+export function MoveWithArrowKeys(sprite: DisplayObject): void {
+    const keyboard = Game.inst.keyboard;
+    const checkKeys = () => {
+
+        if(keyboard.AnyKeyPressed()) {
+            if (keyboard.KeyPressed(Key.UpArrow)) {
+                sprite.y--;
+            }
+            if (keyboard.KeyPressed(Key.DownArrow)) {
+                sprite.y++;
+            }
+            if (keyboard.KeyPressed(Key.LeftArrow)) {
+                sprite.x--;
+            }
+            if (keyboard.KeyPressed(Key.RightArrow)) {
+                sprite.x++;
+            }
+            console.log(sprite.position);
+        }
+    }
+    Game.inst.ticker.add(checkKeys);
 }

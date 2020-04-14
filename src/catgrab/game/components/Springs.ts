@@ -7,7 +7,7 @@ import AssetFactory from "_lib/loading/AssetFactory";
 import { TileToPixel } from "../Utils";
 import { RemoveFromParent } from "_lib/game/display/Utils";
 
-export class Springs extends GameComponent {
+export default class Springs extends GameComponent {
 
     private springPool: ObjectPool<Spring>;
 
