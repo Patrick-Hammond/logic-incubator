@@ -116,6 +116,10 @@ export default class Viking extends GameComponent {
 
     private Move(direction: Direction, onComplete?: () => void): void {
 
+        if(this.state === VikingState.DISABLED) {
+            return;
+        }
+
         const tileType = this.map.GetTile(this.position, direction).type;
 
         if(tileType === TileType.TRAVERSABLE) {

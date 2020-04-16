@@ -2,7 +2,8 @@ import {AdjustmentFilter} from "pixi-filters";
 import {RenderTexture, Sprite} from "pixi.js";
 import GameComponent from "../../../../_lib/game/GameComponent";
 import {RGB} from "../../../../_lib/utils/Types";
-import {CAT_HOME_PLAYER} from "../../Events";
+import {CAT_HOME_PLAYER, NEXT_ROUND} from "../../Events";
+import { RemoveFromParent } from "_lib/game/display/Utils";
 
 export default class HomePlayer extends GameComponent {
 
@@ -25,6 +26,7 @@ export default class HomePlayer extends GameComponent {
         }
 
         this.game.dispatcher.on(CAT_HOME_PLAYER, this.OnCatHome, this);
+        this.game.dispatcher.on(NEXT_ROUND, this.OnRoundStart, this);
     }
 
     private OnCatHome(tint: RGB): void {
@@ -39,5 +41,10 @@ export default class HomePlayer extends GameComponent {
 
             this.catCount++;
         }
+    }
+
+    private OnRoundStart(): void {
+        this.root.removeChildren();
+        this.catCount = 0;
     }
 }

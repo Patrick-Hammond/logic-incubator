@@ -27,9 +27,9 @@ export default class ScoreKeeper extends GameComponent {
     private OnCatHome(home: "player" | "viking", cat: Cat) : void {
         home === "player" ? this.catsHomePlayer++ : this.catsHomeViking++;
 
-        if(this.catsHomePlayer + this.catsHomeViking === 1) {
+        if(this.catsHomePlayer + this.catsHomeViking === 5) {
 
-            const playerWon = this.catsHomePlayer >= this.catsHomeViking;
+            const playerWon = this.catsHomePlayer > this.catsHomeViking;
 
             playerWon ? this.playerRoundsWon++ : this.vikingRoundsWon++;
 

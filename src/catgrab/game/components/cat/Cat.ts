@@ -60,6 +60,12 @@ export default class Cat extends GameComponent {
         }
     }
 
+    Destroy(): void {
+        this.followTartget = null;
+        this.anim.Stop();
+        RemoveFromParent(this.root);
+    }
+
     private MoveTo(x: number, y: number, onComplete?: () => void): void {
         this.position.Set(x, y);
         const pos = TileToPixel({x, y});
@@ -118,8 +124,7 @@ export default class Cat extends GameComponent {
         const isHome = homePlayer || homeViking;
         if (isHome) {
             this.state = CatState.HOME;
-            this.anim.Stop();
-            RemoveFromParent(this.root);
+            this.Destroy();
             this.game.dispatcher.emit(homePlayer ? CAT_HOME_PLAYER : CAT_HOME_VIKING,
                 {r: this.tint.red, g: this.tint.green, b: this.tint.blue}, this);
         }

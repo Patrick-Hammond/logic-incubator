@@ -9,7 +9,6 @@ import Camera from "../Camera";
 import Map, {TileType} from "../Map";
 import Springs from "../Springs";
 import PlayerControl from "./PlayerControl";
-import { PlayerHomeLocation } from "catgrab/Constants";
 
 enum PlayerState {
     IDLE, MOVING, FALLING, DISABLED
@@ -134,6 +133,6 @@ export default class Player extends GameComponent {
     }
 
     private OnNextRound(): void {
-        this.Start(PlayerHomeLocation);
+        this.state = PlayerState.IDLE;
     }
 }
