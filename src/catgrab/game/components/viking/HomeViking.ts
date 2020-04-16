@@ -3,7 +3,6 @@ import {RenderTexture, Sprite} from "pixi.js";
 import GameComponent from "../../../../_lib/game/GameComponent";
 import {RGB} from "../../../../_lib/utils/Types";
 import {CAT_HOME_VIKING, NEXT_ROUND} from "../../Events";
-import { RemoveFromParent } from "_lib/game/display/Utils";
 
 export default class HomeViking extends GameComponent {
 
