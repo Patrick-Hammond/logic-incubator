@@ -7,8 +7,9 @@ import Player from "./components/player/Player";
 import Viking from "./components/viking/Viking";
 import Collisions from "./components/Collisions";
 import Cats from "./components/cat/Cats";
-import {PlayerHomeLocation, VikingHomeLocation} from "../Constants";
+import {PlayerHomeLocation, VikingHomeLocation, Scenes} from "../Constants";
 import ScoreKeeper from "./components/ScoreKeeper";
+import { TITLE_SCREEN_CLOSED } from "./Events";
 
 export default class CatGrabMain extends GameComponent {
 
@@ -18,6 +19,12 @@ export default class CatGrabMain extends GameComponent {
     private playerHome: HomePlayer;
     private viking: Viking;
     private vikingHome: HomeViking;
+    private cats: Cats;
+
+    constructor() {
+        super();
+        this.game.dispatcher.once(TITLE_SCREEN_CLOSED, this.Start, this);
+    }
 
     protected OnInitialise(): void {
 
@@ -26,28 +33,32 @@ export default class CatGrabMain extends GameComponent {
         this.map = new Map();
 
         this.player = new Player(this.map, this.camera);
-        this.player.Start(PlayerHomeLocation);
-
         this.playerHome = new HomePlayer();
 
         this.viking = new Viking(this.map);
-        this.viking.Start(VikingHomeLocation);
-
         this.vikingHome = new HomeViking();
 
-        const cats = new Cats(this.map);
-        cats.Start();
+        this.cats = new Cats(this.map);
 
-        new Collisions(this.player, this.viking, cats);
+        new Collisions(this.player, this.viking, this.cats);
 
         new ScoreKeeper();
 
         this.camera.root.addChild(
             this.map.background,
             this.player.Springs.root, this.viking.Springs.root,
-            cats.root, this.viking.root, this.player.root,
+            this.cats.root, this.viking.root, this.player.root,
             this.playerHome.root, this.vikingHome.root,
             this.map.foreground
             );
+    }
+
+    private Start(): void {
+
+        this.game.sceneManager.ShowScene(Scenes.GAME);
+
+        this.player.Start(PlayerHomeLocation);
+        this.viking.Start(VikingHomeLocation);
+        this.cats.Start();
     }
 }

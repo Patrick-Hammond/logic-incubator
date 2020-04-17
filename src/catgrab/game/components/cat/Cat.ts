@@ -1,6 +1,6 @@
 import gsap, {Linear} from "gsap";
 import {AdjustmentFilter} from "pixi-filters";
-import {FindShortestPath} from "../../../../_lib/algorithms/Search";
+import {FindShortestPath} from "../../../../_lib/algorithms/PathSearch";
 import {AnimationSequence} from "../../../../_lib/game/display/AnimationSequence";
 import {RemoveFromParent, CallbackDone} from "../../../../_lib/game/display/Utils";
 import GameComponent from "../../../../_lib/game/GameComponent";

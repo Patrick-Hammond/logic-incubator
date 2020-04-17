@@ -1,5 +1,5 @@
 import {Sprite} from "pixi.js";
-import {ISearchGraph, SearchNode} from "../../../_lib/algorithms/Search";
+import {ISearchGraph, SearchNode} from "../../../_lib/algorithms/PathSearch";
 import GameComponent from "../../../_lib/game/GameComponent";
 import {Vec2Like} from "../../../_lib/math/Geometry";
 import {Direction} from "../../../_lib/utils/Types";

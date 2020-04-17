@@ -9,5 +9,5 @@ export const VikingHomeLocation = {x:14, y:2};
 export const AssetPath = "/assets/catgrab/";
 
 export const enum Scenes {
-    GAME = "game", SUMMARY = "summary"
+    TITLE = "title", GAME = "game", SUMMARY = "summary"
 }

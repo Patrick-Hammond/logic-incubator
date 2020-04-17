@@ -1,3 +1,4 @@
+export const TITLE_SCREEN_CLOSED = "titleScreenClosed";
 export const CAT_FOUND       = "catFound";
 export const CAT_HOME_PLAYER = "catHomePlayer";
 export const CAT_HOME_VIKING = "catHomeViking";

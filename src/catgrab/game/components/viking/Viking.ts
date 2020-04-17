@@ -1,6 +1,6 @@
 import gsap, {Linear, Power3} from "gsap";
 import {AnimatedSprite} from "pixi.js";
-import {FindShortestPath, SearchNode, FindClosestNode} from "../../../../_lib/algorithms/Search";
+import {FindShortestPath, SearchNode, FindClosestNode} from "../../../../_lib/algorithms/PathSearch";
 import {CallbackDone} from "../../../../_lib/game/display/Utils";
 import GameComponent from "../../../../_lib/game/GameComponent";
 import {Vec2, Vec2Like} from "../../../../_lib/math/Geometry";
