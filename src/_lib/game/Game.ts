@@ -4,7 +4,7 @@ import GamePad from "../io/GamePad";
 import Keyboard from "../io/Keyboard";
 import { StatsTicker } from "../utils/StatsTicker";
 import SceneManager from "./SceneManager";
-import ScreenFull from 'screenfull-es6';
+import * as ScreenFull from 'screenfull';
 import { IResizeStrategy, GetResizeStrategy, ResizeStrategies } from "./display/ResizeStrategies";
 
 export interface IGameOptions {
@@ -54,7 +54,7 @@ export default class Game extends Application {
             settings.SCALE_MODE = SCALE_MODES.NEAREST;
         }
 
-        if(options.fullscreen && ScreenFull.enabled) {
+        if(options.fullscreen && ScreenFull.isEnabled) {
             const mobileIOS = utils.isMobile.apple && (utils.isMobile.phone || utils.isMobile.tablet);
             if(mobileIOS) {
                 this.interactionManager.once("pointerdown", () => ScreenFull.request(this.view));
