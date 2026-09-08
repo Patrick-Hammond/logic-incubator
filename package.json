@@ -12,10 +12,12 @@
     "start": "webpack serve --mode development",
     "build": "webpack --mode development",
     "deploy": "webpack --mode production",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "test": "vitest run"
   },
   "keywords": [],
   "dependencies": {
+    "@pixi/math": "5.2.1",
     "eventemitter3": "^4.0.0",
     "gsap": "3.6.0",
     "nipplejs": "^0.8.5",
@@ -36,6 +38,7 @@
     "tsconfig-paths-webpack-plugin": "^4.2.0",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.69.0",
+    "vitest": "^5.0.0",
     "webpack": "^5.110.3",
     "webpack-cli": "^7.2.3",
     "webpack-dev-server": "^6.0.0"

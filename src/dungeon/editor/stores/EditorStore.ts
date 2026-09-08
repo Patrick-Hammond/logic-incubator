@@ -370,7 +370,7 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
 
     private NextDataLayerId(): number {
         const dataLayers = this.state.layers.filter(layer => layer.isData);
-        const nextId = dataLayers.length ? dataLayers.reduce((prev, curr) => (curr.id > prev.id ? curr : prev)).id - 999 : 0;
+        const nextId = dataLayers.length ? dataLayers.reduce((prev, curr) => (curr.id > prev.id ? curr : prev)).id - 999 : -1;
         return nextId;
     }
 

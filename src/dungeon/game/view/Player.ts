@@ -7,11 +7,11 @@ import {AnimatedSprite} from "pixi.js";
 import GameComponent from "../../../_lib/game/GameComponent";
 import AssetFactory from "../../../_lib/loading/AssetFactory";
 import {Vec2, Vec2Like} from "../../../_lib/math/Geometry";
-import {UpperLimit} from "../../../_lib/math/Utils";
-import {PlayerSpeed, Scenes, TileSize} from "../../Constants";
+import {Scenes, TileSize} from "../../Constants";
 import PlayerControl from "../input/PlayerControl";
 import TileCollision from "../level/TileCollision";
 import {Camera} from "./Camera";
+import {ResolveMove} from "./PlayerMovement";
 
 export class Player extends GameComponent {
     private controls: PlayerControl;
@@ -19,7 +19,6 @@ export class Player extends GameComponent {
     private targetLayer: PIXI.tilemap.CompositeRectTileLayer;
     private velocity = new Vec2();
     private newPosition = new Vec2();
-    private delta = new Vec2();
 
     constructor(
         private camera: Camera,
@@ -59,32 +58,9 @@ export class Player extends GameComponent {
     }
 
     private Move(dt: number): void {
-        this.delta.Set(
-            UpperLimit(this.velocity.x * dt * PlayerSpeed, TileSize - 1),
-            UpperLimit(this.velocity.y * dt * PlayerSpeed, TileSize - 1)
-        );
-        this.newPosition.Set(this.player.x + this.delta.x, this.player.y + this.delta.y);
-
-        if (this.player.x !== this.newPosition.x) {
-            const collision = this.collision.TestX(this.player.position, this.delta.x);
-            if (collision != null) {
-                this.velocity.x = 0;
-                this.newPosition.x = collision;
-            }
-        }
-
-        if (this.player.y !== this.newPosition.y) {
-            const collision = this.collision.TestY(this.player.position, this.delta.y);
-            if (collision != null) {
-                this.velocity.y = 0;
-                this.newPosition.y = collision;
-            }
-        }
-
+        this.newPosition.Copy(this.player.position);
+        ResolveMove(this.newPosition, this.velocity, dt, this.collision);
         this.player.position.set(this.newPosition.x, this.newPosition.y);
-
-        this.velocity.x *= 0.8 * dt;
-        this.velocity.y *= 0.8 * dt;
     }
 
     private Render(): void {

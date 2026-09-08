@@ -1,4 +1,8 @@
-import {Rectangle} from "pixi.js";
+// Deep import from @pixi/math (not "pixi.js") so this module - and everything
+// that imports it, e.g. TileCollision - stays free of pixi.js's renderer code,
+// which touches `window`/`<canvas>` at import time and cannot load under a
+// plain Node test runner. Same Rectangle class; pixi.js just re-exports it.
+import {Rectangle} from "@pixi/math";
 
 // tslint:disable
 export const EditorWidth = 1280;
