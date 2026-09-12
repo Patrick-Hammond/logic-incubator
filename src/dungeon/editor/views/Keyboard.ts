@@ -5,6 +5,7 @@ import EditorComponent from "../EditorComponent";
 import {GenerateMap, IMap, MapType} from "../maps/Generators";
 import {Style0x7} from "../maps/Style0x7";
 import {ApplyMapStyle} from "../maps/Styler";
+import {GenerateZTest} from "../maps/ZTest";
 import {EditorActions, IEditorState} from "../stores/EditorStore";
 import {LevelDataActions, LevelDataState} from "../stores/LevelDataStore";
 
@@ -132,6 +133,16 @@ export default class Keyboard extends EditorComponent {
                             let map: IMap = GenerateMap(mapType, w, h);
                             map = ApplyMapStyle(map, new Style0x7());
                             this.levelDataStore.Load({ levelData: map.levelData } as LevelDataState);
+                        }
+                        break;
+                    }
+                    case Key.Eight: {
+                        // per-tile z / scaling test map
+                        const ok = confirm("This will delete the current map. Are you sure?");
+                        if (ok) {
+                            this.editorStore.Dispatch({ type: EditorActions.RESET, data: { persistZoom: true } });
+                            this.levelDataStore.Dispatch({ type: LevelDataActions.RESET });
+                            this.levelDataStore.Load({ levelData: GenerateZTest() } as LevelDataState);
                         }
                         break;
                     }

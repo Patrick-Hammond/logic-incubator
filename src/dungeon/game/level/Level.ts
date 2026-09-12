@@ -5,6 +5,7 @@ import {Rectangle, Vec2Like} from "../../../_lib/math/Geometry";
 import {IEditorState} from "../../editor/stores/EditorStore";
 import {Layer} from "../../editor/stores/LevelDataStore";
 import {LEVEL_LOADED} from "../Events";
+import {HeightAt} from "./Depth";
 
 type Brush = {
     name: string;
@@ -24,14 +25,23 @@ export default class Level {
     public levelData: Tile[][][] = [];
     public tileLayers: Layer[] = [];
     public collisionData: boolean[][] = [];
+    /** Per-cell height painted with the `data-3` (DepthBrushName) data brush. */
+    public heightData: number[][] = [];
     public boundRect: Rectangle;
     public playerStartPosition: Vec2Like;
     public depthMax: number = 0;
+
+    /** Height painted under the given grid cell (0 if unpainted). Drives the camera zoom. */
+    HeightAt(tileX: number, tileY: number): number {
+        return HeightAt(this.heightData, tileX, tileY);
+    }
 
     LoadEditorData(editorLevelData: {editorData: IEditorState, levelData: Brush[]}): void {
 
         this.tileLayers = [];
         this.collisionData = [];
+        this.heightData = [];
+        this.depthMax = 0;
 
         const idMap: {[ id: number ]: number} = {};
         let id = 0;
@@ -74,7 +84,13 @@ export default class Level {
                         this.collisionData[ posX ][ posY ] = true;
                         break;
                     case "data-3":
-
+                        if(this.heightData[ posX ] == null) {
+                            this.heightData[ posX ] = [];
+                        }
+                        this.heightData[ posX ][ posY ] = brush.data;
+                        if(brush.data > this.depthMax) {
+                            this.depthMax = brush.data;
+                        }
                         break;
                 }
             }
@@ -108,7 +124,13 @@ export default class Level {
                         this.collisionData[ posX ][ posY ] = true;
                         break;
                     case "data-3":
-
+                        if(this.heightData[ posX ] == null) {
+                            this.heightData[ posX ] = [];
+                        }
+                        this.heightData[ posX ][ posY ] = brush.data;
+                        if(brush.data > this.depthMax) {
+                            this.depthMax = brush.data;
+                        }
                         break;
                 }
             }

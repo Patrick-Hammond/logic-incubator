@@ -9,6 +9,7 @@ import AssetFactory from "../../../_lib/loading/AssetFactory";
 import {Vec2, Vec2Like} from "../../../_lib/math/Geometry";
 import {Scenes, TileSize} from "../../Constants";
 import PlayerControl from "../input/PlayerControl";
+import Level from "../level/Level";
 import TileCollision from "../level/TileCollision";
 import {Camera} from "./Camera";
 import {ResolveMove} from "./PlayerMovement";
@@ -22,11 +23,12 @@ export class Player extends GameComponent {
 
     constructor(
         private camera: Camera,
-        private collision: TileCollision
+        private collision: TileCollision,
+        private level: Level
     ) {
         super();
 
-        this.player = AssetFactory.inst.CreateAnimatedSprite("chest_full_open_anim");
+        this.player = AssetFactory.inst.CreateAnimatedSprite("wizzart_m_run_anim");
         this.player.play();
         this.player.animationSpeed = 0.1;
 
@@ -47,6 +49,13 @@ export class Player extends GameComponent {
 
         this.Move(dt);
 
+        const half = (TileSize - 1) * 0.5;
+        const z = this.level.HeightAt(
+            ((this.player.x + half) / TileSize) | 0,
+            ((this.player.y + half) / TileSize) | 0
+        );
+        this.camera.SetZ(z);
+
         this.camera.Follow(this.player.x, this.player.y, 0.05);
 
         this.Render();
@@ -64,6 +73,7 @@ export class Player extends GameComponent {
     }
 
     private Render(): void {
+        // The player's own z band always renders 1:1, so no world-scale factor.
         this.targetLayer.clear();
         this.targetLayer.addFrame(
             this.player.texture,

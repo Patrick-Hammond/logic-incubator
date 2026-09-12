@@ -19,11 +19,30 @@ export class Camera extends GameComponent {
     get Zoom(): number {
         return this.zoom;
     }
+    /**
+     * Visible tile span of the player's own z band, which always renders 1:1.
+     * Bands above/below the player scale relative to it, so the ground the player
+     * stands on never changes size - stepping up makes the level you left recede.
+     */
+    get BaseViewWidth(): number {
+        return this.baseViewWidth;
+    }
+    get BaseViewHeight(): number {
+        return this.baseViewHeight;
+    }
+    /** The height the player is currently standing on; the fully-opaque, 1:1 render band. */
+    get CurrentZ(): number {
+        return this.currentZ;
+    }
 
     private viewRect: Rectangle;
     private scale: number;
     private scaledTileSize: number;
     private zoom: number = 2;
+
+    private baseViewWidth: number = 0;
+    private baseViewHeight: number = 0;
+    private currentZ: number = 0;
 
     constructor(private cameraControl?: ICameraControl) {
         super();
@@ -67,11 +86,24 @@ export class Camera extends GameComponent {
         this.game.dispatcher.emit(CAMERA_MOVED);
     }
 
+    /**
+     * Record the height the player is standing on. The view window is NOT resized
+     * - the player's band always draws 1:1 (see TileMapView), so the camera
+     * effectively zooms out as the player climbs. `TileMapView` reads `CurrentZ`
+     * on the next `CAMERA_MOVED` (emitted every frame by `Follow`).
+     */
+    SetZ(z: number): void {
+        this.currentZ = z;
+    }
+
      protected OnInitialise() {
 
         this.viewRect = new Rectangle(0, 0, Math.floor(GameWidth / TileSize / this.Zoom), Math.floor(GameHeight / TileSize / this.Zoom));
         this.scale = Math.min(GameWidth / this.viewRect.width / TileSize, GameHeight / this.viewRect.height / TileSize);
         this.scaledTileSize = TileSize * this.scale;
+
+        this.baseViewWidth = this.viewRect.width;
+        this.baseViewHeight = this.viewRect.height;
 
         if(this.cameraControl) {
             this.game.ticker.add(this.GetInput, this);

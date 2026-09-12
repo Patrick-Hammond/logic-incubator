@@ -1,0 +1,39 @@
+diff --git a/node_modules/pixi-tilemap/dist/pixi-tilemap.js b/node_modules/pixi-tilemap/dist/pixi-tilemap.js
+index b1615f6..0e4366c 100644
+--- a/node_modules/pixi-tilemap/dist/pixi-tilemap.js
++++ b/node_modules/pixi-tilemap/dist/pixi-tilemap.js
+@@ -197,6 +197,7 @@ var pixi_tilemap;
+             renderer.globalUniforms.uniforms.projectionMatrix.copyTo(this._globalMat).append(this.worldTransform);
+             shader.uniforms.shadowColor = this.shadowColor;
+             shader.uniforms.animationFrame = plugin.tileAnim;
++            shader.uniforms.tileAlpha = this.worldAlpha;
+             renderer.shader.bind(shader, false);
+             var layers = this.children;
+             for (var i = 0; i < layers.length; i++) {
+@@ -496,6 +497,7 @@ var pixi_tilemap;
+             renderer.globalUniforms.uniforms.projectionMatrix.copyTo(this._globalMat).append(this.worldTransform);
+             shader.uniforms.shadowColor = this.shadowColor;
+             shader.uniforms.animationFrame = plugin.tileAnim;
++            shader.uniforms.tileAlpha = this.worldAlpha;
+             this.renderWebGLCore(renderer, plugin);
+         };
+         RectTileLayer.prototype.renderWebGLCore = function (renderer, plugin) {
+@@ -667,7 +669,7 @@ var pixi_tilemap;
+ })(pixi_tilemap || (pixi_tilemap = {}));
+ var pixi_tilemap;
+ (function (pixi_tilemap) {
+-    var rectShaderFrag = "\nvarying vec2 vTextureCoord;\nvarying vec4 vFrame;\nvarying float vTextureId;\nuniform vec4 shadowColor;\nuniform sampler2D uSamplers[%count%];\nuniform vec2 uSamplerSize[%count%];\n\nvoid main(void){\n   vec2 textureCoord = clamp(vTextureCoord, vFrame.xy, vFrame.zw);\n   float textureId = floor(vTextureId + 0.5);\n\n   vec4 color;\n   %forloop%\n   gl_FragColor = color;\n}\n";
++    var rectShaderFrag = "\nvarying vec2 vTextureCoord;\nvarying vec4 vFrame;\nvarying float vTextureId;\nuniform vec4 shadowColor;\nuniform float tileAlpha;\nuniform sampler2D uSamplers[%count%];\nuniform vec2 uSamplerSize[%count%];\n\nvoid main(void){\n   vec2 textureCoord = clamp(vTextureCoord, vFrame.xy, vFrame.zw);\n   float textureId = floor(vTextureId + 0.5);\n\n   vec4 color;\n   %forloop%\n   gl_FragColor = color * tileAlpha;\n}\n";
+     var rectShaderVert = "\nattribute vec2 aVertexPosition;\nattribute vec2 aTextureCoord;\nattribute vec4 aFrame;\nattribute vec2 aAnim;\nattribute float aTextureId;\n\nuniform mat3 projTransMatrix;\nuniform vec2 animationFrame;\n\nvarying vec2 vTextureCoord;\nvarying float vTextureId;\nvarying vec4 vFrame;\n\nvoid main(void){\n   gl_Position = vec4((projTransMatrix * vec3(aVertexPosition, 1.0)).xy, 0.0, 1.0);\n   vec2 animCount = floor((aAnim + 0.5) / 2048.0);\n   vec2 animFrameOffset = aAnim - animCount * 2048.0;\n   vec2 animOffset = animFrameOffset * floor(mod(animationFrame + 0.5, animCount));\n\n   vTextureCoord = aTextureCoord + animOffset;\n   vFrame = aFrame + vec4(animOffset, animOffset);\n   vTextureId = aTextureId;\n}\n";
+     var TilemapShader = (function (_super) {
+         __extends(TilemapShader, _super);
+@@ -676,7 +678,8 @@ var pixi_tilemap;
+                 animationFrame: new Float32Array(2),
+                 uSamplers: [],
+                 uSamplerSize: [],
+-                projTransMatrix: new PIXI.Matrix()
++                projTransMatrix: new PIXI.Matrix(),
++                tileAlpha: 1
+             }) || this;
+             _this.maxTextures = 0;
+             _this.maxTextures = maxTextures;

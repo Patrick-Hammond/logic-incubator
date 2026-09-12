@@ -67,7 +67,7 @@ export default class Canvas extends EditorComponent {
 
             this.textPool.RestoreAll();
             state.levelData.forEach(brush => {
-                if (layerDict[brush.layerId].visible) {
+                if (layerDict[brush.layerId] && layerDict[brush.layerId].visible) {
                     let posX = (brush.position.x - viewOffset.x) * scaledTileSize + GridBounds.x;
                     let posY = (brush.position.y - viewOffset.y) * scaledTileSize + GridBounds.y;
 

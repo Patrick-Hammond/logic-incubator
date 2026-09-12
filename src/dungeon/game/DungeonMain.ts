@@ -20,7 +20,7 @@ export class DungeonMain extends GameComponent {
         this.game.dispatcher.on(LEVEL_CREATED, () => {
             if(!this.player) {
                 const collision = new TileCollision(this.level);
-                this.player = new Player(camera, collision);
+                this.player = new Player(camera, collision, this.level);
             }
             this.player.Init(this.level.playerStartPosition);
         });
