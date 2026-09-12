@@ -1,5 +1,5 @@
 diff --git a/node_modules/pixi-tilemap/dist/pixi-tilemap.js b/node_modules/pixi-tilemap/dist/pixi-tilemap.js
-index b1615f6..0e4366c 100644
+index b1615f6..5777ca0 100644
 --- a/node_modules/pixi-tilemap/dist/pixi-tilemap.js
 +++ b/node_modules/pixi-tilemap/dist/pixi-tilemap.js
 @@ -197,6 +197,7 @@ var pixi_tilemap;
@@ -10,6 +10,15 @@ index b1615f6..0e4366c 100644
              renderer.shader.bind(shader, false);
              var layers = this.children;
              for (var i = 0; i < layers.length; i++) {
+@@ -438,7 +439,7 @@ var pixi_tilemap;
+         };
+         RectTileLayer.prototype.tileRotate = function (rotate) {
+             var pb = this.pointsBuf;
+-            pb[pb.length - 3] = rotate;
++            pb[pb.length - 6] = rotate;
+         };
+         RectTileLayer.prototype.tileAnimX = function (offset, count) {
+             var pb = this.pointsBuf;
 @@ -496,6 +497,7 @@ var pixi_tilemap;
              renderer.globalUniforms.uniforms.projectionMatrix.copyTo(this._globalMat).append(this.worldTransform);
              shader.uniforms.shadowColor = this.shadowColor;

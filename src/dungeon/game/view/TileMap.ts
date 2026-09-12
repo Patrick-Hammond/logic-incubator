@@ -14,6 +14,33 @@ import { Camera } from "./Camera";
 type Band = { root: Container; layers: PIXI.tilemap.CompositeRectTileLayer[] };
 
 /**
+ * `CompositeRectTileLayer.addFrame` has no rotation/flip parameter - it always
+ * draws the texture's own baked-in orientation. A brush's rotation and flips
+ * have to be composed into a single GD8 symmetry and applied after the fact via
+ * `tileRotate`, since GD8 codes cover flip+rotation combinations, not each axis
+ * independently.
+ */
+function TileGD8Rotation(rotation: number, scaleX: number, scaleY: number): PIXI.GD8Symmetry {
+    // groupD8.S/N (and the mirror constants below) don't line up with their
+    // documented directions for this use - the whole mapping here is fit to
+    // match a real PIXI.Sprite(rotation, scale) rendering of the same texture,
+    // verified pixel-for-pixel across all 4 rotations x 4 flip combinations,
+    // not derived from the GD8 docs.
+    const quarterTurns = Math.round(rotation / (Math.PI / 2)) % 4;
+    const rotate = [PIXI.groupD8.E, PIXI.groupD8.N, PIXI.groupD8.W, PIXI.groupD8.S][quarterTurns];
+
+    let flip = PIXI.groupD8.E;
+    if (scaleX < 0) {
+        flip = PIXI.groupD8.add(flip, PIXI.groupD8.MIRROR_HORIZONTAL);
+    }
+    if (scaleY < 0) {
+        flip = PIXI.groupD8.add(flip, PIXI.groupD8.MIRROR_VERTICAL);
+    }
+
+    return PIXI.groupD8.add(flip, rotate);
+}
+
+/**
  * Draws tiles grouped by height (z). Each z band renders at `ZScale(z)`; all
  * bands are anchored on the same world point so they line up at the centre of
  * the screen and diverge outward by scale. Bands are added lowest z first, so a
@@ -119,10 +146,22 @@ export default class TileMapView extends GameComponent {
                         if (y < 0 || y >= boundH) {
                             continue;
                         }
-                        const tile = columns[x][y];
+                        const tiles = columns[x][y];
+                        if (!tiles) {
+                            continue;
+                        }
                         const cellZ = (heightColumn && heightColumn[y]) || 0;
-                        if (tile && tile.texture && cellZ === z) {
-                            layer.addFrame(tile.texture, (x - originX) * TileSize, (y - originY) * TileSize);
+                        if (cellZ !== z) {
+                            continue;
+                        }
+                        for (let t = 0, tt = tiles.length; t < tt; t++) {
+                            const tile = tiles[t];
+                            if (tile.texture) {
+                                layer.addFrame(tile.texture, (x - originX) * TileSize, (y - originY) * TileSize);
+                                if (tile.rotation || tile.scale.x < 0 || tile.scale.y < 0) {
+                                    layer.tileRotate(TileGD8Rotation(tile.rotation, tile.scale.x, tile.scale.y));
+                                }
+                            }
                         }
                     }
                 }

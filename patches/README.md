@@ -1,0 +1,35 @@
+# pixi-tilemap patches
+
+`pixi-tilemap` is pinned to `2.0.6` (see the `"//overrides"` note in `package.json`) and can't simply be upgraded — the maintained replacement, `@pixi/tilemap`, only has releases for pixi.js v6+, and this project is pinned to pixi.js 5.2.1. Two bugs in this exact version are fixed here via [patch-package](https://www.npmjs.com/package/patch-package) instead of forking: `npm install` reapplies `pixi-tilemap+2.0.6.patch` automatically via the `postinstall` script in `package.json`.
+
+## Fix 1: no alpha support
+
+`CompositeRectTileLayer`'s WebGL render path read `worldAlpha` only to skip drawing entirely once it hit exactly `0` — the value was never fed into the shader, so setting `.alpha` anywhere between 0 and 1 (on a tile layer, or a container holding one) had no visible effect. Tiles stayed fully opaque until alpha hit zero, then just vanished.
+
+Patched: added a `tileAlpha` uniform to the fragment shader (`gl_FragColor = color * tileAlpha`, default `1`), set from `this.worldAlpha` before each draw in both `CompositeRectTileLayer.prototype.render` and `RectTileLayer.prototype.render`.
+
+## Fix 2: `tileRotate` writes to the wrong buffer slot
+
+`RectTileLayer.prototype.tileRotate(rotate)` is meant to patch the rotation of the most-recently-added tile. It wrote to `pointsBuf[pointsBuf.length - 3]` — but by `addRect`'s actual push order (`u, v, x, y, tileWidth, tileHeight, rotate, animX, animY, textureIndex, animCountX, animCountY` — 12 fields per tile), `rotate` sits at offset `-6` from the end, not `-3` (which is `textureIndex`). Calling `tileRotate` was corrupting which texture a tile samples from instead of rotating it.
+
+Patched: `pointsBuf[pointsBuf.length - 6] = rotate`.
+
+## Where this is used, and a GD8 gotcha
+
+`TileGD8Rotation` in `src/dungeon/game/view/TileMap.ts` uses `tileRotate` to apply a brush's rotation and flips when rendering tiles (`CompositeRectTileLayer.addFrame` has no rotation parameter of its own — this is what makes `tileRotate` necessary in the first place). Getting the actual GD8 codes right took empirical verification, not documentation — PIXI's own doc comments are misleading here:
+
+- `PIXI.groupD8.MIRROR_VERTICAL` flips **top/bottom**, not left/right; `MIRROR_HORIZONTAL` flips **left/right**. Backwards from what "reflection about the Y/X axis" suggests.
+- The quarter-turn mapping for 0°/90°/180°/270° is `[E, N, W, S]`, not the seemingly obvious `[E, S, W, N]`.
+- The correct composition is `PIXI.groupD8.add(flip, rotate)` — flip as the *first* argument, not the second.
+
+This was pinned down by rendering the same asymmetric test texture two ways — once through a real `PIXI.Sprite` with `.rotation`/`.scale` set (matching exactly what the level editor does), once through `CompositeRectTileLayer` + a candidate GD8 code — and diffing pixels until they matched. Verified exhaustively across all 4 rotations × all 4 flip combinations (16 cases) before trusting the formula.
+
+**If tile orientation ever looks wrong again after touching `TileGD8Rotation`, re-verify the same way — don't re-derive the mapping from PIXI's `groupD8` docs, they don't hold up for this.**
+
+## Regenerating the patch
+
+If `pixi-tilemap`'s installed files ever change (a version bump, or a fresh `npm install` overwriting a hand-edit), reapply the two fixes above to `node_modules/pixi-tilemap/dist/pixi-tilemap.js`, then run:
+
+```bash
+npx patch-package pixi-tilemap
+```

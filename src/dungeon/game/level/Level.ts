@@ -22,7 +22,8 @@ export type Tile = Brush & {
 };
 
 export default class Level {
-    public levelData: Tile[][][] = [];
+    /** [layer][x][y] -> every tile painted at that cell, in paint order (later = drawn on top). */
+    public levelData: Tile[][][][] = [];
     public tileLayers: Layer[] = [];
     public collisionData: boolean[][] = [];
     /** Per-cell height painted with the `data-3` (DepthBrushName) data brush. */
@@ -109,9 +110,12 @@ export default class Level {
                 if(this.levelData[ index ][ posX ] == null) {
                     this.levelData[ index ][ posX ] = [];
                 }
+                if(this.levelData[ index ][ posX ][ posY ] == null) {
+                    this.levelData[ index ][ posX ][ posY ] = [];
+                }
 
                 const tile = {texture: AssetFactory.inst.CreateTexture(brush.name), ...brush};
-                this.levelData[ index ][ posX ][ posY ] = tile;
+                this.levelData[ index ][ posX ][ posY ].push(tile);
             } else {
                 switch(brush.name) {
                     case "data-1":
