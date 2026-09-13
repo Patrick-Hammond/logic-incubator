@@ -12,7 +12,7 @@ module.exports = {
   devServer: {
     contentBase: './dist',
     hot: true,
-    port: 4200
+    port: 5000
   },
   plugins: [
     new CleanWebpackPlugin(['dist']),

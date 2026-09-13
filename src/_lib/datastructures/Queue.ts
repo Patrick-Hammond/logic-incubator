@@ -1,12 +1,12 @@
 export class Queue<T> {
 
-    private queue: T[] = [];
-
-    constructor(private capacity: number) {}
-
     static Create<U>(capacity: number = Number.MAX_VALUE): Queue<U> {
         return new Queue<U>(capacity);
     }
+
+    private queue: T[] = [];
+
+    constructor(private capacity: number) {}
 
     Queue(item: T): Queue<T> {
         this.queue.push(item);

@@ -1,4 +1,4 @@
-import {AnimatedSprite, Sprite, Texture, utils, BitmapText} from "pixi.js";
+import {AnimatedSprite, BitmapText, Sprite, Texture, utils} from "pixi.js";
 
 export default class AssetFactory {
     private static _inst: AssetFactory;

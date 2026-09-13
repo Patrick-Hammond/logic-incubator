@@ -1,5 +1,5 @@
-import Game from "../Game";
 import { RectangleLike } from "_lib/math/Geometry";
+import Game from "../Game";
 
 export function RemoveFromParent(displayObject: PIXI.DisplayObject): PIXI.DisplayObject {
     if (displayObject && displayObject.parent) {

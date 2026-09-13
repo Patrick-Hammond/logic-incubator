@@ -120,6 +120,14 @@ export class Rectangle {
         return this;
     }
 
+    Scale(amount: number): Rectangle {
+        this.x *= amount;
+        this.y *= amount;
+        this.width *= amount;
+        this.height *= amount;
+        return this;
+    }
+
     ContainsPoint(point: Vec2Like): boolean {
         return this.Contains(point.x, point.y);
     }
@@ -141,11 +149,12 @@ export class Rectangle {
                 rect.height === this.height;
     }
 
-    Copy(rect: RectangleLike): void {
+    Copy(rect: RectangleLike): Rectangle {
         this.x = rect.x;
         this.y = rect.y;
         this.width = rect.width;
         this.height = rect.height;
+        return this;
     }
 
     Clone(): Rectangle {

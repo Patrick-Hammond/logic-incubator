@@ -9,8 +9,7 @@ FACTORY
 */
 
 export function GetResizeStrategy(fit: ResizeStrategies): IResizeStrategy {
-    switch(fit)
-    {
+    switch(fit) {
         case "none":     return new NoResizeStrategy();
         case "centered": return new CenteredResizeStrategy();
         case "border":   return new BorderResizeStrategy();

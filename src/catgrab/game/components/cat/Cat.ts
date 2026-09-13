@@ -5,11 +5,11 @@ import {AnimationSequence} from "../../../../_lib/game/display/AnimationSequence
 import {RemoveFromParent, CallbackDone} from "../../../../_lib/game/display/Utils";
 import GameComponent from "../../../../_lib/game/GameComponent";
 import {Vec2, Vec2Like} from "../../../../_lib/math/Geometry";
-import {Wait} from "../../../../_lib/game/Timing";
 import {PlayerHomeLocation, VikingHomeLocation} from "../../../Constants";
 import {CAT_FOLLOWING, CAT_HOME_PLAYER, CAT_HOME_VIKING, CAT_MOVED} from "../../Events";
 import {TileToPixel} from "../../Utils";
 import Map from "../Map";
+import { Wait } from "_lib/utils/Timing";
 
 enum CatState {
     FALLING, ACTIVE, HOME

@@ -1,8 +1,8 @@
+import { Cancel, Wait } from "_lib/utils/Timing";
 import { EventEmitter } from "eventemitter3";
 import { Vec2 } from "../math/Geometry";
 import { LowerLimit } from "../math/Utils";
 import {Direction} from "../utils/Types";
-import { Cancel, Wait } from "_lib/game/Timing";
 
 export enum GamePadEvents {
     CONNECTED = "connected",
@@ -146,7 +146,7 @@ export default class GamePad extends EventEmitter {
         this.emit(GamePadEvents.CONNECTED, gamepad.index);
     }
 
-    private RemoveGamePad(gamepad : Gamepad) {
+    private RemoveGamePad(gamepad: Gamepad) {
         this.Log("disconnected! " + gamepad.index);
 
         this.emit(GamePadEvents.DISCONNECTED, gamepad.index);

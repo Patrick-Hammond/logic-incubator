@@ -5,13 +5,13 @@ import {CallbackDone} from "../../../../_lib/game/display/Utils";
 import GameComponent from "../../../../_lib/game/GameComponent";
 import {Vec2, Vec2Like} from "../../../../_lib/math/Geometry";
 import {NullFunction} from "../../../../_lib/patterns/FunctionUtils";
-import {Cancel, Wait} from "../../../../_lib/game/Timing";
 import {Direction} from "../../../../_lib/utils/Types";
 import {VikingHomeLocation} from "../../../Constants";
 import {CAT_FOLLOWING, VIKING_MOVED, CAT_POSITIONS, ROUND_FINISHED, NEXT_ROUND} from "../../Events";
 import {TileToPixel} from "../../Utils";
 import Map, {TileType} from "../Map";
 import Springs from "../Springs";
+import { Wait, Cancel } from "_lib/utils/Timing";
 
 enum VikingState {
     PATROLLING, END_PATROL, GOING_HOME, FALLING, DISABLED

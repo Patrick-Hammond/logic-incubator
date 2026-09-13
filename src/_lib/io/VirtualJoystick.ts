@@ -1,6 +1,6 @@
-import { JoystickManagerOptions, JoystickManager, EventData, JoystickOutputData } from 'nipplejs';
-import { create as createManager } from 'nipplejs';
-import { Direction } from '_lib/utils/Types';
+import { Direction } from "_lib/utils/Types";
+import { EventData, JoystickManager, JoystickManagerOptions, JoystickOutputData } from "nipplejs";
+import { create as createManager } from "nipplejs";
 
 type JoystickState = {evt: EventData, data: JoystickOutputData, dir: string, plain: string};
 

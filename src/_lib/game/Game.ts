@@ -1,11 +1,11 @@
 import { EventEmitter } from "eventemitter3";
-import {Application, interaction, settings, SCALE_MODES, utils} from "pixi.js";
+import {Application, interaction, SCALE_MODES, settings, utils} from "pixi.js";
+import ScreenFull from "screenfull-es6";
 import GamePad from "../io/GamePad";
 import Keyboard from "../io/Keyboard";
 import { StatsTicker } from "../utils/StatsTicker";
+import { GetResizeStrategy, IResizeStrategy, ResizeStrategies } from "./display/ResizeStrategies";
 import SceneManager from "./SceneManager";
-import ScreenFull from 'screenfull-es6';
-import { IResizeStrategy, GetResizeStrategy, ResizeStrategies } from "./display/ResizeStrategies";
 
 export interface IGameOptions {
         autoStart?: boolean;

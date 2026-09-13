@@ -3,8 +3,8 @@ import ObjectPool from "../../../../_lib/patterns/ObjectPool";
 import Cat from "./Cat";
 import Map from "../Map";
 import {CAT_POSITIONS, CAT_HOME_PLAYER, CAT_HOME_VIKING, NEXT_ROUND} from "../../Events";
-import { GetInterval, Wait } from "_lib/game/Timing";
 import { Vec2Like } from "_lib/math/Geometry";
+import { GetInterval, Wait } from "_lib/utils/Timing";
 
 export default class Cats extends GameComponent {
 
