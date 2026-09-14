@@ -9,9 +9,11 @@ import AssetFactory from "../../../_lib/loading/AssetFactory";
 import {Vec2, Vec2Like} from "../../../_lib/math/Geometry";
 import {Scenes, TileSize} from "../../Constants";
 import PlayerControl from "../input/PlayerControl";
+import {CameraZoom} from "../level/Depth";
 import Level from "../level/Level";
 import TileCollision from "../level/TileCollision";
 import {Camera} from "./Camera";
+import {ViewOrigin} from "./CameraWindow";
 import {ResolveMove} from "./PlayerMovement";
 import {SpriteDrawPosition} from "./SpriteDrawOffset";
 import {TileGD8Rotation} from "./TileMap";
@@ -82,9 +84,15 @@ export class Player extends GameComponent {
     private Render(): void {
         if(!this.targetLayer) return;
 
-        // The player's own z band always renders 1:1, so no world-scale factor.
+        // The player's own z band is scaled by CameraZoom (see TileMapView),
+        // so its window origin must be computed the exact same way - not the
+        // raw ViewRect, which ignores that zoom and would drift the sprite
+        // away from its tile the moment CameraZoom moves off 1 (any z != 0).
+        const cameraZoom = CameraZoom(this.camera.CurrentZ);
+        const origin = ViewOrigin(this.camera.ViewRect.center, this.camera.BaseViewWidth, this.camera.BaseViewHeight, cameraZoom);
+
         this.targetLayer.clear();
-        const draw = SpriteDrawPosition(this.player.position, this.camera.ViewRect, this.player.texture);
+        const draw = SpriteDrawPosition(this.player.position, origin, this.player.texture);
         this.targetLayer.addFrame(this.player.texture, draw.x, draw.y);
         if (this.facingX < 0) {
             this.targetLayer.tileRotate(TileGD8Rotation(0, this.facingX, 1));

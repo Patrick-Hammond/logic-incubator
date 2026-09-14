@@ -10,6 +10,7 @@ import { CAMERA_MOVED, LEVEL_CREATED, LEVEL_LOADED } from "../Events";
 import { CameraZoom, ZBandAlpha, ZScale } from "../level/Depth";
 import Level from "../level/Level";
 import { Camera } from "./Camera";
+import { ViewOrigin } from "./CameraWindow";
 
 type Band = { root: Container; layers: PIXI.tilemap.CompositeRectTileLayer[] };
 
@@ -131,8 +132,7 @@ export default class TileMapView extends GameComponent {
             const zScale = ZScale(z - currentZ) * cameraZoom;
             const winW = this.camera.BaseViewWidth / zScale;
             const winH = this.camera.BaseViewHeight / zScale;
-            const originX = centre.x - winW * 0.5;
-            const originY = centre.y - winH * 0.5;
+            const { x: originX, y: originY } = ViewOrigin(centre, this.camera.BaseViewWidth, this.camera.BaseViewHeight, zScale);
 
             for (let l = 0, ll = band.layers.length; l < ll; l++) {
                 const layer = band.layers[l];
