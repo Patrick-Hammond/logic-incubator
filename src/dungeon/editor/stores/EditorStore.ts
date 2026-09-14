@@ -41,6 +41,14 @@ export const enum MouseButtonState {
     MIDDLE_DOWN
 }
 
+export const enum DataBrushName {
+    PLAYER_START = "player-start",
+    COLLISION = "collision",
+    Z_INDEX = "z-index",
+    DATA_4 = "data-4",
+    DATA_5 = "data-5"
+}
+
 export type DataBrush = { name: string; colour: number; value: number };
 
 interface IActionData {
@@ -84,11 +92,11 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
             brushVisible: false,
             hoveredBrushName: "",
             dataBrushes: [
-                { name: "data-1", colour: 0xfe3464, value: 0 },
-                { name: "data-2", colour: 0xffd166, value: 0 },
-                { name: "data-3", colour: 0x06d6a0, value: 0 },
-                { name: "data-4", colour: 0x118ab2, value: 0 },
-                { name: "data-5", colour: 0xff8100, value: 0 }
+                { name: DataBrushName.PLAYER_START, colour: 0xfe3464, value: 0 },
+                { name: DataBrushName.COLLISION, colour: 0xffd166, value: 0 },
+                { name: DataBrushName.Z_INDEX, colour: 0x06d6a0, value: 0 },
+                { name: DataBrushName.DATA_4, colour: 0x118ab2, value: 0 },
+                { name: DataBrushName.DATA_5, colour: 0xff8100, value: 0 }
             ],
             layers: [],
             mouseButtonState: MouseButtonState.UP,

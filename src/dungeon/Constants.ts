@@ -3,6 +3,7 @@
 // which touches `window`/`<canvas>` at import time and cannot load under a
 // plain Node test runner. Same Rectangle class; pixi.js just re-exports it.
 import {Rectangle} from "@pixi/math";
+import { DataBrushName } from "./editor/stores/EditorStore";
 
 // tslint:disable
 export const EditorWidth = 1280;
@@ -13,7 +14,7 @@ export const InitalScale = 1.5;
 export const TileSize = 16;
 export const AnimationSpeed = 0.2;
 export const PlayerSpeed = 0.8;
-export const DepthBrushName = "data-3";
+export const DepthBrushName = DataBrushName.Z_INDEX;
 export const AssetPath = "/assets/dungeon/";
 
 export const GridBounds = new Rectangle(20, 20, EditorWidth - 300, EditorHeight - 40);

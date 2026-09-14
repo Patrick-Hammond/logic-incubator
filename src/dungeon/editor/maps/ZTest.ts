@@ -1,8 +1,9 @@
+import { DataBrushName } from "../stores/EditorStore";
 import { Brush } from "../stores/LevelDataStore";
 
 /**
  * A hand-built map for exercising height / scaling without editor painting.
- * One flat walkable grid; height comes from `data-3` brushes on a data layer
+ * One flat walkable grid; height comes from `Z_INDEX` brushes on a data layer
  * (same as the editor workflow), covering every cell of the raised areas:
  *
  *   low room    x  2..18   h 0   -- player spawns here, door on the right
@@ -31,10 +32,10 @@ function mk(name: string, x: number, y: number, layerId: number, data: number = 
     };
 }
 
-/** Paint a data-3 (height) brush - skipped for height 0 (the unpainted default). */
+/** Paint a `Z_INDEX` (height) brush - skipped for height 0 (the unpainted default). */
 function height(out: Brush[], x: number, y: number, h: number): void {
     if (h > 0) {
-        out.push(mk("data-3", x, y, DATA_LAYER, h));
+        out.push(mk(DataBrushName.Z_INDEX, x, y, DATA_LAYER, h));
     }
 }
 
@@ -46,7 +47,7 @@ function room(out: Brush[], x0: number, y0: number, x1: number, y1: number, h: n
             const isDoor = (door === "right" && x === x1 && y === doorY) || (door === "left" && x === x0 && y === doorY);
             if (perimeter && !isDoor) {
                 out.push(mk("wall_mid", x, y, TILE_LAYER));
-                out.push(mk("data-2", x, y, DATA_LAYER));
+                out.push(mk(DataBrushName.COLLISION, x, y, DATA_LAYER));
             } else {
                 out.push(mk("floor_1", x, y, TILE_LAYER));
             }
@@ -59,15 +60,15 @@ export function GenerateZTest(): Brush[] {
     const out: Brush[] = [];
 
     room(out, 2, 2, 18, 14, 0, "right");
-    out.push(mk("data-1", 5, ROW, DATA_LAYER)); // spawn
+    out.push(mk(DataBrushName.PLAYER_START, 5, ROW, DATA_LAYER)); // spawn
 
     STEP_H.forEach((h, i) => {
         const x = 19 + i;
         out.push(mk("floor_1", x, ROW, TILE_LAYER));
         out.push(mk("wall_mid", x, ROW - 1, TILE_LAYER));
-        out.push(mk("data-2", x, ROW - 1, DATA_LAYER));
+        out.push(mk(DataBrushName.COLLISION, x, ROW - 1, DATA_LAYER));
         out.push(mk("wall_mid", x, ROW + 1, TILE_LAYER));
-        out.push(mk("data-2", x, ROW + 1, DATA_LAYER));
+        out.push(mk(DataBrushName.COLLISION, x, ROW + 1, DATA_LAYER));
         // height covers the whole strip footprint so walls scale with the floor
         height(out, x, ROW - 1, h);
         height(out, x, ROW, h);

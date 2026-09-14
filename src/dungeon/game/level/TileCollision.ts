@@ -7,7 +7,7 @@ export default class TileCollision {
 
     constructor(private level: Level) {}
 
-    TestX(from: Vec2Like, dir: number): number {
+    TestX(from: Vec2Like, dir: number): number | null{
         this.playerBounds.x = from.x + dir;
         const yBottom = from.y + this.playerBounds.height;
         if (dir > 0) {
@@ -25,7 +25,7 @@ export default class TileCollision {
         return null;
     }
 
-    TestY(from: Vec2Like, dir: number): number {
+    TestY(from: Vec2Like, dir: number): number | null {
         this.playerBounds.y = from.y + dir;
         const xRight = from.x + this.playerBounds.width;
         if (dir > 0) {
@@ -55,7 +55,7 @@ export default class TileCollision {
      * and the wall continuing solid past both sides of the gap, is the "lined
      * up with a gap but a corner is catching" case the head-start is for.
      */
-    GapAlignX(from: Vec2Like, dir: number): number {
+    GapAlignX(from: Vec2Like, dir: number): number | null {
         if (dir === 0) {
             return null;
         }
@@ -88,7 +88,7 @@ export default class TileCollision {
      * gap (a doorway) in a vertical wall that the player's vertical centre is
      * lined up with. Returns the Y to jump to, or null to block normally.
      */
-    GapAlignY(from: Vec2Like, dir: number): number {
+    GapAlignY(from: Vec2Like, dir: number): number | null {
         if (dir === 0) {
             return null;
         }

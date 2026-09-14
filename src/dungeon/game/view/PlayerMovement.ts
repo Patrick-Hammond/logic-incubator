@@ -4,21 +4,21 @@ import { PlayerSpeed, TileSize } from "../../Constants";
 
 export interface MoveCollider {
     /** Non-null = the X the player must stop at when stepping `dir` px horizontally from `from`. */
-    TestX(from: Vec2Like, dir: number): number;
+    TestX(from: Vec2Like, dir: number): number | null;
     /** Non-null = the Y the player must stop at when stepping `dir` px vertically from `from`. */
-    TestY(from: Vec2Like, dir: number): number;
+    TestY(from: Vec2Like, dir: number): number | null;
     /**
      * Called after TestY blocks a vertical step: non-null = the X to jump to so
      * the player drops through a one-tile column gap it is lined up with; null =
      * a real wall.
      */
-    GapAlignX(from: Vec2Like, dir: number): number;
+    GapAlignX(from: Vec2Like, dir: number): number | null;
     /**
      * Called after TestX blocks a horizontal step: non-null = the Y to jump to
      * so the player slips through a one-tile row gap (a doorway) it is lined up
      * with; null = a real wall.
      */
-    GapAlignY(from: Vec2Like, dir: number): number;
+    GapAlignY(from: Vec2Like, dir: number): number | null;
 }
 
 /** Per-frame velocity damping (multiplied by dt each frame). */

@@ -2,7 +2,7 @@ import {Texture} from "pixi.js";
 import Game from "../../../_lib/game/Game";
 import AssetFactory from "../../../_lib/loading/AssetFactory";
 import {Rectangle, Vec2Like} from "../../../_lib/math/Geometry";
-import {IEditorState} from "../../editor/stores/EditorStore";
+import {DataBrushName, IEditorState} from "../../editor/stores/EditorStore";
 import {Layer} from "../../editor/stores/LevelDataStore";
 import {LEVEL_LOADED} from "../Events";
 import {HeightAt} from "./Depth";
@@ -26,7 +26,7 @@ export default class Level {
     public levelData: Tile[][][][] = [];
     public tileLayers: Layer[] = [];
     public collisionData: boolean[][] = [];
-    /** Per-cell height painted with the `data-3` (DepthBrushName) data brush. */
+    /** Per-cell height painted with the `Z_INDEX` (DepthBrushName) data brush. */
     public heightData: number[][] = [];
     public boundRect: Rectangle;
     public playerStartPosition: Vec2Like;
@@ -75,16 +75,16 @@ export default class Level {
                 const posY = brush.position.y - bounds.y1;
 
                 switch(brush.name) {
-                    case "data-1":
+                    case DataBrushName.PLAYER_START:
                         this.playerStartPosition = {x: posX, y: posY};
                         break;
-                    case "data-2":
+                    case DataBrushName.COLLISION:
                         if(this.collisionData[ posX ] == null) {
                             this.collisionData[ posX ] = [];
                         }
                         this.collisionData[ posX ][ posY ] = true;
                         break;
-                    case "data-3":
+                    case DataBrushName.Z_INDEX:
                         if(this.heightData[ posX ] == null) {
                             this.heightData[ posX ] = [];
                         }
@@ -118,16 +118,16 @@ export default class Level {
                 this.levelData[ index ][ posX ][ posY ].push(tile);
             } else {
                 switch(brush.name) {
-                    case "data-1":
+                    case DataBrushName.PLAYER_START:
                         this.playerStartPosition = {x: posX, y: posY};
                         break;
-                    case "data-2":
+                    case DataBrushName.COLLISION:
                         if(this.collisionData[ posX ] == null) {
                             this.collisionData[ posX ] = [];
                         }
                         this.collisionData[ posX ][ posY ] = true;
                         break;
-                    case "data-3":
+                    case DataBrushName.Z_INDEX:
                         if(this.heightData[ posX ] == null) {
                             this.heightData[ posX ] = [];
                         }
