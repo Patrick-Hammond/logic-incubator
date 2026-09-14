@@ -1,7 +1,8 @@
-import {Texture} from "pixi.js";
+import {AnimatedSprite, Texture} from "pixi.js";
 import Game from "../../../_lib/game/Game";
 import AssetFactory from "../../../_lib/loading/AssetFactory";
 import {Rectangle, Vec2Like} from "../../../_lib/math/Geometry";
+import {AnimationSpeed} from "../../Constants";
 import {DataBrushName, IEditorState} from "../../editor/stores/EditorStore";
 import {Layer} from "../../editor/stores/LevelDataStore";
 import {LEVEL_LOADED} from "../Events";
@@ -19,7 +20,19 @@ type Brush = {
 
 export type Tile = Brush & {
     texture: Texture;
+    /** Set for tiles painted with an animated brush; `TileMapView` reads its live `.texture` each render instead of `texture`. */
+    anim?: AnimatedSprite;
 };
+
+function CreateTile(brush: Brush): Tile {
+    if (AssetFactory.inst.AnimationNames.indexOf(brush.name) > -1) {
+        const anim = AssetFactory.inst.CreateAnimatedSprite(brush.name);
+        anim.play();
+        anim.animationSpeed = AnimationSpeed;
+        return {...brush, texture: anim.texture, anim};
+    }
+    return {...brush, texture: AssetFactory.inst.CreateTexture(brush.name)};
+}
 
 export default class Level {
     /** [layer][x][y] -> every tile painted at that cell, in paint order (later = drawn on top). */
@@ -39,7 +52,18 @@ export default class Level {
         return HeightAt(this.heightData, tileX, tileY);
     }
 
+    /** Stops animated tiles' sprites so reloading a level doesn't leave them ticking in the background forever. */
+    private DisposeTiles(): void {
+        this.levelData.forEach(layer =>
+            layer.forEach(column =>
+                column && column.forEach(cell => cell && cell.forEach(tile => tile.anim && tile.anim.stop()))
+            )
+        );
+    }
+
     LoadEditorData(editorLevelData: {editorData: IEditorState, levelData: Brush[]}): void {
+
+        this.DisposeTiles();
 
         this.tileLayers = [];
         this.collisionData = [];
@@ -120,8 +144,7 @@ export default class Level {
                     this.levelData[ index ][ posX ][ posY ] = [];
                 }
 
-                const tile = {texture: AssetFactory.inst.CreateTexture(brush.name), ...brush};
-                this.levelData[ index ][ posX ][ posY ].push(tile);
+                this.levelData[ index ][ posX ][ posY ].push(CreateTile(brush));
             } else {
                 switch(brush.name) {
                     case DataBrushName.PLAYER_START:

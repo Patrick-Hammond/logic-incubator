@@ -167,8 +167,9 @@ export default class TileMapView extends GameComponent {
                         }
                         for (let t = 0, tt = tiles.length; t < tt; t++) {
                             const tile = tiles[t];
-                            if (tile.texture) {
-                                layer.addFrame(tile.texture, (x - originX) * TileSize, (y - originY) * TileSize);
+                            const texture = tile.anim ? tile.anim.texture : tile.texture;
+                            if (texture) {
+                                layer.addFrame(texture, (x - originX) * TileSize, (y - originY) * TileSize);
                                 if (tile.rotation || tile.scale.x < 0 || tile.scale.y < 0) {
                                     layer.tileRotate(TileGD8Rotation(tile.rotation, tile.scale.x, tile.scale.y));
                                 }
