@@ -17,6 +17,8 @@ export const BaseZScale = 1;
 export const ZScaleRatio = 1.04;
 /** Alpha lost per z away from the z the player is standing on. */
 export const ZFadeStep = 0.2;
+/** Minimum alpha for a z-band. */
+export const MinZFade = 0.05;
 
 /** On-screen scale of a tile / band at the given height. */
 export function ZScale(z: number): number {
@@ -31,7 +33,7 @@ export function ZBandAlpha(z: number, playerZ: number): number {
     if (z === playerZ) {
         return 1;
     }
-    return Math.max(0.05, 1 - Math.abs(z - playerZ) * ZFadeStep);
+    return Math.max(MinZFade, 1 - Math.abs(z - playerZ) * ZFadeStep);
 }
 
 /**
