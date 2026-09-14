@@ -44,9 +44,8 @@ export default class Level {
     public heightData: number[][] = [];
     public boundRect: Rectangle;
     public playerStartPosition: Vec2Like;
-    /** Highest/lowest painted `Z_INDEX` height, inclusive of the unpainted default (0). */
-    public depthMax: number = 0;
-    public depthMin: number = 0;
+    /** Distinct painted `Z_INDEX` heights, ascending, always including the unpainted default (0). `TileMapView` builds one band per entry - sparse, so a stray tile at an extreme height doesn't force bands for every height in between. */
+    public depths: number[] = [0];
 
     /** Height painted under the given grid cell (0 if unpainted). Drives the camera zoom. */
     HeightAt(tileX: number, tileY: number): number {
@@ -69,8 +68,7 @@ export default class Level {
         this.tileLayers = [];
         this.collisionData = [];
         this.heightData = [];
-        this.depthMax = 0;
-        this.depthMin = 0;
+        const depths = new Set<number>([0]);
 
         const idMap: {[ id: number ]: number} = {};
         let id = 0;
@@ -117,12 +115,7 @@ export default class Level {
                             this.heightData[ posX ] = [];
                         }
                         this.heightData[ posX ][ posY ] = brush.data;
-                        if(brush.data > this.depthMax) {
-                            this.depthMax = brush.data;
-                        }
-                        if(brush.data < this.depthMin) {
-                            this.depthMin = brush.data;
-                        }
+                        depths.add(brush.data);
                         break;
                 }
             }
@@ -162,16 +155,13 @@ export default class Level {
                             this.heightData[ posX ] = [];
                         }
                         this.heightData[ posX ][ posY ] = brush.data;
-                        if(brush.data > this.depthMax) {
-                            this.depthMax = brush.data;
-                        }
-                        if(brush.data < this.depthMin) {
-                            this.depthMin = brush.data;
-                        }
+                        depths.add(brush.data);
                         break;
                 }
             }
         });
+
+        this.depths = Array.from(depths).sort((a, b) => a - b);
 
         Game.inst.dispatcher.emit(LEVEL_LOADED);
     }

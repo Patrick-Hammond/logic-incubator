@@ -77,7 +77,7 @@ export default class TileMapView extends GameComponent {
             this.playerLayer = null;
         }
 
-        for (let z = this.level.depthMin; z <= this.level.depthMax; z++) {
+        for (const z of this.level.depths) {
             const root = new Container();
             root.name = "z-" + z;
             root.interactive = root.interactiveChildren = false;
