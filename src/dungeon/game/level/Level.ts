@@ -27,8 +27,9 @@ export type Tile = Brush & {
 function CreateTile(brush: Brush): Tile {
     if (AssetFactory.inst.AnimationNames.indexOf(brush.name) > -1) {
         const anim = AssetFactory.inst.CreateAnimatedSprite(brush.name);
-        anim.play();
         anim.animationSpeed = AnimationSpeed;
+        // Random start frame so identical brushes (e.g. several torches) don't all pulse in lockstep.
+        anim.gotoAndPlay((Math.random() * anim.totalFrames) | 0);
         return {...brush, texture: anim.texture, anim};
     }
     return {...brush, texture: AssetFactory.inst.CreateTexture(brush.name)};
