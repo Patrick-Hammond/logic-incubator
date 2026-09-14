@@ -13,6 +13,7 @@ import Level from "../level/Level";
 import TileCollision from "../level/TileCollision";
 import {Camera} from "./Camera";
 import {ResolveMove} from "./PlayerMovement";
+import {SpriteDrawPosition} from "./SpriteDrawOffset";
 
 export class Player extends GameComponent {
     private controls: PlayerControl;
@@ -75,10 +76,7 @@ export class Player extends GameComponent {
     private Render(): void {
         // The player's own z band always renders 1:1, so no world-scale factor.
         this.targetLayer.clear();
-        this.targetLayer.addFrame(
-            this.player.texture,
-            this.player.x - this.camera.ViewRect.x * TileSize,
-            this.player.y - this.camera.ViewRect.y * TileSize
-        );
+        const draw = SpriteDrawPosition(this.player.position, this.camera.ViewRect, this.player.texture);
+        this.targetLayer.addFrame(this.player.texture, draw.x, draw.y);
     }
 }
