@@ -12,7 +12,7 @@ import Level from "../level/Level";
 import { Camera } from "./Camera";
 import { ViewOrigin } from "./CameraWindow";
 
-type Band = { root: Container; layers: PIXI.tilemap.CompositeRectTileLayer[] };
+type Band = { z: number; root: Container; layers: PIXI.tilemap.CompositeRectTileLayer[] };
 
 /**
  * `CompositeRectTileLayer.addFrame` has no rotation/flip parameter - it always
@@ -77,7 +77,7 @@ export default class TileMapView extends GameComponent {
             this.playerLayer = null;
         }
 
-        for (let z = 0; z <= this.level.depthMax; z++) {
+        for (let z = this.level.depthMin; z <= this.level.depthMax; z++) {
             const root = new Container();
             root.name = "z-" + z;
             root.interactive = root.interactiveChildren = false;
@@ -92,7 +92,7 @@ export default class TileMapView extends GameComponent {
             });
 
             this.camera.root.addChild(root);
-            this.bands.push({ root, layers });
+            this.bands.push({ z, root, layers });
         }
 
         this.playerLayer = new PIXI.tilemap.CompositeRectTileLayer(0);
@@ -119,8 +119,9 @@ export default class TileMapView extends GameComponent {
             this.playerLayer.scale.set(camScale * cameraZoom);
         }
 
-        for (let z = 0, len = this.bands.length; z < len; z++) {
-            const band = this.bands[z];
+        for (let i = 0, len = this.bands.length; i < len; i++) {
+            const band = this.bands[i];
+            const z = band.z;
             const alpha = ZBandAlpha(z, currentZ);
             band.root.alpha = alpha;
             band.root.visible = alpha > 0;

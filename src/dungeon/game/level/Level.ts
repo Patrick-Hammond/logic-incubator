@@ -30,7 +30,9 @@ export default class Level {
     public heightData: number[][] = [];
     public boundRect: Rectangle;
     public playerStartPosition: Vec2Like;
+    /** Highest/lowest painted `Z_INDEX` height, inclusive of the unpainted default (0). */
     public depthMax: number = 0;
+    public depthMin: number = 0;
 
     /** Height painted under the given grid cell (0 if unpainted). Drives the camera zoom. */
     HeightAt(tileX: number, tileY: number): number {
@@ -43,6 +45,7 @@ export default class Level {
         this.collisionData = [];
         this.heightData = [];
         this.depthMax = 0;
+        this.depthMin = 0;
 
         const idMap: {[ id: number ]: number} = {};
         let id = 0;
@@ -92,6 +95,9 @@ export default class Level {
                         if(brush.data > this.depthMax) {
                             this.depthMax = brush.data;
                         }
+                        if(brush.data < this.depthMin) {
+                            this.depthMin = brush.data;
+                        }
                         break;
                 }
             }
@@ -134,6 +140,9 @@ export default class Level {
                         this.heightData[ posX ][ posY ] = brush.data;
                         if(brush.data > this.depthMax) {
                             this.depthMax = brush.data;
+                        }
+                        if(brush.data < this.depthMin) {
+                            this.depthMin = brush.data;
                         }
                         break;
                 }
