@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BaseZScale, HeightAt, ZBandAlpha, ZFadeStep, ZScale, ZScaleRatio } from "./Depth";
+import { BaseZScale, CameraZoom, CameraZoomRatio, HeightAt, MaxCameraZoom, MinCameraZoom, ZBandAlpha, ZFadeStep, ZScale, ZScaleRatio } from "./Depth";
 
 describe("ZScale", () => {
     it("is BaseZScale at z 0", () => {
@@ -36,6 +36,29 @@ describe("ZBandAlpha", () => {
         for (let z = -2; z < 12; z++) {
             expect(ZBandAlpha(z, 4)).toBeGreaterThanOrEqual(0);
         }
+    });
+});
+
+describe("CameraZoom", () => {
+    it("is 1 at z 0", () => {
+        expect(CameraZoom(0)).toBe(1);
+    });
+
+    it("multiplies by CameraZoomRatio per step while inside the caps", () => {
+        expect(CameraZoom(1) / CameraZoom(0)).toBeCloseTo(CameraZoomRatio, 10);
+        expect(CameraZoom(4) / CameraZoom(3)).toBeCloseTo(CameraZoomRatio, 10);
+    });
+
+    it("grows with z but never past MaxCameraZoom", () => {
+        expect(CameraZoom(5)).toBeGreaterThan(CameraZoom(0));
+        expect(CameraZoom(50)).toBe(MaxCameraZoom);
+        expect(CameraZoom(1000)).toBe(MaxCameraZoom);
+    });
+
+    it("shrinks with negative z but never past MinCameraZoom", () => {
+        expect(CameraZoom(-5)).toBeLessThan(CameraZoom(0));
+        expect(CameraZoom(-50)).toBe(MinCameraZoom);
+        expect(CameraZoom(-1000)).toBe(MinCameraZoom);
     });
 });
 

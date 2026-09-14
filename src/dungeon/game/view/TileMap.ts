@@ -7,7 +7,7 @@ import { Container } from "pixi.js";
 import GameComponent from "../../../_lib/game/GameComponent";
 import { TileSize } from "../../Constants";
 import { CAMERA_MOVED, LEVEL_CREATED, LEVEL_LOADED } from "../Events";
-import { ZBandAlpha, ZScale } from "../level/Depth";
+import { CameraZoom, ZBandAlpha, ZScale } from "../level/Depth";
 import Level from "../level/Level";
 import { Camera } from "./Camera";
 
@@ -45,12 +45,15 @@ export function TileGD8Rotation(rotation: number, scaleX: number, scaleY: number
  * bands are anchored on the same world point so they line up at the centre of
  * the screen and diverge outward by scale. Bands are added lowest z first, so a
  * higher band is drawn over a lower one where they overlap. Non-current bands
- * are faded (`ZBandAlpha`). The player renders into its own top layer, scaled by
- * the camera only, so it keeps a constant on-screen size while the world scales.
+ * are faded (`ZBandAlpha`). All bands - including the player's own - are
+ * additionally scaled by `CameraZoom`, a whole-scene zoom driven by the
+ * player's absolute z, so climbing doesn't stay pinned at a perfect 1:1. The
+ * player renders into its own top layer, which gets the same `CameraZoom`
+ * factor so it grows/shrinks in step with the world.
  */
 export default class TileMapView extends GameComponent {
     private bands: Band[] = [];
-    private playerLayer: PIXI.tilemap.CompositeRectTileLayer;
+    private playerLayer: PIXI.tilemap.CompositeRectTileLayer | null = null;
 
     constructor(private level: Level, private camera: Camera) {
         super();
@@ -103,12 +106,17 @@ export default class TileMapView extends GameComponent {
     }
 
     private Render(): void {
-        const camScale = this.camera.Scale;
-        const centre = this.camera.ViewRect.center;
         const currentZ = this.camera.CurrentZ;
+        const camScale = this.camera.Scale;
+        const cameraZoom = CameraZoom(currentZ);
+        const centre = this.camera.ViewRect.center;
         const heightData = this.level.heightData;
         const boundW = this.level.boundRect.width;
         const boundH = this.level.boundRect.height;
+
+        if (this.playerLayer) {
+            this.playerLayer.scale.set(camScale * cameraZoom);
+        }
 
         for (let z = 0, len = this.bands.length; z < len; z++) {
             const band = this.bands[z];
@@ -116,9 +124,11 @@ export default class TileMapView extends GameComponent {
             band.root.alpha = alpha;
             band.root.visible = alpha > 0;
 
-            // Scale is relative to the player's z: their own band is always 1:1,
-            // higher bands are bigger, lower bands recede.
-            const zScale = ZScale(z - currentZ);
+            // Relative to the player's z - their own band is 1:1 here, higher
+            // bands are bigger, lower bands recede - then `cameraZoom` scales
+            // everything again together, so the whole view also grows a little
+            // as the player's absolute z climbs instead of staying pinned.
+            const zScale = ZScale(z - currentZ) * cameraZoom;
             const winW = this.camera.BaseViewWidth / zScale;
             const winH = this.camera.BaseViewHeight / zScale;
             const originX = centre.x - winW * 0.5;

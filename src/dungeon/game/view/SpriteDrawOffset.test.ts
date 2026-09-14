@@ -2,6 +2,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { describe, expect, it } from "vitest";
 import { TileSize } from "../../Constants";
+import { DataBrushName } from "../../editor/stores/EditorStore";
 import { SpriteDrawPosition } from "./SpriteDrawOffset";
 
 /**
@@ -38,7 +39,7 @@ function loadFixtureStartTile(): { x: number; y: number } {
         y1 = Math.min(y1, b.position.y);
     });
 
-    const start = brushes.find(b => b.name === "data-1");
+    const start = brushes.find(b => b.name === DataBrushName.PLAYER_START);
     return { x: start.position.x - x1, y: start.position.y - y1 };
 }
 
