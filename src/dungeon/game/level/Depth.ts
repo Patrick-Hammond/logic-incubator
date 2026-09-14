@@ -31,7 +31,7 @@ export function ZBandAlpha(z: number, playerZ: number): number {
     if (z === playerZ) {
         return 1;
     }
-    return Math.max(0, 1 - Math.abs(z - playerZ) * ZFadeStep);
+    return Math.max(0.05, 1 - Math.abs(z - playerZ) * ZFadeStep);
 }
 
 /**
