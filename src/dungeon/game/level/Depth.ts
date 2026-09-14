@@ -16,7 +16,7 @@ export const BaseZScale = 1;
 /** On-screen size multiplier per z step (tunable). */
 export const ZScaleRatio = 1.04;
 /** Alpha lost per z away from the z the player is standing on. */
-export const ZFadeStep = 0.2;
+export const ZFadeStep = 0.1;
 /** Minimum alpha for a z-band. */
 export const MinZFade = 0.05;
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BaseZScale, CameraZoom, CameraZoomRatio, HeightAt, MaxCameraZoom, MinCameraZoom, ZBandAlpha, ZFadeStep, ZScale, ZScaleRatio } from "./Depth";
+import { BaseZScale, CameraZoom, CameraZoomRatio, HeightAt, MaxCameraZoom, MinCameraZoom, MinZFade, ZBandAlpha, ZFadeStep, ZScale, ZScaleRatio } from "./Depth";
 
 describe("ZScale", () => {
     it("is BaseZScale at z 0", () => {
@@ -30,11 +30,11 @@ describe("ZBandAlpha", () => {
         expect(ZBandAlpha(3, 1)).toBeCloseTo(1 - 2 * ZFadeStep, 10);
     });
 
-    it("is floored at 0 for distant bands", () => {
-        expect(ZBandAlpha(0, 9)).toBe(0);
-        expect(ZBandAlpha(10, 2)).toBe(0);
+    it("is floored to MinZFade for distant bands", () => {
+        expect(ZBandAlpha(0, 10)).toBe(MinZFade);
+        expect(ZBandAlpha(20, 2)).toBe(MinZFade);
         for (let z = -2; z < 12; z++) {
-            expect(ZBandAlpha(z, 4)).toBeGreaterThanOrEqual(0);
+            expect(ZBandAlpha(z, 4)).toBeGreaterThanOrEqual(MinZFade);
         }
     });
 });
