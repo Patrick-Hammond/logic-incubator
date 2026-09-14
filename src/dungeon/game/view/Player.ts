@@ -14,13 +14,15 @@ import TileCollision from "../level/TileCollision";
 import {Camera} from "./Camera";
 import {ResolveMove} from "./PlayerMovement";
 import {SpriteDrawPosition} from "./SpriteDrawOffset";
+import {TileGD8Rotation} from "./TileMap";
 
 export class Player extends GameComponent {
     private controls: PlayerControl;
     private player: AnimatedSprite;
-    private targetLayer: PIXI.tilemap.CompositeRectTileLayer;
+    private targetLayer: PIXI.tilemap.CompositeRectTileLayer | undefined;
     private velocity = new Vec2();
     private newPosition = new Vec2();
+    private facingX = 1;
 
     constructor(
         private camera: Camera,
@@ -47,23 +49,16 @@ export class Player extends GameComponent {
 
     private OnUpdate(dt: number): void {
         this.GetInput();
-
         this.Move(dt);
-
-        const half = (TileSize - 1) * 0.5;
-        const z = this.level.HeightAt(
-            ((this.player.x + half) / TileSize) | 0,
-            ((this.player.y + half) / TileSize) | 0
-        );
-        this.camera.SetZ(z);
-
-        this.camera.Follow(this.player.x, this.player.y, 0.05);
-
+        this.MoveCamera();
         this.Render();
     }
 
     private GetInput(): void {
         const n = this.controls.Get().direction;
+        if (n.x !== 0) {
+            this.facingX = n.x < 0 ? -1 : 1;
+        }
         this.velocity.Offset(n.x, n.y);
     }
 
@@ -73,10 +68,26 @@ export class Player extends GameComponent {
         this.player.position.set(this.newPosition.x, this.newPosition.y);
     }
 
+    private MoveCamera(): void {
+        const half = (TileSize - 1) * 0.5;
+        const z = this.level.HeightAt(
+            ((this.player.x + half) / TileSize) | 0,
+            ((this.player.y + half) / TileSize) | 0
+        );
+        this.camera.SetZ(z);
+
+        this.camera.Follow(this.player.x, this.player.y, 0.05);
+    }
+    
     private Render(): void {
+        if(!this.targetLayer) return;
+
         // The player's own z band always renders 1:1, so no world-scale factor.
         this.targetLayer.clear();
         const draw = SpriteDrawPosition(this.player.position, this.camera.ViewRect, this.player.texture);
         this.targetLayer.addFrame(this.player.texture, draw.x, draw.y);
+        if (this.facingX < 0) {
+            this.targetLayer.tileRotate(TileGD8Rotation(0, this.facingX, 1));
+        }
     }
 }

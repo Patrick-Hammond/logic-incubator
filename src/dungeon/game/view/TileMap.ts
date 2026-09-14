@@ -20,7 +20,7 @@ type Band = { root: Container; layers: PIXI.tilemap.CompositeRectTileLayer[] };
  * `tileRotate`, since GD8 codes cover flip+rotation combinations, not each axis
  * independently.
  */
-function TileGD8Rotation(rotation: number, scaleX: number, scaleY: number): PIXI.GD8Symmetry {
+export function TileGD8Rotation(rotation: number, scaleX: number, scaleY: number): PIXI.GD8Symmetry {
     // groupD8.S/N (and the mirror constants below) don't line up with their
     // documented directions for this use - the whole mapping here is fit to
     // match a real PIXI.Sprite(rotation, scale) rendering of the same texture,
