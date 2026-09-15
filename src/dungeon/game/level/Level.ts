@@ -8,6 +8,7 @@ import {Layer} from "../../editor/stores/LevelDataStore";
 import {LEVEL_LOADED} from "../Events";
 import {HeightAt} from "./Depth";
 import {FindDoorGroups} from "./Doors";
+import {FindRegions, Region, RegionIdsTouching} from "./Regions";
 
 /** Sprite names swapped by `Level.UpdateDoors` - the closed leaf is what's painted in the editor, the open one only ever appears at runtime. */
 const DOOR_CLOSED_SPRITE = "doors_leaf_closed";
@@ -29,8 +30,8 @@ export type Tile = Brush & {
     anim?: AnimatedSprite;
 };
 
-/** One door: the cells painted with the `DOOR` data brush, and the visual tile whose texture is swapped when the player overlaps any of them. */
-export type Door = { cells: Vec2Like[]; tile: Tile; isOpen: boolean };
+/** One door: the cells painted with the `DOOR` data brush, and the visual tile whose texture is swapped when the player overlaps any of them. `regionIds` is the (possibly empty) set of regions this door borders - see `Regions.ts`. */
+export type Door = { cells: Vec2Like[]; tile: Tile; isOpen: boolean; regionIds: number[] };
 
 function CreateTile(brush: Brush): Tile {
     if (AssetFactory.inst.AnimationNames.indexOf(brush.name) > -1) {
@@ -54,6 +55,14 @@ export default class Level {
     public doorData: boolean[][] = [];
     /** One entry per connected island of `doorData` cells that has a matching door sprite tile (see `FindDoorTile`). */
     public doors: Door[] = [];
+    /** [x][y] -> region id for a walkable (non-collision, non-door) cell. See `Regions.ts`. */
+    public regionData: number[][] = [];
+    /** [x][y] -> distinct region ids touching a wall/door cell's 4-neighbours. See `Regions.ts`. */
+    public boundaryRegionData: number[][][] = [];
+    /** One entry per connected walkable component of the map. */
+    public regions: Region[] = [];
+    /** Regions currently reachable from the player: their own region, plus any reachable through a door that is open right now. Fully dynamic - closing a door conceals what's only reachable through it again. Recomputed every frame by `UpdateVisibleRegions`. */
+    public visibleRegions: Set<number> = new Set<number>();
     public boundRect: Rectangle;
     public playerStartPosition: Vec2Like;
     /** Distinct painted `Z_INDEX` heights, ascending, always including the unpainted default (0). `TileMapView` builds one band per entry - sparse, so a stray tile at an extreme height doesn't force bands for every height in between. */
@@ -79,6 +88,72 @@ export default class Level {
                 door.tile.texture = AssetFactory.inst.CreateTexture(overlapping ? DOOR_OPEN_SPRITE : DOOR_CLOSED_SPRITE);
             }
         });
+    }
+
+    /**
+     * Recomputes which regions are currently reachable from the player: their
+     * own region, plus every region reachable by crossing a door that is open
+     * right now, chained through any number of simultaneously-open doors.
+     * Call once per frame, after `UpdateDoors` (this frame's door states must
+     * already be current). If the player's own tile has no region - they're
+     * standing on a door cell, the common case while transiting one, since
+     * door cells are deliberately excluded from the region flood fill - seed
+     * from that door's own `regionIds` instead (its `isOpen` was just synced
+     * by `UpdateDoors` for this exact tile, one line above the call site).
+     */
+    UpdateVisibleRegions(tileX: number, tileY: number): void {
+        const active = new Set<number>();
+
+        const column = this.regionData[tileX];
+        const ownRegion = column ? column[tileY] : undefined;
+        if (ownRegion !== undefined) {
+            active.add(ownRegion);
+        } else {
+            this.doors.forEach(door => {
+                if (door.isOpen) {
+                    door.regionIds.forEach(id => active.add(id));
+                }
+            });
+        }
+
+        let expanded = true;
+        while (expanded) {
+            expanded = false;
+            this.doors.forEach(door => {
+                if (!door.isOpen || !door.regionIds.some(id => active.has(id))) {
+                    return;
+                }
+                door.regionIds.forEach(id => {
+                    if (!active.has(id)) {
+                        active.add(id);
+                        expanded = true;
+                    }
+                });
+            });
+        }
+
+        this.visibleRegions = active;
+    }
+
+    /** Whether the given cell should currently be drawn: an open-floor cell is visible iff its own region is active, a wall/door cell is visible iff any region it touches is active. */
+    IsCellVisible(tileX: number, tileY: number): boolean {
+        const column = this.regionData[tileX];
+        const regionId = column ? column[tileY] : undefined;
+        if (regionId !== undefined) {
+            return this.visibleRegions.has(regionId);
+        }
+
+        const boundaryColumn = this.boundaryRegionData[tileX];
+        const touching = boundaryColumn && boundaryColumn[tileY];
+        if (!touching) {
+            return false;
+        }
+        for (let i = 0; i < touching.length; i++) {
+            if (this.visibleRegions.has(touching[i])) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** Finds the door leaf tile (whichever sprite variant is currently painted) among the given cells, searching every tile layer. */
@@ -219,12 +294,34 @@ export default class Level {
 
         this.depths = Array.from(depths).sort((a, b) => a - b);
 
+        const regionMap = FindRegions(this.collisionData, this.doorData, this.boundRect.width, this.boundRect.height);
+        this.regionData = regionMap.regionData;
+        this.boundaryRegionData = regionMap.boundaryRegionData;
+        this.regions = regionMap.regions;
+
         this.doors = FindDoorGroups(this.doorData)
             .map(cells => {
                 const tile = this.FindDoorTile(cells);
-                return tile ? {cells, tile, isOpen: tile.name === DOOR_OPEN_SPRITE} : null;
+                if (!tile) {
+                    return null;
+                }
+                // A door's cells are one visibility unit regardless of which
+                // cell its sprite happens to anchor on - a door painted more
+                // than one cell deep would otherwise have each cell only see
+                // ITS OWN side, and the sprite could vanish depending on
+                // which row it's anchored to (see Regions.ts's RegionIdsTouching doc).
+                const regionIds = RegionIdsTouching(this.boundaryRegionData, cells);
+                cells.forEach(c => {
+                    if (this.boundaryRegionData[ c.x ] == null) {
+                        this.boundaryRegionData[ c.x ] = [];
+                    }
+                    this.boundaryRegionData[ c.x ][ c.y ] = regionIds;
+                });
+                return {cells, tile, isOpen: tile.name === DOOR_OPEN_SPRITE, regionIds};
             })
             .filter((door): door is Door => door != null);
+
+        this.UpdateVisibleRegions(this.playerStartPosition.x, this.playerStartPosition.y);
 
         Game.inst.dispatcher.emit(LEVEL_LOADED);
     }

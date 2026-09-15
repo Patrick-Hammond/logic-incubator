@@ -166,6 +166,9 @@ export default class TileMapView extends GameComponent {
                         if (cellZ !== z) {
                             continue;
                         }
+                        if (!this.level.IsCellVisible(x, y)) {
+                            continue;
+                        }
                         for (let t = 0, tt = tiles.length; t < tt; t++) {
                             const tile = tiles[t];
                             const texture = tile.anim ? tile.anim.texture : tile.texture;

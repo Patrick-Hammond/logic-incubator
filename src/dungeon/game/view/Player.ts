@@ -54,6 +54,7 @@ export class Player extends GameComponent {
         const tile = this.PlayerTile();
         this.MoveCamera(tile);
         this.level.UpdateDoors(tile.x, tile.y);
+        this.level.UpdateVisibleRegions(tile.x, tile.y);
         this.Render();
     }
 
