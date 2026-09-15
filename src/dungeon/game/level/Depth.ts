@@ -30,9 +30,12 @@ export const CameraZoomRatio = 1.08;
 /** CameraZoom never grows past this, however high the player climbs. */
 export const MaxCameraZoom = 2;
 /** CameraZoom never shrinks past this, however low the player sinks. */
-export const MinCameraZoom = 0.5;
+export const MinCameraZoom = 0.25;
 
 function ClampZoom(zoom: number): number {
+    if(zoom >= MaxCameraZoom) {
+       return MaxCameraZoom -0.2;
+    }
     return Math.min(MaxCameraZoom, Math.max(MinCameraZoom, zoom));
 }
 
