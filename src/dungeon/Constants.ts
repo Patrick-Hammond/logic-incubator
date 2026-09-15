@@ -21,5 +21,7 @@ export const GridBounds = new Rectangle(20, 20, EditorWidth - 300, EditorHeight 
 
 export const enum Scenes {
     GAME = "game",
-    EDITOR = "editor"
+    EDITOR = "editor",
+    TITLE = "title",
+    CHARACTER_SELECT = "character-select"
 }

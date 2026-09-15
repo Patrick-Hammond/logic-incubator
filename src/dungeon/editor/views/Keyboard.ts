@@ -113,6 +113,13 @@ export default class Keyboard extends EditorComponent {
                             }
                         }
                         break;
+                    case Key.T:
+                        // Preview the title screen -> character select -> game flow. Separate from
+                        // the Enter key (which still toggles editor <-> game directly) so the fast
+                        // editor/game dev loop is untouched. Dispatched the same way as the Enter
+                        // key's own scene change, so editorStore.currentScene stays consistent.
+                        this.editorStore.Dispatch({ type: EditorActions.CHANGE_SCENE, data: { name: Scenes.TITLE } });
+                        break;
                     case Key.One: // digger
                     case Key.Two: // rogue
                     case Key.Three: // uniform

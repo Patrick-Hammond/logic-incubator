@@ -3,6 +3,8 @@ import Loader from "../_lib/loading/Loader";
 import { AssetPath, GameHeight, GameWidth, Scenes } from "./Constants";
 import { DungeonEditor } from "./editor/DungeonEditor";
 import { DungeonMain } from "./game/DungeonMain";
+import { CharacterSelect } from "./game/scenes/CharacterSelect";
+import { TitleScreen } from "./game/scenes/TitleScreen";
 
 export function Dungoen(): void {
     const game = new Game({width: GameWidth, height: GameHeight, backgroundColor: 0x111111 }, true);
@@ -27,6 +29,8 @@ export function Dungoen(): void {
             // init
             game.sceneManager.AddScene(Scenes.GAME, new DungeonMain());
             game.sceneManager.AddScene(Scenes.EDITOR, new DungeonEditor());
+            game.sceneManager.AddScene(Scenes.TITLE, new TitleScreen());
+            game.sceneManager.AddScene(Scenes.CHARACTER_SELECT, new CharacterSelect());
 
             game.sceneManager.ShowScene(Scenes.EDITOR);
         });
