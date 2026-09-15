@@ -7,7 +7,7 @@ import { Container } from "pixi.js";
 import GameComponent from "../../../_lib/game/GameComponent";
 import { TileSize } from "../../Constants";
 import { CAMERA_MOVED, LEVEL_CREATED, LEVEL_LOADED } from "../Events";
-import { CameraZoom, ZBandAlpha, ZScale } from "../level/Depth";
+import { ZBandAlpha, ZScale } from "../level/Depth";
 import Level from "../level/Level";
 import { Camera } from "./Camera";
 import { ViewOrigin } from "./CameraWindow";
@@ -47,10 +47,11 @@ export function TileGD8Rotation(rotation: number, scaleX: number, scaleY: number
  * the screen and diverge outward by scale. Bands are added lowest z first, so a
  * higher band is drawn over a lower one where they overlap. Non-current bands
  * are faded (`ZBandAlpha`). All bands - including the player's own - are
- * additionally scaled by `CameraZoom`, a whole-scene zoom driven by the
- * player's absolute z, so climbing doesn't stay pinned at a perfect 1:1. The
- * player renders into its own top layer, which gets the same `CameraZoom`
- * factor so it grows/shrinks in step with the world.
+ * additionally scaled by `camera.EffectiveZoom`, a whole-scene zoom driven by
+ * the player's height (see `Camera.UpdateZoom`/`StepZoom`), so climbing
+ * doesn't stay pinned at a perfect 1:1 - though it eases back to 1 if the
+ * player stays put. The player renders into its own top layer, which gets the
+ * same `EffectiveZoom` factor so it grows/shrinks in step with the world.
  */
 export default class TileMapView extends GameComponent {
     private bands: Band[] = [];
@@ -109,7 +110,7 @@ export default class TileMapView extends GameComponent {
     private Render(): void {
         const currentZ = this.camera.CurrentZ;
         const camScale = this.camera.Scale;
-        const cameraZoom = CameraZoom(currentZ);
+        const cameraZoom = this.camera.EffectiveZoom;
         const centre = this.camera.ViewRect.center;
         const heightData = this.level.heightData;
         const boundW = this.level.boundRect.width;
@@ -169,7 +170,11 @@ export default class TileMapView extends GameComponent {
                             const tile = tiles[t];
                             const texture = tile.anim ? tile.anim.texture : tile.texture;
                             if (texture) {
-                                layer.addFrame(texture, (x - originX) * TileSize, (y - originY) * TileSize);
+                                layer.addFrame(
+                                    texture,
+                                    (x - originX) * TileSize - tile.pixelOffset.x,
+                                    (y - originY) * TileSize - tile.pixelOffset.y
+                                );
                                 if (tile.rotation || tile.scale.x < 0 || tile.scale.y < 0) {
                                     layer.tileRotate(TileGD8Rotation(tile.rotation, tile.scale.x, tile.scale.y));
                                 }

@@ -9,7 +9,6 @@ import AssetFactory from "../../../_lib/loading/AssetFactory";
 import {Vec2, Vec2Like} from "../../../_lib/math/Geometry";
 import {Scenes, TileSize} from "../../Constants";
 import PlayerControl from "../input/PlayerControl";
-import {CameraZoom} from "../level/Depth";
 import Level from "../level/Level";
 import TileCollision from "../level/TileCollision";
 import {Camera} from "./Camera";
@@ -77,18 +76,19 @@ export class Player extends GameComponent {
             ((this.player.y + half) / TileSize) | 0
         );
         this.camera.SetZ(z);
+        this.camera.UpdateZoom(this.game.ticker.deltaMS / 1000);
 
         this.camera.Follow(this.player.x, this.player.y, 0.05);
     }
-    
+
     private Render(): void {
         if(!this.targetLayer) return;
 
-        // The player's own z band is scaled by CameraZoom (see TileMapView),
-        // so its window origin must be computed the exact same way - not the
-        // raw ViewRect, which ignores that zoom and would drift the sprite
-        // away from its tile the moment CameraZoom moves off 1 (any z != 0).
-        const cameraZoom = CameraZoom(this.camera.CurrentZ);
+        // The player's own z band is scaled by camera.EffectiveZoom (see
+        // TileMapView), so its window origin must be computed the exact same
+        // way - not the raw ViewRect, which ignores that zoom and would drift
+        // the sprite away from its tile the moment EffectiveZoom moves off 1.
+        const cameraZoom = this.camera.EffectiveZoom;
         const origin = ViewOrigin(this.camera.ViewRect.center, this.camera.BaseViewWidth, this.camera.BaseViewHeight, cameraZoom);
 
         this.targetLayer.clear();

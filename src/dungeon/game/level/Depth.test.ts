@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BaseZScale, CameraZoom, CameraZoomRatio, HeightAt, MaxCameraZoom, MinCameraZoom, MinZFade, ZBandAlpha, ZFadeStep, ZScale, ZScaleRatio } from "./Depth";
+import { BaseZScale, CameraZoom, CameraZoomRatio, HeightAt, MaxCameraZoom, MinCameraZoom, MinZFade, StepZoom, ZBandAlpha, ZFadeStep, ZoomSettleDelay, ZoomSettleSpeed, ZoomState, ZScale, ZScaleRatio } from "./Depth";
 
 describe("ZScale", () => {
     it("is BaseZScale at z 0", () => {
@@ -59,6 +59,76 @@ describe("CameraZoom", () => {
         expect(CameraZoom(-5)).toBeLessThan(CameraZoom(0));
         expect(CameraZoom(-50)).toBe(MinCameraZoom);
         expect(CameraZoom(-1000)).toBe(MinCameraZoom);
+    });
+});
+
+describe("StepZoom", () => {
+    it("matches CameraZoom(z) while held, starting from a fully-settled state", () => {
+        const state: ZoomState = { value: 1, z: 0 };
+        const next = StepZoom(state, 5, 0, 1);
+        expect(next.value).toBe(CameraZoom(5));
+        expect(next.z).toBe(5);
+    });
+
+    it("steps incrementally from the current value, not from an absolute CameraZoom(z)", () => {
+        // value doesn't reflect CameraZoom(2) here (e.g. it's mid-ease) - the
+        // step must scale THIS value by the z 2->5 ratio, not discard it
+        const state: ZoomState = { value: 1.2, z: 2 };
+        const next = StepZoom(state, 5, 0, 1);
+        expect(next.value).toBeCloseTo(1.2 * Math.pow(CameraZoomRatio, 3), 10);
+        expect(next.z).toBe(5);
+    });
+
+    it("eases value toward 1 at ZoomSettleSpeed once heldTime reaches ZoomSettleDelay, leaving z untouched", () => {
+        const from = CameraZoom(3);
+        const dt = 0.001; // small enough that ZoomSettleSpeed * dt can't overshoot the remaining distance to 1
+        const next = StepZoom({ value: from, z: 3 }, 3, ZoomSettleDelay, dt);
+        expect(next.value).toBeCloseTo(from - ZoomSettleSpeed * dt, 10);
+        expect(next.z).toBe(3);
+    });
+
+    it("eases upward toward 1 when value is below 1", () => {
+        const from = CameraZoom(-3);
+        const dt = 0.001;
+        const next = StepZoom({ value: from, z: -3 }, -3, ZoomSettleDelay, dt);
+        expect(next.value).toBeCloseTo(from + ZoomSettleSpeed * dt, 10);
+    });
+
+    it("clamps to exactly 1 instead of overshooting on a large dt", () => {
+        expect(StepZoom({ value: CameraZoom(5), z: 5 }, 5, ZoomSettleDelay, 100).value).toBe(1);
+        expect(StepZoom({ value: 1, z: 0 }, 0, ZoomSettleDelay, 100).value).toBe(1);
+    });
+
+    it("regression: interrupting an in-progress ease-back with a z change does not jump - it continues from wherever value currently is", () => {
+        // settle partway back from a climb to z 5 (still mid-ease, not yet at 1)
+        const midEase: ZoomState = { value: CameraZoom(5) - ZoomSettleSpeed, z: 5 };
+        expect(midEase.value).not.toBe(1); // sanity: genuinely interrupted, not already settled
+
+        // interrupt it by climbing one more level, to z 6
+        const next = StepZoom(midEase, 6, 0, 1);
+
+        // continuous: exactly one more ratio step from wherever value already was
+        expect(next.value).toBeCloseTo(midEase.value * CameraZoomRatio, 10);
+        // NOT a snap back to the fresh absolute CameraZoom(6) (which is what a
+        // naive re-pin would produce, discarding how far the ease had gotten)
+        expect(next.value).not.toBeCloseTo(CameraZoom(6), 5);
+    });
+
+    it("regression: stepping down after a full settle zooms OUT, not further in", () => {
+        // player rested at z 5 long enough for the zoom to fully settle to 1
+        const settledAtFive: ZoomState = { value: 1, z: 5 };
+
+        // then steps down one level to z 4
+        const next = StepZoom(settledAtFive, 4, 0, 1);
+
+        expect(next.value).toBe(CameraZoom(-1)); // one ratio step down from the settled 1, not CameraZoom(4)
+        expect(next.value).toBeLessThan(1); // zooms out, matching the downward move
+    });
+
+    it("does not change z while still easing (no further height change)", () => {
+        const state: ZoomState = { value: CameraZoom(3), z: 3 };
+        const next = StepZoom(state, 3, ZoomSettleDelay, 1);
+        expect(next.z).toBe(3);
     });
 });
 

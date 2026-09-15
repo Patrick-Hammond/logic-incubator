@@ -5,6 +5,7 @@ import { Rectangle } from "../../../_lib/math/Geometry";
 import { Lerp, Sign } from "../../../_lib/math/Utils";
 import { GameHeight, GameWidth, Scenes, TileSize } from "../../Constants";
 import { CAMERA_MOVED } from ".././Events";
+import { StepZoom, ZoomState } from "../level/Depth";
 
 export class Camera extends GameComponent {
     get ViewRect(): Rectangle {
@@ -34,6 +35,10 @@ export class Camera extends GameComponent {
     get CurrentZ(): number {
         return this.currentZ;
     }
+    /** Height-driven zoom (see `UpdateZoom`) - what `TileMapView`/`Player` should scale their render by, instead of calling `CameraZoom(CurrentZ)` themselves. */
+    get EffectiveZoom(): number {
+        return this.zoomState.value;
+    }
 
     private viewRect: Rectangle;
     private scale: number;
@@ -43,6 +48,8 @@ export class Camera extends GameComponent {
     private baseViewWidth: number = 0;
     private baseViewHeight: number = 0;
     private currentZ: number = 0;
+    private zoomState: ZoomState = { value: 1, z: 0 };
+    private zHeldTime: number = 0;
 
     constructor(private cameraControl?: ICameraControl) {
         super();
@@ -93,7 +100,22 @@ export class Camera extends GameComponent {
      * on the next `CAMERA_MOVED` (emitted every frame by `Follow`).
      */
     SetZ(z: number): void {
-        this.currentZ = z;
+        if (z !== this.currentZ) {
+            this.currentZ = z;
+            this.zHeldTime = 0;
+        }
+    }
+
+    /**
+     * Advances `EffectiveZoom` by `dt` seconds. Call once per frame, after
+     * `SetZ`: for `ZoomSettleDelay` seconds after the last z change, it tracks
+     * height incrementally (so interrupting an in-progress ease-back never
+     * causes a visible jump); after that, it eases back to a neutral 1:1 zoom
+     * instead of staying pinned to height forever - see `StepZoom`.
+     */
+    UpdateZoom(dt: number): void {
+        this.zoomState = StepZoom(this.zoomState, this.currentZ, this.zHeldTime, dt);
+        this.zHeldTime += dt;
     }
 
      protected OnInitialise() {
