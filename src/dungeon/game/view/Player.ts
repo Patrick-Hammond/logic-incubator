@@ -43,7 +43,10 @@ export class Player extends GameComponent {
         this.AddToScene(Scenes.GAME);
     }
 
-    Init(playerStartPosition: Vec2Like) {
+    Init(playerStartPosition: Vec2Like | undefined) {
+        if (!playerStartPosition) {
+            throw new Error("Player start position is not defined. Define it in the level data.");
+        }
         this.player.position.set(playerStartPosition.x * TileSize, playerStartPosition.y * TileSize);
         this.targetLayer = this.camera.root.getChildByName("player") as PIXI.tilemap.CompositeRectTileLayer;
     }

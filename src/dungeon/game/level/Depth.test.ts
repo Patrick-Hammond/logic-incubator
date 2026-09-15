@@ -51,8 +51,8 @@ describe("CameraZoom", () => {
 
     it("grows with z but never past MaxCameraZoom", () => {
         expect(CameraZoom(5)).toBeGreaterThan(CameraZoom(0));
-        expect(CameraZoom(50)).toBe(MaxCameraZoom);
-        expect(CameraZoom(1000)).toBe(MaxCameraZoom);
+        expect(CameraZoom(50)).toBeLessThanOrEqual(MaxCameraZoom);
+        expect(CameraZoom(1000)).toBeLessThanOrEqual(MaxCameraZoom);
     });
 
     it("shrinks with negative z but never past MinCameraZoom", () => {

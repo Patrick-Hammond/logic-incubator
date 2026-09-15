@@ -8,8 +8,8 @@ import {Player} from "./view/Player";
 import TileMapView from "./view/TileMap";
 
 export class DungeonMain extends GameComponent {
-    private level: Level;
-    private player: Player;
+    private level: Level | undefined;
+    private player: Player | undefined;
 
     protected OnInitialise(): void {
         this.level = new Level();
@@ -18,17 +18,18 @@ export class DungeonMain extends GameComponent {
         new TileMapView(this.level, camera);
 
         this.game.dispatcher.on(LEVEL_CREATED, () => {
+            const level = this.level as Level;
             if(!this.player) {
-                const collision = new TileCollision(this.level);
-                this.player = new Player(camera, collision, this.level);
+                const collision = new TileCollision(level);
+                this.player = new Player(camera, collision, level);
             }
-            this.player.Init(this.level.playerStartPosition);
+            this.player.Init(level.playerStartPosition);
         });
     }
 
     protected OnShow(): void {
         const localData = LoadFromLocalStorage("dungeonLevel");
-        if(localData) {
+        if(localData && this.level) {
             const data = JSON.parse(localData);
             this.level.LoadEditorData(data);
         }

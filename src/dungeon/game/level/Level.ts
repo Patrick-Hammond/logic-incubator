@@ -63,8 +63,8 @@ export default class Level {
     public regions: Region[] = [];
     /** Regions currently reachable from the player: their own region, plus any reachable through a door that is open right now. Fully dynamic - closing a door conceals what's only reachable through it again. Recomputed every frame by `UpdateVisibleRegions`. */
     public visibleRegions: Set<number> = new Set<number>();
-    public boundRect: Rectangle;
-    public playerStartPosition: Vec2Like;
+    public boundRect: Rectangle = new Rectangle();
+    public playerStartPosition: Vec2Like | undefined;
     /** Distinct painted `Z_INDEX` heights, ascending, always including the unpainted default (0). `TileMapView` builds one band per entry - sparse, so a stray tile at an extreme height doesn't force bands for every height in between. */
     public depths: number[] = [0];
 
@@ -320,6 +320,10 @@ export default class Level {
                 return {cells, tile, isOpen: tile.name === DOOR_OPEN_SPRITE, regionIds};
             })
             .filter((door): door is Door => door != null);
+
+        if (!this.playerStartPosition) {
+            throw new Error("Player start position is not defined. Define it in the level data.");
+        }
 
         this.UpdateVisibleRegions(this.playerStartPosition.x, this.playerStartPosition.y);
 
