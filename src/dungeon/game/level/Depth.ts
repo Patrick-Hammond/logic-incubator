@@ -12,7 +12,7 @@
  */
 
 /** On-screen scale of a tile at z 0. */
-export const BaseZScale = 1.4;
+export const BaseZScale = 1;
 /** On-screen size multiplier per z step (tunable). */
 export const ZScaleRatio = 1.04;
 /** Alpha lost per z away from the z the player is standing on. */
@@ -30,7 +30,7 @@ export const CameraZoomRatio = 1.08;
 /** CameraZoom never grows past this, however high the player climbs. */
 export const MaxCameraZoom = 2;
 /** CameraZoom never shrinks past this, however low the player sinks. */
-export const MinCameraZoom = 0.25;
+export const MinCameraZoom = 0.4;
 
 function ClampZoom(zoom: number): number {
     if(zoom >= MaxCameraZoom) {

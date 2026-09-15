@@ -7,6 +7,11 @@ import {DataBrushName, IEditorState} from "../../editor/stores/EditorStore";
 import {Layer} from "../../editor/stores/LevelDataStore";
 import {LEVEL_LOADED} from "../Events";
 import {HeightAt} from "./Depth";
+import {FindDoorGroups} from "./Doors";
+
+/** Sprite names swapped by `Level.UpdateDoors` - the closed leaf is what's painted in the editor, the open one only ever appears at runtime. */
+const DOOR_CLOSED_SPRITE = "doors_leaf_closed";
+const DOOR_OPEN_SPRITE = "doors_leaf_open";
 
 type Brush = {
     name: string;
@@ -23,6 +28,9 @@ export type Tile = Brush & {
     /** Set for tiles painted with an animated brush; `TileMapView` reads its live `.texture` each render instead of `texture`. */
     anim?: AnimatedSprite;
 };
+
+/** One door: the cells painted with the `DOOR` data brush, and the visual tile whose texture is swapped when the player overlaps any of them. */
+export type Door = { cells: Vec2Like[]; tile: Tile; isOpen: boolean };
 
 function CreateTile(brush: Brush): Tile {
     if (AssetFactory.inst.AnimationNames.indexOf(brush.name) > -1) {
@@ -42,6 +50,10 @@ export default class Level {
     public collisionData: boolean[][] = [];
     /** Per-cell height painted with the `Z_INDEX` (DepthBrushName) data brush. */
     public heightData: number[][] = [];
+    /** Per-cell flag painted with the `DOOR` data brush. Purely a lookup for building `doors` - not consulted for movement collision, since a door must be walkable to trigger open. */
+    public doorData: boolean[][] = [];
+    /** One entry per connected island of `doorData` cells that has a matching door sprite tile (see `FindDoorTile`). */
+    public doors: Door[] = [];
     public boundRect: Rectangle;
     public playerStartPosition: Vec2Like;
     /** Distinct painted `Z_INDEX` heights, ascending, always including the unpainted default (0). `TileMapView` builds one band per entry - sparse, so a stray tile at an extreme height doesn't force bands for every height in between. */
@@ -50,6 +62,37 @@ export default class Level {
     /** Height painted under the given grid cell (0 if unpainted). Drives the camera zoom. */
     HeightAt(tileX: number, tileY: number): number {
         return HeightAt(this.heightData, tileX, tileY);
+    }
+
+    /**
+     * Opens/closes doors whose footprint contains the given tile - call once per
+     * frame with the tile the player currently occupies (e.g. `Player`'s own
+     * `HeightAt` lookup tile). A door swaps open the instant the player's tile
+     * enters any of its cells and swaps closed the instant it leaves all of
+     * them; nothing here blocks movement, so it always reads as "walked open".
+     */
+    UpdateDoors(tileX: number, tileY: number): void {
+        this.doors.forEach(door => {
+            const overlapping = door.cells.some(c => c.x === tileX && c.y === tileY);
+            if (overlapping !== door.isOpen) {
+                door.isOpen = overlapping;
+                door.tile.texture = AssetFactory.inst.CreateTexture(overlapping ? DOOR_OPEN_SPRITE : DOOR_CLOSED_SPRITE);
+            }
+        });
+    }
+
+    /** Finds the door leaf tile (whichever sprite variant is currently painted) among the given cells, searching every tile layer. */
+    private FindDoorTile(cells: Vec2Like[]): Tile | null {
+        for (const cell of cells) {
+            for (const layer of this.levelData) {
+                const stack = layer && layer[ cell.x ] && layer[ cell.x ][ cell.y ];
+                const found = stack && stack.find(t => t.name === DOOR_CLOSED_SPRITE || t.name === DOOR_OPEN_SPRITE);
+                if (found) {
+                    return found;
+                }
+            }
+        }
+        return null;
     }
 
     /** Stops animated tiles' sprites so reloading a level doesn't leave them ticking in the background forever. */
@@ -68,6 +111,7 @@ export default class Level {
         this.tileLayers = [];
         this.collisionData = [];
         this.heightData = [];
+        this.doorData = [];
         const depths = new Set<number>([0]);
 
         const idMap: {[ id: number ]: number} = {};
@@ -117,6 +161,12 @@ export default class Level {
                         this.heightData[ posX ][ posY ] = brush.data;
                         depths.add(brush.data);
                         break;
+                    case DataBrushName.DOOR:
+                        if(this.doorData[ posX ] == null) {
+                            this.doorData[ posX ] = [];
+                        }
+                        this.doorData[ posX ][ posY ] = true;
+                        break;
                 }
             }
         });
@@ -157,11 +207,24 @@ export default class Level {
                         this.heightData[ posX ][ posY ] = brush.data;
                         depths.add(brush.data);
                         break;
+                    case DataBrushName.DOOR:
+                        if(this.doorData[ posX ] == null) {
+                            this.doorData[ posX ] = [];
+                        }
+                        this.doorData[ posX ][ posY ] = true;
+                        break;
                 }
             }
         });
 
         this.depths = Array.from(depths).sort((a, b) => a - b);
+
+        this.doors = FindDoorGroups(this.doorData)
+            .map(cells => {
+                const tile = this.FindDoorTile(cells);
+                return tile ? {cells, tile, isOpen: tile.name === DOOR_OPEN_SPRITE} : null;
+            })
+            .filter((door): door is Door => door != null);
 
         Game.inst.dispatcher.emit(LEVEL_LOADED);
     }

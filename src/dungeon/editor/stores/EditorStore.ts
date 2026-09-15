@@ -45,7 +45,7 @@ export const enum DataBrushName {
     PLAYER_START = "player-start",
     COLLISION = "collision",
     Z_INDEX = "z-index",
-    DATA_4 = "data-4",
+    DOOR = "door",
     DATA_5 = "data-5"
 }
 
@@ -95,7 +95,7 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
                 { name: DataBrushName.PLAYER_START, colour: 0xfe3464, value: 0 },
                 { name: DataBrushName.COLLISION, colour: 0xffd166, value: 0 },
                 { name: DataBrushName.Z_INDEX, colour: 0x06d6a0, value: 0 },
-                { name: DataBrushName.DATA_4, colour: 0x118ab2, value: 0 },
+                { name: DataBrushName.DOOR, colour: 0x118ab2, value: 0 },
                 { name: DataBrushName.DATA_5, colour: 0xff8100, value: 0 }
             ],
             layers: [],

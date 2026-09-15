@@ -51,7 +51,9 @@ export class Player extends GameComponent {
     private OnUpdate(dt: number): void {
         this.GetInput();
         this.Move(dt);
-        this.MoveCamera();
+        const tile = this.PlayerTile();
+        this.MoveCamera(tile);
+        this.level.UpdateDoors(tile.x, tile.y);
         this.Render();
     }
 
@@ -69,12 +71,17 @@ export class Player extends GameComponent {
         this.player.position.set(this.newPosition.x, this.newPosition.y);
     }
 
-    private MoveCamera(): void {
+    /** The tile the player's centre currently sits over - shared by height lookup and door triggering. */
+    private PlayerTile(): Vec2Like {
         const half = (TileSize - 1) * 0.5;
-        const z = this.level.HeightAt(
-            ((this.player.x + half) / TileSize) | 0,
-            ((this.player.y + half) / TileSize) | 0
-        );
+        return {
+            x: ((this.player.x + half) / TileSize) | 0,
+            y: ((this.player.y + half) / TileSize) | 0
+        };
+    }
+
+    private MoveCamera(tile: Vec2Like): void {
+        const z = this.level.HeightAt(tile.x, tile.y);
         this.camera.SetZ(z);
         this.camera.UpdateZoom(this.game.ticker.deltaMS / 1000);
 
