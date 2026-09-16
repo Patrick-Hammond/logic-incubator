@@ -8,14 +8,12 @@ import {Layer} from "../../editor/stores/LevelDataStore";
 import {LEVEL_LOADED} from "../Events";
 import {HeightAt} from "./Depth";
 import {FindDoorGroups} from "./Doors";
+import {AMBIENT_LIGHT, BakeLighting, LightSource} from "./Lighting";
 import {FindRegions, Region, RegionIdsTouching} from "./Regions";
 
 /** Sprite names swapped by `Level.UpdateDoors` - the closed leaf is what's painted in the editor, the open one only ever appears at runtime. */
 const DOOR_CLOSED_SPRITE = "doors_leaf_closed";
 const DOOR_OPEN_SPRITE = "doors_leaf_open";
-
-/** See `Level.LightAt` - the assumed top of the `LIGHT` data brush's raw value scale. */
-const LIGHT_BRUSH_SCALE = 10;
 
 type Brush = {
     name: string;
@@ -54,7 +52,7 @@ export default class Level {
     public collisionData: boolean[][] = [];
     /** Per-cell height painted with the `Z_INDEX` (DepthBrushName) data brush. */
     public heightData: number[][] = [];
-    /** Per-cell brightness painted with the `LIGHT` data brush (see `LightAt`). */
+    /** Per-cell brightness baked from the `LIGHT` data brush's point lights (see `LightAt`, `Lighting.BakeLighting`). */
     public lightData: number[][] = [];
     /** Per-cell flag painted with the `DOOR` data brush. Purely a lookup for building `doors` - not consulted for movement collision, since a door must be walkable to trigger open. */
     public doorData: boolean[][] = [];
@@ -78,18 +76,11 @@ export default class Level {
         return HeightAt(this.heightData, tileX, tileY);
     }
 
-    /**
-     * Brightness under the given grid cell, normalised to `LightTint`'s expected `[0, 1]` range.
-     *
-     * The `LIGHT` data brush's raw painted value isn't itself a `[0, 1]` fraction - the values used in
-     * this project's own `level.json` are small integers (1, 3, 5, 9), i.e. a designer picking points on a
-     * rough 0-10 scale rather than a normalised brightness. Divides by `LIGHT_BRUSH_SCALE` accordingly; an
-     * unpainted cell reads as fully lit (1).
-     */
+    /** Brightness under the given grid cell, already baked (see `Lighting.BakeLighting`) to `LightTint`'s expected `[0, 1]` range. A cell no light's radius reaches reads as ambient (`AMBIENT_LIGHT`), not fully lit. */
     LightAt(tileX: number, tileY: number): number {
         const column = this.lightData[tileX];
         const value = column && column[tileY];
-        return value != null ? value / LIGHT_BRUSH_SCALE : 1;
+        return value != null ? value : AMBIENT_LIGHT;
     }
 
     /**
@@ -205,9 +196,9 @@ export default class Level {
         this.tileLayers = [];
         this.collisionData = [];
         this.heightData = [];
-        this.lightData = [];
         this.doorData = [];
         const depths = new Set<number>([0]);
+        const lights: LightSource[] = [];
 
         const idMap: {[ id: number ]: number} = {};
         let id = 0;
@@ -262,11 +253,12 @@ export default class Level {
                         }
                         this.doorData[ posX ][ posY ] = true;
                         break;
+                    // Collected once here rather than also in the tile-data pass below (unlike the other
+                    // cases above, which are harmlessly re-assigned there too) - lights get baked into
+                    // `lightData` as a batch afterwards, so pushing the same placement twice would double
+                    // its contribution.
                     case DataBrushName.LIGHT:
-                        if(this.lightData[ posX ] == null) {
-                            this.lightData[ posX ] = [];
-                        }
-                        this.lightData[ posX ][ posY ] = brush.data;
+                        lights.push({x: posX, y: posY, value: brush.data});
                         break;
                 }
             }
@@ -314,17 +306,13 @@ export default class Level {
                         }
                         this.doorData[ posX ][ posY ] = true;
                         break;
-                    case DataBrushName.LIGHT:
-                        if(this.lightData[ posX ] == null) {
-                            this.lightData[ posX ] = [];
-                        }
-                        this.lightData[ posX ][ posY ] = brush.data;
-                        break;
                 }
             }
         });
 
         this.depths = Array.from(depths).sort((a, b) => a - b);
+
+        this.lightData = BakeLighting(lights, this.boundRect.width, this.boundRect.height);
 
         const regionMap = FindRegions(this.collisionData, this.doorData, this.boundRect.width, this.boundRect.height);
         this.regionData = regionMap.regionData;
