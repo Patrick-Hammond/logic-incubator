@@ -1,9 +1,5 @@
-
-import * as PIXI from "pixi.js"
-window["PIXI"] = PIXI
-import "pixi-tilemap";
-
 import {AnimatedSprite} from "pixi.js";
+import {CompositeTilemap} from "../../../_lib/tilemap";
 import GameComponent from "../../../_lib/game/GameComponent";
 import AssetFactory from "../../../_lib/loading/AssetFactory";
 import {Vec2, Vec2Like} from "../../../_lib/math/Geometry";
@@ -15,12 +11,12 @@ import {Camera} from "./Camera";
 import {ViewOrigin} from "./helpers/CameraWindow";
 import {ResolveMove} from "./helpers/PlayerMovement";
 import {SpriteDrawPosition} from "./helpers/SpriteDrawOffset";
-import {TileGD8Rotation} from "./TileMap";
+import {LightTint, TileGD8Rotation} from "./TileMap";
 
 export class Player extends GameComponent {
     private controls: PlayerControl;
     private player: AnimatedSprite;
-    private targetLayer: PIXI.tilemap.CompositeRectTileLayer | undefined;
+    private targetLayer: CompositeTilemap | undefined;
     private velocity = new Vec2();
     private newPosition = new Vec2();
     private facingX = 1;
@@ -48,7 +44,7 @@ export class Player extends GameComponent {
             throw new Error("Player start position is not defined. Define it in the level data.");
         }
         this.player.position.set(playerStartPosition.x * TileSize, playerStartPosition.y * TileSize);
-        this.targetLayer = this.camera.root.getChildByName("player") as PIXI.tilemap.CompositeRectTileLayer;
+        this.targetLayer = this.camera.root.getChildByName("player") as CompositeTilemap;
     }
 
     private OnUpdate(dt: number): void {
@@ -104,7 +100,9 @@ export class Player extends GameComponent {
 
         this.targetLayer.clear();
         const draw = SpriteDrawPosition(this.player.position, origin, this.player.texture);
-        this.targetLayer.addFrame(this.player.texture, draw.x, draw.y);
+        const tile = this.PlayerTile();
+        const tint = LightTint(this.level.LightAt(tile.x, tile.y));
+        this.targetLayer.tile(this.player.texture, draw.x, draw.y, { tint });
         if (this.facingX < 0) {
             this.targetLayer.tileRotate(TileGD8Rotation(0, this.facingX, 1));
         }

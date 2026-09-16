@@ -38,6 +38,10 @@ module.exports = (_env, argv) => {
         {
           test: /\.(png|svg|jpg|gif)$/,
           type: 'asset/resource'
+        },
+        {
+          test: /\.(vert|frag)$/,
+          type: 'asset/source'
         }
       ]
     },

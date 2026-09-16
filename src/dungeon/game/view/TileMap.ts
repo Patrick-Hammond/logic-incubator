@@ -1,9 +1,5 @@
-
-import * as PIXI from "pixi.js"
-window["PIXI"] = PIXI
-import "pixi-tilemap";
-
-import { Container } from "pixi.js";
+import { Container, GD8Symmetry, groupD8 } from "pixi.js";
+import { CompositeTilemap } from "../../../_lib/tilemap";
 import GameComponent from "../../../_lib/game/GameComponent";
 import { TileSize } from "../../Constants";
 import { CAMERA_MOVED, LEVEL_CREATED, LEVEL_LOADED } from "../Events";
@@ -12,33 +8,39 @@ import Level from "../level/Level";
 import { Camera } from "./Camera";
 import { ViewOrigin } from "./helpers/CameraWindow";
 
-type Band = { z: number; root: Container; layers: PIXI.tilemap.CompositeRectTileLayer[] };
+type Band = { z: number; root: Container; layers: CompositeTilemap[] };
 
 /**
- * `CompositeRectTileLayer.addFrame` has no rotation/flip parameter - it always
+ * `CompositeTilemap.tile` has no rotation/flip parameter - it always
  * draws the texture's own baked-in orientation. A brush's rotation and flips
  * have to be composed into a single GD8 symmetry and applied after the fact via
  * `tileRotate`, since GD8 codes cover flip+rotation combinations, not each axis
  * independently.
  */
-export function TileGD8Rotation(rotation: number, scaleX: number, scaleY: number): PIXI.GD8Symmetry {
+export function TileGD8Rotation(rotation: number, scaleX: number, scaleY: number): GD8Symmetry {
     // groupD8.S/N (and the mirror constants below) don't line up with their
     // documented directions for this use - the whole mapping here is fit to
     // match a real PIXI.Sprite(rotation, scale) rendering of the same texture,
     // verified pixel-for-pixel across all 4 rotations x 4 flip combinations,
     // not derived from the GD8 docs.
     const quarterTurns = Math.round(rotation / (Math.PI / 2)) % 4;
-    const rotate = [PIXI.groupD8.E, PIXI.groupD8.N, PIXI.groupD8.W, PIXI.groupD8.S][quarterTurns];
+    const rotate = [groupD8.E, groupD8.N, groupD8.W, groupD8.S][quarterTurns];
 
-    let flip = PIXI.groupD8.E;
+    let flip = groupD8.E;
     if (scaleX < 0) {
-        flip = PIXI.groupD8.add(flip, PIXI.groupD8.MIRROR_HORIZONTAL);
+        flip = groupD8.add(flip, groupD8.MIRROR_HORIZONTAL);
     }
     if (scaleY < 0) {
-        flip = PIXI.groupD8.add(flip, PIXI.groupD8.MIRROR_VERTICAL);
+        flip = groupD8.add(flip, groupD8.MIRROR_VERTICAL);
     }
 
-    return PIXI.groupD8.add(flip, rotate);
+    return groupD8.add(flip, rotate);
+}
+
+/** Packs a brightness (as painted by the `LIGHT` data brush, 1 = full brightness) into a grayscale tint. Clamped to `[0, 1]` - `tint` can only darken a texture by multiplying it, not brighten it past its own colours. */
+export function LightTint(brightness: number): number {
+    const channel = Math.round(Math.max(0, Math.min(1, brightness)) * 255);
+    return (channel << 16) | (channel << 8) | channel;
 }
 
 /**
@@ -55,7 +57,7 @@ export function TileGD8Rotation(rotation: number, scaleX: number, scaleY: number
  */
 export default class TileMapView extends GameComponent {
     private bands: Band[] = [];
-    private playerLayer: PIXI.tilemap.CompositeRectTileLayer | null = null;
+    private playerLayer: CompositeTilemap | null = null;
 
     constructor(private level: Level, private camera: Camera) {
         super();
@@ -83,9 +85,9 @@ export default class TileMapView extends GameComponent {
             root.name = "z-" + z;
             root.interactive = root.interactiveChildren = false;
 
-            const layers: PIXI.tilemap.CompositeRectTileLayer[] = [];
+            const layers: CompositeTilemap[] = [];
             this.level.tileLayers.forEach(layer => {
-                const tileLayer = new PIXI.tilemap.CompositeRectTileLayer(layer.id);
+                const tileLayer = new CompositeTilemap();
                 tileLayer.interactive = tileLayer.interactiveChildren = false;
                 tileLayer.name = layer.name;
                 root.addChild(tileLayer);
@@ -96,7 +98,7 @@ export default class TileMapView extends GameComponent {
             this.bands.push({ z, root, layers });
         }
 
-        this.playerLayer = new PIXI.tilemap.CompositeRectTileLayer(0);
+        this.playerLayer = new CompositeTilemap();
         this.playerLayer.name = "player";
         this.playerLayer.interactive = this.playerLayer.interactiveChildren = false;
         this.playerLayer.scale.set(this.camera.Scale);
@@ -169,14 +171,16 @@ export default class TileMapView extends GameComponent {
                         if (!this.level.IsCellVisible(x, y)) {
                             continue;
                         }
+                        const tint = LightTint(this.level.LightAt(x, y));
                         for (let t = 0, tt = tiles.length; t < tt; t++) {
                             const tile = tiles[t];
                             const texture = tile.anim ? tile.anim.texture : tile.texture;
                             if (texture) {
-                                layer.addFrame(
+                                layer.tile(
                                     texture,
                                     (x - originX) * TileSize - tile.pixelOffset.x,
-                                    (y - originY) * TileSize - tile.pixelOffset.y
+                                    (y - originY) * TileSize - tile.pixelOffset.y,
+                                    { tint }
                                 );
                                 if (tile.rotation || tile.scale.x < 0 || tile.scale.y < 0) {
                                     layer.tileRotate(TileGD8Rotation(tile.rotation, tile.scale.x, tile.scale.y));

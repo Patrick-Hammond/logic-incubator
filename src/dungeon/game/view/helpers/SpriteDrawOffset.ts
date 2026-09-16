@@ -12,7 +12,7 @@ export interface TextureSize {
  * Player.Render, kept pure so it can be unit-tested without a pixi/Game
  * runtime (mirrors how ResolveMove was extracted from Player.Move).
  *
- * `CompositeRectTileLayer.addFrame` draws a texture top-left anchored with
+ * `CompositeTilemap.tile` draws a texture top-left anchored with
  * no pivot support. Most tile art is exactly one tile (TileSize) on each
  * axis, but a character's frame (e.g. wizzard_m_run_anim, 16x28) is taller
  * than its footprint tile to fit a head/torso above it. Drawn at the raw

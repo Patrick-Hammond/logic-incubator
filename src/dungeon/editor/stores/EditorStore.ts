@@ -46,7 +46,7 @@ export const enum DataBrushName {
     COLLISION = "collision",
     Z_INDEX = "z-index",
     DOOR = "door",
-    DATA_5 = "data-5"
+    LIGHT = "light"
 }
 
 export type DataBrush = { name: string; colour: number; value: number };
@@ -96,7 +96,7 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
                 { name: DataBrushName.COLLISION, colour: 0xffd166, value: 0 },
                 { name: DataBrushName.Z_INDEX, colour: 0x06d6a0, value: 0 },
                 { name: DataBrushName.DOOR, colour: 0x118ab2, value: 0 },
-                { name: DataBrushName.DATA_5, colour: 0xff8100, value: 0 }
+                { name: DataBrushName.LIGHT, colour: 0xff8100, value: 0 }
             ],
             layers: [],
             mouseButtonState: MouseButtonState.UP,
@@ -105,6 +105,30 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
             viewScale: InitalScale,
             currentScene: null
         };
+    }
+
+    /**
+     * `Store.Load()` replaces state wholesale with whatever was saved, with no reconciliation against
+     * the current code - so a `dataBrushes` entry saved under a name that's since been renamed (or typo'd
+     * in a hand-edited export) silently stops matching. The palette swatch is unaffected (`Palette.Create`
+     * builds it fresh from the current `DataBrushName` enum before this runs), but `SelectedDataBrush` and
+     * the `BRUSH_CHANGED`/`DATA_BRUSH_INC`/`DEC` lookups key off the *loaded* catalogue, so the mismatched
+     * entry's value can never be found again - see the "door"/"doors" mismatch this fixed in level.json.
+     * Reconcile on load: always keep the current code's set of brush names/colours, carrying over each
+     * one's saved `value` only where its name still matches.
+     */
+    Load(state: IEditorState): void {
+        super.Load({
+            ...state,
+            dataBrushes: this.ReconcileDataBrushes(state && state.dataBrushes)
+        });
+    }
+
+    private ReconcileDataBrushes(loaded: DataBrush[]): DataBrush[] {
+        return this.DefaultState().dataBrushes.map(def => {
+            const saved = loaded && loaded.find(db => db.name === def.name);
+            return saved ? { ...def, value: saved.value } : def;
+        });
     }
 
     protected Reduce(state: IEditorState, action: IAction<IActionData>): IEditorState {

@@ -24,7 +24,6 @@
     "gsap": "3.6.0",
     "nipplejs": "^0.8.5",
     "pixi-filters": "3.1.1",
-    "pixi-tilemap": "2.0.6",
     "pixi.js": "5.2.1",
     "rot-js": "^2.1.1",
     "screenfull": "^5.2.0",
@@ -46,7 +45,7 @@
     "webpack-cli": "^7.2.3",
     "webpack-dev-server": "^6.0.0"
   },
-  "//overrides": "pixi-filters@3.1.1 and pixi-tilemap@2.0.6 declare @pixi/* as ^5.0.0, which npm otherwise floats to 5.3.x - a second copy of @pixi/core et al. alongside the 5.2.1 that pixi.js uses. Two engine instances break the renderer at runtime. Pin the whole @pixi tree to the pixi.js 5.2.1 version.",
+  "//overrides": "pixi-filters@3.1.1 declares @pixi/* as ^5.0.0, which npm otherwise floats to 5.3.x - a second copy of @pixi/core et al. alongside the 5.2.1 that pixi.js uses. Two engine instances break the renderer at runtime. Pin the whole @pixi tree to the pixi.js 5.2.1 version.",
   "overrides": {
     "@pixi/accessibility": "5.2.1",
     "@pixi/app": "5.2.1",

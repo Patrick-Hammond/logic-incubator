@@ -14,6 +14,9 @@ import {FindRegions, Region, RegionIdsTouching} from "./Regions";
 const DOOR_CLOSED_SPRITE = "doors_leaf_closed";
 const DOOR_OPEN_SPRITE = "doors_leaf_open";
 
+/** See `Level.LightAt` - the assumed top of the `LIGHT` data brush's raw value scale. */
+const LIGHT_BRUSH_SCALE = 10;
+
 type Brush = {
     name: string;
     position: Vec2Like;
@@ -51,6 +54,8 @@ export default class Level {
     public collisionData: boolean[][] = [];
     /** Per-cell height painted with the `Z_INDEX` (DepthBrushName) data brush. */
     public heightData: number[][] = [];
+    /** Per-cell brightness painted with the `LIGHT` data brush (see `LightAt`). */
+    public lightData: number[][] = [];
     /** Per-cell flag painted with the `DOOR` data brush. Purely a lookup for building `doors` - not consulted for movement collision, since a door must be walkable to trigger open. */
     public doorData: boolean[][] = [];
     /** One entry per connected island of `doorData` cells that has a matching door sprite tile (see `FindDoorTile`). */
@@ -71,6 +76,20 @@ export default class Level {
     /** Height painted under the given grid cell (0 if unpainted). Drives the camera zoom. */
     HeightAt(tileX: number, tileY: number): number {
         return HeightAt(this.heightData, tileX, tileY);
+    }
+
+    /**
+     * Brightness under the given grid cell, normalised to `LightTint`'s expected `[0, 1]` range.
+     *
+     * The `LIGHT` data brush's raw painted value isn't itself a `[0, 1]` fraction - the values used in
+     * this project's own `level.json` are small integers (1, 3, 5, 9), i.e. a designer picking points on a
+     * rough 0-10 scale rather than a normalised brightness. Divides by `LIGHT_BRUSH_SCALE` accordingly; an
+     * unpainted cell reads as fully lit (1).
+     */
+    LightAt(tileX: number, tileY: number): number {
+        const column = this.lightData[tileX];
+        const value = column && column[tileY];
+        return value != null ? value / LIGHT_BRUSH_SCALE : 1;
     }
 
     /**
@@ -186,6 +205,7 @@ export default class Level {
         this.tileLayers = [];
         this.collisionData = [];
         this.heightData = [];
+        this.lightData = [];
         this.doorData = [];
         const depths = new Set<number>([0]);
 
@@ -242,6 +262,12 @@ export default class Level {
                         }
                         this.doorData[ posX ][ posY ] = true;
                         break;
+                    case DataBrushName.LIGHT:
+                        if(this.lightData[ posX ] == null) {
+                            this.lightData[ posX ] = [];
+                        }
+                        this.lightData[ posX ][ posY ] = brush.data;
+                        break;
                 }
             }
         });
@@ -287,6 +313,12 @@ export default class Level {
                             this.doorData[ posX ] = [];
                         }
                         this.doorData[ posX ][ posY ] = true;
+                        break;
+                    case DataBrushName.LIGHT:
+                        if(this.lightData[ posX ] == null) {
+                            this.lightData[ posX ] = [];
+                        }
+                        this.lightData[ posX ][ posY ] = brush.data;
                         break;
                 }
             }
