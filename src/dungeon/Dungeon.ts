@@ -10,7 +10,7 @@ export function Dungoen(): void {
     const game = new Game({width: GameWidth, height: GameHeight, backgroundColor: 0x111111 }, true);
 
     // load
-    Loader.inst.LoadSpriteSheet(AssetPath + "spritesheet.json", /^.+(?=_f)/, () => {
+    Loader.inst.LoadSpriteSheet(AssetPath + "frames.json", /^.+(?=_f)/, () => {
         game.loader.baseUrl = AssetPath;
         game.loader.add([
             { name: "icon-eye", url: "icons/eye.png" },

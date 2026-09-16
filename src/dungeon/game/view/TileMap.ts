@@ -10,7 +10,7 @@ import { CAMERA_MOVED, LEVEL_CREATED, LEVEL_LOADED } from "../Events";
 import { ZBandAlpha, ZScale } from "../level/Depth";
 import Level from "../level/Level";
 import { Camera } from "./Camera";
-import { ViewOrigin } from "./CameraWindow";
+import { ViewOrigin } from "./helpers/CameraWindow";
 
 type Band = { z: number; root: Container; layers: PIXI.tilemap.CompositeRectTileLayer[] };
 

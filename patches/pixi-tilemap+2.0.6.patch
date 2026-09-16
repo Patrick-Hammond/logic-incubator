@@ -1,8 +1,18 @@
 diff --git a/node_modules/pixi-tilemap/dist/pixi-tilemap.js b/node_modules/pixi-tilemap/dist/pixi-tilemap.js
-index b1615f6..5777ca0 100644
+index b1615f6..0fa3590 100644
 --- a/node_modules/pixi-tilemap/dist/pixi-tilemap.js
 +++ b/node_modules/pixi-tilemap/dist/pixi-tilemap.js
-@@ -197,6 +197,7 @@ var pixi_tilemap;
+@@ -169,7 +169,8 @@ var pixi_tilemap;
+                 }
+             }
+             this._lastLayer = layer;
+-            layer.addRect(ind, texture.frame.x, texture.frame.y, x, y, texture.orig.width, texture.orig.height, animX, animY, texture.rotate, animWidth, animHeight);
++            var trim = texture.trim;
++            layer.addRect(ind, texture.frame.x, texture.frame.y, x + (trim ? trim.x : 0), y + (trim ? trim.y : 0), texture.frame.width, texture.frame.height, animX, animY, texture.rotate, animWidth, animHeight);
+             return this;
+         };
+         CompositeRectTileLayer.prototype.renderCanvas = function (renderer) {
+@@ -197,6 +198,7 @@ var pixi_tilemap;
              renderer.globalUniforms.uniforms.projectionMatrix.copyTo(this._globalMat).append(this.worldTransform);
              shader.uniforms.shadowColor = this.shadowColor;
              shader.uniforms.animationFrame = plugin.tileAnim;
@@ -10,7 +20,17 @@ index b1615f6..5777ca0 100644
              renderer.shader.bind(shader, false);
              var layers = this.children;
              for (var i = 0; i < layers.length; i++) {
-@@ -438,7 +439,7 @@ var pixi_tilemap;
+@@ -411,7 +413,8 @@ var pixi_tilemap;
+                     return false;
+                 }
+             }
+-            this.addRect(textureIndex, texture.frame.x, texture.frame.y, x, y, texture.orig.width, texture.orig.height, animX, animY, texture.rotate);
++            var trim = texture.trim;
++            this.addRect(textureIndex, texture.frame.x, texture.frame.y, x + (trim ? trim.x : 0), y + (trim ? trim.y : 0), texture.frame.width, texture.frame.height, animX, animY, texture.rotate);
+             return true;
+         };
+         RectTileLayer.prototype.addRect = function (textureIndex, u, v, x, y, tileWidth, tileHeight, animX, animY, rotate, animCountX, animCountY) {
+@@ -438,7 +441,7 @@ var pixi_tilemap;
          };
          RectTileLayer.prototype.tileRotate = function (rotate) {
              var pb = this.pointsBuf;
@@ -19,7 +39,7 @@ index b1615f6..5777ca0 100644
          };
          RectTileLayer.prototype.tileAnimX = function (offset, count) {
              var pb = this.pointsBuf;
-@@ -496,6 +497,7 @@ var pixi_tilemap;
+@@ -496,6 +499,7 @@ var pixi_tilemap;
              renderer.globalUniforms.uniforms.projectionMatrix.copyTo(this._globalMat).append(this.worldTransform);
              shader.uniforms.shadowColor = this.shadowColor;
              shader.uniforms.animationFrame = plugin.tileAnim;
@@ -27,7 +47,7 @@ index b1615f6..5777ca0 100644
              this.renderWebGLCore(renderer, plugin);
          };
          RectTileLayer.prototype.renderWebGLCore = function (renderer, plugin) {
-@@ -667,7 +669,7 @@ var pixi_tilemap;
+@@ -667,7 +671,7 @@ var pixi_tilemap;
  })(pixi_tilemap || (pixi_tilemap = {}));
  var pixi_tilemap;
  (function (pixi_tilemap) {
@@ -36,7 +56,7 @@ index b1615f6..5777ca0 100644
      var rectShaderVert = "\nattribute vec2 aVertexPosition;\nattribute vec2 aTextureCoord;\nattribute vec4 aFrame;\nattribute vec2 aAnim;\nattribute float aTextureId;\n\nuniform mat3 projTransMatrix;\nuniform vec2 animationFrame;\n\nvarying vec2 vTextureCoord;\nvarying float vTextureId;\nvarying vec4 vFrame;\n\nvoid main(void){\n   gl_Position = vec4((projTransMatrix * vec3(aVertexPosition, 1.0)).xy, 0.0, 1.0);\n   vec2 animCount = floor((aAnim + 0.5) / 2048.0);\n   vec2 animFrameOffset = aAnim - animCount * 2048.0;\n   vec2 animOffset = animFrameOffset * floor(mod(animationFrame + 0.5, animCount));\n\n   vTextureCoord = aTextureCoord + animOffset;\n   vFrame = aFrame + vec4(animOffset, animOffset);\n   vTextureId = aTextureId;\n}\n";
      var TilemapShader = (function (_super) {
          __extends(TilemapShader, _super);
-@@ -676,7 +678,8 @@ var pixi_tilemap;
+@@ -676,7 +680,8 @@ var pixi_tilemap;
                  animationFrame: new Float32Array(2),
                  uSamplers: [],
                  uSamplerSize: [],

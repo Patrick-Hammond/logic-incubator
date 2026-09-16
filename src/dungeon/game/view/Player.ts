@@ -12,9 +12,9 @@ import PlayerControl from "../input/PlayerControl";
 import Level from "../level/Level";
 import TileCollision from "../level/TileCollision";
 import {Camera} from "./Camera";
-import {ViewOrigin} from "./CameraWindow";
-import {ResolveMove} from "./PlayerMovement";
-import {SpriteDrawPosition} from "./SpriteDrawOffset";
+import {ViewOrigin} from "./helpers/CameraWindow";
+import {ResolveMove} from "./helpers/PlayerMovement";
+import {SpriteDrawPosition} from "./helpers/SpriteDrawOffset";
 import {TileGD8Rotation} from "./TileMap";
 
 export class Player extends GameComponent {
@@ -32,7 +32,7 @@ export class Player extends GameComponent {
     ) {
         super();
 
-        this.player = AssetFactory.inst.CreateAnimatedSprite("wizzart_m_run_anim");
+        this.player = AssetFactory.inst.CreateAnimatedSprite("wizzard_m_run_anim");
         this.player.play();
         this.player.animationSpeed = 0.1;
 

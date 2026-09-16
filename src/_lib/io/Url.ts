@@ -21,6 +21,9 @@ export function GetNextInImageSequence(url: string): string {
 
 export function GetExtension(url: string): string {
     const result = url.match(/(\.\w+$)/gim);
+    if (!result) {
+        return "";
+    }
     return result.length ? result[0] : "";
 }
 
