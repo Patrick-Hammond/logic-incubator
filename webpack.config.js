@@ -3,28 +3,54 @@ const HtmlWebpackPlugin = require('html-webpack-plugin');
 const CopyWebpackPlugin = require('copy-webpack-plugin');
 const TsconfigPathsPlugin = require('tsconfig-paths-webpack-plugin');
 
-module.exports = (_env, argv) => {
+// Each project builds to its own dist/<project> folder (assets nested inside
+// as dist/<project>/assets), so multiple projects can be hosted side by side
+// under matching /<project>/ paths on the same origin. Select one with
+// `--env project=<name>` (see the per-project npm scripts in package.json).
+const PROJECTS = {
+  dungeon: {
+    entry: './src/dungeon/main.ts',
+    title: 'In Dungeons We Dwell',
+    assets: './src/dungeon/assets'
+  },
+  catgrab: {
+    entry: './src/catgrab/main.ts',
+    title: 'Cat Grab',
+    assets: './src/catgrab/assets'
+  }
+};
+
+module.exports = (env, argv) => {
   const isProduction = argv.mode === 'production';
+  const projectName = (env && env.project) || 'dungeon';
+  const project = PROJECTS[projectName];
+
+  if (!project) {
+    throw new Error(`Unknown project "${projectName}". Valid projects: ${Object.keys(PROJECTS).join(', ')}`);
+  }
+
+  const outputPath = path.resolve(__dirname, 'dist', projectName);
 
   return {
-    entry: './src/Main.ts',
+    entry: project.entry,
     mode: isProduction ? 'production' : 'development',
     devtool: isProduction ? false : 'source-map',
     target: ['web', 'es5'],
     devServer: {
-      static: { directory: path.resolve(__dirname, 'dist') },
+      static: { directory: outputPath },
       hot: true,
-      port: 4200
+      port: 4200,
+      open: [`/${projectName}/`]
     },
     plugins: [
       new HtmlWebpackPlugin({
-        title: 'Symbol Shift',
-        template: './src/index.template'
+        title: project.title,
+        template: './src/_lib/html/index.template'
       }),
       new CopyWebpackPlugin({
         patterns: [
-          { from: './src/assets', to: 'assets' },
-          { from: './src/index.styles.css', to: 'index.styles.css' }
+          { from: project.assets, to: 'assets' },
+          { from: './src/_lib/html/index.styles.css', to: 'index.styles.css' }
         ]
       })
     ],
@@ -54,7 +80,8 @@ module.exports = (_env, argv) => {
     output: {
       filename: '[name].bundle.js',
       sourceMapFilename: '[file].map[query]',
-      path: path.resolve(__dirname, 'dist'),
+      path: outputPath,
+      publicPath: `/${projectName}/`,
       clean: true
     },
     // This is a canvas game; a large single bundle is expected.

@@ -6,7 +6,7 @@ export const MapWidth = 16;
 export const MapHeight = 12;
 export const PlayerHomeLocation = {x:1, y:2};
 export const VikingHomeLocation = {x:14, y:2};
-export const AssetPath = "/assets/catgrab/";
+export const AssetPath = "/catgrab/assets/";
 
 export const enum Scenes {
     TITLE = "title", GAME = "game", SUMMARY = "summary"

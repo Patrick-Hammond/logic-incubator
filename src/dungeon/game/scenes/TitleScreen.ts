@@ -8,7 +8,7 @@ export class TitleScreen extends GameComponent {
     constructor() {
         super();
 
-        const title = new Text("Symbol Shift", {fontFamily: "Arial", fontSize: 64, fill: 0xffffff});
+        const title = new Text("In Dungeons We Dwell", {fontFamily: "Arial", fontSize: 64, fill: 0xffffff});
         title.anchor.set(0.5);
         title.position.set(GameWidth / 2, GameHeight * 0.35);
 
