@@ -3,7 +3,7 @@ const tseslint = require('typescript-eslint');
 
 module.exports = tseslint.config(
   {
-    ignores: ['dist/', 'node_modules/', 'webpack.config.js', 'eslint.config.js']
+    ignores: ['dist/', 'node_modules/', 'webpack.config.js', 'eslint.config.js', 'src/_lib/scripts/create-metadata.js']
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,

@@ -6,14 +6,11 @@ import {AnimationSpeed} from "../../Constants";
 import {DataBrushName, IEditorState} from "../../editor/stores/EditorStore";
 import {Layer} from "../../editor/stores/LevelDataStore";
 import {LEVEL_LOADED} from "../Events";
+import AssetMetadataStore from "./AssetMetadata";
 import {HeightAt} from "./Depth";
 import {FindDoorGroups} from "./Doors";
-import {AMBIENT_LIGHT, BakeLighting, LightSource} from "./Lighting";
+import {AMBIENT_LIGHT, AMBIENT_TINT, BakedLight, BakeLighting, IsLightValue, LightSource, LightValue} from "./Lighting";
 import {FindRegions, Region, RegionIdsTouching} from "./Regions";
-
-/** Sprite names swapped by `Level.UpdateDoors` - the closed leaf is what's painted in the editor, the open one only ever appears at runtime. */
-const DOOR_CLOSED_SPRITE = "doors_leaf_closed";
-const DOOR_OPEN_SPRITE = "doors_leaf_open";
 
 type Brush = {
     name: string;
@@ -22,7 +19,7 @@ type Brush = {
     rotation: number;
     scale: Vec2Like;
     layerId: number;
-    data: number;
+    data: number | LightValue;
 };
 
 export type Tile = Brush & {
@@ -31,8 +28,8 @@ export type Tile = Brush & {
     anim?: AnimatedSprite;
 };
 
-/** One door: the cells painted with the `DOOR` data brush, and the visual tile whose texture is swapped when the player overlaps any of them. `regionIds` is the (possibly empty) set of regions this door borders - see `Regions.ts`. */
-export type Door = { cells: Vec2Like[]; tile: Tile; isOpen: boolean; regionIds: number[] };
+/** One door: the cell(s) whose tile has a `door` id in its `AssetMetadata`, and the visual tile whose texture is swapped between `closedSprite`/`openSprite` (that door's own pair, resolved via `AssetMetadataStore.GetDoorPartner`) when the player overlaps any of them. `regionIds` is the (possibly empty) set of regions this door borders - see `Regions.ts`. */
+export type Door = { cells: Vec2Like[]; tile: Tile; isOpen: boolean; regionIds: number[]; openSprite: string; closedSprite: string };
 
 function CreateTile(brush: Brush): Tile {
     if (AssetFactory.inst.AnimationNames.indexOf(brush.name) > -1) {
@@ -49,12 +46,13 @@ export default class Level {
     /** [layer][x][y] -> every tile painted at that cell, in paint order (later = drawn on top). */
     public levelData: Tile[][][][] = [];
     public tileLayers: Layer[] = [];
+    /** Per-cell collision: `true` if any tile placed there has `collidable: true` in `AssetMetadata`, or the cell was painted with the `COLLISION` data brush (an explicit override/addition on top of the intrinsic default). */
     public collisionData: boolean[][] = [];
     /** Per-cell height painted with the `Z_INDEX` (DepthBrushName) data brush. */
     public heightData: number[][] = [];
-    /** Per-cell brightness baked from the `LIGHT` data brush's point lights (see `LightAt`, `Lighting.BakeLighting`). */
-    public lightData: number[][] = [];
-    /** Per-cell flag painted with the `DOOR` data brush. Purely a lookup for building `doors` - not consulted for movement collision, since a door must be walkable to trigger open. */
+    /** Per-cell lighting baked from point lights - both the `LIGHT` data brush and any placed tile with `light` in its `AssetMetadata` (see `LightAt`, `Lighting.BakeLighting`). */
+    public lightData: BakedLight[][] = [];
+    /** Per-cell flag: `true` if any tile placed there has a `door` id in its `AssetMetadata`. Purely a lookup for building `doors` - not consulted for movement collision, since a door must be walkable to trigger open. */
     public doorData: boolean[][] = [];
     /** One entry per connected island of `doorData` cells that has a matching door sprite tile (see `FindDoorTile`). */
     public doors: Door[] = [];
@@ -76,11 +74,11 @@ export default class Level {
         return HeightAt(this.heightData, tileX, tileY);
     }
 
-    /** Brightness under the given grid cell, already baked (see `Lighting.BakeLighting`) to `LightTint`'s expected `[0, 1]` range. A cell no light's radius reaches reads as ambient (`AMBIENT_LIGHT`), not fully lit. */
-    LightAt(tileX: number, tileY: number): number {
+    /** Lighting under the given grid cell, already baked (see `Lighting.BakeLighting`) to `LightTint`'s expected shape. A cell no light's radius reaches reads as ambient (`AMBIENT_LIGHT`/`AMBIENT_TINT`), not fully lit. */
+    LightAt(tileX: number, tileY: number): BakedLight {
         const column = this.lightData[tileX];
         const value = column && column[tileY];
-        return value != null ? value : AMBIENT_LIGHT;
+        return value != null ? value : { brightness: AMBIENT_LIGHT, tint: AMBIENT_TINT };
     }
 
     /**
@@ -95,7 +93,7 @@ export default class Level {
             const overlapping = door.cells.some(c => c.x === tileX && c.y === tileY);
             if (overlapping !== door.isOpen) {
                 door.isOpen = overlapping;
-                door.tile.texture = AssetFactory.inst.CreateTexture(overlapping ? DOOR_OPEN_SPRITE : DOOR_CLOSED_SPRITE);
+                door.tile.texture = AssetFactory.inst.CreateTexture(overlapping ? door.openSprite : door.closedSprite);
             }
         });
     }
@@ -166,12 +164,12 @@ export default class Level {
         return false;
     }
 
-    /** Finds the door leaf tile (whichever sprite variant is currently painted) among the given cells, searching every tile layer. */
+    /** Finds the door leaf tile (whichever sprite variant is currently painted, of whichever door type) among the given cells, searching every tile layer. */
     private FindDoorTile(cells: Vec2Like[]): Tile | null {
         for (const cell of cells) {
             for (const layer of this.levelData) {
                 const stack = layer && layer[ cell.x ] && layer[ cell.x ][ cell.y ];
-                const found = stack && stack.find(t => t.name === DOOR_CLOSED_SPRITE || t.name === DOOR_OPEN_SPRITE);
+                const found = stack && stack.find(t => AssetMetadataStore.inst.Get(t.name)?.door != null);
                 if (found) {
                     return found;
                 }
@@ -199,6 +197,8 @@ export default class Level {
         this.doorData = [];
         const depths = new Set<number>([0]);
         const lights: LightSource[] = [];
+        /** Cells with an explicit `LIGHT` brush placement - an intrinsic `AssetMetadata.light` at the same cell is skipped in the tile-data pass below, so the two sources don't double up. */
+        const explicitLightCells = new Set<string>();
 
         const idMap: {[ id: number ]: number} = {};
         let id = 0;
@@ -244,21 +244,18 @@ export default class Level {
                         if(this.heightData[ posX ] == null) {
                             this.heightData[ posX ] = [];
                         }
-                        this.heightData[ posX ][ posY ] = brush.data;
-                        depths.add(brush.data);
-                        break;
-                    case DataBrushName.DOOR:
-                        if(this.doorData[ posX ] == null) {
-                            this.doorData[ posX ] = [];
-                        }
-                        this.doorData[ posX ][ posY ] = true;
+                        this.heightData[ posX ][ posY ] = brush.data as number;
+                        depths.add(brush.data as number);
                         break;
                     // Collected once here rather than also in the tile-data pass below (unlike the other
                     // cases above, which are harmlessly re-assigned there too) - lights get baked into
                     // `lightData` as a batch afterwards, so pushing the same placement twice would double
                     // its contribution.
                     case DataBrushName.LIGHT:
-                        lights.push({x: posX, y: posY, value: brush.data});
+                        if (IsLightValue(brush.data)) {
+                            lights.push({x: posX, y: posY, value: brush.data});
+                            explicitLightCells.add(posX + "," + posY);
+                        }
                         break;
                 }
             }
@@ -282,6 +279,28 @@ export default class Level {
                 }
 
                 this.levelData[ index ][ posX ][ posY ].push(CreateTile(brush));
+
+                // Intrinsic defaults from the tile's own AssetMetadata - an explicit data brush at the
+                // same cell (COLLISION above, or a LIGHT placement tracked in explicitLightCells) still
+                // layers on top / takes precedence, rather than being overwritten by this.
+                const meta = AssetMetadataStore.inst.Get(brush.name);
+                if (meta) {
+                    if (meta.collidable) {
+                        if(this.collisionData[ posX ] == null) {
+                            this.collisionData[ posX ] = [];
+                        }
+                        this.collisionData[ posX ][ posY ] = true;
+                    }
+                    if (meta.door) {
+                        if(this.doorData[ posX ] == null) {
+                            this.doorData[ posX ] = [];
+                        }
+                        this.doorData[ posX ][ posY ] = true;
+                    }
+                    if (meta.light && !explicitLightCells.has(posX + "," + posY)) {
+                        lights.push({x: posX, y: posY, value: meta.light});
+                    }
+                }
             } else {
                 switch(brush.name) {
                     case DataBrushName.PLAYER_START:
@@ -297,14 +316,8 @@ export default class Level {
                         if(this.heightData[ posX ] == null) {
                             this.heightData[ posX ] = [];
                         }
-                        this.heightData[ posX ][ posY ] = brush.data;
-                        depths.add(brush.data);
-                        break;
-                    case DataBrushName.DOOR:
-                        if(this.doorData[ posX ] == null) {
-                            this.doorData[ posX ] = [];
-                        }
-                        this.doorData[ posX ][ posY ] = true;
+                        this.heightData[ posX ][ posY ] = brush.data as number;
+                        depths.add(brush.data as number);
                         break;
                 }
             }
@@ -322,7 +335,16 @@ export default class Level {
         this.doors = FindDoorGroups(this.doorData)
             .map(cells => {
                 const tile = this.FindDoorTile(cells);
-                if (!tile) {
+                const doorValue = tile && AssetMetadataStore.inst.Get(tile.name)?.door;
+                if (!tile || !doorValue) {
+                    return null;
+                }
+                // Resolved once here, not per-frame - `UpdateDoors` (called every tick) just reads
+                // these back rather than re-scanning AssetMetadata for this door's pair each time.
+                const partner = AssetMetadataStore.inst.GetDoorPartner(tile.name);
+                const openSprite = doorValue.open ? tile.name : partner;
+                const closedSprite = doorValue.open ? partner : tile.name;
+                if (!openSprite || !closedSprite) {
                     return null;
                 }
                 // A door's cells are one visibility unit regardless of which
@@ -337,7 +359,7 @@ export default class Level {
                     }
                     this.boundaryRegionData[ c.x ][ c.y ] = regionIds;
                 });
-                return {cells, tile, isOpen: tile.name === DOOR_OPEN_SPRITE, regionIds};
+                return {cells, tile, isOpen: doorValue.open, regionIds, openSprite, closedSprite};
             })
             .filter((door): door is Door => door != null);
 

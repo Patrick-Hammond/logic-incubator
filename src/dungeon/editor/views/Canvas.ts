@@ -1,5 +1,6 @@
 import {AnimatedSprite, BitmapText, Container, Graphics, interaction} from "pixi.js";
 import { Key } from "../../../_lib/io/Keyboard";
+import { IsLightValue } from "../../game/level/Lighting";
 import ObjectPool from "../../../_lib/patterns/ObjectPool";
 import { AnimationSpeed, GridBounds, InitalScale, Scenes, TileSize } from "../../Constants";
 import EditorComponent from "../EditorComponent";
@@ -89,7 +90,10 @@ export default class Canvas extends EditorComponent {
                         }
                         if (brush.data !== null) {
                             const text = this.textPool.Get();
-                            text.text = brush.data.toString();
+                            // A LightValue is shown as just its range, matching every other data brush's
+                            // convention of a single bare number - brightness/tint are only relevant once
+                            // you're editing the light (see SelectedBrush), not at a map-overview glance.
+                            text.text = IsLightValue(brush.data) ? brush.data.range.toString() : brush.data.toString();
                             sprite.addChild(text);
                         }
                         layerDict[brush.layerId].addChild(sprite);

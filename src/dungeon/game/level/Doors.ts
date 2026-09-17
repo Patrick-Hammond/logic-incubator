@@ -13,12 +13,18 @@ const NEIGHBOUR_OFFSETS: ReadonlyArray<Vec2Like> = [
 ];
 
 /**
- * Splits a sparse `[x][y]` boolean grid (`Level.doorData`, painted with the
- * `DOOR` data brush) into 4-connected islands - one per door, however many
- * cells the author painted for it (the docs describe a 2x2 footprint under a
- * 32x32 door sprite, but nothing here assumes that exact shape or count).
- * Each island is tested against the player independently at runtime (see
- * `Level.UpdateDoors`), so two doorways a tile apart never open together.
+ * Splits a sparse `[x][y]` boolean grid (`Level.doorData`, derived from any
+ * placed tile whose `AssetMetadata` has a `door` id) into 4-connected islands
+ * - one per door, however many cells it spans (nothing here assumes a
+ * particular shape or count). Each island is tested against the player
+ * independently at runtime (see `Level.UpdateDoors`), so two doorways a tile
+ * apart never open together.
+ *
+ * Blind to door *type* - the grid only says "door here", not which one - so
+ * two different door types placed on directly-adjacent cells would flood-fill
+ * into a single group and `Level.FindDoorTile` would pick just one of their
+ * sprite pairs for the whole group. Not handled here; keep different door
+ * types at least a cell apart until this is worth solving properly.
  */
 export function FindDoorGroups(doorData: ReadonlyArray<ReadonlyArray<boolean>>): Vec2Like[][] {
     const isPainted = (x: number, y: number): boolean => {

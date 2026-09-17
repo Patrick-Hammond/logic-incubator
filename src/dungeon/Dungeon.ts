@@ -2,6 +2,7 @@ import Game from "../_lib/game/Game";
 import Loader from "../_lib/loading/Loader";
 import { AssetPath, GameHeight, GameWidth, Scenes } from "./Constants";
 import { DungeonEditor } from "./editor/DungeonEditor";
+import AssetMetadataStore from "./game/level/AssetMetadata";
 import { DungeonMain } from "./game/DungeonMain";
 import { CharacterSelect } from "./game/scenes/CharacterSelect";
 import { TitleScreen } from "./game/scenes/TitleScreen";
@@ -23,10 +24,12 @@ export function Dungoen(): void {
             { name: "icon-data", url: "icons/data.png" },
             { name: "data-square", url: "icons/square.png" },
             { name: "small-font", url: "fonts/small-font-export.fnt" },
-            { name: "levelData", url: "level.json" }
+            { name: "levelData", url: "level.json" },
+            { name: "assetsMeta", url: "assets-meta.json" }
         ]);
         game.loader.load(() => {
             // init
+            AssetMetadataStore.inst.Load(game.loader.resources["assetsMeta"].data);
             game.sceneManager.AddScene(Scenes.GAME, new DungeonMain());
             game.sceneManager.AddScene(Scenes.EDITOR, new DungeonEditor());
             game.sceneManager.AddScene(Scenes.TITLE, new TitleScreen());

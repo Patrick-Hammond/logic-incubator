@@ -9,37 +9,59 @@
 
 import { Vec2Like } from "../../../_lib/math/Geometry";
 
-/** A `LIGHT` data brush placement: `value` is the raw, unnormalised brush value (this project's own level data uses small integers like 1, 3, 5, 9) - see `BakeLighting` for what it drives. */
-export type LightSource = Vec2Like & { value: number };
+/** A light's authored properties - either painted with the `LIGHT` data brush, or intrinsic to a tile via `AssetMetadata.light` (see `Level.LoadEditorData`). */
+export type LightValue = { brightness: number; tint: number; range: number };
 
-/** Top of the `LIGHT` brush's raw value scale - see `BakeLighting`. */
-const LIGHT_VALUE_SCALE = 10;
+/** Narrows a `Brush.data`/`DataBrush.value` (`number | LightValue`) to `LightValue` - every other data brush (collision, z-index, player-start) keeps a plain number, so a `typeof` check is enough, no discriminant tag needed. Deliberately loose - callers that already trust the shape (e.g. a `LIGHT` brush placement) only need "is this the object variant". */
+export function IsLightValue(value: unknown): value is LightValue {
+    return typeof value === "object" && value !== null;
+}
+
+/** Strict structural check, unlike `IsLightValue` above: catches a hand-edited `assets-meta.json` entry that's missing `brightness`/`tint`/`range` or has the wrong type for one - which would otherwise flow silently into `BakeLighting` as `NaN`/`undefined` and bake to a black tint rather than fail loudly. See `AssetMetadataStore.Load`. */
+export function IsCompleteLightValue(value: unknown): value is LightValue {
+    return (
+        IsLightValue(value) &&
+        typeof value.brightness === "number" && Number.isFinite(value.brightness) &&
+        typeof value.tint === "number" && Number.isFinite(value.tint) &&
+        typeof value.range === "number" && Number.isFinite(value.range)
+    );
+}
+
+/** A single point light: painted position plus its `LightValue` - see `BakeLighting` for what each field drives. */
+export type LightSource = Vec2Like & { value: LightValue };
+
+/** A cell's baked lighting: brightness in `[0, 1]` and the colour multiply-tint of whichever light dominates that cell - see `TileMap.LightTint`. */
+export type BakedLight = { brightness: number; tint: number };
 
 /** Brightness of a cell no light reaches at all. Keeps unlit floor visible instead of going pure black. */
 export const AMBIENT_LIGHT = 0.2;
 
+/** Tint of a cell no light reaches - neutral, so ambient floor keeps its own texture colours rather than picking up a light's hue. */
+export const AMBIENT_TINT = 0xffffff;
+
 /**
- * Bakes a set of static point lights into a per-cell brightness lookup, `[0, 1]`, ready for `LightTint`.
+ * Bakes a set of static point lights into a per-cell `BakedLight` lookup, ready for `TileMap.LightTint`.
  *
- * A light's raw brush `value` drives both its peak brightness (`value / LIGHT_VALUE_SCALE`, clamped to 1) and its
- * radius in tiles (`value` itself) - one authored number controls both, so a bigger torch is both brighter and
- * casts further, rather than needing a separate "radius" field on the brush. Falloff within that radius is linear
- * (`peak * (1 - distance / radius)`), not inverse-square - inverse-square spikes unrealistically near the source,
- * where linear reads better against this project's blocky, stylised tile art.
+ * `brightness` (peak, at the light's own cell) and `range` (radius in tiles) are independent authored
+ * fields, so a bigger torch isn't forced to also cast further. Falloff within `range` is linear
+ * (`brightness * (1 - distance / range)`), not inverse-square - inverse-square spikes unrealistically
+ * near the source, where linear reads better against this project's blocky, stylised tile art.
  *
- * Overlapping lights combine with `max`, not addition: summing would need clamping anyway to stop two nearby
- * torches blowing a tile out to solid white, and `max` is the simpler way to get that same ceiling.
+ * Overlapping lights combine by keeping whichever contributes the higher brightness at each cell - and
+ * that light's own `tint` - rather than blending colours, which avoids two different-coloured torches
+ * producing a muddy average nobody authored.
  *
  * Deliberately has no occlusion - light passes through walls within its radius. True shadow-casting (e.g.
- * restricting a light to its own connected region, or full line-of-sight) is a meaningfully bigger feature than
- * baking itself; add it later if it's visually needed, rather than preemptively.
+ * restricting a light to its own connected region, or full line-of-sight) is a meaningfully bigger feature
+ * than baking itself; add it later if it's visually needed, rather than preemptively.
  */
-export function BakeLighting(lights: ReadonlyArray<LightSource>, width: number, height: number): number[][] {
-    const lightData: number[][] = [];
+export function BakeLighting(lights: ReadonlyArray<LightSource>, width: number, height: number): BakedLight[][] {
+    const lightData: BakedLight[][] = [];
 
     lights.forEach(light => {
-        const peak = Math.min(1, light.value / LIGHT_VALUE_SCALE);
-        const radius = light.value;
+        const peak = Math.max(0, Math.min(1, light.value.brightness));
+        const radius = light.value.range;
+        const tint = light.value.tint;
         if (peak <= 0 || radius <= 0) {
             return;
         }
@@ -58,7 +80,10 @@ export function BakeLighting(lights: ReadonlyArray<LightSource>, width: number, 
                 }
 
                 const brightness = Math.max(AMBIENT_LIGHT, peak * (1 - distance / radius));
-                column[y] = Math.max(column[y] ?? 0, brightness);
+                const existing = column[y];
+                if (!existing || brightness > existing.brightness) {
+                    column[y] = { brightness, tint };
+                }
             }
         }
     });

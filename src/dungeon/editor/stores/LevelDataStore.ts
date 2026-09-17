@@ -1,6 +1,7 @@
 import { Vec2Like } from "../../../_lib/math/Geometry";
 import { AddTypes } from "../../../_lib/patterns/EnumerateTypes";
 import Store, { IAction } from "../../../_lib/patterns/redux/Store";
+import { LightValue } from "../../game/level/Lighting";
 
 export type Brush = {
     name: string;
@@ -9,7 +10,7 @@ export type Brush = {
     rotation: number;
     scale: Vec2Like;
     layerId: number;
-    data: number;
+    data: number | LightValue;
 };
 export type Layer = { id: number; name: string; selected: boolean; visible: boolean; isData: boolean };
 export type LevelDataState = { levelData: LevelData };

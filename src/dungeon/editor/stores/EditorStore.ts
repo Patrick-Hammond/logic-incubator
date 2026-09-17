@@ -2,6 +2,7 @@ import { Vec2Like } from "../../../_lib/math/Geometry";
 import { AddTypes, SubtractTypes } from "../../../_lib/patterns/EnumerateTypes";
 import Store, { IAction } from "../../../_lib/patterns/redux/Store";
 import { InitalScale } from "../../Constants";
+import { LightValue } from "../../game/level/Lighting";
 import { Brush, Layer } from "./LevelDataStore";
 
 export const enum EditorActions {
@@ -15,6 +16,7 @@ export const enum EditorActions {
     BRUSH_NUDGE,
     DATA_BRUSH_INC,
     DATA_BRUSH_DEC,
+    SET_DATA_BRUSH_VALUE,
     ZOOM_IN,
     ZOOM_OUT,
     MOUSE_BUTTON,
@@ -45,11 +47,12 @@ export const enum DataBrushName {
     PLAYER_START = "player-start",
     COLLISION = "collision",
     Z_INDEX = "z-index",
-    DOOR = "door",
     LIGHT = "light"
 }
 
-export type DataBrush = { name: string; colour: number; value: number };
+export type DataBrushValue = number | LightValue;
+
+export type DataBrush = { name: string; colour: number; value: DataBrushValue };
 
 interface IActionData {
     mouseButtonState?: MouseButtonState;
@@ -62,6 +65,7 @@ interface IActionData {
     persistZoom?: boolean;
     layer?: Layer;
     visible?: boolean;
+    value?: DataBrushValue;
 }
 
 export interface IEditorState {
@@ -95,8 +99,7 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
                 { name: DataBrushName.PLAYER_START, colour: 0xfe3464, value: 0 },
                 { name: DataBrushName.COLLISION, colour: 0xffd166, value: 0 },
                 { name: DataBrushName.Z_INDEX, colour: 0x06d6a0, value: 0 },
-                { name: DataBrushName.DOOR, colour: 0x118ab2, value: 0 },
-                { name: DataBrushName.LIGHT, colour: 0xff8100, value: 0 }
+                { name: DataBrushName.LIGHT, colour: 0xff8100, value: { brightness: 0.5, tint: 0xff8100, range: 5 } }
             ],
             layers: [],
             mouseButtonState: MouseButtonState.UP,
@@ -163,6 +166,12 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
                     data: dataBrush ? this.CalcDataBrushValue(dataBrush.value, action.type) : null
                 };
             }
+            case EditorActions.SET_DATA_BRUSH_VALUE: {
+                return {
+                    ...currentBrush,
+                    data: action.data.value
+                };
+            }
             case EditorActions.BRUSH_CHANGED: {
                 const dataBrush = this.state.dataBrushes.find(db => db.name === action.data.name);
                 return {
@@ -223,7 +232,7 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
     private UpdateDataBrushes(dataBrushes: DataBrush[], action: IAction<IActionData>): DataBrush[] {
         switch (action.type) {
             case EditorActions.DATA_BRUSH_INC:
-            case EditorActions.DATA_BRUSH_DEC:
+            case EditorActions.DATA_BRUSH_DEC: {
                 const dataBrush = this.SelectedDataBrush;
                 if (dataBrush) {
                     const val = this.CalcDataBrushValue(dataBrush.value, action.type);
@@ -235,6 +244,14 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
                     });
                 }
                 return dataBrushes;
+            }
+            case EditorActions.SET_DATA_BRUSH_VALUE: {
+                const dataBrush = this.SelectedDataBrush;
+                if (dataBrush) {
+                    return dataBrushes.map(db => (db === dataBrush ? { ...db, value: action.data.value } : db));
+                }
+                return dataBrushes;
+            }
             default:
                 return dataBrushes || this.DefaultState().dataBrushes;
         }
@@ -389,7 +406,11 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
 
     // helpers
 
-    private CalcDataBrushValue(value: number, actionType: EditorActions): number {
+    /** Plain +/- stepping only applies to a numeric data brush value - LIGHT's `LightValue` is edited via its own dialog (see `SelectedBrush`), so +/- is a harmless no-op while it's selected. */
+    private CalcDataBrushValue(value: DataBrushValue, actionType: EditorActions): DataBrushValue {
+        if (typeof value !== "number") {
+            return value;
+        }
         const inc = actionType === EditorActions.DATA_BRUSH_INC ? 1 : -1;
         return Math.max(Math.min(value + inc, 999), -999);
     }

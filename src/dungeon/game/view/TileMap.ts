@@ -4,6 +4,7 @@ import GameComponent from "../../../_lib/game/GameComponent";
 import { TileSize } from "../../Constants";
 import { CAMERA_MOVED, LEVEL_CREATED, LEVEL_LOADED } from "../Events";
 import { ZBandAlpha, ZScale } from "../level/Depth";
+import { BakedLight } from "../level/Lighting";
 import Level from "../level/Level";
 import { Camera } from "./Camera";
 import { ViewOrigin } from "./helpers/CameraWindow";
@@ -37,10 +38,13 @@ export function TileGD8Rotation(rotation: number, scaleX: number, scaleY: number
     return groupD8.add(flip, rotate);
 }
 
-/** Packs a brightness (as painted by the `LIGHT` data brush, 1 = full brightness) into a grayscale tint. Clamped to `[0, 1]` - `tint` can only darken a texture by multiplying it, not brighten it past its own colours. */
-export function LightTint(brightness: number): number {
-    const channel = Math.round(Math.max(0, Math.min(1, brightness)) * 255);
-    return (channel << 16) | (channel << 8) | channel;
+/** Packs a baked `BakedLight` (see `Lighting.ts`) into a colour multiply-tint: each of the light's own `tint` channels scaled by `brightness` (`[0, 1]`, 1 = that channel at full strength). `tint` can only darken a texture by multiplying it, never brighten it past its own colours - a white light (`AMBIENT_TINT`) at brightness 1 leaves a texture unchanged. */
+export function LightTint(light: BakedLight): number {
+    const brightness = Math.max(0, Math.min(1, light.brightness));
+    const r = Math.round(((light.tint >> 16) & 0xff) * brightness);
+    const g = Math.round(((light.tint >> 8) & 0xff) * brightness);
+    const b = Math.round((light.tint & 0xff) * brightness);
+    return (r << 16) | (g << 8) | b;
 }
 
 /**

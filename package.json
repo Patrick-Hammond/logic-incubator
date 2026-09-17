@@ -10,12 +10,12 @@
   "main": "./index.html",
   "scripts": {
     "start": "webpack serve --mode development --env project=dungeon",
-    "build": "npm run pack-textures & webpack --mode development --env project=dungeon",
+    "build": "npm run pack-textures && npm run create-metadata && webpack --mode development --env project=dungeon",
     "deploy": "webpack --mode production --env project=dungeon",
     "lint": "eslint .",
     "test": "vitest run",
     "pack-textures": "src\\_lib\\scripts\\pack-textures.bat \"C:\\Program Files (x86)\\SpriteSheet Packer\\SpriteSheetPacker\" \"J:\\Documents\\projects\\vc_projects\\logic-incubator\\src\\dungeon\\assets\\frames\" \"J:\\Documents\\projects\\vc_projects\\logic-incubator\\src\\dungeon\\assets\"",
-    "create-metadata": "src\\_lib\\scripts\\create-metadata.bat"
+    "create-metadata": "node src/_lib/scripts/create-metadata.js"
   },
   "keywords": [],
   "dependencies": {
