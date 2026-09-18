@@ -78,8 +78,8 @@
 	"flame_1_anim": {
 		"light": {
 			"brightness": 10,
-			"tint": 16744704,
-			"range": 10
+			"tint": 15856113,
+			"range": 7
 		}
 	},
 	"flask_big_blue": {},
@@ -167,9 +167,9 @@
 	"tiny_zombie_run_anim": {},
 	"torch_1_anim": {
 		"light": {
-			"brightness": 10,
+			"brightness": 5,
 			"tint": 15856113,
-			"range": 12
+			"range": 15
 		}
 	},
 	"torch_base": {},

@@ -199,6 +199,8 @@ export default class Level {
         const lights: LightSource[] = [];
         /** Cells with an explicit `LIGHT` brush placement - an intrinsic `AssetMetadata.light` at the same cell is skipped in the tile-data pass below, so the two sources don't double up. */
         const explicitLightCells = new Set<string>();
+        /** Per-cell door id (parallel to `doorData`, but tagged with *which* door type) - `FindDoorGroups` needs this to keep two different door types on adjacent cells from merging into one group. */
+        const doorIds: (number | undefined)[][] = [];
 
         const idMap: {[ id: number ]: number} = {};
         let id = 0;
@@ -296,6 +298,10 @@ export default class Level {
                             this.doorData[ posX ] = [];
                         }
                         this.doorData[ posX ][ posY ] = true;
+                        if(doorIds[ posX ] == null) {
+                            doorIds[ posX ] = [];
+                        }
+                        doorIds[ posX ][ posY ] = meta.door.id;
                     }
                     if (meta.light && !explicitLightCells.has(posX + "," + posY)) {
                         lights.push({x: posX, y: posY, value: meta.light});
@@ -332,7 +338,7 @@ export default class Level {
         this.boundaryRegionData = regionMap.boundaryRegionData;
         this.regions = regionMap.regions;
 
-        this.doors = FindDoorGroups(this.doorData)
+        this.doors = FindDoorGroups(doorIds)
             .map(cells => {
                 const tile = this.FindDoorTile(cells);
                 const doorValue = tile && AssetMetadataStore.inst.Get(tile.name)?.door;

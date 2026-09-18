@@ -13,35 +13,34 @@ const NEIGHBOUR_OFFSETS: ReadonlyArray<Vec2Like> = [
 ];
 
 /**
- * Splits a sparse `[x][y]` boolean grid (`Level.doorData`, derived from any
- * placed tile whose `AssetMetadata` has a `door` id) into 4-connected islands
- * - one per door, however many cells it spans (nothing here assumes a
- * particular shape or count). Each island is tested against the player
- * independently at runtime (see `Level.UpdateDoors`), so two doorways a tile
- * apart never open together.
+ * Splits a sparse `[x][y]` grid of door ids (`AssetMetadata.door.id` of
+ * whichever tile occupies each cell, `undefined` where there's no door) into
+ * 4-connected islands - one per door, however many cells it spans (nothing
+ * here assumes a particular shape or count). Each island is tested against
+ * the player independently at runtime (see `Level.UpdateDoors`), so two
+ * doorways a tile apart never open together.
  *
- * Blind to door *type* - the grid only says "door here", not which one - so
- * two different door types placed on directly-adjacent cells would flood-fill
- * into a single group and `Level.FindDoorTile` would pick just one of their
- * sprite pairs for the whole group. Not handled here; keep different door
- * types at least a cell apart until this is worth solving properly.
+ * Grouping requires matching ids, not just "a door" - two different door
+ * types on directly-adjacent cells stay separate islands (each still finds
+ * its own sprite pair in `Level.FindDoorTile`) rather than merging into one
+ * that only tracks whichever tile was found first.
  */
-export function FindDoorGroups(doorData: ReadonlyArray<ReadonlyArray<boolean>>): Vec2Like[][] {
-    const isPainted = (x: number, y: number): boolean => {
-        const column = doorData[x];
-        return !!column && !!column[y];
+export function FindDoorGroups(doorIds: ReadonlyArray<ReadonlyArray<number | undefined>>): Vec2Like[][] {
+    const idAt = (x: number, y: number): number | undefined => {
+        const column = doorIds[x];
+        return column ? column[y] : undefined;
     };
 
     const visited = new Set<string>();
     const groups: Vec2Like[][] = [];
 
-    doorData.forEach((column, x) => {
+    doorIds.forEach((column, x) => {
         if (!column) {
             return;
         }
-        column.forEach((painted, y) => {
+        column.forEach((id, y) => {
             const key = x + "," + y;
-            if (!painted || visited.has(key)) {
+            if (id === undefined || visited.has(key)) {
                 return;
             }
 
@@ -57,7 +56,7 @@ export function FindDoorGroups(doorData: ReadonlyArray<ReadonlyArray<boolean>>):
                     const nx = cell.x + offset.x;
                     const ny = cell.y + offset.y;
                     const nKey = nx + "," + ny;
-                    if (!visited.has(nKey) && isPainted(nx, ny)) {
+                    if (!visited.has(nKey) && idAt(nx, ny) === id) {
                         visited.add(nKey);
                         stack.push({ x: nx, y: ny });
                     }

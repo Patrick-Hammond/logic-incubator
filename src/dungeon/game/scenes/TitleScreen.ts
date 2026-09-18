@@ -1,27 +1,34 @@
-import {Text} from "pixi.js";
+import {Sprite} from "pixi.js";
 import GameComponent from "../../../_lib/game/GameComponent";
 import {GameHeight, GameWidth, Scenes} from "../../Constants";
-import MenuButton from "./MenuButton";
+import sound from 'pixi-sound';
+import { Tween } from "_lib/tween/Tweener";
 
 /** Placeholder title scene: game name + a Start button leading into CharacterSelect. */
 export class TitleScreen extends GameComponent {
+    private _title: Sprite;
     constructor() {
         super();
 
-        const title = new Text("In Dungeons We Dwell", {fontFamily: "Arial", fontSize: 64, fill: 0xffffff});
-        title.anchor.set(0.5);
-        title.position.set(GameWidth / 2, GameHeight * 0.35);
+        sound.add('theme', 'assets/title_theme.ogg');
+        
+        this._title = Sprite.from("title");
+        this._title.anchor.set(0.5);
+        this._title.alpha = 0;
+        this._title.position.set(GameWidth / 2, GameHeight / 2);
+        this._title.scale.set(Math.min(GameHeight / this._title.height, GameWidth / this._title.width));
+        this._title.interactive = true;
+        this.root.addChild(this._title);
+    }
 
-        const subtitle = new Text("placeholder title screen", {fontFamily: "Arial", fontSize: 18, fill: 0x999999});
-        subtitle.anchor.set(0.5);
-        subtitle.position.set(GameWidth / 2, GameHeight * 0.35 + 50);
+    OnShow() {
+        sound.play('theme', { loop: true });
 
-        const startWidth = 240;
-        const startButton = new MenuButton("Start", startWidth, 60, () => {
+        this._title.once('pointerdown', () => {
+            sound.stop('theme');
             this.game.sceneManager.ShowScene(Scenes.CHARACTER_SELECT);
         });
-        startButton.position.set((GameWidth - startWidth) / 2, GameHeight * 0.6);
 
-        this.root.addChild(title, subtitle, startButton);
+        Tween(this._title, { alpha: 1 }, 10000);
     }
 }

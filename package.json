@@ -24,6 +24,7 @@
     "gsap": "3.6.0",
     "nipplejs": "^0.8.5",
     "pixi-filters": "3.1.1",
+    "pixi-sound": "^3.0.4",
     "pixi.js": "5.2.1",
     "rot-js": "^2.1.1",
     "screenfull": "^5.2.0",

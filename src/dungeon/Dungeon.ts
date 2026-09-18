@@ -8,7 +8,7 @@ import { CharacterSelect } from "./game/scenes/CharacterSelect";
 import { TitleScreen } from "./game/scenes/TitleScreen";
 
 export function Dungoen(): void {
-    const game = new Game({width: GameWidth, height: GameHeight, backgroundColor: 0x111111 }, true);
+    const game = new Game({width: GameWidth, height: GameHeight, backgroundColor: 0 }, true);
 
     // load
     Loader.inst.LoadSpriteSheet(AssetPath + "frames.json", /^.+(?=_f)/, () => {
@@ -24,6 +24,7 @@ export function Dungoen(): void {
             { name: "icon-data", url: "icons/data.png" },
             { name: "data-square", url: "icons/square.png" },
             { name: "small-font", url: "fonts/small-font-export.fnt" },
+            { name: "title", url: "title.png" },
             { name: "levelData", url: "level.json" },
             { name: "assetsMeta", url: "assets-meta.json" }
         ]);

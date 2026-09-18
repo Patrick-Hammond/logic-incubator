@@ -34,7 +34,7 @@ export type LightSource = Vec2Like & { value: LightValue };
 export type BakedLight = { brightness: number; tint: number };
 
 /** Brightness of a cell no light reaches at all. Keeps unlit floor visible instead of going pure black. */
-export const AMBIENT_LIGHT = 0.2;
+export const AMBIENT_LIGHT = 0.3;
 
 /** Tint of a cell no light reaches - neutral, so ambient floor keeps its own texture colours rather than picking up a light's hue. */
 export const AMBIENT_TINT = 0xffffff;
