@@ -12,9 +12,10 @@
     "start": "webpack serve --mode development --env project=dungeon",
     "build": "npm run pack-textures && npm run create-metadata && webpack --mode development --env project=dungeon",
     "deploy": "webpack --mode production --env project=dungeon",
+    "go": "npm run build && npm run start",
     "lint": "eslint .",
     "test": "vitest run",
-    "pack-textures": "src\\_lib\\scripts\\pack-textures.bat \"C:\\Program Files (x86)\\SpriteSheet Packer\\SpriteSheetPacker\" \"J:\\Documents\\projects\\vc_projects\\logic-incubator\\src\\dungeon\\assets\\frames\" \"J:\\Documents\\projects\\vc_projects\\logic-incubator\\src\\dungeon\\assets\"",
+    "pack-textures": "src\\_lib\\scripts\\pack-textures.bat \"C:\\Program Files (x86)\\SpriteSheet Packer\\SpriteSheetPacker\" \"C:\\Documents\\projects\\vc_projects\\logic-incubator\\src\\dungeon\\assets\\frames\" \"C:\\Documents\\projects\\vc_projects\\logic-incubator\\src\\dungeon\\assets\"",
     "create-metadata": "node src/_lib/scripts/create-metadata.js"
   },
   "keywords": [],
