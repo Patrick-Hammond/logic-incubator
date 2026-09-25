@@ -1,11 +1,17 @@
 import {AnimatedSprite, BitmapText, Container, Graphics, interaction} from "pixi.js";
 import { Key } from "../../../_lib/io/Keyboard";
+import AssetMetadataStore from "../../game/level/AssetMetadata";
+import { FindImplicitPlacements } from "../../game/level/ImplicitData";
 import { IsLightValue } from "../../game/level/Lighting";
+import AssetFactory from "../../../_lib/loading/AssetFactory";
 import ObjectPool from "../../../_lib/patterns/ObjectPool";
 import { AnimationSpeed, GridBounds, InitalScale, Scenes, TileSize } from "../../Constants";
 import EditorComponent from "../EditorComponent";
-import { EditorActions, IEditorState, MouseButtonState } from "../stores/EditorStore";
-import { LevelDataActions, LevelDataState } from "../stores/LevelDataStore";
+import { DataBrushName, EditorActions, IEditorState, MouseButtonState } from "../stores/EditorStore";
+import { Brush, LevelDataActions, LevelDataState } from "../stores/LevelDataStore";
+
+/** Doors aren't a paintable data brush, so they have no palette colour of their own to borrow. */
+const IMPLICIT_DOOR_COLOUR = 0x4cc9f0;
 
 export default class Canvas extends EditorComponent {
     private grid: Graphics = new Graphics();
@@ -13,6 +19,9 @@ export default class Canvas extends EditorComponent {
     private levelContainer = new Container();
     private layerContainers: ObjectPool<Container>;
     private textPool: ObjectPool<BitmapText>;
+    /** The read-only implicit layer's drawing - always on top of every real layer, and outside `layerContainers` so it never eats one of the (limited) editable layers' slots. */
+    private implicitContainer = new Container();
+    private implicitGraphics = new Graphics();
 
     constructor() {
         super();
@@ -26,12 +35,21 @@ export default class Canvas extends EditorComponent {
             (item: Container) => item.removeChildren()
         );
 
-        this.textPool = new ObjectPool<BitmapText>(100, () => {
-            const b = new BitmapText("", { font: { name: "small-font", size: 6 } });
-            b.position.set(8, 8);
-            b.anchor = 0.5;
-            return b;
-        });
+        this.textPool = new ObjectPool<BitmapText>(
+            100,
+            () => {
+                const b = new BitmapText("", { font: { name: "small-font", size: 6 } });
+                b.position.set(8, 8);
+                b.anchor = 0.5;
+                return b;
+            },
+            // Shared by brush sprites (sprite-local, unscaled) and the implicit layer (screen space,
+            // scaled) - put each back to the brush-sprite default so neither inherits the other's.
+            (b: BitmapText) => {
+                b.position.set(8, 8);
+                b.scale.set(1);
+            }
+        );
 
         this.root.addChild(this.mask, this.grid, this.levelContainer);
         this.levelContainer.mask = this.mask;
@@ -57,6 +75,9 @@ export default class Canvas extends EditorComponent {
             this.layerContainers.RestoreAll();
             const layerDict: { [id: number]: Container } = {};
             this.editorStore.state.layers.forEach(layer => {
+                if (layer.readOnly) {
+                    return;
+                }
                 const layerContainer = this.layerContainers.Get();
                 layerDict[layer.id] = layerContainer;
                 layerContainer.visible = layer.visible;
@@ -67,6 +88,7 @@ export default class Canvas extends EditorComponent {
             const viewOffset = this.editorStore.state.viewOffset;
 
             this.textPool.RestoreAll();
+            this.DrawImplicitLayer(state.levelData);
             state.levelData.forEach(brush => {
                 if (layerDict[brush.layerId] && layerDict[brush.layerId].visible) {
                     let posX = (brush.position.x - viewOffset.x) * scaledTileSize + GridBounds.x;
@@ -101,6 +123,74 @@ export default class Canvas extends EditorComponent {
                 }
             });
         }
+    }
+
+    /**
+     * Outlines every placement the game derives from tiles' `AssetMetadata`
+     * (see `FindImplicitPlacements` - the same function `Level` uses, so this
+     * is exactly what the game will get): collision, each cell of a door's
+     * sprite footprint, and intrinsic lights labelled with their range. Drawn
+     * outlined over a faint fill, so it reads differently from the solid
+     * squares of hand-painted data brushes.
+     */
+    private DrawImplicitLayer(levelData: Brush[]): void {
+        this.implicitContainer.removeChildren();
+        this.implicitGraphics.clear();
+        this.implicitContainer.addChild(this.implicitGraphics);
+        this.levelContainer.addChild(this.implicitContainer);
+
+        const state = this.editorStore.state;
+        const implicitLayer = state.layers.find(layer => layer.readOnly);
+        if (!implicitLayer || !implicitLayer.visible) {
+            return;
+        }
+
+        const tileLayerIds = new Set(state.layers.filter(layer => !layer.isData).map(layer => layer.id));
+        const placements = FindImplicitPlacements(
+            levelData,
+            layerId => tileLayerIds.has(layerId),
+            name => AssetMetadataStore.inst.Get(name),
+            name => AssetFactory.inst.CreateTexture(name),
+            TileSize
+        );
+
+        const colourOf = (name: string): number => {
+            const dataBrush = state.dataBrushes.find(db => db.name === name);
+            return dataBrush ? dataBrush.colour : 0xffffff;
+        };
+        const scaledTileSize = TileSize * state.viewScale;
+        const drawn = new Set<string>();
+        /** Returns the cell's screen top-left, or null if it's culled (off-grid) or already drawn in this colour. */
+        const drawCell = (x: number, y: number, colour: number): { x: number; y: number } | null => {
+            const posX = (x - state.viewOffset.x) * scaledTileSize + GridBounds.x;
+            const posY = (y - state.viewOffset.y) * scaledTileSize + GridBounds.y;
+            const key = x + "," + y + "," + colour;
+            if (!GridBounds.contains(posX, posY) || drawn.has(key)) {
+                return null;
+            }
+            drawn.add(key);
+            this.implicitGraphics
+                .lineStyle(1, colour, 0.9)
+                .beginFill(colour, 0.2)
+                .drawRect(posX + 1, posY + 1, scaledTileSize - 2, scaledTileSize - 2)
+                .endFill();
+            return { x: posX, y: posY };
+        };
+
+        const collisionColour = colourOf(DataBrushName.COLLISION);
+        placements.collision.forEach(cell => drawCell(cell.x, cell.y, collisionColour));
+        placements.doors.forEach(cell => drawCell(cell.x, cell.y, IMPLICIT_DOOR_COLOUR));
+        const lightColour = colourOf(DataBrushName.LIGHT);
+        placements.lights.forEach(light => {
+            const pos = drawCell(light.x, light.y, lightColour);
+            if (pos) {
+                const text = this.textPool.Get();
+                text.text = light.value.range.toString();
+                text.scale.set(state.viewScale);
+                text.position.set(pos.x + scaledTileSize * 0.5, pos.y + scaledTileSize * 0.5);
+                this.implicitContainer.addChild(text);
+            }
+        });
     }
 
     private RedrawGrid(scale: number): void {
@@ -167,7 +257,8 @@ export default class Canvas extends EditorComponent {
                         const rectErasing =
                             this.game.keyboard.KeyPressed(Key.Ctrl) &&
                             this.editorStore.state.mouseButtonState === MouseButtonState.RIGHT_DOWN;
-                        if (rectPainting || rectErasing) {
+                        const selectedLayer = this.editorStore.SelectedLayer;
+                        if ((rectPainting || rectErasing) && !(selectedLayer && selectedLayer.readOnly)) {
                             this.levelDataStore.Dispatch({
                                 type: rectPainting ? LevelDataActions.PAINT_RECT : LevelDataActions.ERASE_RECT,
                                 data: {

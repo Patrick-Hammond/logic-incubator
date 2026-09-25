@@ -115,7 +115,9 @@ export default class Palette extends EditorComponent {
         const selectedLayer = this.editorStore.SelectedLayer;
         if (selectedLayer) {
             this.root.removeChildren();
-            if (selectedLayer.isData) {
+            if (selectedLayer.readOnly) {
+                // Nothing to paint on the implicit layer - leave the palette empty.
+            } else if (selectedLayer.isData) {
                 this.root.addChild(this.dataContainer);
             } else {
                 this.root.addChild(this.paletteContainer);

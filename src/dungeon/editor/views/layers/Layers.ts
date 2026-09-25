@@ -1,7 +1,7 @@
 import {Rectangle} from "pixi.js";
 import {GridBounds, Scenes} from "../../../Constants";
 import EditorComponent from "../../EditorComponent";
-import {EditorActions, IEditorState} from "../../stores/EditorStore";
+import {EditableLayerCount, EditorActions, IEditorState, MaxEditableLayers} from "../../stores/EditorStore";
 import {LevelDataActions} from "../../stores/LevelDataStore";
 import Button from "../../ui/components/Button";
 import {ListBox, ListBoxEvents} from "../../ui/components/listbox/ListBox";
@@ -41,7 +41,7 @@ export default class Layers extends EditorComponent {
 
         // add
         const addButton = new Button("icon-plus", () => {
-            if (this.editorStore.state.layers.length < 6) {
+            if (EditableLayerCount(this.editorStore.state.layers) < MaxEditableLayers) {
                 this.editorStore.Dispatch({ type: EditorActions.ADD_LAYER });
             }
         });
@@ -52,7 +52,7 @@ export default class Layers extends EditorComponent {
         const removeButton = new Button("icon-minus", () => {
             const selectedLayer = this.editorStore.state.layers.find(layer => layer.selected);
             const spriteLayers = this.editorStore.state.layers.filter(layer => layer.isData === false);
-            if (spriteLayers.length > 1 || selectedLayer.isData) {
+            if (selectedLayer && !selectedLayer.readOnly && (spriteLayers.length > 1 || selectedLayer.isData)) {
                 this.editorStore.Dispatch({ type: EditorActions.REMOVE_LAYER });
                 this.editorStore.Dispatch({
                     type: EditorActions.SELECT_LAYER,
@@ -91,7 +91,7 @@ export default class Layers extends EditorComponent {
 
         // add data layer
         const dataButton = new Button("icon-data", () => {
-            if (this.editorStore.state.layers.length < 6) {
+            if (EditableLayerCount(this.editorStore.state.layers) < MaxEditableLayers) {
                 this.editorStore.Dispatch({ type: EditorActions.ADD_DATA_LAYER });
             }
         });
@@ -107,8 +107,8 @@ export default class Layers extends EditorComponent {
             this.layerContainer.Set(state.layers);
         }
 
-        // enforce at least 1 layer
-        if (state.layers.length === 0) {
+        // enforce at least 1 editable layer (the read-only implicit layer is always there, so doesn't count)
+        if (EditableLayerCount(state.layers) === 0) {
             this.editorStore.Dispatch({ type: EditorActions.ADD_LAYER });
         }
     }

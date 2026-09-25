@@ -3,7 +3,10 @@
 // which touches `window`/`<canvas>` at import time and cannot load under a
 // plain Node test runner. Same Rectangle class; pixi.js just re-exports it.
 import {Rectangle} from "@pixi/math";
-import { DataBrushName } from "./editor/stores/EditorStore";
+// Type-only: EditorStore imports this module too, and a runtime import back into it is a cycle that
+// leaves `DataBrushName` undefined here whenever EditorStore happens to be loaded first (e.g. by a
+// test importing it directly). The value below is checked against the enum at compile time instead.
+import type { DataBrushName } from "./editor/stores/EditorStore";
 
 // tslint:disable
 export const EditorWidth = 1280;
@@ -14,7 +17,7 @@ export const InitalScale = 1.5;
 export const TileSize = 16;
 export const AnimationSpeed = 0.2;
 export const PlayerSpeed = 0.8;
-export const DepthBrushName = DataBrushName.Z_INDEX;
+export const DepthBrushName: `${DataBrushName.Z_INDEX}` = "z-index";
 export const AssetPath = "/dungeon/assets/";
 
 export const GridBounds = new Rectangle(20, 20, EditorWidth - 300, EditorHeight - 40);

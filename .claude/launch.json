@@ -6,6 +6,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "start"],
       "port": 4200
+    },
+    {
+      "name": "logic-incubator-dev-4201",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "start", "--", "--port", "4201", "--no-open"],
+      "port": 4201
     }
   ]
 }

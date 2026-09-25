@@ -12,7 +12,8 @@ export type Brush = {
     layerId: number;
     data: number | LightValue;
 };
-export type Layer = { id: number; name: string; selected: boolean; visible: boolean; isData: boolean };
+/** `readOnly` marks the editor's derived implicit-data layer (see `IMPLICIT_LAYER_ID` in EditorStore) - nothing can be painted on it. */
+export type Layer = { id: number; name: string; selected: boolean; visible: boolean; isData: boolean; readOnly?: boolean };
 export type LevelDataState = { levelData: LevelData };
 
 export const enum LevelDataActions {

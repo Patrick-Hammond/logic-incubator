@@ -52,6 +52,32 @@ export const enum DataBrushName {
 
 export type DataBrushValue = number | LightValue;
 
+/** Max editable (non-`readOnly`) layers - bounded by the Layers panel's list height. */
+export const MaxEditableLayers = 6;
+
+/**
+ * Fixed id of the read-only layer that shows data the game derives from tiles'
+ * `AssetMetadata` (collision, door footprints, lights - see
+ * `FindImplicitPlacements`) rather than hand-painted brushes. Always present
+ * (re-added on load/reset), never holds brushes, and `isData` so
+ * `Level.LoadEditorData` never mistakes it for a tile layer. Far below any id
+ * `NextDataLayerId` hands out (-1, -1000, -1999, ...).
+ */
+export const IMPLICIT_LAYER_ID = -99999;
+
+function ImplicitLayer(): Layer {
+    return { id: IMPLICIT_LAYER_ID, name: "implicit (read-only)", selected: false, visible: true, isData: true, readOnly: true };
+}
+
+/** Returns `layers` untouched if it already has the implicit layer (so subscribers' reference checks don't see a change), else a copy with it prepended. */
+function WithImplicitLayer(layers: Layer[]): Layer[] {
+    return layers.some(layer => layer.id === IMPLICIT_LAYER_ID) ? layers : [ImplicitLayer(), ...layers];
+}
+
+export function EditableLayerCount(layers: Layer[]): number {
+    return layers.filter(layer => !layer.readOnly).length;
+}
+
 export type DataBrush = { name: string; colour: number; value: DataBrushValue };
 
 interface IActionData {
@@ -123,7 +149,8 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
     Load(state: IEditorState): void {
         super.Load({
             ...state,
-            dataBrushes: this.ReconcileDataBrushes(state && state.dataBrushes)
+            dataBrushes: this.ReconcileDataBrushes(state && state.dataBrushes),
+            layers: WithImplicitLayer((state && state.layers) || [])
         });
     }
 
@@ -140,7 +167,7 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
             currentBrush: this.UpdateBrush(state.currentBrush, action),
             brushVisible: this.UpdateBrushVisible(state.brushVisible, action),
             hoveredBrushName: this.UpdateHoveredBrushName(state.hoveredBrushName, action),
-            layers: this.UpdateLayers(state.layers, action),
+            layers: WithImplicitLayer(this.UpdateLayers(state.layers, action)),
             mouseButtonState: this.UpdateMouseButton(state.mouseButtonState, action),
             mouseDownPosition: this.UpdateMouseDownPosition(state.mouseDownPosition, action),
             viewOffset: this.UpdateViewOffset(state.viewOffset, action),
@@ -294,6 +321,9 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
                 return layers.filter(layer => layer.selected === false);
             case EditorActions.RENAME_LAYER: {
                 const selectedLayer = this.SelectedLayer;
+                if (!selectedLayer || selectedLayer.readOnly) {
+                    return layers;
+                }
                 const name = prompt("Rename layer", selectedLayer.name);
                 if (name) {
                     return layers.map(layer => {
@@ -346,6 +376,9 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
             }
             case EditorActions.DUPLICATE_LAYER: {
                 const selectedLayer = this.SelectedLayer;
+                if (!selectedLayer || selectedLayer.readOnly) {
+                    return layers;
+                }
                 const nextId = selectedLayer.isData ? this.NextDataLayerId() : this.NextLayerId();
                 const newLayer = { ...selectedLayer, id: nextId, selected: false };
                 return layers.concat(newLayer);
@@ -422,7 +455,7 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
     }
 
     private NextDataLayerId(): number {
-        const dataLayers = this.state.layers.filter(layer => layer.isData);
+        const dataLayers = this.state.layers.filter(layer => layer.isData && !layer.readOnly);
         const nextId = dataLayers.length ? dataLayers.reduce((prev, curr) => (curr.id > prev.id ? curr : prev)).id - 999 : -1;
         return nextId;
     }

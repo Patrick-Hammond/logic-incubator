@@ -69,7 +69,9 @@ export default class Keyboard extends EditorComponent {
                         }
                         break;
                     case Key.D:
-                        if (shift) {
+                        // The read-only implicit layer has no brushes of its own to duplicate - and COPY
+                        // below would otherwise copy into whatever layer happens to be last.
+                        if (shift && this.editorStore.SelectedLayer && !this.editorStore.SelectedLayer.readOnly) {
                             this.editorStore.Dispatch({ type: EditorActions.DUPLICATE_LAYER });
                             this.levelDataStore.Dispatch({
                                 type: LevelDataActions.COPY,

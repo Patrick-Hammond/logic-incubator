@@ -77,7 +77,9 @@ export default class BrushTool extends EditorComponent {
 
         // paint/erase
         const mouseButtonChanged = prevState.mouseButtonState !== state.mouseButtonState;
-        if (this.brush && (positionChanged || mouseButtonChanged)) {
+        const selectedLayer = this.editorStore.SelectedLayer;
+        const readOnly = selectedLayer != null && selectedLayer.readOnly === true;
+        if (this.brush && !readOnly && (positionChanged || mouseButtonChanged)) {
             if (GridBounds.contains(this.brush.position.x, this.brush.position.y)) {
                 const modifierKeyPressed = this.game.keyboard.KeyPressed(Key.Ctrl) || this.game.keyboard.KeyPressed(Key.Shift);
                 if (state.mouseButtonState === MouseButtonState.LEFT_DOWN && !modifierKeyPressed) {

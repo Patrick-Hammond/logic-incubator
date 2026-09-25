@@ -2,13 +2,14 @@ import {AnimatedSprite, Texture} from "pixi.js";
 import Game from "../../../_lib/game/Game";
 import AssetFactory from "../../../_lib/loading/AssetFactory";
 import {Rectangle, Vec2Like} from "../../../_lib/math/Geometry";
-import {AnimationSpeed} from "../../Constants";
+import {AnimationSpeed, TileSize} from "../../Constants";
 import {DataBrushName, IEditorState} from "../../editor/stores/EditorStore";
 import {Layer} from "../../editor/stores/LevelDataStore";
 import {LEVEL_LOADED} from "../Events";
 import AssetMetadataStore from "./AssetMetadata";
 import {HeightAt} from "./Depth";
 import {FindDoorGroups} from "./Doors";
+import {FindImplicitPlacements} from "./ImplicitData";
 import {AMBIENT_LIGHT, AMBIENT_TINT, BakedLight, BakeLighting, IsLightValue, LightSource, LightValue} from "./Lighting";
 import {FindRegions, Region, RegionIdsTouching} from "./Regions";
 
@@ -52,7 +53,7 @@ export default class Level {
     public heightData: number[][] = [];
     /** Per-cell lighting baked from point lights - both the `LIGHT` data brush and any placed tile with `light` in its `AssetMetadata` (see `LightAt`, `Lighting.BakeLighting`). */
     public lightData: BakedLight[][] = [];
-    /** Per-cell flag: `true` if any tile placed there has a `door` id in its `AssetMetadata`. Purely a lookup for building `doors` - not consulted for movement collision, since a door must be walkable to trigger open. */
+    /** Per-cell flag: `true` if the cell is covered by the sprite footprint (see `DoorFootprint`) of a tile with a `door` id in its `AssetMetadata`. Purely a lookup for building `doors` - not consulted for movement collision, since a door must be walkable to trigger open. */
     public doorData: boolean[][] = [];
     /** One entry per connected island of `doorData` cells that has a matching door sprite tile (see `FindDoorTile`). */
     public doors: Door[] = [];
@@ -197,8 +198,6 @@ export default class Level {
         this.doorData = [];
         const depths = new Set<number>([0]);
         const lights: LightSource[] = [];
-        /** Cells with an explicit `LIGHT` brush placement - an intrinsic `AssetMetadata.light` at the same cell is skipped in the tile-data pass below, so the two sources don't double up. */
-        const explicitLightCells = new Set<string>();
         /** Per-cell door id (parallel to `doorData`, but tagged with *which* door type) - `FindDoorGroups` needs this to keep two different door types on adjacent cells from merging into one group. */
         const doorIds: (number | undefined)[][] = [];
 
@@ -252,11 +251,11 @@ export default class Level {
                     // Collected once here rather than also in the tile-data pass below (unlike the other
                     // cases above, which are harmlessly re-assigned there too) - lights get baked into
                     // `lightData` as a batch afterwards, so pushing the same placement twice would double
-                    // its contribution.
+                    // its contribution. (An intrinsic tile light on the same cell is dropped by
+                    // FindImplicitPlacements, so the explicit one wins.)
                     case DataBrushName.LIGHT:
                         if (IsLightValue(brush.data)) {
                             lights.push({x: posX, y: posY, value: brush.data});
-                            explicitLightCells.add(posX + "," + posY);
                         }
                         break;
                 }
@@ -281,32 +280,6 @@ export default class Level {
                 }
 
                 this.levelData[ index ][ posX ][ posY ].push(CreateTile(brush));
-
-                // Intrinsic defaults from the tile's own AssetMetadata - an explicit data brush at the
-                // same cell (COLLISION above, or a LIGHT placement tracked in explicitLightCells) still
-                // layers on top / takes precedence, rather than being overwritten by this.
-                const meta = AssetMetadataStore.inst.Get(brush.name);
-                if (meta) {
-                    if (meta.collidable) {
-                        if(this.collisionData[ posX ] == null) {
-                            this.collisionData[ posX ] = [];
-                        }
-                        this.collisionData[ posX ][ posY ] = true;
-                    }
-                    if (meta.door) {
-                        if(this.doorData[ posX ] == null) {
-                            this.doorData[ posX ] = [];
-                        }
-                        this.doorData[ posX ][ posY ] = true;
-                        if(doorIds[ posX ] == null) {
-                            doorIds[ posX ] = [];
-                        }
-                        doorIds[ posX ][ posY ] = meta.door.id;
-                    }
-                    if (meta.light && !explicitLightCells.has(posX + "," + posY)) {
-                        lights.push({x: posX, y: posY, value: meta.light});
-                    }
-                }
             } else {
                 switch(brush.name) {
                     case DataBrushName.PLAYER_START:
@@ -328,6 +301,42 @@ export default class Level {
                 }
             }
         });
+
+        // Intrinsic defaults from tiles' own AssetMetadata (collision, door footprints, lights) - the
+        // same list the editor's read-only implicit layer draws. They layer on top of the explicit
+        // data brushes above rather than overwriting them; an explicit LIGHT at the same cell wins.
+        const implicit = FindImplicitPlacements(
+            levelData,
+            layerId => idMap[ layerId ] != null,
+            name => AssetMetadataStore.inst.Get(name),
+            name => AssetFactory.inst.CreateTexture(name),
+            TileSize
+        );
+        implicit.collision.forEach(({x, y}) => {
+            const posX = x - bounds.x1;
+            const posY = y - bounds.y1;
+            if(this.collisionData[ posX ] == null) {
+                this.collisionData[ posX ] = [];
+            }
+            this.collisionData[ posX ][ posY ] = true;
+        });
+        implicit.doors.forEach(({x, y, id: doorId}) => {
+            const posX = x - bounds.x1;
+            const posY = y - bounds.y1;
+            // A door sprite nudged past the map's top/left edge - nothing to mark there.
+            if (posX < 0 || posY < 0) {
+                return;
+            }
+            if(this.doorData[ posX ] == null) {
+                this.doorData[ posX ] = [];
+            }
+            this.doorData[ posX ][ posY ] = true;
+            if(doorIds[ posX ] == null) {
+                doorIds[ posX ] = [];
+            }
+            doorIds[ posX ][ posY ] = doorId;
+        });
+        implicit.lights.forEach(({x, y, value}) => lights.push({x: x - bounds.x1, y: y - bounds.y1, value}));
 
         this.depths = Array.from(depths).sort((a, b) => a - b);
 

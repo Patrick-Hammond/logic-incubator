@@ -69,3 +69,39 @@ export function FindDoorGroups(doorIds: ReadonlyArray<ReadonlyArray<number | und
 
     return groups;
 }
+
+/**
+ * Every cell a door sprite covers on screen, not just the cell its brush is
+ * anchored to - a 32x32 door leaf on 16px tiles spans a 2x2 block, and only
+ * marking the anchor left the doorway's other cells as plain floor (so the
+ * region flood fill leaked straight through, and the door only triggered from
+ * its top-left tile).
+ *
+ * Mirrors how `TileMap` draws a tile: a `size` box at the anchor cell's
+ * top-left minus `pixelOffset`. Rotation/flips are deliberately ignored -
+ * `Tilemap` rotates the texture's UVs within that same box, it never moves or
+ * resizes the box itself. Cells can be negative (an editor map painted left
+ * of/above its origin, or a door nudged past it) - callers clip as they need.
+ */
+export function DoorFootprint(
+    anchor: Vec2Like,
+    size: { width: number; height: number },
+    pixelOffset: Vec2Like,
+    tileSize: number
+): Vec2Like[] {
+    const left = anchor.x * tileSize - pixelOffset.x;
+    const top = anchor.y * tileSize - pixelOffset.y;
+    const x0 = Math.floor(left / tileSize);
+    const y0 = Math.floor(top / tileSize);
+    // At least one cell either way, so a degenerate (0-size) texture still behaves like the old anchor-only door.
+    const x1 = Math.max(x0 + 1, Math.ceil((left + size.width) / tileSize));
+    const y1 = Math.max(y0 + 1, Math.ceil((top + size.height) / tileSize));
+
+    const cells: Vec2Like[] = [];
+    for (let x = x0; x < x1; x++) {
+        for (let y = y0; y < y1; y++) {
+            cells.push({ x, y });
+        }
+    }
+    return cells;
+}
