@@ -16,7 +16,8 @@ import { SpriteDrawPosition } from "./SpriteDrawOffset";
  *   AssetFactory.inst.CreateAnimatedSprite("chest_full_open_anim")
  *   -> AssetFactory.inst.CreateAnimatedSprite("wizzard_m_run_anim")
  *
- * chest_full_open_anim is 16x16 (src/assets/dungeon/spritesheet.json). The
+ * chest_full_open_anim is 16x16 (the untrimmed sourceSize in
+ * src/dungeon/assets/frames.json, which is what texture.height reports). The
  * new wizzard_m_run_anim frames are 16x28 - 12px taller, to fit a head/torso
  * above the character's footprint tile. Player.Render() draws
  * `this.player.texture` via `addFrame`, which is always top-left anchored
@@ -28,7 +29,7 @@ import { SpriteDrawPosition } from "./SpriteDrawOffset";
 
 function loadFixtureStartTile(): { x: number; y: number } {
     const raw = JSON.parse(
-        fs.readFileSync(path.join(__dirname, "..", "level", "__fixtures__", "dungeonLevel.json"), "utf8"),
+        fs.readFileSync(path.join(__dirname, "..", "..", "level", "__fixtures__", "dungeonLevel.json"), "utf8"),
     );
     const brushes: { name: string; position: { x: number; y: number } }[] = raw.levelData.levelData;
 
