@@ -92,7 +92,7 @@ export default class BrushTool extends EditorComponent {
                 if (state.mouseButtonState === MouseButtonState.RIGHT_DOWN && !modifierKeyPressed) {
                     this.levelDataStore.Dispatch({
                         type: LevelDataActions.ERASE,
-                        data: { brush: state.currentBrush, viewOffset: state.viewOffset },
+                        data: { brush: state.currentBrush, viewOffset: state.viewOffset, layers: state.layers },
                         canUndo: true
                     });
                 }

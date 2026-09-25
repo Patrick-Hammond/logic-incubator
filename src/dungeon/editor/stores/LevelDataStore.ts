@@ -1,6 +1,8 @@
 import { Vec2Like } from "../../../_lib/math/Geometry";
 import { AddTypes } from "../../../_lib/patterns/EnumerateTypes";
 import Store, { IAction } from "../../../_lib/patterns/redux/Store";
+import AssetMetadataStore from "../../game/level/AssetMetadata";
+import { OrphanedExplicitData } from "../../game/level/ImplicitData";
 import type { DataBrushValue } from "./EditorStore";
 
 export type Brush = {
@@ -35,6 +37,8 @@ type ActionData = {
     rectBottomRight?: Vec2Like;
     sourceLayer?: Layer;
     destLayer?: Layer;
+    /** The editor's layers, for ERASE/ERASE_RECT to tell tile layers from data layers - see `EraseOrphanedData`. Without it, erasing removes only the brushes it hits. */
+    layers?: Layer[];
 };
 
 export default class LevelDataStore extends Store<LevelDataState, ActionData> {
@@ -86,18 +90,20 @@ export default class LevelDataStore extends Store<LevelDataState, ActionData> {
                 brush.position = AddTypes(brush.position, action.data.viewOffset);
 
                 // remove last item in the same location
+                const erased: Brush[] = [];
                 for (let i = levelDataCopy.length - 1; i >= 0; i--) {
                     const item = levelDataCopy[i];
                     if (item.position.x === brush.position.x && item.position.y === brush.position.y && item.layerId === brush.layerId) {
-                        levelDataCopy.splice(i, 1);
+                        erased.push(...levelDataCopy.splice(i, 1));
                         break;
                     }
                 }
 
-                return levelDataCopy;
+                return this.EraseOrphanedData(levelDataCopy, erased, action.data.layers);
             }
             case LevelDataActions.ERASE_RECT: {
                 const levelDataCopy = levelData.concat();
+                const erased: Brush[] = [];
                 for (let x = action.data.rectTopLeft.x; x <= action.data.rectBottomRight.x; x++) {
                     for (let y = action.data.rectTopLeft.y; y <= action.data.rectBottomRight.y; y++) {
                         const brush: Brush = { ...action.data.brush };
@@ -111,13 +117,13 @@ export default class LevelDataStore extends Store<LevelDataState, ActionData> {
                                 item.position.y === brush.position.y &&
                                 item.layerId === brush.layerId
                             ) {
-                                levelDataCopy.splice(i, 1);
+                                erased.push(...levelDataCopy.splice(i, 1));
                                 break;
                             }
                         }
                     }
                 }
-                return levelDataCopy;
+                return this.EraseOrphanedData(levelDataCopy, erased, action.data.layers);
             }
             case LevelDataActions.ERASE_LAYER: {
                 return levelData.filter(brush => brush.layerId !== action.data.destLayer.id);
@@ -139,5 +145,22 @@ export default class LevelDataStore extends Store<LevelDataState, ActionData> {
                 return levelData || this.DefaultState().levelData;
             }
         }
+    }
+
+    /** Erasing a tile takes the data brushes that only existed for it along with it (see `OrphanedExplicitData`), in the same undo step. */
+    private EraseOrphanedData(levelData: LevelData, erased: Brush[], layers: Layer[] | undefined): LevelData {
+        if (!erased.length || !layers) {
+            return levelData;
+        }
+        const tileLayerIds = new Set(layers.filter(layer => !layer.isData).map(layer => layer.id));
+        const orphans = new Set(
+            OrphanedExplicitData(
+                erased,
+                levelData,
+                layerId => tileLayerIds.has(layerId),
+                name => AssetMetadataStore.inst.Get(name)
+            )
+        );
+        return orphans.size ? levelData.filter(brush => !orphans.has(brush)) : levelData;
     }
 }

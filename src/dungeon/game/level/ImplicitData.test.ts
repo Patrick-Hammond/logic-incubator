@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { AssetMetadata } from "./AssetMetadata";
-import { FindImplicitPlacements, ImplicitBrush } from "./ImplicitData";
+import { FindImplicitPlacements, ImplicitBrush, OrphanedExplicitData } from "./ImplicitData";
 
 const TILE = 16;
 const TILE_LAYER = 0;
@@ -67,5 +67,43 @@ describe("FindImplicitPlacements", () => {
         const result = find([brush("wall", 1, 1, DATA_LAYER), brush("door", 2, 2, DATA_LAYER)]);
         expect(result.collision).toEqual([]);
         expect(result.doors).toEqual([]);
+    });
+});
+
+describe("OrphanedExplicitData", () => {
+    const orphans = (erased: ImplicitBrush[], remaining: ImplicitBrush[]) =>
+        OrphanedExplicitData(erased, remaining, layerId => layerId >= 0, name => META[name]);
+    const light = (x: number, y: number) => brush("light", x, y, DATA_LAYER, { data: { brightness: 0.5, tint: 0xffffff, range: 3 } });
+
+    it("returns the collision brush under an erased collidable tile, and only on its cell", () => {
+        const under = brush("collision", 1, 1, DATA_LAYER);
+        const elsewhere = brush("collision", 2, 1, DATA_LAYER);
+        expect(orphans([brush("wall", 1, 1)], [under, elsewhere])).toEqual([under]);
+    });
+
+    it("returns the light brush overriding an erased lit tile's light", () => {
+        const override = light(2, 2);
+        expect(orphans([brush("torch", 2, 2)], [override])).toEqual([override]);
+    });
+
+    it("leaves data the erased tile didn't provide", () => {
+        const collision = brush("collision", 1, 1, DATA_LAYER);
+        const z = brush("z-index", 1, 1, DATA_LAYER, { data: 2 });
+        // A wall has no light, so a light on its cell isn't its override.
+        expect(orphans([brush("wall", 1, 1)], [light(1, 1), z])).toEqual([]);
+        // Collision on a floor is a deliberate one-off, not the floor's.
+        expect(orphans([brush("floor", 1, 1)], [collision])).toEqual([]);
+    });
+
+    it("keeps the data while another tile on the cell (on any tile layer) still provides it", () => {
+        const collision = brush("collision", 1, 1, DATA_LAYER);
+        expect(orphans([brush("wall", 1, 1)], [brush("wall", 1, 1, 3), collision])).toEqual([]);
+        // ...but a remaining tile without the property doesn't count.
+        expect(orphans([brush("wall", 1, 1)], [brush("floor", 1, 1, 3), collision])).toEqual([collision]);
+    });
+
+    it("ignores erased brushes on data layers", () => {
+        const collision = brush("collision", 1, 1, DATA_LAYER);
+        expect(orphans([brush("wall", 1, 1, DATA_LAYER)], [collision])).toEqual([]);
     });
 });

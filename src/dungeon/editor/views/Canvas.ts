@@ -273,7 +273,8 @@ export default class Canvas extends EditorComponent {
                                     brush: currentBrush,
                                     rectTopLeft: this.editorStore.state.mouseDownPosition,
                                     rectBottomRight: currentBrush.position,
-                                    viewOffset: this.editorStore.state.viewOffset
+                                    viewOffset: this.editorStore.state.viewOffset,
+                                    layers: this.editorStore.state.layers
                                 },
                                 canUndo: true
                             });
