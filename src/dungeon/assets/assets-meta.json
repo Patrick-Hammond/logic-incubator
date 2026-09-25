@@ -49,7 +49,9 @@
 			"open": true
 		}
 	},
-	"doors": {},
+	"doors_frame_left": {},
+	"doors_frame_right": {},
+	"doors_frame_top": {},
 	"doors_leaf_closed": {
 		"door": {
 			"id": 1,
@@ -103,8 +105,8 @@
 	"floor_stairs": {},
 	"goblin_idle_anim": {},
 	"goblin_run_anim": {},
-	"heart": {},
 	"heart_empty": {},
+	"heart_full": {},
 	"heart_half": {},
 	"hole": {},
 	"ice_zombie_anim": {},
@@ -173,12 +175,9 @@
 		}
 	},
 	"torch_base": {},
-	"ui_heart": {},
 	"ui_heart_empty": {},
+	"ui_heart_full": {},
 	"ui_heart_half": {},
-	"wall": {
-		"collidable": true
-	},
 	"wall_banner_blue": {
 		"collidable": true
 	},
@@ -237,6 +236,15 @@
 		"collidable": true
 	},
 	"wall_fountain_mid_red_anim": {},
+	"wall_fountain_top_1": {
+		"collidable": true
+	},
+	"wall_fountain_top_2": {
+		"collidable": true
+	},
+	"wall_fountain_top_3": {
+		"collidable": true
+	},
 	"wall_goo": {
 		"collidable": true
 	},
@@ -253,7 +261,10 @@
 	"wall_mid": {
 		"collidable": true
 	},
-	"wall_outer": {
+	"wall_outer_front_left": {
+		"collidable": true
+	},
+	"wall_outer_front_right": {
 		"collidable": true
 	},
 	"wall_outer_mid_left": {

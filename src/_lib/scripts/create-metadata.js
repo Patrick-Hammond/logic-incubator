@@ -21,9 +21,12 @@ const ASSETS_DIR = path.join(__dirname, "..", "..", "dungeon", "assets");
 const FRAMES_PATH = path.join(ASSETS_DIR, "frames.json");
 const META_PATH = path.join(ASSETS_DIR, "assets-meta.json");
 
-// Same grouping rule as Loader.ts/Dungeon.ts: an animation's frames all share
-// everything up to "_f<N>"; anything else is its own single-frame asset name.
-const ANIM_NAME_REGEX = /^.+(?=_f)/;
+// Same grouping rule as AnimFrameRegex in src/dungeon/Constants.ts (this plain
+// Node script can't import it): an animation's frames all share everything up
+// to a trailing "_f<N>"; anything else - including names that merely contain
+// "_f", like "wall_fountain_top_1" - is its own single-frame asset name.
+// src/dungeon/SpriteSheetGrouping.test.ts fails if the two rules drift apart.
+const ANIM_NAME_REGEX = /^.+(?=_f\d+$)/;
 
 function AssetNamesFromFrames(frames) {
     const names = new Set();

@@ -1,7 +1,7 @@
 import {Loader as PixiLoader} from "pixi.js";
 import {LoaderResource} from "pixi.js";
-import { GetNextInImageSequence, ImageSequenceIndex, RemoveExtension } from "../io/Url";
 import AssetFactory from "./AssetFactory";
+import { GroupSpriteSheetFrames } from "./SpriteSheetFrames";
 
 export default class Loader {
     private static _inst: Loader;
@@ -31,34 +31,7 @@ export default class Loader {
 
         this.loader.use((resource: LoaderResource, next: (...params: any[]) => any) => {
             if (resource.data && resource.data.frames) {
-                const frames = resource.data.frames;
-                for (const frame in frames) {
-                    if (frames.hasOwnProperty(frame)) {
-                        const nameResult = animRegEx.exec(frame);
-                        if (nameResult) {
-                            // animation
-                            const name = nameResult[0];
-                            const seqIndex = ImageSequenceIndex(frame);
-
-                            if (seqIndex === 0) {
-                                let nextFrame = frame;
-                                const animFrames: string[] = [];
-                                while (frames[nextFrame]) {
-                                    animFrames.push(nextFrame);
-                                    nextFrame = GetNextInImageSequence(nextFrame);
-                                }
-
-                                AssetFactory.inst.Add(name, animFrames);
-                                // console.log("creating amination " + name);
-                            }
-                        } else {
-                            // image
-                            const name = RemoveExtension(frame);
-                            AssetFactory.inst.Add(name, [frame]);
-                            // console.log("creating sprite " + name);
-                        }
-                    }
-                }
+                GroupSpriteSheetFrames(resource.data.frames, animRegEx).forEach(asset => AssetFactory.inst.Add(asset.name, asset.frames));
             }
             next();
         });

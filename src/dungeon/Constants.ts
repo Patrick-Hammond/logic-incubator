@@ -19,6 +19,10 @@ export const AnimationSpeed = 0.2;
 export const PlayerSpeed = 0.8;
 export const DepthBrushName: `${DataBrushName.Z_INDEX}` = "z-index";
 export const AssetPath = "/dungeon/assets/";
+// frames.json keys have no extension. Only a trailing "_f<N>" marks an animation frame - names that merely
+// contain "_f" ("wall_fountain_top_1", "doors_frame_left", "heart_full", "wall_outer_front_left") are sprites.
+// src/_lib/scripts/create-metadata.js duplicates this rule; SpriteSheetGrouping.test.ts keeps them in step.
+export const AnimFrameRegex = /^.+(?=_f\d+$)/;
 
 export const GridBounds = new Rectangle(20, 20, EditorWidth - 300, EditorHeight - 40);
 

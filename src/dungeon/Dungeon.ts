@@ -1,6 +1,6 @@
 import Game from "../_lib/game/Game";
 import Loader from "../_lib/loading/Loader";
-import { AssetPath, GameHeight, GameWidth, Scenes } from "./Constants";
+import { AnimFrameRegex, AssetPath, GameHeight, GameWidth, Scenes } from "./Constants";
 import { DungeonEditor } from "./editor/DungeonEditor";
 import AssetMetadataStore from "./game/level/AssetMetadata";
 import { DungeonMain } from "./game/DungeonMain";
@@ -11,7 +11,7 @@ export function Dungoen(): void {
     const game = new Game({width: GameWidth, height: GameHeight, backgroundColor: 0 }, true);
 
     // load
-    Loader.inst.LoadSpriteSheet(AssetPath + "frames.json", /^.+(?=_f)/, () => {
+    Loader.inst.LoadSpriteSheet(AssetPath + "frames.json", AnimFrameRegex, () => {
         game.loader.baseUrl = AssetPath;
         game.loader.add([
             // The editor's other icons are loaded straight into its DOM panels (see Layers).
