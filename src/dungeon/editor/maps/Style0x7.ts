@@ -5,26 +5,26 @@ import { BaseStyle } from "./BaseStyle";
 
 export class Style0x7 extends BaseStyle {
     TopLeft(): Brush[] {
-        return this.Fill(["wall_inner_corner_mid_left"], this.rect.x, this.rect.y).concat(
+        return this.Fill(["wall_edge_tshape_left"], this.rect.x, this.rect.y).concat(
             this.Fill(["wall_top_left"], this.rect.x, this.rect.y - 1)
         );
     }
 
     TopRight(): Brush[] {
-        return this.Fill(["wall_inner_corner_mid_rigth"], this.rect.x + this.rect.width, this.rect.y).concat(
+        return this.Fill(["wall_edge_tshape_right"], this.rect.x + this.rect.width, this.rect.y).concat(
             this.Fill(["wall_top_right"], this.rect.x + this.rect.width, this.rect.y - 1)
         );
     }
 
     BottomLeft(): Brush[] {
-        return this.Fill(["wall_inner_corner_l_top_left", "wall_top_left"], this.rect.x, this.rect.y + this.rect.height - 1).concat(
+        return this.Fill(["wall_edge_bottom_left", "wall_top_left"], this.rect.x, this.rect.y + this.rect.height - 1).concat(
             this.Fill(["wall_left"], this.rect.x, this.rect.y + this.rect.height)
         );
     }
 
     BottomRight(): Brush[] {
         return this.Fill(
-            ["wall_inner_corner_l_top_rigth", "wall_top_right"],
+            ["wall_edge_bottom_right", "wall_top_right"],
             this.rect.x + this.rect.width,
             this.rect.y + this.rect.height - 1
         ).concat(this.Fill(["wall_right"], this.rect.x + this.rect.width, this.rect.y + this.rect.height));
@@ -51,7 +51,7 @@ export class Style0x7 extends BaseStyle {
     LeftWall(): Brush[] {
         const result: Brush[] = [];
         for (let h = 1; h < this.rect.height - 1; h++) {
-            result.push(...this.Fill(["wall_side_mid_right"], this.rect.x, this.rect.y + h));
+            result.push(...this.Fill(["wall_outer_mid_right"], this.rect.x, this.rect.y + h));
         }
         return result;
     }
@@ -59,7 +59,7 @@ export class Style0x7 extends BaseStyle {
     RightWall(): Brush[] {
         const result: Brush[] = [];
         for (let h = 1; h < this.rect.height - 1; h++) {
-            result.push(...this.Fill(["wall_side_mid_left"], this.rect.x + this.rect.width, this.rect.y + h));
+            result.push(...this.Fill(["wall_outer_mid_left"], this.rect.x + this.rect.width, this.rect.y + h));
         }
         return result;
     }

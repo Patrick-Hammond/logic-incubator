@@ -11,6 +11,7 @@ export default class AssetFactory {
 
     private names: { sprites: string[]; anims: string[] } = { sprites: [], anims: [] };
     private registry: { [name: string]: string[] } = {};
+    private warnedMissing = new Set<string>();
 
     get SpriteNames(): string[] {
         return this.names.sprites;
@@ -18,6 +19,19 @@ export default class AssetFactory {
 
     get AnimationNames(): string[] {
         return this.names.anims;
+    }
+
+    /** Whether `name` is a loaded sprite or animation - `Create` returns null, and `CreateTexture` throws, for anything else. */
+    Has(name: string): boolean {
+        return this.SpriteNames.indexOf(name) > -1 || this.AnimationNames.indexOf(name) > -1;
+    }
+
+    /** Warns that `name` isn't in the sprite sheet and is being skipped - once per name, however many tiles use it. */
+    WarnMissing(name: string): void {
+        if (!this.warnedMissing.has(name)) {
+            this.warnedMissing.add(name);
+            console.warn(`"${name}" is not in the sprite sheet - skipping every tile that uses it.`);
+        }
     }
 
     Add(name: string, frameNames: string[], textures?: Texture[]): void {

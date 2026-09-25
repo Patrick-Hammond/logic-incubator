@@ -93,7 +93,7 @@ export default class SelectedBrush extends EditorComponent {
         this.nameText.title = name;
 
         const dataBrush = this.editorStore.state.dataBrushes.find(db => db.name === name);
-        const known = this.assetFactory.SpriteNames.indexOf(name) > -1 || this.assetFactory.AnimationNames.indexOf(name) > -1;
+        const known = this.assetFactory.Has(name);
         if (dataBrush) {
             const icon = dataBrush.icon ? this.assetFactory.CreateTexture(dataBrush.icon) : null;
             this.preview.ShowSwatch(dataBrush.colour, icon, PREVIEW_SIZE / DATA_SWATCH_SIZE);

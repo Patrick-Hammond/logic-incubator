@@ -33,7 +33,12 @@ export type Tile = Brush & {
 /** One door: the cell(s) whose tile has a `door` id in its `AssetMetadata`, and the visual tile whose texture is swapped between `closedSprite`/`openSprite` (that door's own pair, resolved via `AssetMetadataStore.GetDoorPartner`) when the player overlaps any of them. `regionIds` is the (possibly empty) set of regions this door borders - see `Regions.ts`. */
 export type Door = { cells: Vec2Like[]; tile: Tile; isOpen: boolean; regionIds: number[]; openSprite: string; closedSprite: string };
 
-function CreateTile(brush: Brush): Tile {
+/** Returns null (after a one-off warning) for a brush whose name isn't in the sprite sheet, so one bad name drops just its own tiles instead of throwing out of the whole level load. */
+function CreateTile(brush: Brush): Tile | null {
+    if (!AssetFactory.inst.Has(brush.name)) {
+        AssetFactory.inst.WarnMissing(brush.name);
+        return null;
+    }
     if (AssetFactory.inst.AnimationNames.indexOf(brush.name) > -1) {
         const anim = AssetFactory.inst.CreateAnimatedSprite(brush.name);
         anim.animationSpeed = AnimationSpeed;
@@ -282,6 +287,10 @@ export default class Level {
             const posY = brush.position.y - bounds.y1;
 
             if(index != null) {
+                const tile = CreateTile(brush);
+                if(!tile) {
+                    return;
+                }
                 if(this.levelData[ index ][ posX ] == null) {
                     this.levelData[ index ][ posX ] = [];
                 }
@@ -289,7 +298,7 @@ export default class Level {
                     this.levelData[ index ][ posX ][ posY ] = [];
                 }
 
-                this.levelData[ index ][ posX ][ posY ].push(CreateTile(brush));
+                this.levelData[ index ][ posX ][ posY ].push(tile);
             } else {
                 switch(brush.name) {
                     case DataBrushName.PLAYER_START:

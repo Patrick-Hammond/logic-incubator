@@ -99,6 +99,11 @@ export default class Canvas extends EditorComponent {
 
                     if (GridBounds.contains(posX, posY)) {
                         const sprite = this.assetFactory.Create(brush.name);
+                        // A name the atlas doesn't have (e.g. from a generator style or an old save) - skip just that brush rather than throw and leave the rest of the map undrawn.
+                        if (!sprite) {
+                            this.assetFactory.WarnMissing(brush.name);
+                            return;
+                        }
                         const scaleX = brush.scale.x * this.editorStore.state.viewScale;
                         const scaleY = brush.scale.y * this.editorStore.state.viewScale;
                         const flipOffsetX = scaleX < 0 ? sprite.width * this.editorStore.state.viewScale : 0;
