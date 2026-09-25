@@ -1,6 +1,6 @@
 import {Container, Graphics, Rectangle, Text} from "pixi.js";
 
-/** A simple rectangular text button for menu-style scenes (Title, CharacterSelect) - bigger and more game-facing than the editor's own small toolbar `TextButton`. */
+/** A simple rectangular text button for menu-style scenes (Title, CharacterSelect) - bigger and more game-facing than the editor's DOM panel buttons. */
 export default class MenuButton extends Container {
     constructor(label: string, width: number, height: number, onClick: () => void) {
         super();

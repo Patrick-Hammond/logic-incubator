@@ -54,8 +54,8 @@ export const enum DataBrushName {
 
 export type DataBrushValue = number | LightValue | SpawnerValue;
 
-/** Max editable (non-`readOnly`) layers - bounded by the Layers panel's list height. */
-export const MaxEditableLayers = 6;
+/** Max editable (non-`readOnly`) layers - a sanity cap; the Layers panel's list scrolls past what fits. */
+export const MaxEditableLayers = 16;
 
 /**
  * Fixed id of the read-only layer that shows data the game derives from tiles'
@@ -80,7 +80,8 @@ export function EditableLayerCount(layers: Layer[]): number {
     return layers.filter(layer => !layer.readOnly).length;
 }
 
-export type DataBrush = { name: string; colour: number; value: DataBrushValue };
+/** `icon`: AssetFactory name (its first frame, for an animation) drawn over the brush's colour in the palette and on the map - see `Palette`. */
+export type DataBrush = { name: string; colour: number; icon?: string; value: DataBrushValue };
 
 interface IActionData {
     mouseButtonState?: MouseButtonState;
@@ -124,11 +125,12 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
             brushVisible: false,
             hoveredBrushName: "",
             dataBrushes: [
-                { name: DataBrushName.PLAYER_START, colour: 0xfe3464, value: 0 },
-                { name: DataBrushName.COLLISION, colour: 0xffd166, value: 0 },
+                { name: DataBrushName.PLAYER_START, colour: 0xfe3464, icon: "knight_m_idle_anim", value: 0 },
+                { name: DataBrushName.COLLISION, colour: 0xffd166, icon: "wall_mid", value: 0 },
                 { name: DataBrushName.Z_INDEX, colour: 0x06d6a0, value: 0 },
-                { name: DataBrushName.LIGHT, colour: 0xff8100, value: { brightness: 0.5, tint: 0xff8100, range: 5 } },
-                { name: DataBrushName.SPAWNER, colour: 0x9b5de5, value: DEFAULT_SPAWNER_VALUE }
+                { name: DataBrushName.LIGHT, colour: 0xff8100, icon: "torch_1_anim", value: { brightness: 0.5, tint: 0xff8100, range: 5 } },
+                // The skull stands in for the spawner (for now), so placed spawners read as what they are.
+                { name: DataBrushName.SPAWNER, colour: 0x9b5de5, icon: "skull", value: DEFAULT_SPAWNER_VALUE }
             ],
             layers: [],
             mouseButtonState: MouseButtonState.UP,
@@ -148,7 +150,7 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
      * builds it fresh from the current `DataBrushName` enum before this runs), but `SelectedDataBrush` and
      * the `BRUSH_CHANGED`/`DATA_BRUSH_INC`/`DEC` lookups key off the *loaded* catalogue, so the mismatched
      * entry's value can never be found again - see the "door"/"doors" mismatch this fixed in level.json.
-     * Reconcile on load: always keep the current code's set of brush names/colours, carrying over each
+     * Reconcile on load: always keep the current code's set of brush names/colours/icons, carrying over each
      * one's saved `value` only where its name still matches.
      *
      * `currentScene` is kept as-is rather than taken from the save: which scene is on screen isn't part of
@@ -334,19 +336,13 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
             case EditorActions.REMOVE_LAYER:
                 return layers.filter(layer => layer.selected === false);
             case EditorActions.RENAME_LAYER: {
+                // The new name comes from the Layers panel's rename dialog.
                 const selectedLayer = this.SelectedLayer;
-                if (!selectedLayer || selectedLayer.readOnly) {
+                const name = action.data && action.data.name;
+                if (!selectedLayer || selectedLayer.readOnly || !name) {
                     return layers;
                 }
-                const name = prompt("Rename layer", selectedLayer.name);
-                if (name) {
-                    return layers.map(layer => {
-                        if (layer.id === selectedLayer.id) {
-                            return { ...layer, name };
-                        }
-                        return layer;
-                    });
-                }
+                return layers.map(layer => (layer.id === selectedLayer.id ? { ...layer, name } : layer));
             }
             case EditorActions.SELECT_LAYER:
                 return layers.map(layer => {

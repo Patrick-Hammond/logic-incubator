@@ -60,6 +60,44 @@ describe("EditorStore implicit layer", () => {
     });
 });
 
+describe("EditorStore layer rename", () => {
+    it("renames the selected layer to the name it's given", () => {
+        const store = new EditorStore();
+        store.Dispatch({ type: EditorActions.ADD_LAYER });
+        store.Dispatch({ type: EditorActions.RENAME_LAYER, data: { name: "floor" } });
+        expect(store.SelectedLayer.name).toBe("floor");
+    });
+
+    it("leaves the layers untouched without a name (a cancelled dialog)", () => {
+        const store = new EditorStore();
+        store.Dispatch({ type: EditorActions.ADD_LAYER });
+        const before = store.state.layers;
+        store.Dispatch({ type: EditorActions.RENAME_LAYER });
+        store.Dispatch({ type: EditorActions.RENAME_LAYER, data: { name: "" } });
+        expect(store.state.layers).toBe(before);
+    });
+});
+
+describe("EditorStore data brush icons", () => {
+    it("come from the code, not the save, so older saves get them too", () => {
+        const store = new EditorStore();
+        const saved = {
+            ...store.state,
+            dataBrushes: store.state.dataBrushes.map(({ name, colour, value }) => ({ name, colour, value }))
+        };
+        store.Load(saved);
+        const icons: { [name: string]: string | undefined } = {};
+        store.state.dataBrushes.forEach(db => (icons[db.name] = db.icon));
+        expect(icons).toEqual({
+            [DataBrushName.PLAYER_START]: "knight_m_idle_anim",
+            [DataBrushName.COLLISION]: "wall_mid",
+            [DataBrushName.Z_INDEX]: undefined,
+            [DataBrushName.LIGHT]: "torch_1_anim",
+            [DataBrushName.SPAWNER]: "skull"
+        });
+    });
+});
+
 describe("EditorStore spawner data brush", () => {
     it("reconciles a saved spawner value, filling fields it was saved without", () => {
         const store = new EditorStore();

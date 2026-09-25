@@ -14,14 +14,7 @@ export function Dungoen(): void {
     Loader.inst.LoadSpriteSheet(AssetPath + "frames.json", /^.+(?=_f)/, () => {
         game.loader.baseUrl = AssetPath;
         game.loader.add([
-            { name: "icon-eye", url: "icons/eye.png" },
-            { name: "icon-eye-slash", url: "icons/eye-slash.png" },
-            { name: "icon-arrow-down", url: "icons/arrow-down.png" },
-            { name: "icon-arrow-up", url: "icons/arrow-up.png" },
-            { name: "icon-edit", url: "icons/edit.png" },
-            { name: "icon-plus", url: "icons/plus.png" },
-            { name: "icon-minus", url: "icons/minus.png" },
-            { name: "icon-data", url: "icons/data.png" },
+            // The editor's other icons are loaded straight into its DOM panels (see Layers).
             { name: "data-square", url: "icons/square.png" },
             { name: "small-font", url: "fonts/small-font-export.fnt" },
             { name: "title", url: "title.png" },

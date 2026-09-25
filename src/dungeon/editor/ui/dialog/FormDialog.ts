@@ -15,6 +15,8 @@
  * shared key map never gets stuck with a key held down.
  */
 
+import { El, InjectStyles, InjectTheme } from "../dom/Dom";
+
 export type ChoiceOption = {
     value: string;
     label: string;
@@ -65,7 +67,8 @@ export function IsFormDialogOpen(): boolean {
 
 /** Resolves with the edited values on Save, or `null` if cancelled (Escape, Cancel, or a click outside the panel). */
 export function OpenFormDialog(options: FormDialogOptions): Promise<FormValues | null> {
-    InjectStyles();
+    InjectTheme();
+    InjectStyles("fd-styles", STYLES);
     if (openDialog) {
         return Promise.resolve(null);
     }
@@ -92,8 +95,8 @@ export function OpenFormDialog(options: FormDialogOptions): Promise<FormValues |
 
         const footer = El("div", "fd-footer");
         const error = El("span", "fd-error");
-        const cancelButton = El("button", "fd-button", "Cancel") as HTMLButtonElement;
-        const saveButton = El("button", "fd-button fd-primary", "Save") as HTMLButtonElement;
+        const cancelButton = El("button", "ed-button", "Cancel");
+        const saveButton = El("button", "ed-button fd-primary", "Save");
         cancelButton.type = saveButton.type = "button";
         footer.append(error, cancelButton, saveButton);
         panel.appendChild(footer);
@@ -144,15 +147,21 @@ export function OpenFormDialog(options: FormDialogOptions): Promise<FormValues |
         revalidate();
         document.body.appendChild(overlay);
         openDialog = overlay;
-        const firstInput = panel.querySelector<HTMLElement>("input[type=text], input[type=number]");
-        (firstInput || panel).focus();
+        const firstInput = panel.querySelector<HTMLInputElement>("input[type=text], input[type=number]");
+        if (firstInput) {
+            // Selected, so typing replaces the value rather than appending to it.
+            firstInput.focus();
+            firstInput.select();
+        } else {
+            panel.focus();
+        }
     });
 }
 
 function BuildField(field: FieldSpec, value: FormValue, onChange: (key: string, value: FormValue) => void): HTMLElement {
     const row = El("div", "fd-field fd-" + field.type);
     const id = "fd-" + field.key;
-    const label = El("label", "fd-label", field.label) as HTMLLabelElement;
+    const label = El("label", "fd-label", field.label);
     label.htmlFor = id;
     row.appendChild(label);
 
@@ -252,7 +261,7 @@ function BuildField(field: FieldSpec, value: FormValue, onChange: (key: string, 
             const grid = El("div", "fd-chips");
             grid.id = id;
             field.options.forEach(option => {
-                const chip = El("button", "fd-chip") as HTMLButtonElement;
+                const chip = El("button", "fd-chip");
                 chip.type = "button";
                 chip.title = option.label;
                 if (option.image) {
@@ -289,8 +298,8 @@ function BuildField(field: FieldSpec, value: FormValue, onChange: (key: string, 
                 chips.forEach(c => c.setAttribute("aria-pressed", String(on)));
                 emit();
             };
-            const all = El("button", "fd-link", "All") as HTMLButtonElement;
-            const none = El("button", "fd-link", "None") as HTMLButtonElement;
+            const all = El("button", "fd-link", "All");
+            const none = El("button", "fd-link", "None");
             all.type = none.type = "button";
             all.addEventListener("click", () => setAll(true));
             none.addEventListener("click", () => setAll(false));
@@ -333,15 +342,6 @@ function HexString(colour: number): string {
     return "#" + colour.toString(16).padStart(6, "0");
 }
 
-function El(tag: string, className: string, text?: string): HTMLElement {
-    const el = document.createElement(tag);
-    el.className = className;
-    if (text != null) {
-        el.textContent = text;
-    }
-    return el;
-}
-
 function Input(type: string, id: string): HTMLInputElement {
     const input = document.createElement("input");
     input.type = type;
@@ -349,74 +349,57 @@ function Input(type: string, id: string): HTMLInputElement {
     return input;
 }
 
-let stylesInjected = false;
-function InjectStyles(): void {
-    if (stylesInjected) {
-        return;
-    }
-    stylesInjected = true;
-    const style = document.createElement("style");
-    style.textContent = STYLES;
-    document.head.appendChild(style);
-}
-
 const STYLES = `
 .fd-overlay {
     position: fixed; inset: 0; z-index: 1000;
     display: flex; align-items: center; justify-content: center;
     background: rgba(0, 0, 0, 0.55);
-    font: 13px/1.4 Arial, Helvetica, sans-serif; color: #e6e6e6;
+    font: var(--ed-font); color: var(--ed-text);
 }
 .fd-panel {
     width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 32px);
     display: flex; flex-direction: column;
-    background: #2a2a2e; border: 1px solid #4a4a50; border-radius: 6px;
+    background: var(--ed-panel); border: 1px solid var(--ed-panel-border); border-radius: 6px;
     box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6); outline: none;
 }
-.fd-header { padding: 14px 18px 10px; border-bottom: 1px solid #3a3a40; }
-.fd-title { margin: 0; font-size: 16px; font-weight: bold; color: #fff; }
-.fd-subtitle { margin: 4px 0 0; color: #a0a0a8; }
+.fd-header { padding: 14px 18px 10px; border-bottom: 1px solid var(--ed-divider); }
+.fd-title { margin: 0; font-size: 16px; font-weight: bold; color: var(--ed-text-strong); }
+.fd-subtitle { margin: 4px 0 0; color: var(--ed-muted); }
 .fd-body { padding: 8px 18px; overflow-y: auto; }
-.fd-field { padding: 10px 0; border-bottom: 1px solid #333338; }
+.fd-field { padding: 10px 0; border-bottom: 1px solid var(--ed-divider-soft); }
 .fd-field:last-child { border-bottom: none; }
-.fd-label { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 6px; font-weight: bold; color: #d0d0d6; }
+.fd-label { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 6px; font-weight: bold; color: var(--ed-label); }
 .fd-control { display: flex; align-items: center; gap: 10px; }
-.fd-hint { margin: 5px 0 0; font-size: 12px; color: #8c8c94; }
-.fd-panel input[type=range] { flex: 1; accent-color: #9b5de5; }
+.fd-hint { margin: 5px 0 0; font-size: 12px; color: var(--ed-faint); }
+.fd-panel input[type=range] { flex: 1; accent-color: var(--ed-accent); }
 .fd-panel input[type=number], .fd-panel input[type=text] {
-    background: #1c1c1f; color: #fff; border: 1px solid #4a4a50; border-radius: 4px;
+    background: var(--ed-input); color: var(--ed-text-strong); border: 1px solid var(--ed-panel-border); border-radius: 4px;
     padding: 5px 7px; font: inherit;
 }
 .fd-panel input[type=number] { width: 72px; }
 .fd-panel input[type=text] { flex: 1; }
 .fd-panel input.fd-hex { flex: 0 0 84px; font-family: monospace; }
-.fd-panel input[type=color] { width: 44px; height: 30px; padding: 0; border: 1px solid #4a4a50; border-radius: 4px; background: none; cursor: pointer; }
-.fd-panel input:focus-visible, .fd-panel button:focus-visible { outline: 2px solid #9b5de5; outline-offset: 1px; }
-.fd-suffix { min-width: 88px; color: #a0a0a8; font-size: 12px; }
+.fd-panel input[type=color] { width: 44px; height: 30px; padding: 0; border: 1px solid var(--ed-panel-border); border-radius: 4px; background: none; cursor: pointer; }
+.fd-panel input:focus-visible, .fd-panel button:focus-visible { outline: 2px solid var(--ed-accent); outline-offset: 1px; }
+.fd-suffix { min-width: 88px; color: var(--ed-muted); font-size: 12px; }
 .fd-chips { display: grid; grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); gap: 6px; width: 100%; }
 .fd-chip {
     display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 4px;
     padding: 6px 4px; min-height: 84px;
-    background: #1f1f23; color: #b8b8c0; border: 1px solid #3a3a40; border-radius: 5px;
+    background: var(--ed-well); color: var(--ed-chip-text); border: 1px solid var(--ed-divider); border-radius: 5px;
     font: inherit; font-size: 11px; cursor: pointer;
 }
-.fd-chip:hover { border-color: #6a6a74; }
-.fd-chip[aria-pressed=true] { background: #3b2a55; border-color: #9b5de5; color: #fff; }
+.fd-chip:hover { border-color: var(--ed-hover-border); }
+.fd-chip[aria-pressed=true] { background: var(--ed-accent-bg); border-color: var(--ed-accent); color: var(--ed-text-strong); }
 .fd-chip[aria-pressed=false] img { opacity: 0.45; filter: grayscale(0.7); }
 .fd-chip-art { flex: 1; display: flex; align-items: flex-end; justify-content: center; }
 .fd-chip img { image-rendering: pixelated; }
 .fd-chip-label { overflow-wrap: anywhere; text-align: center; }
 .fd-bulk { display: flex; gap: 10px; font-weight: normal; }
-.fd-link { background: none; border: none; padding: 0; color: #b48cf0; font: inherit; font-size: 12px; cursor: pointer; }
+.fd-link { background: none; border: none; padding: 0; color: var(--ed-link); font: inherit; font-size: 12px; cursor: pointer; }
 .fd-link:hover { text-decoration: underline; }
-.fd-footer { display: flex; align-items: center; gap: 8px; padding: 12px 18px; border-top: 1px solid #3a3a40; }
-.fd-error { flex: 1; color: #ff7b7b; font-size: 12px; }
-.fd-button {
-    padding: 6px 16px; border-radius: 4px; border: 1px solid #55555c;
-    background: #38383e; color: #eee; font: inherit; cursor: pointer;
-}
-.fd-button:hover { background: #44444b; }
-.fd-primary { background: #7b3fd0; border-color: #9b5de5; color: #fff; }
-.fd-primary:hover { background: #8a4fe0; }
-.fd-button:disabled { opacity: 0.45; cursor: not-allowed; }
+.fd-footer { display: flex; align-items: center; gap: 8px; padding: 12px 18px; border-top: 1px solid var(--ed-divider); }
+.fd-error { flex: 1; color: var(--ed-error); font-size: 12px; }
+.fd-primary { background: var(--ed-accent-strong); border-color: var(--ed-accent); color: var(--ed-text-strong); }
+.fd-primary:hover { background: var(--ed-accent-hover); }
 `;

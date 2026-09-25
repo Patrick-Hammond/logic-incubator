@@ -5,6 +5,7 @@ import { FindImplicitPlacements } from "../../game/level/ImplicitData";
 import { IsSpawnerValue } from "../../game/level/entities/Spawners";
 import { IsLightValue } from "../../game/level/Lighting";
 import AssetFactory from "../../../_lib/loading/AssetFactory";
+import { DataBrushEditorFor } from "../DataBrushEditors";
 import ObjectPool from "../../../_lib/patterns/ObjectPool";
 import { AnimationSpeed, GridBounds, InitalScale, Scenes, TileSize } from "../../Constants";
 import EditorComponent from "../EditorComponent";
@@ -111,7 +112,8 @@ export default class Canvas extends EditorComponent {
                             sprite.play();
                             sprite.animationSpeed = AnimationSpeed;
                         }
-                        if (brush.data !== null) {
+                        // Player-start and collision values mean nothing (no editor for them), and a "0" would sit over their icons.
+                        if (brush.data !== null && DataBrushEditorFor(brush.name)) {
                             const text = this.textPool.Get();
                             // A LightValue is shown as just its range, matching every other data brush's
                             // convention of a single bare number - brightness/tint are only relevant once

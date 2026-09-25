@@ -42,6 +42,11 @@ export default class AssetFactory {
         return Texture.from(this.registry[name][0]);
     }
 
+    /** Every frame's texture, in order - one for a sprite. */
+    CreateTextures(name: string): Texture[] {
+        return this.registry[name].map(frameName => Texture.from(frameName));
+    }
+
     CreateSprite(name: string): Sprite {
         return Sprite.from(this.registry[name][0]);
     }

@@ -1,20 +1,34 @@
-import {Sprite, Text, Texture} from "pixi.js";
 import { Key } from "../../../_lib/io/Keyboard";
-import { GridBounds, Scenes } from "../../Constants";
+import { AnimationSpeed, Scenes } from "../../Constants";
 import { MonsterIdleAnimation, MonsterType } from "../../game/level/entities/Monsters";
 import { IsSpawnerValue } from "../../game/level/entities/Spawners";
 import { IsLightValue } from "../../game/level/Lighting";
 import { DataBrushEditorFor } from "../DataBrushEditors";
 import EditorComponent from "../EditorComponent";
 import { DataBrushValue, EditorActions, IEditorState } from "../stores/EditorStore";
-import Button from "../ui/components/Button";
 import { ChoiceOption, IsFormDialogOpen, OpenFormDialog } from "../ui/dialog/FormDialog";
+import { ButtonEl, El, InjectStyles } from "../ui/dom/Dom";
+import EditorOverlay from "../ui/dom/EditorOverlay";
+import SpriteCanvas, { DATA_SWATCH_SIZE } from "../ui/dom/SpriteCanvas";
 
+const PREVIEW_SIZE = 64;
+
+/**
+ * The card under the brush picker: a preview of the brush being hovered (or
+ * else the one picked), what it is, and - for a data brush with a popup
+ * editor - its value and an Edit button (also E).
+ */
 export default class SelectedBrush extends EditorComponent {
-    private brush = new Sprite();
-    private brushText: Text;
-    private dataText: Text;
-    private editDataButton: Button;
+    private preview = new SpriteCanvas();
+    private nameText: HTMLElement;
+    private kindText: HTMLElement;
+    private valueRow: HTMLElement;
+    private valueChip: HTMLElement;
+    private valueText: HTMLElement;
+    private editButton: HTMLButtonElement;
+    /** The brush on the card, or null before the first `ShowBrush`. */
+    private shownName: string = null;
+    private animTime = 0;
     private monsterImages: { [type: string]: ChoiceOption["image"] | undefined } = {};
 
     constructor() {
@@ -23,25 +37,24 @@ export default class SelectedBrush extends EditorComponent {
     }
 
     protected Create(): void {
-        this.brush.position.set(GridBounds.right + 160, GridBounds.y + 10 + GridBounds.height * 0.75);
-        this.brush.anchor.set(0.5, 1);
-        this.brush.position.set(1218, 697);
+        InjectStyles("sb-styles", STYLES);
 
-        this.brushText = new Text("", { fontFamily: "Arial", fontSize: 11, fill: 0xeeeeee });
-        this.brushText.anchor.x = 1;
-        this.brushText.position.set(1270, 702);
-
-        this.dataText = new Text("", { fontFamily: "Arial", fontSize: 16, fill: 0xeeeeee });
-        this.dataText.anchor.set(0.5);
-        this.dataText.position.set(1218, 647);
-
-        this.editDataButton = new Button("icon-edit", () => this.OpenDataEditor());
-        this.editDataButton.position.set(1245, 630);
-        this.editDataButton.visible = false;
-
-        this.root.addChild(this.brush, this.brushText, this.dataText, this.editDataButton);
+        const card = El("div", "ed-panel sb-card");
+        card.appendChild(El("div", "sb-preview")).appendChild(this.preview.canvas);
+        const info = card.appendChild(El("div", "sb-info"));
+        this.nameText = info.appendChild(El("div", "sb-name"));
+        const kindRow = info.appendChild(El("div", "sb-kind-row"));
+        this.kindText = kindRow.appendChild(El("span", "sb-kind"));
+        this.editButton = kindRow.appendChild(ButtonEl("ed-button sb-edit", "Edit", "Edit this brush's value"));
+        this.editButton.appendChild(El("kbd", "", "E"));
+        this.editButton.addEventListener("click", () => this.OpenDataEditor());
+        this.valueRow = info.appendChild(El("div", "sb-value"));
+        this.valueChip = this.valueRow.appendChild(El("span", "sb-chip"));
+        this.valueText = this.valueRow.appendChild(El("span", "sb-value-text"));
+        EditorOverlay.inst.Slot("selected").appendChild(card);
 
         this.editorStore.Subscribe(this.Render, this);
+        this.game.ticker.add(this.Animate, this);
 
         // E: same as the edit button. Keydowns typed inside the dialog never reach here (see FormDialog).
         this.game.keyboard.on("keydown", (e: KeyboardEvent) => {
@@ -51,37 +64,90 @@ export default class SelectedBrush extends EditorComponent {
                 this.OpenDataEditor();
             }
         });
+
+        this.ShowBrush(this.editorStore.state.currentBrush.name);
+        this.ShowValue();
     }
 
     private Render(prevState: IEditorState, state: IEditorState): void {
+        let name = this.shownName;
         if (prevState.hoveredBrushName !== state.hoveredBrushName) {
-            this.UpdateBrush(state.hoveredBrushName);
+            name = state.hoveredBrushName;
         }
-
         if (prevState.currentBrush.name !== state.currentBrush.name) {
-            this.UpdateBrush(state.currentBrush.name);
+            name = state.currentBrush.name;
         }
 
-        const dataBrush = this.editorStore.SelectedDataBrush;
-        if (dataBrush) {
-            this.dataText.text = this.FormatDataValue(dataBrush.value);
-            this.dataText.visible = true;
-        } else {
-            this.dataText.visible = false;
+        const changed = name !== this.shownName;
+        if (changed) {
+            this.ShowBrush(name);
         }
-
-        this.editDataButton.visible = dataBrush != null && DataBrushEditorFor(dataBrush.name) != null;
+        if (changed || prevState.dataBrushes !== state.dataBrushes || prevState.currentBrush.name !== state.currentBrush.name) {
+            this.ShowValue();
+        }
     }
 
-    private FormatDataValue(value: DataBrushValue): string {
+    private ShowBrush(name: string): void {
+        this.shownName = name;
+        this.nameText.textContent = name || "No brush";
+        this.nameText.title = name;
+
+        const dataBrush = this.editorStore.state.dataBrushes.find(db => db.name === name);
+        const known = this.assetFactory.SpriteNames.indexOf(name) > -1 || this.assetFactory.AnimationNames.indexOf(name) > -1;
+        if (dataBrush) {
+            const icon = dataBrush.icon ? this.assetFactory.CreateTexture(dataBrush.icon) : null;
+            this.preview.ShowSwatch(dataBrush.colour, icon, PREVIEW_SIZE / DATA_SWATCH_SIZE);
+            this.kindText.textContent = "Data brush";
+        } else if (name && known) {
+            const frames = this.assetFactory.CreateTextures(name);
+            this.preview.ShowFitted(frames, PREVIEW_SIZE);
+            const size = frames[0].orig.width + "×" + frames[0].orig.height;
+            this.kindText.textContent = frames.length > 1 ? `Animation · ${frames.length} frames · ${size}` : `Tile · ${size}`;
+        } else {
+            this.preview.Clear();
+            this.kindText.textContent = name ? "Not in the sprite sheet" : "Hover or pick one above";
+        }
+    }
+
+    /** The shown data brush's value, for brushes whose value is edited in a dialog; player-start and collision have none worth showing. */
+    private ShowValue(): void {
+        const state = this.editorStore.state;
+        const dataBrush = state.dataBrushes.find(db => db.name === this.shownName);
+        const editable = dataBrush != null && DataBrushEditorFor(dataBrush.name) != null;
+        this.valueRow.style.visibility = editable ? "" : "hidden";
+        // The dialog edits the picked brush, so no button while previewing another one.
+        this.editButton.style.display = editable && dataBrush.name === state.currentBrush.name ? "" : "none";
+        if (!editable) {
+            return;
+        }
+
+        const summary = this.DescribeValue(dataBrush.value);
+        this.valueText.textContent = summary.text;
+        this.valueRow.title = summary.text;
+        this.valueChip.style.display = summary.colour != null ? "" : "none";
+        if (summary.colour != null) {
+            const hex = "#" + summary.colour.toString(16).padStart(6, "0");
+            this.valueChip.style.background = hex;
+            this.valueRow.title = hex + " · " + summary.text;
+        }
+    }
+
+    private DescribeValue(value: DataBrushValue): { text: string; colour?: number } {
         if (IsLightValue(value)) {
-            return `B ${value.brightness}\n#${value.tint.toString(16).padStart(6, "0")}\nR ${value.range}`;
+            return { text: `${value.brightness} bright · ${value.range} tiles`, colour: value.tint };
         }
         if (IsSpawnerValue(value)) {
             const types = value.monsters.length === 1 ? value.monsters[0].replace(/_/g, " ") : `${value.monsters.length} types`;
-            return `${types}\nevery ${value.interval}s\nmax ${value.maxAlive}`;
+            return { text: `${types} · every ${value.interval}s · max ${value.maxAlive}` };
         }
-        return value.toString();
+        return { text: `${value} · +/- to adjust` };
+    }
+
+    private Animate(delta: number): void {
+        if (this.preview.Animated && EditorOverlay.inst.Visible) {
+            this.animTime += delta * AnimationSpeed;
+            this.preview.SetFrame(Math.floor(this.animTime));
+        }
     }
 
     /** Opens the popup editor (see `DataBrushEditors`) for the selected data brush, if it has one. Cancelling leaves the value untouched. */
@@ -105,29 +171,36 @@ export default class SelectedBrush extends EditorComponent {
         });
     }
 
-    /** First idle frame of the monster, as a data URI for the spawner dialog's chips. Cached - extracting is a GPU readback. */
+    /** First idle frame of the monster at 2x, as a data URI for the spawner dialog's chips. Cached. */
     private MonsterImage(type: MonsterType): ChoiceOption["image"] | undefined {
         if (!(type in this.monsterImages)) {
             const name = MonsterIdleAnimation(type);
             if (this.assetFactory.AnimationNames.indexOf(name) === -1) {
                 this.monsterImages[type] = undefined;
             } else {
-                const sprite = this.assetFactory.CreateAnimatedSprite(name);
-                const { width, height } = sprite.texture;
-                this.monsterImages[type] = { src: this.game.renderer.plugins.extract.base64(sprite), width: width * 2, height: height * 2 };
-                sprite.destroy();
+                const image = new SpriteCanvas();
+                image.Show([this.assetFactory.CreateTexture(name)], 2);
+                const { canvas } = image;
+                this.monsterImages[type] = { src: canvas.toDataURL(), width: canvas.width, height: canvas.height };
             }
         }
         return this.monsterImages[type];
     }
-
-    private UpdateBrush(name: string): void {
-        this.brushText.text = name;
-        if (name !== "") {
-            this.brush.texture = this.assetFactory.Create(name).texture;
-            this.brush.scale.set(100 / Math.max(this.brush.texture.width, this.brush.texture.height));
-        } else {
-            this.brush.texture = Texture.EMPTY;
-        }
-    }
 }
+
+const STYLES = `
+.sb-card { flex-direction: row; align-items: center; gap: 10px; height: 84px; padding: 9px; }
+.sb-preview {
+    flex: 0 0 ${PREVIEW_SIZE}px; height: ${PREVIEW_SIZE}px; display: flex; align-items: center; justify-content: center;
+    background: var(--ed-well); border-radius: 4px;
+}
+.sb-preview canvas { display: block; image-rendering: pixelated; }
+.sb-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.sb-name { font-weight: bold; color: var(--ed-text-strong); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sb-kind-row { display: flex; align-items: center; gap: 6px; min-height: 22px; }
+.sb-kind { flex: 1; min-width: 0; font-size: 11px; color: var(--ed-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sb-edit { display: inline-flex; align-items: center; gap: 5px; padding: 2px 5px 2px 8px; font-size: 12px; }
+.sb-value { display: flex; align-items: center; gap: 5px; min-height: 16px; font-size: 12px; color: var(--ed-label); white-space: nowrap; overflow: hidden; }
+.sb-value-text { overflow: hidden; text-overflow: ellipsis; }
+.sb-chip { flex: 0 0 auto; width: 10px; height: 10px; border: 1px solid rgba(255, 255, 255, 0.35); border-radius: 2px; }
+`;
