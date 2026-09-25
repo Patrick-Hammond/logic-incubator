@@ -33,6 +33,7 @@ type LevelData = Brush[];
 type ActionData = {
     brush?: Brush;
     viewOffset?: Vec2Like;
+    /** Opposite corners of a PAINT_RECT/ERASE_RECT, in view cells like `brush.position` - in either order, as a drag can go any way. */
     rectTopLeft?: Vec2Like;
     rectBottomRight?: Vec2Like;
     sourceLayer?: Layer;
@@ -70,18 +71,16 @@ export default class LevelDataStore extends Store<LevelDataState, ActionData> {
             }
             case LevelDataActions.PAINT_RECT: {
                 const levelDataCopy = levelData.concat();
-                for (let x = action.data.rectTopLeft.x; x <= action.data.rectBottomRight.x; x++) {
-                    for (let y = action.data.rectTopLeft.y; y <= action.data.rectBottomRight.y; y++) {
-                        const brush: Brush = { ...action.data.brush };
-                        brush.position = AddTypes({ x, y }, action.data.viewOffset);
-                        const existing = levelDataCopy.some(
-                            v => v.position.x === brush.position.x && v.position.y === brush.position.y && v.layerId === brush.layerId
-                        );
-                        if (!existing) {
-                            levelDataCopy.push(brush);
-                        }
+                this.RectCells(action.data.rectTopLeft, action.data.rectBottomRight).forEach(cell => {
+                    const brush: Brush = { ...action.data.brush };
+                    brush.position = AddTypes(cell, action.data.viewOffset);
+                    const existing = levelDataCopy.some(
+                        v => v.position.x === brush.position.x && v.position.y === brush.position.y && v.layerId === brush.layerId
+                    );
+                    if (!existing) {
+                        levelDataCopy.push(brush);
                     }
-                }
+                });
                 return levelDataCopy;
             }
             case LevelDataActions.ERASE: {
@@ -104,25 +103,19 @@ export default class LevelDataStore extends Store<LevelDataState, ActionData> {
             case LevelDataActions.ERASE_RECT: {
                 const levelDataCopy = levelData.concat();
                 const erased: Brush[] = [];
-                for (let x = action.data.rectTopLeft.x; x <= action.data.rectBottomRight.x; x++) {
-                    for (let y = action.data.rectTopLeft.y; y <= action.data.rectBottomRight.y; y++) {
-                        const brush: Brush = { ...action.data.brush };
-                        brush.position = AddTypes({ x, y }, action.data.viewOffset);
+                this.RectCells(action.data.rectTopLeft, action.data.rectBottomRight).forEach(cell => {
+                    const brush: Brush = { ...action.data.brush };
+                    brush.position = AddTypes(cell, action.data.viewOffset);
 
-                        // remove last item in the same location
-                        for (let i = levelDataCopy.length - 1; i >= 0; i--) {
-                            const item = levelDataCopy[i];
-                            if (
-                                item.position.x === brush.position.x &&
-                                item.position.y === brush.position.y &&
-                                item.layerId === brush.layerId
-                            ) {
-                                erased.push(...levelDataCopy.splice(i, 1));
-                                break;
-                            }
+                    // remove last item in the same location
+                    for (let i = levelDataCopy.length - 1; i >= 0; i--) {
+                        const item = levelDataCopy[i];
+                        if (item.position.x === brush.position.x && item.position.y === brush.position.y && item.layerId === brush.layerId) {
+                            erased.push(...levelDataCopy.splice(i, 1));
+                            break;
                         }
                     }
-                }
+                });
                 return this.EraseOrphanedData(levelDataCopy, erased, action.data.layers);
             }
             case LevelDataActions.ERASE_LAYER: {
@@ -145,6 +138,17 @@ export default class LevelDataStore extends Store<LevelDataState, ActionData> {
                 return levelData || this.DefaultState().levelData;
             }
         }
+    }
+
+    /** Every cell of the rect between two opposite corners, whichever way round they come - dragging up or left gives the same cells as the reverse. */
+    private RectCells(corner: Vec2Like, oppositeCorner: Vec2Like): Vec2Like[] {
+        const cells: Vec2Like[] = [];
+        for (let x = Math.min(corner.x, oppositeCorner.x); x <= Math.max(corner.x, oppositeCorner.x); x++) {
+            for (let y = Math.min(corner.y, oppositeCorner.y); y <= Math.max(corner.y, oppositeCorner.y); y++) {
+                cells.push({ x, y });
+            }
+        }
+        return cells;
     }
 
     /** Erasing a tile takes the data brushes that only existed for it along with it (see `OrphanedExplicitData`), in the same undo step. */

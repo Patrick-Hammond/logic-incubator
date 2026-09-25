@@ -309,11 +309,18 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
         }
     }
 
+    /**
+     * Where a Ctrl+drag rect starts - on the left (paint) or right (erase) button. Kept in level cells
+     * (the view cell plus `viewOffset`), not view cells, so panning or zooming mid-drag doesn't move it.
+     */
     private UpdateMouseDownPosition(mouseDownPosition: Vec2Like, action: IAction<IActionData>): Vec2Like {
         switch (action.type) {
             case EditorActions.MOUSE_BUTTON:
-                if (action.data.mouseButtonState === MouseButtonState.LEFT_DOWN) {
-                    return this.state.currentBrush.position;
+                if (
+                    action.data.mouseButtonState === MouseButtonState.LEFT_DOWN ||
+                    action.data.mouseButtonState === MouseButtonState.RIGHT_DOWN
+                ) {
+                    return AddTypes(this.state.currentBrush.position, this.state.viewOffset);
                 }
             default:
                 return mouseDownPosition || this.DefaultState().mouseDownPosition;

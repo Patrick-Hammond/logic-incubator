@@ -59,3 +59,55 @@ describe("LevelDataStore erasing", () => {
         expect(names(store)).toEqual(["wall@1,1"]);
     });
 });
+
+describe("LevelDataStore rects", () => {
+    beforeAll(() => AssetMetadataStore.inst.Load({ wall: { collidable: true }, floor: {} }));
+
+    // The same 2x2 rect, dragged from each of its corners.
+    const DRAGS = [
+        { from: { x: 1, y: 1 }, to: { x: 2, y: 2 }, direction: "down-right" },
+        { from: { x: 2, y: 2 }, to: { x: 1, y: 1 }, direction: "up-left" },
+        { from: { x: 1, y: 2 }, to: { x: 2, y: 1 }, direction: "up-right" },
+        { from: { x: 2, y: 1 }, to: { x: 1, y: 2 }, direction: "down-left" }
+    ];
+
+    it.each(DRAGS)("paints the same cells dragged $direction", ({ from, to }) => {
+        const store = storeWith([]);
+        store.Dispatch({
+            type: LevelDataActions.PAINT_RECT,
+            data: { brush: brush("floor", 0, 0), rectTopLeft: from, rectBottomRight: to, viewOffset: NO_OFFSET },
+            canUndo: true
+        });
+        expect(names(store)).toEqual(["floor@1,1", "floor@1,2", "floor@2,1", "floor@2,2"]);
+    });
+
+    it.each(DRAGS)("erases the same cells, and the collision they leave behind, dragged $direction", ({ from, to }) => {
+        // A 3x3 block of walls, each with its collision; the rect takes out the bottom-right 2x2 of it.
+        const brushes: Brush[] = [];
+        const kept: string[] = [];
+        for (let x = 0; x <= 2; x++) {
+            for (let y = 0; y <= 2; y++) {
+                brushes.push(brush("wall", x, y), brush(DataBrushName.COLLISION, x, y, DATA_LAYER.id));
+                if (x === 0 || y === 0) {
+                    kept.push(`wall@${x},${y}`, `collision@${x},${y}`);
+                }
+            }
+        }
+        const store = storeWith(brushes);
+        store.Dispatch({
+            type: LevelDataActions.ERASE_RECT,
+            data: { brush: brush("wall", 0, 0), rectTopLeft: from, rectBottomRight: to, viewOffset: NO_OFFSET, layers: LAYERS },
+            canUndo: true
+        });
+        expect(names(store)).toEqual(kept.sort());
+    });
+
+    it("offsets the rect by the view, like a single brush", () => {
+        const store = storeWith([]);
+        store.Dispatch({
+            type: LevelDataActions.PAINT_RECT,
+            data: { brush: brush("floor", 0, 0), rectTopLeft: { x: 1, y: 0 }, rectBottomRight: { x: 0, y: 0 }, viewOffset: { x: 10, y: 5 } }
+        });
+        expect(names(store)).toEqual(["floor@10,5", "floor@11,5"]);
+    });
+});

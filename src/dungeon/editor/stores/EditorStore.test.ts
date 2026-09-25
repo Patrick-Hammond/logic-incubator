@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Scenes } from "../../Constants";
 import { DEFAULT_SPAWNER_VALUE } from "../../game/level/entities/Spawners";
-import EditorStore, { DataBrushName, EditableLayerCount, EditorActions, IMPLICIT_LAYER_ID } from "./EditorStore";
+import EditorStore, { DataBrushName, EditableLayerCount, EditorActions, IMPLICIT_LAYER_ID, MouseButtonState } from "./EditorStore";
 
 function implicitLayers(store: EditorStore) {
     return store.state.layers.filter(layer => layer.id === IMPLICIT_LAYER_ID);
@@ -142,5 +142,43 @@ describe("EditorStore currentScene", () => {
         const store = new EditorStore();
         store.Dispatch({ type: EditorActions.CHANGE_SCENE, data: { name: Scenes.GAME } });
         expect(store.state.currentScene).toBe(Scenes.GAME);
+    });
+});
+
+describe("EditorStore mouseDownPosition", () => {
+    function pressAt(store: EditorStore, x: number, y: number, mouseButtonState: MouseButtonState) {
+        store.Dispatch({ type: EditorActions.BRUSH_MOVED, data: { position: { x, y } } });
+        store.Dispatch({ type: EditorActions.MOUSE_BUTTON, data: { mouseButtonState } });
+    }
+
+    it("is recorded on a left press, where a rect paint starts", () => {
+        const store = new EditorStore();
+        pressAt(store, 2, 3, MouseButtonState.LEFT_DOWN);
+        expect(store.state.mouseDownPosition).toEqual({ x: 2, y: 3 });
+    });
+
+    it("is recorded on a right press too, where a rect erase starts - not left over from the last left press", () => {
+        const store = new EditorStore();
+        pressAt(store, 2, 3, MouseButtonState.LEFT_DOWN);
+        store.Dispatch({ type: EditorActions.MOUSE_BUTTON, data: { mouseButtonState: MouseButtonState.UP } });
+        pressAt(store, 7, 5, MouseButtonState.RIGHT_DOWN);
+        expect(store.state.mouseDownPosition).toEqual({ x: 7, y: 5 });
+    });
+
+    it("isn't touched by a middle press or a release", () => {
+        const store = new EditorStore();
+        pressAt(store, 2, 3, MouseButtonState.RIGHT_DOWN);
+        pressAt(store, 4, 4, MouseButtonState.MIDDLE_DOWN);
+        pressAt(store, 5, 5, MouseButtonState.UP);
+        expect(store.state.mouseDownPosition).toEqual({ x: 2, y: 3 });
+    });
+
+    it("is in level cells, so it stays on the same cell when the view moves mid-drag", () => {
+        const store = new EditorStore();
+        store.Dispatch({ type: EditorActions.VIEW_MOVE, data: { move: { x: 10, y: 20 } } });
+        pressAt(store, 2, 3, MouseButtonState.RIGHT_DOWN);
+        expect(store.state.mouseDownPosition).toEqual({ x: 12, y: 23 });
+        store.Dispatch({ type: EditorActions.VIEW_MOVE, data: { move: { x: -4, y: 1 } } });
+        expect(store.state.mouseDownPosition).toEqual({ x: 12, y: 23 });
     });
 });

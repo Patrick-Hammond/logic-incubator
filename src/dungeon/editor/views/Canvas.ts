@@ -1,5 +1,6 @@
 import {AnimatedSprite, BitmapText, Container, Graphics, interaction} from "pixi.js";
 import { Key } from "../../../_lib/io/Keyboard";
+import { SubtractTypes } from "../../../_lib/patterns/EnumerateTypes";
 import AssetMetadataStore from "../../game/level/AssetMetadata";
 import { FindImplicitPlacements } from "../../game/level/ImplicitData";
 import { IsSpawnerValue } from "../../game/level/entities/Spawners";
@@ -271,7 +272,8 @@ export default class Canvas extends EditorComponent {
                                 type: rectPainting ? LevelDataActions.PAINT_RECT : LevelDataActions.ERASE_RECT,
                                 data: {
                                     brush: currentBrush,
-                                    rectTopLeft: this.editorStore.state.mouseDownPosition,
+                                    // mouseDownPosition is in level cells; the store wants view cells, like the brush's
+                                    rectTopLeft: SubtractTypes(this.editorStore.state.mouseDownPosition, this.editorStore.state.viewOffset),
                                     rectBottomRight: currentBrush.position,
                                     viewOffset: this.editorStore.state.viewOffset,
                                     layers: this.editorStore.state.layers
