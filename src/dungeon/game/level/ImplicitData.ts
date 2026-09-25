@@ -11,12 +11,12 @@
  */
 
 import { Vec2Like } from "../../../_lib/math/Geometry";
-import { DataBrushName } from "../../editor/stores/EditorStore";
+import { DataBrushName, DataBrushValue } from "../../editor/stores/EditorStore";
 import { AssetMetadata } from "./AssetMetadata";
 import { DoorFootprint } from "./Doors";
 import { IsLightValue, LightValue } from "./Lighting";
 
-export type ImplicitBrush = { name: string; position: Vec2Like; pixelOffset: Vec2Like; layerId: number; data?: number | LightValue | null };
+export type ImplicitBrush = { name: string; position: Vec2Like; pixelOffset: Vec2Like; layerId: number; data?: DataBrushValue | null };
 
 export type ImplicitPlacements = {
     /** Cells under a `collidable` tile. May repeat a cell (several collidable tiles stacked on it). */

@@ -3,14 +3,15 @@ import Game from "../../../_lib/game/Game";
 import AssetFactory from "../../../_lib/loading/AssetFactory";
 import {Rectangle, Vec2Like} from "../../../_lib/math/Geometry";
 import {AnimationSpeed, TileSize} from "../../Constants";
-import {DataBrushName, IEditorState} from "../../editor/stores/EditorStore";
+import {DataBrushName, DataBrushValue, IEditorState} from "../../editor/stores/EditorStore";
 import {Layer} from "../../editor/stores/LevelDataStore";
 import {LEVEL_LOADED} from "../Events";
 import AssetMetadataStore from "./AssetMetadata";
 import {HeightAt} from "./Depth";
 import {FindDoorGroups} from "./Doors";
+import {IsSpawnerValue, SanitiseSpawnerValue, Spawner} from "./entities/Spawners";
 import {FindImplicitPlacements} from "./ImplicitData";
-import {AMBIENT_LIGHT, AMBIENT_TINT, BakedLight, BakeLighting, IsLightValue, LightSource, LightValue} from "./Lighting";
+import {AMBIENT_LIGHT, AMBIENT_TINT, BakedLight, BakeLighting, IsLightValue, LightSource} from "./Lighting";
 import {FindRegions, Region, RegionIdsTouching} from "./Regions";
 
 type Brush = {
@@ -20,7 +21,7 @@ type Brush = {
     rotation: number;
     scale: Vec2Like;
     layerId: number;
-    data: number | LightValue;
+    data: DataBrushValue;
 };
 
 export type Tile = Brush & {
@@ -67,6 +68,8 @@ export default class Level {
     public visibleRegions: Set<number> = new Set<number>();
     public boundRect: Rectangle = new Rectangle();
     public playerStartPosition: Vec2Like | undefined;
+    /** Every cell painted with the `SPAWNER` data brush, in normalised map coordinates. */
+    public spawners: Spawner[] = [];
     /** Distinct painted `Z_INDEX` heights, ascending, always including the unpainted default (0). `TileMapView` builds one band per entry - sparse, so a stray tile at an extreme height doesn't force bands for every height in between. */
     public depths: number[] = [0];
 
@@ -196,6 +199,7 @@ export default class Level {
         this.collisionData = [];
         this.heightData = [];
         this.doorData = [];
+        this.spawners = [];
         const depths = new Set<number>([0]);
         const lights: LightSource[] = [];
         /** Per-cell door id (parallel to `doorData`, but tagged with *which* door type) - `FindDoorGroups` needs this to keep two different door types on adjacent cells from merging into one group. */
@@ -256,6 +260,12 @@ export default class Level {
                     case DataBrushName.LIGHT:
                         if (IsLightValue(brush.data)) {
                             lights.push({x: posX, y: posY, value: brush.data});
+                        }
+                        break;
+                    // Same reason as LIGHT - collected once, here only.
+                    case DataBrushName.SPAWNER:
+                        if (IsSpawnerValue(brush.data)) {
+                            this.spawners.push({x: posX, y: posY, value: SanitiseSpawnerValue(brush.data)});
                         }
                         break;
                 }

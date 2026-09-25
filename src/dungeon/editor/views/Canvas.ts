@@ -2,6 +2,7 @@ import {AnimatedSprite, BitmapText, Container, Graphics, interaction} from "pixi
 import { Key } from "../../../_lib/io/Keyboard";
 import AssetMetadataStore from "../../game/level/AssetMetadata";
 import { FindImplicitPlacements } from "../../game/level/ImplicitData";
+import { IsSpawnerValue } from "../../game/level/entities/Spawners";
 import { IsLightValue } from "../../game/level/Lighting";
 import AssetFactory from "../../../_lib/loading/AssetFactory";
 import ObjectPool from "../../../_lib/patterns/ObjectPool";
@@ -115,7 +116,12 @@ export default class Canvas extends EditorComponent {
                             // A LightValue is shown as just its range, matching every other data brush's
                             // convention of a single bare number - brightness/tint are only relevant once
                             // you're editing the light (see SelectedBrush), not at a map-overview glance.
-                            text.text = IsLightValue(brush.data) ? brush.data.range.toString() : brush.data.toString();
+                            // Likewise a spawner shows how many monster types it draws from.
+                            text.text = IsLightValue(brush.data)
+                                ? brush.data.range.toString()
+                                : IsSpawnerValue(brush.data)
+                                  ? brush.data.monsters.length.toString()
+                                  : brush.data.toString();
                             sprite.addChild(text);
                         }
                         layerDict[brush.layerId].addChild(sprite);

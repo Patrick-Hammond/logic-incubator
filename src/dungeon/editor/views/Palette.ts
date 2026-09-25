@@ -1,8 +1,8 @@
-import {DisplayObject, interaction, Rectangle, SCALE_MODES, Sprite} from "pixi.js";
+import {Container, DisplayObject, interaction, Rectangle, SCALE_MODES, Sprite} from "pixi.js";
 import AssetFactory from "../../../_lib/loading/AssetFactory";
 import { AnimationSpeed, GridBounds, Scenes } from "../../Constants";
 import EditorComponent from "../EditorComponent";
-import { EditorActions, IEditorState } from "../stores/EditorStore";
+import { DataBrushName, EditorActions, IEditorState } from "../stores/EditorStore";
 import ScrollBox from "../ui/components/ScrollBox";
 import ContainerSkin from "../ui/skins/flat/ContainerSkin";
 
@@ -95,9 +95,20 @@ export default class Palette extends EditorComponent {
 
         const square = Sprite.from("data-square");
         square.alpha = 0.5;
+        // The spawner stands in as the "skull" sprite (for now) over its colour, so placed spawners
+        // read as what they are on the map rather than as one more plain square.
+        const skull = this.assetFactory.CreateSprite("skull");
+        skull.position.set((square.width - skull.width) / 2, (square.height - skull.height) / 2);
+        const swatch = new Container();
+        swatch.addChild(square);
         this.editorStore.state.dataBrushes.forEach(dataBrush => {
             square.tint = dataBrush.colour;
-            const tex = this.game.renderer.generateTexture(square, SCALE_MODES.NEAREST, 1);
+            if (dataBrush.name === DataBrushName.SPAWNER) {
+                swatch.addChild(skull);
+            } else {
+                swatch.removeChild(skull);
+            }
+            const tex = this.game.renderer.generateTexture(swatch, SCALE_MODES.NEAREST, 1);
             const s = new Sprite(tex);
             s.texture.baseTexture.scaleMode = SCALE_MODES.NEAREST;
             s.scale.set(2);

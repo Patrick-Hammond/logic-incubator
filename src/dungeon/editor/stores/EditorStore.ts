@@ -1,7 +1,8 @@
 import { Vec2Like } from "../../../_lib/math/Geometry";
 import { AddTypes, SubtractTypes } from "../../../_lib/patterns/EnumerateTypes";
 import Store, { IAction } from "../../../_lib/patterns/redux/Store";
-import { InitalScale } from "../../Constants";
+import { InitalScale, Scenes } from "../../Constants";
+import { DEFAULT_SPAWNER_VALUE, IsSpawnerValue, SanitiseSpawnerValue, SpawnerValue } from "../../game/level/entities/Spawners";
 import { LightValue } from "../../game/level/Lighting";
 import { Brush, Layer } from "./LevelDataStore";
 
@@ -47,10 +48,11 @@ export const enum DataBrushName {
     PLAYER_START = "player-start",
     COLLISION = "collision",
     Z_INDEX = "z-index",
-    LIGHT = "light"
+    LIGHT = "light",
+    SPAWNER = "spawner"
 }
 
-export type DataBrushValue = number | LightValue;
+export type DataBrushValue = number | LightValue | SpawnerValue;
 
 /** Max editable (non-`readOnly`) layers - bounded by the Layers panel's list height. */
 export const MaxEditableLayers = 6;
@@ -125,14 +127,17 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
                 { name: DataBrushName.PLAYER_START, colour: 0xfe3464, value: 0 },
                 { name: DataBrushName.COLLISION, colour: 0xffd166, value: 0 },
                 { name: DataBrushName.Z_INDEX, colour: 0x06d6a0, value: 0 },
-                { name: DataBrushName.LIGHT, colour: 0xff8100, value: { brightness: 0.5, tint: 0xff8100, range: 5 } }
+                { name: DataBrushName.LIGHT, colour: 0xff8100, value: { brightness: 0.5, tint: 0xff8100, range: 5 } },
+                { name: DataBrushName.SPAWNER, colour: 0x9b5de5, value: DEFAULT_SPAWNER_VALUE }
             ],
             layers: [],
             mouseButtonState: MouseButtonState.UP,
             mouseDownPosition: null,
             viewOffset: { x: 0, y: 0 },
             viewScale: InitalScale,
-            currentScene: null
+            // What `Dungeon.ts` shows at boot. Was null, which left every editor shortcut (gated on
+            // `currentScene === EDITOR` in Keyboard) dead until the first Enter toggled it into place.
+            currentScene: Scenes.EDITOR
         };
     }
 
@@ -145,10 +150,15 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
      * entry's value can never be found again - see the "door"/"doors" mismatch this fixed in level.json.
      * Reconcile on load: always keep the current code's set of brush names/colours, carrying over each
      * one's saved `value` only where its name still matches.
+     *
+     * `currentScene` is kept as-is rather than taken from the save: which scene is on screen isn't part of
+     * a map, and a save carrying some other value (e.g. null, from before it had a default) would
+     * otherwise switch scenes on load or disable the editor shortcuts again.
      */
     Load(state: IEditorState): void {
         super.Load({
             ...state,
+            currentScene: this.state.currentScene,
             dataBrushes: this.ReconcileDataBrushes(state && state.dataBrushes),
             layers: WithImplicitLayer((state && state.layers) || [])
         });
@@ -157,7 +167,11 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
     private ReconcileDataBrushes(loaded: DataBrush[]): DataBrush[] {
         return this.DefaultState().dataBrushes.map(def => {
             const saved = loaded && loaded.find(db => db.name === def.name);
-            return saved ? { ...def, value: saved.value } : def;
+            if (!saved) {
+                return def;
+            }
+            // A spawner saved before one of its fields existed (or hand-edited) gets the gaps filled in.
+            return { ...def, value: IsSpawnerValue(def.value) ? SanitiseSpawnerValue(saved.value as SpawnerValue) : saved.value };
         });
     }
 
@@ -439,7 +453,7 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
 
     // helpers
 
-    /** Plain +/- stepping only applies to a numeric data brush value - LIGHT's `LightValue` is edited via its own dialog (see `SelectedBrush`), so +/- is a harmless no-op while it's selected. */
+    /** Plain +/- stepping only applies to a numeric data brush value - LIGHT's and SPAWNER's object values are edited via the data dialog (see `DataBrushEditors`), so +/- is a harmless no-op while they're selected. */
     private CalcDataBrushValue(value: DataBrushValue, actionType: EditorActions): DataBrushValue {
         if (typeof value !== "number") {
             return value;

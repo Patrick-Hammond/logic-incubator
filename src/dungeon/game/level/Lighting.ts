@@ -12,9 +12,9 @@ import { Vec2Like } from "../../../_lib/math/Geometry";
 /** A light's authored properties - either painted with the `LIGHT` data brush, or intrinsic to a tile via `AssetMetadata.light` (see `Level.LoadEditorData`). */
 export type LightValue = { brightness: number; tint: number; range: number };
 
-/** Narrows a `Brush.data`/`DataBrush.value` (`number | LightValue`) to `LightValue` - every other data brush (collision, z-index, player-start) keeps a plain number, so a `typeof` check is enough, no discriminant tag needed. Deliberately loose - callers that already trust the shape (e.g. a `LIGHT` brush placement) only need "is this the object variant". */
+/** Narrows a `Brush.data`/`DataBrush.value` to `LightValue`. Collision, z-index and player-start keep a plain number, but `SpawnerValue` is an object too, so this keys off `range` rather than just "is an object". Deliberately loose past that - callers that already trust the shape (e.g. a `LIGHT` brush placement) only need "is this the light variant"; see `IsCompleteLightValue` for untrusted input. */
 export function IsLightValue(value: unknown): value is LightValue {
-    return typeof value === "object" && value !== null;
+    return typeof value === "object" && value !== null && "range" in value;
 }
 
 /** Strict structural check, unlike `IsLightValue` above: catches a hand-edited `assets-meta.json` entry that's missing `brightness`/`tint`/`range` or has the wrong type for one - which would otherwise flow silently into `BakeLighting` as `NaN`/`undefined` and bake to a black tint rather than fail loudly. See `AssetMetadataStore.Load`. */

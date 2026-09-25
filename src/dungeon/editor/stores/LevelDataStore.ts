@@ -1,7 +1,7 @@
 import { Vec2Like } from "../../../_lib/math/Geometry";
 import { AddTypes } from "../../../_lib/patterns/EnumerateTypes";
 import Store, { IAction } from "../../../_lib/patterns/redux/Store";
-import { LightValue } from "../../game/level/Lighting";
+import type { DataBrushValue } from "./EditorStore";
 
 export type Brush = {
     name: string;
@@ -10,7 +10,7 @@ export type Brush = {
     rotation: number;
     scale: Vec2Like;
     layerId: number;
-    data: number | LightValue;
+    data: DataBrushValue;
 };
 /** `readOnly` marks the editor's derived implicit-data layer (see `IMPLICIT_LAYER_ID` in EditorStore) - nothing can be painted on it. */
 export type Layer = { id: number; name: string; selected: boolean; visible: boolean; isData: boolean; readOnly?: boolean };

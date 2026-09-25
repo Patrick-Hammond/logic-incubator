@@ -1,17 +1,21 @@
 import {Sprite, Text, Texture} from "pixi.js";
+import { Key } from "../../../_lib/io/Keyboard";
 import { GridBounds, Scenes } from "../../Constants";
-import { IsLightValue, LightValue } from "../../game/level/Lighting";
+import { MonsterIdleAnimation, MonsterType } from "../../game/level/entities/Monsters";
+import { IsSpawnerValue } from "../../game/level/entities/Spawners";
+import { IsLightValue } from "../../game/level/Lighting";
+import { DataBrushEditorFor } from "../DataBrushEditors";
 import EditorComponent from "../EditorComponent";
-import { DataBrushName, EditorActions, IEditorState } from "../stores/EditorStore";
+import { DataBrushValue, EditorActions, IEditorState } from "../stores/EditorStore";
 import Button from "../ui/components/Button";
-
-const DEFAULT_LIGHT_VALUE: LightValue = { brightness: 0.5, tint: 0xff8100, range: 5 };
+import { ChoiceOption, IsFormDialogOpen, OpenFormDialog } from "../ui/dialog/FormDialog";
 
 export default class SelectedBrush extends EditorComponent {
     private brush = new Sprite();
     private brushText: Text;
     private dataText: Text;
-    private editLightButton: Button;
+    private editDataButton: Button;
+    private monsterImages: { [type: string]: ChoiceOption["image"] | undefined } = {};
 
     constructor() {
         super();
@@ -31,13 +35,22 @@ export default class SelectedBrush extends EditorComponent {
         this.dataText.anchor.set(0.5);
         this.dataText.position.set(1218, 647);
 
-        this.editLightButton = new Button("icon-edit", () => this.OpenLightEditor());
-        this.editLightButton.position.set(1245, 630);
-        this.editLightButton.visible = false;
+        this.editDataButton = new Button("icon-edit", () => this.OpenDataEditor());
+        this.editDataButton.position.set(1245, 630);
+        this.editDataButton.visible = false;
 
-        this.root.addChild(this.brush, this.brushText, this.dataText, this.editLightButton);
+        this.root.addChild(this.brush, this.brushText, this.dataText, this.editDataButton);
 
         this.editorStore.Subscribe(this.Render, this);
+
+        // E: same as the edit button. Keydowns typed inside the dialog never reach here (see FormDialog).
+        this.game.keyboard.on("keydown", (e: KeyboardEvent) => {
+            if (e.keyCode === Key.E && this.editorStore.state.currentScene === Scenes.EDITOR) {
+                // Otherwise this same keypress types an "e" into the dialog field that just took focus.
+                e.preventDefault();
+                this.OpenDataEditor();
+            }
+        });
     }
 
     private Render(prevState: IEditorState, state: IEditorState): void {
@@ -51,57 +64,61 @@ export default class SelectedBrush extends EditorComponent {
 
         const dataBrush = this.editorStore.SelectedDataBrush;
         if (dataBrush) {
-            this.dataText.text = IsLightValue(dataBrush.value) ? this.FormatLightValue(dataBrush.value) : dataBrush.value.toString();
+            this.dataText.text = this.FormatDataValue(dataBrush.value);
             this.dataText.visible = true;
         } else {
             this.dataText.visible = false;
         }
 
-        this.editLightButton.visible = dataBrush != null && dataBrush.name === DataBrushName.LIGHT;
+        this.editDataButton.visible = dataBrush != null && DataBrushEditorFor(dataBrush.name) != null;
     }
 
-    private FormatLightValue(value: LightValue): string {
-        return `B ${value.brightness}\n#${value.tint.toString(16).padStart(6, "0")}\nR ${value.range}`;
+    private FormatDataValue(value: DataBrushValue): string {
+        if (IsLightValue(value)) {
+            return `B ${value.brightness}\n#${value.tint.toString(16).padStart(6, "0")}\nR ${value.range}`;
+        }
+        if (IsSpawnerValue(value)) {
+            const types = value.monsters.length === 1 ? value.monsters[0].replace(/_/g, " ") : `${value.monsters.length} types`;
+            return `${types}\nevery ${value.interval}s\nmax ${value.maxAlive}`;
+        }
+        return value.toString();
     }
 
-    /**
-     * Chained native `prompt()` dialogs, matching this editor's existing text-entry convention (see
-     * `Layers.RENAME_LAYER`) rather than building a bespoke Pixi modal + text-input widget just for
-     * three numbers. Cancelling any step aborts the whole edit - no partial changes are dispatched.
-     */
-    private OpenLightEditor(): void {
+    /** Opens the popup editor (see `DataBrushEditors`) for the selected data brush, if it has one. Cancelling leaves the value untouched. */
+    private OpenDataEditor(): void {
         const dataBrush = this.editorStore.SelectedDataBrush;
-        if (!dataBrush) {
+        const editor = dataBrush && DataBrushEditorFor(dataBrush.name);
+        if (!editor || IsFormDialogOpen()) {
             return;
         }
-        const current = IsLightValue(dataBrush.value) ? dataBrush.value : DEFAULT_LIGHT_VALUE;
-
-        const brightnessStr = prompt("Light brightness (0-1)", current.brightness.toString());
-        if (brightnessStr === null) {
-            return;
-        }
-        const tintStr = prompt("Light tint (hex colour, e.g. ff8100)", current.tint.toString(16).padStart(6, "0"));
-        if (tintStr === null) {
-            return;
-        }
-        const rangeStr = prompt("Light range (tiles)", current.range.toString());
-        if (rangeStr === null) {
-            return;
-        }
-
-        const brightness = Math.max(0, Math.min(1, parseFloat(brightnessStr)));
-        const tint = parseInt(tintStr.replace(/^#/, ""), 16);
-        const range = Math.max(0, parseFloat(rangeStr));
-
-        if (Number.isNaN(brightness) || Number.isNaN(tint) || Number.isNaN(range)) {
-            alert("Invalid light value - not saved.");
-            return;
-        }
-
-        this.editorStore.Dispatch({
-            type: EditorActions.SET_DATA_BRUSH_VALUE,
-            data: { value: { brightness, tint, range } }
+        OpenFormDialog({
+            title: editor.title,
+            subtitle: editor.subtitle,
+            fields: editor.fields({ monster: type => this.MonsterImage(type) }),
+            values: editor.toForm(dataBrush.value),
+            validate: editor.validate
+        }).then(form => {
+            // Guard against the selection having changed underneath the (modal, but async) dialog.
+            if (form && this.editorStore.SelectedDataBrush === dataBrush) {
+                this.editorStore.Dispatch({ type: EditorActions.SET_DATA_BRUSH_VALUE, data: { value: editor.fromForm(form) } });
+            }
         });
+    }
+
+    /** First idle frame of the monster, as a data URI for the spawner dialog's chips. Cached - extracting is a GPU readback. */
+    private MonsterImage(type: MonsterType): ChoiceOption["image"] | undefined {
+        if (!(type in this.monsterImages)) {
+            const name = MonsterIdleAnimation(type);
+            if (this.assetFactory.AnimationNames.indexOf(name) === -1) {
+                this.monsterImages[type] = undefined;
+            } else {
+                const sprite = this.assetFactory.CreateAnimatedSprite(name);
+                const { width, height } = sprite.texture;
+                this.monsterImages[type] = { src: this.game.renderer.plugins.extract.base64(sprite), width: width * 2, height: height * 2 };
+                sprite.destroy();
+            }
+        }
+        return this.monsterImages[type];
     }
 
     private UpdateBrush(name: string): void {

@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import EditorStore, { EditableLayerCount, EditorActions, IMPLICIT_LAYER_ID } from "./EditorStore";
+import { Scenes } from "../../Constants";
+import { DEFAULT_SPAWNER_VALUE } from "../../game/level/entities/Spawners";
+import EditorStore, { DataBrushName, EditableLayerCount, EditorActions, IMPLICIT_LAYER_ID } from "./EditorStore";
 
 function implicitLayers(store: EditorStore) {
     return store.state.layers.filter(layer => layer.id === IMPLICIT_LAYER_ID);
@@ -55,5 +57,52 @@ describe("EditorStore implicit layer", () => {
         const store = new EditorStore();
         store.Dispatch({ type: EditorActions.ADD_DATA_LAYER });
         expect(store.state.layers.find(layer => layer.isData && !layer.readOnly).id).toBe(-1);
+    });
+});
+
+describe("EditorStore spawner data brush", () => {
+    it("reconciles a saved spawner value, filling fields it was saved without", () => {
+        const store = new EditorStore();
+        const saved = {
+            ...store.state,
+            dataBrushes: [{ name: DataBrushName.SPAWNER, colour: 0, value: { monsters: ["imp"], interval: 1 } as never }]
+        };
+        store.Load(saved);
+        const spawner = store.state.dataBrushes.find(db => db.name === DataBrushName.SPAWNER);
+        expect(spawner.value).toEqual({ ...DEFAULT_SPAWNER_VALUE, monsters: ["imp"], interval: 1 });
+    });
+
+    it("ignores +/- on a spawner, and takes a value set from the dialog", () => {
+        const store = new EditorStore();
+        store.Dispatch({ type: EditorActions.ADD_DATA_LAYER });
+        store.Dispatch({ type: EditorActions.SELECT_LAYER, data: { layer: store.state.layers[store.state.layers.length - 1] } });
+        store.Dispatch({ type: EditorActions.BRUSH_CHANGED, data: { name: DataBrushName.SPAWNER } });
+        store.Dispatch({ type: EditorActions.DATA_BRUSH_INC });
+        expect(store.SelectedDataBrush.value).toEqual(DEFAULT_SPAWNER_VALUE);
+
+        const value = { ...DEFAULT_SPAWNER_VALUE, monsters: ["ogre" as const] };
+        store.Dispatch({ type: EditorActions.SET_DATA_BRUSH_VALUE, data: { value } });
+        expect(store.SelectedDataBrush.value).toEqual(value);
+        expect(store.state.currentBrush.data).toEqual(value);
+    });
+});
+
+describe("EditorStore currentScene", () => {
+    it("starts on the editor, the scene shown at boot, so its shortcuts work straight away", () => {
+        expect(new EditorStore().state.currentScene).toBe(Scenes.EDITOR);
+    });
+
+    it("isn't changed by loading a map, whatever scene the save carries", () => {
+        const store = new EditorStore();
+        store.Load({ ...store.state, currentScene: null });
+        expect(store.state.currentScene).toBe(Scenes.EDITOR);
+        store.Load({ ...store.state, currentScene: Scenes.GAME });
+        expect(store.state.currentScene).toBe(Scenes.EDITOR);
+    });
+
+    it("still follows CHANGE_SCENE", () => {
+        const store = new EditorStore();
+        store.Dispatch({ type: EditorActions.CHANGE_SCENE, data: { name: Scenes.GAME } });
+        expect(store.state.currentScene).toBe(Scenes.GAME);
     });
 });
