@@ -1,12 +1,11 @@
 import { Key } from "../../../_lib/io/Keyboard";
 import { AnimationSpeed, Scenes } from "../../Constants";
-import MonsterRoster, { MonsterType } from "../../engine/level/entities/MonsterRoster";
 import { IsSpawnerValue } from "../../engine/level/entities/Spawners";
 import { IsLightValue } from "../../engine/level/Lighting";
+import { OpenDataBrushDialog } from "../DataBrushDialog";
 import { DataBrushEditorFor } from "../DataBrushEditors";
 import EditorComponent from "../EditorComponent";
 import { DataBrushValue, EditorActions, IEditorState } from "../stores/EditorStore";
-import { ChoiceOption, IsFormDialogOpen, OpenFormDialog } from "../ui/dialog/FormDialog";
 import { ButtonEl, El, InjectStyles } from "../ui/dom/Dom";
 import EditorOverlay from "../ui/dom/EditorOverlay";
 import SpriteCanvas, { DATA_SWATCH_SIZE } from "../ui/dom/SpriteCanvas";
@@ -29,7 +28,6 @@ export default class SelectedBrush extends EditorComponent {
     /** The brush on the card, or null before the first `ShowBrush`. */
     private shownName: string = null;
     private animTime = 0;
-    private monsterImages: { [type: string]: ChoiceOption["image"] | undefined } = {};
 
     constructor() {
         super();
@@ -150,41 +148,18 @@ export default class SelectedBrush extends EditorComponent {
         }
     }
 
-    /** Opens the popup editor (see `DataBrushEditors`) for the selected data brush, if it has one. Cancelling leaves the value untouched. */
+    /** Opens the popup editor for the selected data brush, if it has one. Cancelling leaves the value untouched. */
     private OpenDataEditor(): void {
         const dataBrush = this.editorStore.SelectedDataBrush;
-        const editor = dataBrush && DataBrushEditorFor(dataBrush.name);
-        if (!editor || IsFormDialogOpen()) {
+        if (!dataBrush) {
             return;
         }
-        OpenFormDialog({
-            title: editor.title,
-            subtitle: editor.subtitle,
-            fields: editor.fields({ monster: type => this.MonsterImage(type) }),
-            values: editor.toForm(dataBrush.value),
-            validate: editor.validate
-        }).then(form => {
+        OpenDataBrushDialog(dataBrush.name, dataBrush.value).then(value => {
             // Guard against the selection having changed underneath the (modal, but async) dialog.
-            if (form && this.editorStore.SelectedDataBrush === dataBrush) {
-                this.editorStore.Dispatch({ type: EditorActions.SET_DATA_BRUSH_VALUE, data: { value: editor.fromForm(form) } });
+            if (value != null && this.editorStore.SelectedDataBrush === dataBrush) {
+                this.editorStore.Dispatch({ type: EditorActions.SET_DATA_BRUSH_VALUE, data: { value } });
             }
         });
-    }
-
-    /** First idle frame of the monster at 2x, as a data URI for the spawner dialog's chips. Cached. */
-    private MonsterImage(type: MonsterType): ChoiceOption["image"] | undefined {
-        if (!(type in this.monsterImages)) {
-            const name = MonsterRoster.inst.IdleAnimation(type);
-            if (this.assetFactory.AnimationNames.indexOf(name) === -1) {
-                this.monsterImages[type] = undefined;
-            } else {
-                const image = new SpriteCanvas();
-                image.Show([this.assetFactory.CreateTexture(name)], 2);
-                const { canvas } = image;
-                this.monsterImages[type] = { src: canvas.toDataURL(), width: canvas.width, height: canvas.height };
-            }
-        }
-        return this.monsterImages[type];
     }
 }
 

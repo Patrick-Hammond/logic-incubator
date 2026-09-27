@@ -60,26 +60,16 @@ describe("LevelDataStore erasing", () => {
     });
 });
 
-describe("LevelDataStore rects", () => {
+describe("LevelDataStore rect erase", () => {
     beforeAll(() => AssetMetadataStore.inst.Load({ wall: { collidable: true }, floor: {} }));
 
-    // The same 2x2 rect, dragged from each of its corners.
+    // The same 2x2 rect, dragged from each of its corners. (A stamp's rect is spanned by `SpanRect` - see ToolGeometry.test.ts.)
     const DRAGS = [
         { from: { x: 1, y: 1 }, to: { x: 2, y: 2 }, direction: "down-right" },
         { from: { x: 2, y: 2 }, to: { x: 1, y: 1 }, direction: "up-left" },
         { from: { x: 1, y: 2 }, to: { x: 2, y: 1 }, direction: "up-right" },
         { from: { x: 2, y: 1 }, to: { x: 1, y: 2 }, direction: "down-left" }
     ];
-
-    it.each(DRAGS)("paints the same cells dragged $direction", ({ from, to }) => {
-        const store = storeWith([]);
-        store.Dispatch({
-            type: LevelDataActions.PAINT_RECT,
-            data: { brush: brush("floor", 0, 0), rectTopLeft: from, rectBottomRight: to, viewOffset: NO_OFFSET },
-            canUndo: true
-        });
-        expect(names(store)).toEqual(["floor@1,1", "floor@1,2", "floor@2,1", "floor@2,2"]);
-    });
 
     it.each(DRAGS)("erases the same cells, and the collision they leave behind, dragged $direction", ({ from, to }) => {
         // A 3x3 block of walls, each with its collision; the rect takes out the bottom-right 2x2 of it.
@@ -103,11 +93,39 @@ describe("LevelDataStore rects", () => {
     });
 
     it("offsets the rect by the view, like a single brush", () => {
-        const store = storeWith([]);
+        const store = storeWith([brush("floor", 10, 5), brush("floor", 11, 5), brush("floor", 12, 5)]);
         store.Dispatch({
-            type: LevelDataActions.PAINT_RECT,
+            type: LevelDataActions.ERASE_RECT,
             data: { brush: brush("floor", 0, 0), rectTopLeft: { x: 1, y: 0 }, rectBottomRight: { x: 0, y: 0 }, viewOffset: { x: 10, y: 5 } }
         });
-        expect(names(store)).toEqual(["floor@10,5", "floor@11,5"]);
+        expect(names(store)).toEqual(["floor@12,5"]);
+    });
+});
+
+describe("LevelDataStore stamp/fill and placed data", () => {
+    it("PAINT_CELLS paints every cell as one undo step, replacing what's there on that layer only", () => {
+        const store = storeWith([brush("wall", 0, 0), brush("floor", 5, 5), brush(DataBrushName.COLLISION, 0, 0, DATA_LAYER.id)]);
+        store.Dispatch({
+            type: LevelDataActions.PAINT_CELLS,
+            data: { brush: brush("floor", 99, 99), cells: [{ x: 0, y: 0 }, { x: 1, y: 0 }] },
+            canUndo: true
+        });
+        expect(names(store)).toEqual(["collision@0,0", "floor@0,0", "floor@1,0", "floor@5,5"]);
+        store.Undo();
+        expect(names(store)).toEqual(["collision@0,0", "floor@5,5", "wall@0,0"]);
+    });
+
+    it("SET_DATA changes just the one placed brush's value", () => {
+        const light = { ...brush(DataBrushName.LIGHT, 2, 2, DATA_LAYER.id), data: { brightness: 0.5, tint: 0xffffff, range: 5 } };
+        const other = { ...light, position: { x: 3, y: 3 } };
+        const store = storeWith([light, other]);
+        const value = { brightness: 1, tint: 0xff0000, range: 9 };
+        store.Dispatch({ type: LevelDataActions.SET_DATA, data: { target: light, value }, canUndo: true });
+        expect(store.state.levelData.map(b => b.data)).toEqual([value, other.data]);
+
+        // A brush that's no longer placed (e.g. erased meanwhile) is a no-op.
+        const before = store.state.levelData;
+        store.Dispatch({ type: LevelDataActions.SET_DATA, data: { target: light, value } });
+        expect(store.state.levelData).toBe(before);
     });
 });

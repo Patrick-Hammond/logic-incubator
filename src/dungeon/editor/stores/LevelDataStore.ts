@@ -20,11 +20,14 @@ export type LevelDataState = { levelData: LevelData };
 
 export const enum LevelDataActions {
     PAINT,
-    PAINT_RECT,
+    /** Paints `brush` at each of `cells` (map coordinates), replacing what was on that layer there - the stamp and fill tools, as one undo step. */
+    PAINT_CELLS,
     ERASE,
     ERASE_RECT,
     ERASE_LAYER,
     COPY,
+    /** Sets the `data` of one placed brush (`target`, by identity) to `value` - the data-select tool's dialog. */
+    SET_DATA,
     REFRESH,
     RESET
 }
@@ -33,13 +36,17 @@ type LevelData = Brush[];
 type ActionData = {
     brush?: Brush;
     viewOffset?: Vec2Like;
-    /** Opposite corners of a PAINT_RECT/ERASE_RECT, in view cells like `brush.position` - in either order, as a drag can go any way. */
+    /** Opposite corners of an ERASE_RECT, in view cells like `brush.position` - in either order, as a drag can go any way. */
     rectTopLeft?: Vec2Like;
     rectBottomRight?: Vec2Like;
     sourceLayer?: Layer;
     destLayer?: Layer;
     /** The editor's layers, for ERASE/ERASE_RECT to tell tile layers from data layers - see `EraseOrphanedData`. Without it, erasing removes only the brushes it hits. */
     layers?: Layer[];
+    /** PAINT_CELLS: map coordinates, unlike the view-relative `brush.position` the other paint actions offset by `viewOffset`. */
+    cells?: Vec2Like[];
+    target?: Brush;
+    value?: DataBrushValue;
 };
 
 export default class LevelDataStore extends Store<LevelDataState, ActionData> {
@@ -69,19 +76,11 @@ export default class LevelDataStore extends Store<LevelDataState, ActionData> {
 
                 return levelDataCopy.concat(brush);
             }
-            case LevelDataActions.PAINT_RECT: {
-                const levelDataCopy = levelData.concat();
-                this.RectCells(action.data.rectTopLeft, action.data.rectBottomRight).forEach(cell => {
-                    const brush: Brush = { ...action.data.brush };
-                    brush.position = AddTypes(cell, action.data.viewOffset);
-                    const existing = levelDataCopy.some(
-                        v => v.position.x === brush.position.x && v.position.y === brush.position.y && v.layerId === brush.layerId
-                    );
-                    if (!existing) {
-                        levelDataCopy.push(brush);
-                    }
-                });
-                return levelDataCopy;
+            case LevelDataActions.PAINT_CELLS: {
+                const layerId = action.data.brush.layerId;
+                const cellKeys = new Set(action.data.cells.map(cell => cell.x + "," + cell.y));
+                const kept = levelData.filter(v => v.layerId !== layerId || !cellKeys.has(v.position.x + "," + v.position.y));
+                return kept.concat(action.data.cells.map(cell => ({ ...action.data.brush, position: { x: cell.x, y: cell.y } })));
             }
             case LevelDataActions.ERASE: {
                 const levelDataCopy = levelData.concat();
@@ -127,6 +126,15 @@ export default class LevelDataStore extends Store<LevelDataState, ActionData> {
                     return { ...b, layerId: action.data.destLayer.id };
                 });
                 return levelData.concat(copy);
+            }
+            case LevelDataActions.SET_DATA: {
+                const index = levelData.indexOf(action.data.target);
+                if (index === -1) {
+                    return levelData;
+                }
+                const copy = levelData.concat();
+                copy[index] = { ...action.data.target, data: action.data.value };
+                return copy;
             }
             case LevelDataActions.REFRESH: {
                 return levelData.concat();

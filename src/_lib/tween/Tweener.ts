@@ -5,6 +5,17 @@ import { CallbackDone } from "../game/display/Utils";
 import { Cancel } from "../game/Timing";
 import { Easing, EasingFunction } from "./Easing";
 
+export interface TweenOptions {
+    /** Defaults to `Easing.Linear`. */
+    easing?: EasingFunction;
+    /** After reaching `to`, play the same tween backwards to the starting values. Each leg takes `ms`, so a round trip takes `2 * ms`. */
+    pingPong?: boolean;
+    /** Extra plays after the first (a ping-pong round trip counts as one play). `Infinity` loops until cancelled. Defaults to 0. */
+    repeat?: number;
+    /** Called once the last play finishes - never, if `repeat` is `Infinity`. */
+    onComplete?: () => void;
+}
+
 /**
  * Animates the given numeric properties of `target` (e.g. `{alpha: 0}` or `{x: 100, y: 200}`) from
  * their current value to those in `to`, over `ms` milliseconds. Returns a `Cancel` that stops the
@@ -17,29 +28,52 @@ export function Tween<T extends object>(
     easing: EasingFunction = Easing.Linear,
     onComplete?: () => void
 ): Cancel {
+    return TweenWithOptions(target, to, ms, { easing, onComplete });
+}
+
+/**
+ * `Tween` with playback options. A `pingPong` return leg is the forward leg played in reverse, so
+ * e.g. `Easing.Quad.Out` decelerates into `to` and accelerates back out of it, ending exactly on the
+ * starting values. Without `pingPong`, each repeat jumps back to the starting values and plays again.
+ */
+export function TweenWithOptions<T extends object>(
+    target: T,
+    to: Partial<Record<keyof T, number>>,
+    ms: number,
+    options: TweenOptions = {}
+): Cancel {
+    const { easing = Easing.Linear, pingPong = false, repeat = 0, onComplete } = options;
     const values = target as unknown as Dictionary<number>;
     const toValues = to as Dictionary<number>;
     const keys = Object.keys(to);
 
-    if (ms <= 0) {
-        keys.forEach(key => values[key] = toValues[key]);
-        CallbackDone(onComplete);
-        return () => {};
-    }
-
     const from: Dictionary<number> = {};
     keys.forEach(key => from[key] = values[key]);
 
+    const finish = () => {
+        keys.forEach(key => values[key] = pingPong ? from[key] : toValues[key]);
+        CallbackDone(onComplete);
+    };
+
+    if (ms <= 0) {
+        finish();
+        return () => {};
+    }
+
+    const duration = (repeat + 1) * (pingPong ? 2 : 1) * ms;
     let elapsed = 0;
     const tick = () => {
         elapsed += Ticker.shared.deltaMS;
-        const t = easing(Math.min(1, elapsed / ms));
-        keys.forEach(key => values[key] = Lerp(from[key], toValues[key], t));
-
-        if (elapsed >= ms) {
+        if (elapsed >= duration) {
             cancel();
-            CallbackDone(onComplete);
+            finish();
+            return;
         }
+
+        const leg = Math.floor(elapsed / ms);
+        const progress = (elapsed - leg * ms) / ms;
+        const t = easing(pingPong && leg % 2 === 1 ? 1 - progress : progress);
+        keys.forEach(key => values[key] = Lerp(from[key], toValues[key], t));
     };
 
     const cancel: Cancel = () => Ticker.shared.remove(tick);

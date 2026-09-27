@@ -3,7 +3,7 @@ import { Scenes } from "../../Constants";
 import { TEST_MONSTERS } from "../../engine/level/__fixtures__/TestMonsters";
 import MonsterRoster from "../../engine/level/entities/MonsterRoster";
 import { DefaultSpawnerValue } from "../../engine/level/entities/Spawners";
-import EditorStore, { DataBrushName, EditableLayerCount, EditorActions, IMPLICIT_LAYER_ID, MouseButtonState } from "./EditorStore";
+import EditorStore, { DataBrushName, EditableLayerCount, EditorActions, EditorTool, IMPLICIT_LAYER_ID, MouseButtonState } from "./EditorStore";
 
 MonsterRoster.inst.Load(TEST_MONSTERS);
 
@@ -184,5 +184,58 @@ describe("EditorStore mouseDownPosition", () => {
         expect(store.state.mouseDownPosition).toEqual({ x: 12, y: 23 });
         store.Dispatch({ type: EditorActions.VIEW_MOVE, data: { move: { x: -4, y: 1 } } });
         expect(store.state.mouseDownPosition).toEqual({ x: 12, y: 23 });
+    });
+});
+
+describe("EditorStore tools", () => {
+    it("starts on the brush, switches with SET_TOOL, and keeps the live tool when a map is loaded", () => {
+        const store = new EditorStore();
+        expect(store.state.tool).toBe(EditorTool.BRUSH);
+        store.Dispatch({ type: EditorActions.SET_TOOL, data: { tool: EditorTool.FILL } });
+        expect(store.state.tool).toBe(EditorTool.FILL);
+        store.Load({ ...store.state, tool: EditorTool.MOVE });
+        expect(store.state.tool).toBe(EditorTool.FILL);
+    });
+
+    it("PICK_BRUSH takes a placed brush's name, layer and transform, but not its position", () => {
+        const store = new EditorStore();
+        store.Dispatch({ type: EditorActions.ADD_LAYER });
+        store.Dispatch({ type: EditorActions.ADD_DATA_LAYER });
+        const dataLayer = store.state.layers[store.state.layers.length - 1];
+        const tileLayer = store.state.layers.find(l => !l.isData);
+        store.Dispatch({ type: EditorActions.SELECT_LAYER, data: { layer: dataLayer } });
+        store.Dispatch({ type: EditorActions.BRUSH_MOVED, data: { position: { x: 4, y: 4 } } });
+
+        const placed = {
+            name: "wall_mid",
+            position: { x: 10, y: 11 },
+            pixelOffset: { x: 1, y: 2 },
+            rotation: Math.PI / 2,
+            scale: { x: -1, y: 1 },
+            layerId: tileLayer.id,
+            data: null
+        };
+        store.Dispatch({ type: EditorActions.PICK_BRUSH, data: { brush: placed } });
+        expect(store.state.currentBrush).toEqual({ ...placed, position: { x: 4, y: 4 } });
+        expect(store.SelectedLayer.id).toBe(tileLayer.id);
+    });
+
+    it("PICK_BRUSH on a placed data brush picks up its value too", () => {
+        const store = new EditorStore();
+        store.Dispatch({ type: EditorActions.ADD_DATA_LAYER });
+        const dataLayer = store.state.layers[store.state.layers.length - 1];
+        const value = { ...DefaultSpawnerValue(), monsters: ["imp"] };
+        const placed = {
+            name: DataBrushName.SPAWNER,
+            position: { x: 1, y: 1 },
+            pixelOffset: { x: 0, y: 0 },
+            rotation: 0,
+            scale: { x: 1, y: 1 },
+            layerId: dataLayer.id,
+            data: value
+        };
+        store.Dispatch({ type: EditorActions.PICK_BRUSH, data: { brush: placed } });
+        expect(store.SelectedDataBrush.value).toEqual(value);
+        expect(store.SelectedLayer.id).toBe(dataLayer.id);
     });
 });

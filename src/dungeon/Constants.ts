@@ -26,7 +26,13 @@ export const AssetPath = "assets/";
 // src/_lib/scripts/create-metadata.js duplicates this rule; AnimFrameRegex.test.ts keeps them in step.
 export const AnimFrameRegex = /^.+(?=_f\d+$)/;
 
-export const GridBounds = new Rectangle(20, 20, EditorWidth - 300, EditorHeight - 40);
+/** The editor's right-hand column of panels (brushes, selected brush, layers). */
+export const SidebarWidth = 260;
+/** The editor's tool strip, right of the sidebar at the canvas's right edge. */
+export const ToolbarWidth = 40;
+
+/** 20px margin left/top/bottom; right of it a 10px gap, the sidebar, a 10px gap, the toolbar and a 10px margin. */
+export const GridBounds = new Rectangle(20, 20, EditorWidth - 20 - (10 + SidebarWidth + 10 + ToolbarWidth + 10), EditorHeight - 40);
 
 /** The engine's own scenes. A game adds its own (title, menus...) alongside them, under names of its choosing. */
 export const enum Scenes {

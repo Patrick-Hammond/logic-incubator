@@ -8,6 +8,8 @@ import Layers from "./views/layers/Layers";
 import Menu from "./views/Menu";
 import Palette from "./views/Palette";
 import SelectedBrush from "./views/SelectedBrush";
+import Toolbar from "./views/Toolbar";
+import Tools from "./views/Tools";
 
 /**
  * Loader entries the editor draws with, for the game to add to its loader (baseUrl `AssetPath`) alongside
@@ -32,9 +34,11 @@ export class DungeonEditor extends EditorComponent {
         // views
         new Canvas();
         new BrushTool();
+        new Tools();
         new Palette();
         new Layers();
         new SelectedBrush();
+        new Toolbar();
         new Keyboard(this.options.titleScene);
         new Menu(this.options.titleScene);
 

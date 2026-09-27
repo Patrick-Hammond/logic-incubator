@@ -1,12 +1,12 @@
 import Game from "../../../../_lib/game/Game";
-import { EditorHeight, EditorWidth, GridBounds } from "../../../Constants";
+import { EditorHeight, EditorWidth, GridBounds, SidebarWidth, ToolbarWidth } from "../../../Constants";
 import { El, InjectStyles, InjectTheme } from "./Dom";
 
-export type OverlaySlot = "brushes" | "selected" | "layers" | "help";
+export type OverlaySlot = "brushes" | "selected" | "layers" | "tools" | "help";
 
 /**
- * Hosts the editor's DOM side panels (brushes, selected brush, layers) and
- * help line over the Pixi canvas, in the canvas's own 1280x720 coordinates:
+ * Hosts the editor's DOM side panels (brushes, selected brush, layers), the
+ * tool strip at the right edge, and the help line over the Pixi canvas, in the canvas's own 1280x720 coordinates:
  * the root is sized to the stage and scaled/positioned to wherever
  * `BorderResizeStrategy` has put the canvas, so panels can be laid out
  * against `GridBounds` like the Pixi views are.
@@ -42,13 +42,19 @@ export default class EditorOverlay {
         const sidebar = El("div", "eo-sidebar");
         sidebar.style.left = GridBounds.right + 10 + "px";
         sidebar.style.top = GridBounds.y + "px";
-        sidebar.style.width = EditorWidth - GridBounds.right - 20 + "px";
+        sidebar.style.width = SidebarWidth + "px";
         sidebar.style.height = GridBounds.height + "px";
         this.root.appendChild(sidebar);
 
         (["brushes", "selected", "layers"] as OverlaySlot[]).forEach(name => {
             this.slots[name] = sidebar.appendChild(El("div", "eo-slot eo-" + name));
         });
+
+        const tools = El("div", "eo-slot eo-tools");
+        tools.style.left = GridBounds.right + 10 + SidebarWidth + 10 + "px";
+        tools.style.top = GridBounds.y + "px";
+        tools.style.width = ToolbarWidth + "px";
+        this.slots.tools = this.root.appendChild(tools);
 
         const help = El("div", "eo-help");
         help.style.left = GridBounds.x + "px";
@@ -106,6 +112,7 @@ const STYLES = `
 .eo-brushes { flex: 1 1 auto; }
 .eo-selected { flex: 0 0 auto; }
 .eo-layers { flex: 0 0 232px; }
+.eo-tools { position: absolute; }
 .eo-help { position: absolute; display: flex; align-items: center; }
 .eo-root kbd {
     display: inline-block; min-width: 9px; padding: 0 4px; box-sizing: border-box;
