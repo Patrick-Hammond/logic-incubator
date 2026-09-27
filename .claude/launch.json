@@ -2,22 +2,16 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "logic-incubator-dev",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "start"],
-      "port": 4200
-    },
-    {
-      "name": "logic-incubator-dev-4201",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "start", "--", "--port", "4201", "--no-open"],
-      "port": 4201
-    },
-    {
       "name": "in-dungeons-we-dwell-dev",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["--prefix", "../in-dungeons-we-dwell", "run", "start", "--", "--port", "4202", "--no-open"],
       "port": 4202
+    },
+    {
+      "name": "catgrab-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "../catgrab", "run", "start", "--", "--port", "4203", "--no-open"],
+      "port": 4203
     }
   ]
 }

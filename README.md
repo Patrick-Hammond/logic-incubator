@@ -2,9 +2,13 @@
 
 code microbes.. microdes
 
-to build/run, specify project in npm script call
-e.g. npm run build project=catgrab
+The shared code the games build on - there's nothing to run here:
 
-`src/dungeon` is the dungeon engine and level editor. It has no build of its own:
-games using it (e.g. in-dungeons-we-dwell, checked out beside this repo) compile
-it from source.
+- `src/_lib` - game framework, loading, input, tweening, tilemap, filters
+- `src/dungeon` - the dungeon engine and level editor
+
+Games check this repo out beside their own and compile it from source as
+`@logic-incubator/...`: in-dungeons-we-dwell (the dungeon engine and editor)
+and catgrab (`_lib` only).
+
+`npm test` and `npm run lint` cover it here.
