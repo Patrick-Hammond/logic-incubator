@@ -10,7 +10,7 @@ import {EditorActions, IEditorState} from "../stores/EditorStore";
 import {LevelDataActions, LevelDataState} from "../stores/LevelDataStore";
 
 export default class Keyboard extends EditorComponent {
-    constructor() {
+    constructor(private readonly titleScene?: string) {
         super();
 
         this.Create();
@@ -116,11 +116,14 @@ export default class Keyboard extends EditorComponent {
                         }
                         break;
                     case Key.T:
-                        // Preview the title screen -> character select -> game flow. Separate from
-                        // the Enter key (which still toggles editor <-> game directly) so the fast
-                        // editor/game dev loop is untouched. Dispatched the same way as the Enter
-                        // key's own scene change, so editorStore.currentScene stays consistent.
-                        this.editorStore.Dispatch({ type: EditorActions.CHANGE_SCENE, data: { name: Scenes.TITLE } });
+                        // Preview the game's own front end (e.g. title -> character select -> game), if
+                        // it gave the editor a title scene. Separate from the Enter key (which still
+                        // toggles editor <-> game directly) so the fast editor/game dev loop is untouched.
+                        // Dispatched the same way as the Enter key's own scene change, so
+                        // editorStore.currentScene stays consistent.
+                        if (this.titleScene) {
+                            this.editorStore.Dispatch({ type: EditorActions.CHANGE_SCENE, data: { name: this.titleScene } });
+                        }
                         break;
                     case Key.One: // digger
                     case Key.Two: // rogue

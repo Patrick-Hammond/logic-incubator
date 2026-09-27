@@ -1,8 +1,8 @@
 import { Vec2Like } from "../../../_lib/math/Geometry";
 import { AddTypes } from "../../../_lib/patterns/EnumerateTypes";
 import Store, { IAction } from "../../../_lib/patterns/redux/Store";
-import AssetMetadataStore from "../../game/level/AssetMetadata";
-import { OrphanedExplicitData } from "../../game/level/ImplicitData";
+import AssetMetadataStore from "../../engine/level/AssetMetadata";
+import { OrphanedExplicitData } from "../../engine/level/ImplicitData";
 import type { DataBrushValue } from "./EditorStore";
 
 export type Brush = {

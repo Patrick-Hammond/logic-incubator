@@ -2,8 +2,8 @@ import { Vec2Like } from "../../../_lib/math/Geometry";
 import { AddTypes, SubtractTypes } from "../../../_lib/patterns/EnumerateTypes";
 import Store, { IAction } from "../../../_lib/patterns/redux/Store";
 import { InitalScale, Scenes } from "../../Constants";
-import { DEFAULT_SPAWNER_VALUE, IsSpawnerValue, SanitiseSpawnerValue, SpawnerValue } from "../../game/level/entities/Spawners";
-import { LightValue } from "../../game/level/Lighting";
+import { DefaultSpawnerValue, IsSpawnerValue, SanitiseSpawnerValue, SpawnerValue } from "../../engine/level/entities/Spawners";
+import { LightValue } from "../../engine/level/Lighting";
 import { Brush, Layer } from "./LevelDataStore";
 
 export const enum EditorActions {
@@ -130,14 +130,14 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
                 { name: DataBrushName.Z_INDEX, colour: 0x06d6a0, value: 0 },
                 { name: DataBrushName.LIGHT, colour: 0xff8100, icon: "torch_1_anim", value: { brightness: 0.5, tint: 0xff8100, range: 5 } },
                 // The skull stands in for the spawner (for now), so placed spawners read as what they are.
-                { name: DataBrushName.SPAWNER, colour: 0x9b5de5, icon: "skull", value: DEFAULT_SPAWNER_VALUE }
+                { name: DataBrushName.SPAWNER, colour: 0x9b5de5, icon: "skull", value: DefaultSpawnerValue() }
             ],
             layers: [],
             mouseButtonState: MouseButtonState.UP,
             mouseDownPosition: null,
             viewOffset: { x: 0, y: 0 },
             viewScale: InitalScale,
-            // What `Dungeon.ts` shows at boot. Was null, which left every editor shortcut (gated on
+            // What the game shows at boot. Was null, which left every editor shortcut (gated on
             // `currentScene === EDITOR` in Keyboard) dead until the first Enter toggled it into place.
             currentScene: Scenes.EDITOR
         };

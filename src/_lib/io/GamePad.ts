@@ -2,7 +2,7 @@ import { EventEmitter } from "eventemitter3";
 import { Vec2 } from "../math/Geometry";
 import { LowerLimit } from "../math/Utils";
 import {Direction} from "../utils/Types";
-import { Cancel, Wait } from "_lib/game/Timing";
+import { Cancel, Wait } from "../game/Timing";
 
 export enum GamePadEvents {
     CONNECTED = "connected",

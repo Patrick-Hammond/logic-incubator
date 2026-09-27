@@ -8,9 +8,9 @@
  * conversions run under the plain node test runner (see DataBrushEditors.test.ts).
  */
 
-import { IsMonsterType, MonsterType, MonsterTypes } from "../game/level/entities/Monsters";
-import { DEFAULT_SPAWNER_VALUE, IsSpawnerValue, SanitiseSpawnerValue } from "../game/level/entities/Spawners";
-import { IsLightValue } from "../game/level/Lighting";
+import MonsterRoster, { MonsterType } from "../engine/level/entities/MonsterRoster";
+import { DefaultSpawnerValue, IsSpawnerValue, SanitiseSpawnerValue } from "../engine/level/entities/Spawners";
+import { IsLightValue } from "../engine/level/Lighting";
 import { DataBrushName, DataBrushValue } from "./stores/EditorStore";
 import { ChoiceOption, FieldSpec, FormValues } from "./ui/dialog/FormDialog";
 
@@ -74,7 +74,7 @@ const EDITORS: { [name: string]: DataBrushEditor } = {
                 type: "multi-choice",
                 key: "monsters",
                 label: "Monsters",
-                options: MonsterTypes.map(type => ({ value: type, label: type.replace(/_/g, " "), image: images.monster(type) }))
+                options: MonsterRoster.inst.Types.map(type => ({ value: type, label: type.replace(/_/g, " "), image: images.monster(type) }))
             },
             { type: "number", key: "interval", label: "Spawn interval", min: 0.5, max: 120, step: 0.5, sliderMax: 20, unit: "seconds" },
             {
@@ -101,12 +101,12 @@ const EDITORS: { [name: string]: DataBrushEditor } = {
             { type: "number", key: "hitPoints", label: "Spawner hit points", min: 0, max: 999, sliderMax: 100, zeroLabel: "indestructible" }
         ],
         toForm: value => {
-            const spawner = SanitiseSpawnerValue(IsSpawnerValue(value) ? value : DEFAULT_SPAWNER_VALUE);
+            const spawner = SanitiseSpawnerValue(IsSpawnerValue(value) ? value : DefaultSpawnerValue());
             return { ...spawner, monsters: spawner.monsters.concat() };
         },
         fromForm: form =>
             SanitiseSpawnerValue({
-                monsters: (form.monsters as string[]).filter(IsMonsterType),
+                monsters: (form.monsters as string[]).filter(type => MonsterRoster.inst.Has(type)),
                 interval: Number(form.interval),
                 maxAlive: Number(form.maxAlive),
                 total: Number(form.total),

@@ -1,23 +1,31 @@
 "use strict";
 
 /**
- * Keeps assets-meta.json's set of keys in sync with the dungeon project's
- * packed spritesheet (frames.json), without ever touching an existing
- * entry's hand-authored values:
+ * Keeps a game's assets-meta.json's set of keys in sync with its packed
+ * spritesheet (frames.json), without ever touching an existing entry's
+ * hand-authored values:
  *   - adds an empty {} placeholder for every asset name frames.json has
  *     that assets-meta.json doesn't yet,
  *   - removes any assets-meta.json entry whose asset name no longer exists
  *     in frames.json (the source art was deleted/renamed),
  *   - leaves every other entry's value exactly as it was.
  *
- * Run after pack-textures (see package.json's "build" script) so frames.json
+ * Run after pack-textures (see the game's "build" script) so frames.json
  * is already up to date.
+ *
+ * Usage: node create-metadata.js <assets_dir>
+ *   <assets_dir>  Folder holding frames.json and assets-meta.json
  */
 
 const fs = require("fs");
 const path = require("path");
 
-const ASSETS_DIR = path.join(__dirname, "..", "..", "dungeon", "assets");
+if (!process.argv[2]) {
+    console.error("Usage: node create-metadata.js <assets_dir>");
+    process.exit(1);
+}
+
+const ASSETS_DIR = path.resolve(process.argv[2]);
 const FRAMES_PATH = path.join(ASSETS_DIR, "frames.json");
 const META_PATH = path.join(ASSETS_DIR, "assets-meta.json");
 
@@ -25,7 +33,7 @@ const META_PATH = path.join(ASSETS_DIR, "assets-meta.json");
 // Node script can't import it): an animation's frames all share everything up
 // to a trailing "_f<N>"; anything else - including names that merely contain
 // "_f", like "wall_fountain_top_1" - is its own single-frame asset name.
-// src/dungeon/SpriteSheetGrouping.test.ts fails if the two rules drift apart.
+// src/dungeon/AnimFrameRegex.test.ts fails if the two rules drift apart.
 const ANIM_NAME_REGEX = /^.+(?=_f\d+$)/;
 
 function AssetNamesFromFrames(frames) {

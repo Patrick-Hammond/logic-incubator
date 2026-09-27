@@ -1,6 +1,6 @@
 import {DisplayObject} from "pixi.js";
-import { Key } from "_lib/io/Keyboard";
-import Game from "_lib/game/Game";
+import { Key } from "../io/Keyboard";
+import Game from "../game/Game";
 
 export function MakeDraggable(sprite: DisplayObject): void {
     sprite.interactive = true;

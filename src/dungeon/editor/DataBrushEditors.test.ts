@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { MonsterTypes } from "../game/level/entities/Monsters";
-import { DEFAULT_SPAWNER_VALUE } from "../game/level/entities/Spawners";
+import { TEST_MONSTERS } from "../engine/level/__fixtures__/TestMonsters";
+import MonsterRoster from "../engine/level/entities/MonsterRoster";
+import { DefaultSpawnerValue } from "../engine/level/entities/Spawners";
 import { DataBrushEditorFor } from "./DataBrushEditors";
 import { DataBrushName } from "./stores/EditorStore";
+
+MonsterRoster.inst.Load(TEST_MONSTERS);
 
 const noImages = { monster: () => undefined };
 
@@ -24,9 +27,9 @@ describe("DataBrushEditors", () => {
     it("lists every monster type in the spawner dialog, and refuses an empty pool", () => {
         const editor = DataBrushEditorFor(DataBrushName.SPAWNER);
         const monsters = editor.fields(noImages).find(f => f.key === "monsters");
-        expect(monsters.type === "multi-choice" && monsters.options.map(o => o.value)).toEqual([...MonsterTypes]);
-        expect(editor.validate({ ...editor.toForm(DEFAULT_SPAWNER_VALUE), monsters: [] })).toMatch(/at least one/);
-        expect(editor.validate(editor.toForm(DEFAULT_SPAWNER_VALUE))).toBeNull();
+        expect(monsters.type === "multi-choice" && monsters.options.map(o => o.value)).toEqual([...TEST_MONSTERS.types]);
+        expect(editor.validate({ ...editor.toForm(DefaultSpawnerValue()), monsters: [] })).toMatch(/at least one/);
+        expect(editor.validate(editor.toForm(DefaultSpawnerValue()))).toBeNull();
     });
 
     it("gives every form field a value, so no control starts blank", () => {

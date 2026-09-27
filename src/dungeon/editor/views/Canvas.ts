@@ -1,10 +1,10 @@
 import {AnimatedSprite, BitmapText, Container, Graphics, interaction} from "pixi.js";
 import { Key } from "../../../_lib/io/Keyboard";
 import { SubtractTypes } from "../../../_lib/patterns/EnumerateTypes";
-import AssetMetadataStore from "../../game/level/AssetMetadata";
-import { FindImplicitPlacements } from "../../game/level/ImplicitData";
-import { IsSpawnerValue } from "../../game/level/entities/Spawners";
-import { IsLightValue } from "../../game/level/Lighting";
+import AssetMetadataStore from "../../engine/level/AssetMetadata";
+import { FindImplicitPlacements } from "../../engine/level/ImplicitData";
+import { IsSpawnerValue } from "../../engine/level/entities/Spawners";
+import { IsLightValue } from "../../engine/level/Lighting";
 import AssetFactory from "../../../_lib/loading/AssetFactory";
 import { DataBrushEditorFor } from "../DataBrushEditors";
 import ObjectPool from "../../../_lib/patterns/ObjectPool";

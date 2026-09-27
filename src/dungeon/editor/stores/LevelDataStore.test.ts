@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from "vitest";
-import AssetMetadataStore from "../../game/level/AssetMetadata";
+import AssetMetadataStore from "../../engine/level/AssetMetadata";
 import { DataBrushName } from "./EditorStore";
 import LevelDataStore, { Brush, Layer, LevelDataActions } from "./LevelDataStore";
 

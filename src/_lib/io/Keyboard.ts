@@ -1,5 +1,5 @@
 import { EventEmitter } from "eventemitter3";
-import { Wait, Cancel } from "_lib/game/Timing";
+import { Wait, Cancel } from "../game/Timing";
 
 export default class Keyboard extends EventEmitter {
     private map: { [keycode: number]: boolean } = {};

@@ -1,8 +1,8 @@
 import { Key } from "../../../_lib/io/Keyboard";
 import { AnimationSpeed, Scenes } from "../../Constants";
-import { MonsterIdleAnimation, MonsterType } from "../../game/level/entities/Monsters";
-import { IsSpawnerValue } from "../../game/level/entities/Spawners";
-import { IsLightValue } from "../../game/level/Lighting";
+import MonsterRoster, { MonsterType } from "../../engine/level/entities/MonsterRoster";
+import { IsSpawnerValue } from "../../engine/level/entities/Spawners";
+import { IsLightValue } from "../../engine/level/Lighting";
 import { DataBrushEditorFor } from "../DataBrushEditors";
 import EditorComponent from "../EditorComponent";
 import { DataBrushValue, EditorActions, IEditorState } from "../stores/EditorStore";
@@ -174,7 +174,7 @@ export default class SelectedBrush extends EditorComponent {
     /** First idle frame of the monster at 2x, as a data URI for the spawner dialog's chips. Cached. */
     private MonsterImage(type: MonsterType): ChoiceOption["image"] | undefined {
         if (!(type in this.monsterImages)) {
-            const name = MonsterIdleAnimation(type);
+            const name = MonsterRoster.inst.IdleAnimation(type);
             if (this.assetFactory.AnimationNames.indexOf(name) === -1) {
                 this.monsterImages[type] = undefined;
             } else {

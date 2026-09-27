@@ -7,12 +7,9 @@ const TsconfigPathsPlugin = require('tsconfig-paths-webpack-plugin');
 // as dist/<project>/assets), so multiple projects can be hosted side by side
 // under matching /<project>/ paths on the same origin. Select one with
 // `--env project=<name>` (see the per-project npm scripts in package.json).
+// The dungeon engine (src/dungeon) has no entry of its own here - it's built by
+// the game that uses it, in-dungeons-we-dwell.
 const PROJECTS = {
-  dungeon: {
-    entry: './src/dungeon/main.ts',
-    title: 'In Dungeons We Dwell',
-    assets: './src/dungeon/assets'
-  },
   catgrab: {
     entry: './src/catgrab/main.ts',
     title: 'Cat Grab',
@@ -22,7 +19,7 @@ const PROJECTS = {
 
 module.exports = (env, argv) => {
   const isProduction = argv.mode === 'production';
-  const projectName = (env && env.project) || 'dungeon';
+  const projectName = (env && env.project) || 'catgrab';
   const project = PROJECTS[projectName];
 
   if (!project) {

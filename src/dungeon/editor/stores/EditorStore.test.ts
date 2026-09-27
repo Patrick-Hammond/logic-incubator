@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { Scenes } from "../../Constants";
-import { DEFAULT_SPAWNER_VALUE } from "../../game/level/entities/Spawners";
+import { TEST_MONSTERS } from "../../engine/level/__fixtures__/TestMonsters";
+import MonsterRoster from "../../engine/level/entities/MonsterRoster";
+import { DefaultSpawnerValue } from "../../engine/level/entities/Spawners";
 import EditorStore, { DataBrushName, EditableLayerCount, EditorActions, IMPLICIT_LAYER_ID, MouseButtonState } from "./EditorStore";
+
+MonsterRoster.inst.Load(TEST_MONSTERS);
 
 function implicitLayers(store: EditorStore) {
     return store.state.layers.filter(layer => layer.id === IMPLICIT_LAYER_ID);
@@ -107,7 +111,7 @@ describe("EditorStore spawner data brush", () => {
         };
         store.Load(saved);
         const spawner = store.state.dataBrushes.find(db => db.name === DataBrushName.SPAWNER);
-        expect(spawner.value).toEqual({ ...DEFAULT_SPAWNER_VALUE, monsters: ["imp"], interval: 1 });
+        expect(spawner.value).toEqual({ ...DefaultSpawnerValue(), monsters: ["imp"], interval: 1 });
     });
 
     it("ignores +/- on a spawner, and takes a value set from the dialog", () => {
@@ -116,9 +120,9 @@ describe("EditorStore spawner data brush", () => {
         store.Dispatch({ type: EditorActions.SELECT_LAYER, data: { layer: store.state.layers[store.state.layers.length - 1] } });
         store.Dispatch({ type: EditorActions.BRUSH_CHANGED, data: { name: DataBrushName.SPAWNER } });
         store.Dispatch({ type: EditorActions.DATA_BRUSH_INC });
-        expect(store.SelectedDataBrush.value).toEqual(DEFAULT_SPAWNER_VALUE);
+        expect(store.SelectedDataBrush.value).toEqual(DefaultSpawnerValue());
 
-        const value = { ...DEFAULT_SPAWNER_VALUE, monsters: ["ogre" as const] };
+        const value = { ...DefaultSpawnerValue(), monsters: ["ogre"] };
         store.Dispatch({ type: EditorActions.SET_DATA_BRUSH_VALUE, data: { value } });
         expect(store.SelectedDataBrush.value).toEqual(value);
         expect(store.state.currentBrush.data).toEqual(value);

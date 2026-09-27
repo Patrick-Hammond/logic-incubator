@@ -15,13 +15,13 @@ const SHORTCUTS: [string, string][] = [
     ["Save", "S"],
     ["Load", "L"],
     ["Reset", "Ctrl+Q"],
-    ["Play", "Enter"],
-    ["Title screen", "T"]
+    ["Play", "Enter"]
 ];
 
 /** The help line under the grid. */
 export default class Menu extends EditorComponent {
-    constructor() {
+    /** `titleScene`: see `IDungeonEditorOptions` - its T shortcut is only listed when the game has one. */
+    constructor(private readonly titleScene?: string) {
         super();
         this.AddToScene(Scenes.EDITOR);
     }
@@ -29,7 +29,8 @@ export default class Menu extends EditorComponent {
     protected Create(): void {
         InjectStyles("hb-styles", STYLES);
         const help = EditorOverlay.inst.Slot("help");
-        SHORTCUTS.forEach(([what, key]) => {
+        const shortcuts = this.titleScene ? SHORTCUTS.concat([["Title screen", "T"]]) : SHORTCUTS;
+        shortcuts.forEach(([what, key]) => {
             const item = help.appendChild(El("span", "hb-item", what + " "));
             item.appendChild(El("kbd", "", key));
         });

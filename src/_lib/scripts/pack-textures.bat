@@ -11,6 +11,7 @@ REM Arguments:
 REM   1) packer_exe_path  Path to SpriteSheetPacker executable (with or without .exe)
 REM   2) source_folder    Folder containing source sprite frames
 REM   3) dest_folder      Folder where output .json/.png are written
+REM   Folders may be relative to the current directory; they're made absolute before use.
 
 if "%~3"=="" (
 	echo Usage: %~nx0 ^<packer_exe_path^> ^<source_folder^> ^<dest_folder^>
@@ -18,8 +19,8 @@ if "%~3"=="" (
 )
 
 set "PACKER_EXE=%~1"
-set "SOURCE_DIR=%~2"
-set "DEST_DIR=%~3"
+set "SOURCE_DIR=%~f2"
+set "DEST_DIR=%~f3"
 
 if not exist "%PACKER_EXE%" if exist "%PACKER_EXE%.exe" (
 	set "PACKER_EXE=%PACKER_EXE%.exe"
