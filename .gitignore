@@ -1,2 +1,5 @@
 node_modules
 dist
+package-lock.json
+src/dungeon/assets/assets-meta.json
+src/dungeon/assets/frames.json
