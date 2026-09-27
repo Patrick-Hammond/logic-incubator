@@ -1,3 +1,4 @@
+import { LoaderResource } from "pixi.js";
 import Game from "../_lib/game/Game";
 import Loader from "../_lib/loading/Loader";
 import { AssetPath, GameHeight, GameWidth, Scenes } from "./Constants";
@@ -18,6 +19,8 @@ export function Dungoen(): void {
             { name: "data-square", url: "icons/square.png" },
             { name: "small-font", url: "fonts/small-font-export.fnt" },
             { name: "title", url: "title.png" },
+            // Raw bytes for @pixi/gif's AnimatedGIF.fromBuffer; the default image load would only give the first frame.
+            { name: "fire", url: "fire.gif", loadType: LoaderResource.LOAD_TYPE.XHR, xhrType: LoaderResource.XHR_RESPONSE_TYPE.BUFFER },
             { name: "levelData", url: "level.json" },
             { name: "assetsMeta", url: "assets-meta.json" }
         ]);
