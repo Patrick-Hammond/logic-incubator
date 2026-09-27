@@ -20,7 +20,13 @@ export const PlayerSpeed = 0.8;
 export const DepthBrushName: `${DataBrushName.Z_INDEX}` = "z-index";
 export const AssetPath = "/dungeon/assets/";
 
-export const GridBounds = new Rectangle(20, 20, EditorWidth - 300, EditorHeight - 40);
+/** The editor's right-hand column of panels (brushes, selected brush, layers). */
+export const SidebarWidth = 260;
+/** The editor's tool strip, right of the sidebar at the canvas's right edge. */
+export const ToolbarWidth = 40;
+
+/** 20px margin left/top/bottom; right of it a 10px gap, the sidebar, a 10px gap, the toolbar and a 10px margin. */
+export const GridBounds = new Rectangle(20, 20, EditorWidth - 20 - (10 + SidebarWidth + 10 + ToolbarWidth + 10), EditorHeight - 40);
 
 export const enum Scenes {
     GAME = "game",

@@ -9,7 +9,7 @@ import { DataBrushEditorFor } from "../DataBrushEditors";
 import ObjectPool from "../../../_lib/patterns/ObjectPool";
 import { AnimationSpeed, GridBounds, InitalScale, Scenes, TileSize } from "../../Constants";
 import EditorComponent from "../EditorComponent";
-import { DataBrushName, EditorActions, IEditorState, MouseButtonState } from "../stores/EditorStore";
+import { DataBrushName, EditorActions, EditorTool, IEditorState, MouseButtonState } from "../stores/EditorStore";
 import { Brush, LevelDataActions, LevelDataState } from "../stores/LevelDataStore";
 
 /** Doors aren't a paintable data brush, so they have no palette colour of their own to borrow. */
@@ -248,36 +248,14 @@ export default class Canvas extends EditorComponent {
                     if (currentBrush.position.x !== pos.x || currentBrush.position.y !== pos.y) {
                         this.editorStore.Dispatch({ type: EditorActions.BRUSH_MOVED, data: { position: pos } });
 
-                        // check drag move
-                        const spaceDragging =
-                            this.game.keyboard.KeyPressed(Key.Space) &&
-                            this.editorStore.state.mouseButtonState === MouseButtonState.LEFT_DOWN;
-                        const middleButtonDragging = this.editorStore.state.mouseButtonState === MouseButtonState.MIDDLE_DOWN;
-                        if (spaceDragging || middleButtonDragging) {
+                        // check drag move - painting, erasing and the other tools are handled by `Tools`
+                        const state = this.editorStore.state;
+                        const spaceDragging = this.game.keyboard.KeyPressed(Key.Space) && state.mouseButtonState === MouseButtonState.LEFT_DOWN;
+                        const middleButtonDragging = state.mouseButtonState === MouseButtonState.MIDDLE_DOWN;
+                        const moveToolDragging = state.tool === EditorTool.MOVE && state.mouseButtonState === MouseButtonState.LEFT_DOWN;
+                        if (spaceDragging || middleButtonDragging || moveToolDragging) {
                             this.editorStore.Dispatch({ type: EditorActions.VIEW_DRAG, data: { position: currentBrush.position } });
                             this.levelDataStore.Dispatch({ type: LevelDataActions.REFRESH });
-                        }
-
-                        // check rect paint/erase
-                        const rectPainting =
-                            this.game.keyboard.KeyPressed(Key.Ctrl) &&
-                            this.editorStore.state.mouseButtonState === MouseButtonState.LEFT_DOWN;
-                        const rectErasing =
-                            this.game.keyboard.KeyPressed(Key.Ctrl) &&
-                            this.editorStore.state.mouseButtonState === MouseButtonState.RIGHT_DOWN;
-                        const selectedLayer = this.editorStore.SelectedLayer;
-                        if ((rectPainting || rectErasing) && !(selectedLayer && selectedLayer.readOnly)) {
-                            this.levelDataStore.Dispatch({
-                                type: rectPainting ? LevelDataActions.PAINT_RECT : LevelDataActions.ERASE_RECT,
-                                data: {
-                                    brush: currentBrush,
-                                    rectTopLeft: this.editorStore.state.mouseDownPosition,
-                                    rectBottomRight: currentBrush.position,
-                                    viewOffset: this.editorStore.state.viewOffset,
-                                    layers: this.editorStore.state.layers
-                                },
-                                canUndo: true
-                            });
                         }
                     }
                 }

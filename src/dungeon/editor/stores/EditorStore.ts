@@ -33,6 +33,8 @@ export const enum EditorActions {
     MOVE_LAYER_DOWN,
     TOGGLE_LAYER_VISIBILITY,
     CHANGE_SCENE,
+    SET_TOOL,
+    PICK_BRUSH,
     REFRESH,
     RESET
 }
@@ -53,6 +55,17 @@ export const enum DataBrushName {
 }
 
 export type DataBrushValue = number | LightValue | SpawnerValue;
+
+/** What a left-click/drag on the map does - picked from the toolbar (see `Toolbar`, `Tools`). */
+export const enum EditorTool {
+    BRUSH = "brush",
+    ERASE = "erase",
+    DATA_SELECT = "data-select",
+    STAMP = "stamp",
+    DROPPER = "dropper",
+    FILL = "fill",
+    MOVE = "move"
+}
 
 /** Max editable (non-`readOnly`) layers - a sanity cap; the Layers panel's list scrolls past what fits. */
 export const MaxEditableLayers = 16;
@@ -95,6 +108,9 @@ interface IActionData {
     layer?: Layer;
     visible?: boolean;
     value?: DataBrushValue;
+    tool?: EditorTool;
+    /** PICK_BRUSH: a brush placed on the map, to paint with next. */
+    brush?: Brush;
 }
 
 export interface IEditorState {
@@ -108,6 +124,7 @@ export interface IEditorState {
     viewOffset: Vec2Like;
     viewScale: number;
     currentScene: string;
+    tool: EditorTool;
 }
 
 export default class EditorStore extends Store<IEditorState, IActionData> {
@@ -139,7 +156,8 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
             viewScale: InitalScale,
             // What `Dungeon.ts` shows at boot. Was null, which left every editor shortcut (gated on
             // `currentScene === EDITOR` in Keyboard) dead until the first Enter toggled it into place.
-            currentScene: Scenes.EDITOR
+            currentScene: Scenes.EDITOR,
+            tool: EditorTool.BRUSH
         };
     }
 
@@ -155,12 +173,13 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
      *
      * `currentScene` is kept as-is rather than taken from the save: which scene is on screen isn't part of
      * a map, and a save carrying some other value (e.g. null, from before it had a default) would
-     * otherwise switch scenes on load or disable the editor shortcuts again.
+     * otherwise switch scenes on load or disable the editor shortcuts again. Likewise the current `tool`.
      */
     Load(state: IEditorState): void {
         super.Load({
             ...state,
             currentScene: this.state.currentScene,
+            tool: this.state.tool,
             dataBrushes: this.ReconcileDataBrushes(state && state.dataBrushes),
             layers: WithImplicitLayer((state && state.layers) || [])
         });
@@ -188,7 +207,8 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
             mouseDownPosition: this.UpdateMouseDownPosition(state.mouseDownPosition, action),
             viewOffset: this.UpdateViewOffset(state.viewOffset, action),
             viewScale: this.UpdateViewScale(state.viewScale, action),
-            currentScene: this.UpdateCurrentScene(state.currentScene, action)
+            currentScene: this.UpdateCurrentScene(state.currentScene, action),
+            tool: this.UpdateTool(state.tool, action)
         };
         return newState as IEditorState;
     }
@@ -222,6 +242,16 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
                     name: action.data.name,
                     layerId: this.SelectedLayer.id,
                     data: dataBrush ? dataBrush.value : null
+                };
+            }
+            case EditorActions.PICK_BRUSH: {
+                // Everything about the placed brush but where it is - the cursor stays where it was.
+                const picked = action.data.brush;
+                return {
+                    ...picked,
+                    position: currentBrush.position,
+                    pixelOffset: { ...picked.pixelOffset },
+                    scale: { ...picked.scale }
                 };
             }
             case EditorActions.ROTATE_BRUSH: {
@@ -295,6 +325,15 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
                 }
                 return dataBrushes;
             }
+            case EditorActions.PICK_BRUSH: {
+                // Picking a placed light/spawner picks up its settings too, so the palette brush (and its
+                // Edit dialog) carry on from them.
+                const picked = action.data.brush;
+                if (picked.data == null || !dataBrushes.some(db => db.name === picked.name)) {
+                    return dataBrushes;
+                }
+                return dataBrushes.map(db => (db.name === picked.name ? { ...db, value: picked.data } : db));
+            }
             default:
                 return dataBrushes || this.DefaultState().dataBrushes;
         }
@@ -351,6 +390,15 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
                         selected: layer.id === action.data.layer.id
                     };
                 });
+            case EditorActions.PICK_BRUSH: {
+                // Paint it back onto its own kind of layer - a tile picked while a data layer is
+                // selected would otherwise get painted onto the data layer.
+                const layerId = action.data.brush.layerId;
+                if (!layers.some(layer => layer.id === layerId) || (this.SelectedLayer && this.SelectedLayer.id === layerId)) {
+                    return layers;
+                }
+                return layers.map(layer => (layer.selected === (layer.id === layerId) ? layer : { ...layer, selected: layer.id === layerId }));
+            }
             case EditorActions.TOGGLE_LAYER_VISIBILITY: {
                 return layers.map(layer => {
                     if (layer.id === action.data.layer.id) {
@@ -444,6 +492,15 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
                 return action.data.name;
             default:
                 return currentScene || this.DefaultState().currentScene;
+        }
+    }
+
+    private UpdateTool(tool: EditorTool, action: IAction<IActionData>): EditorTool {
+        switch (action.type) {
+            case EditorActions.SET_TOOL:
+                return action.data.tool;
+            default:
+                return tool || this.DefaultState().tool;
         }
     }
 

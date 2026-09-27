@@ -8,15 +8,19 @@ import Layers from "./views/layers/Layers";
 import Menu from "./views/Menu";
 import Palette from "./views/Palette";
 import SelectedBrush from "./views/SelectedBrush";
+import Toolbar from "./views/Toolbar";
+import Tools from "./views/Tools";
 
 export class DungeonEditor extends EditorComponent {
     protected Create(): void {
         // views
         new Canvas();
         new BrushTool();
+        new Tools();
         new Palette();
         new Layers();
         new SelectedBrush();
+        new Toolbar();
         new Keyboard();
         new Menu();
 
