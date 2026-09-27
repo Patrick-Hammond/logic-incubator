@@ -21,8 +21,23 @@ export interface MoveCollider {
     GapAlignY(from: Vec2Like, dir: number): number | null;
 }
 
-/** Per-frame velocity damping (multiplied by dt each frame). */
+/** Per-frame velocity damping (raised to dt each frame). */
 export const MoveDamping = 0.8;
+
+/** The tile under a one-tile box's centre, given its top-left in pixels - the cell the player (or a monster) counts as standing on. */
+export function CentreTile(position: Vec2Like): Vec2Like {
+    const half = (TileSize - 1) * 0.5;
+    return {
+        x: ((position.x + half) / TileSize) | 0,
+        y: ((position.y + half) / TileSize) | 0
+    };
+}
+
+/** Centre of a one-tile box, given its top-left in pixels. */
+export function BoxCentre(position: Vec2Like): Vec2Like {
+    const half = (TileSize - 1) * 0.5;
+    return { x: position.x + half, y: position.y + half };
+}
 
 /**
  * One frame of input-driven movement + tile collision.
@@ -48,15 +63,18 @@ export const MoveDamping = 0.8;
  * The vertical axis is resolved first; if it takes a head-start, the horizontal
  * axis is skipped for the frame so the two can't fight (and vice-versa is not
  * needed because X is last).
+ *
+ * Monsters move the same way, with their own `speed` in place of the player's.
  */
 export function ResolveMove(
     position: Vec2Like,
     velocity: Vec2Like,
     dt: number,
     collider: MoveCollider,
+    speed: number = PlayerSpeed,
 ): void {
-    const deltaX = UpperLimit(velocity.x * dt * PlayerSpeed, TileSize - 1);
-    const deltaY = UpperLimit(velocity.y * dt * PlayerSpeed, TileSize - 1);
+    const deltaX = UpperLimit(velocity.x * dt * speed, TileSize - 1);
+    const deltaY = UpperLimit(velocity.y * dt * speed, TileSize - 1);
 
     const from = { x: position.x, y: position.y };
     let newX = from.x + deltaX;
@@ -101,8 +119,11 @@ export function ResolveMove(
     position.x = newX;
     position.y = newY;
 
-    velocity.x *= MoveDamping * dt;
-    velocity.y *= MoveDamping * dt;
+    // Raised to dt, not multiplied by it: the same at 60fps (dt 1), but a slow frame (dt past
+    // 1.25) no longer stops velocity decaying at all and lets it grow without bound.
+    const damping = Math.pow(MoveDamping, dt);
+    velocity.x *= damping;
+    velocity.y *= damping;
 
     if (Math.abs(velocity.x) < 0.001) {
         velocity.x = 0;

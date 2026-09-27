@@ -5,7 +5,7 @@ import Level from "./Level";
 export default class TileCollision {
     private playerBounds = new Rectangle(0, 0, TileSize - 1, TileSize - 1);
 
-    constructor(private level: Level) {}
+    constructor(private level: Pick<Level, "collisionData">) {}
 
     TestX(from: Vec2Like, dir: number): number | null{
         this.playerBounds.x = from.x + dir;

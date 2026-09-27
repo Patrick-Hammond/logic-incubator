@@ -72,4 +72,18 @@ describe("SpriteDrawPosition", () => {
         // further down.
         expect(draw.y + texture.height).toBe(position.y + TileSize);
     });
+
+    it("centres a frame wider than its tile (big_demon, 32x36) across it, feet still on the tile's bottom", () => {
+        const position = { x: 10 * TileSize, y: 4 * TileSize };
+        const texture = { width: 32, height: 36 };
+
+        const draw = SpriteDrawPosition(position, { x: 0, y: 0 }, texture);
+
+        expect(draw.x + texture.width / 2).toBe(position.x + TileSize / 2);
+        expect(draw.y + texture.height).toBe(position.y + TileSize);
+    });
+
+    it("leaves a one-tile-wide frame's X alone when its width is given", () => {
+        expect(SpriteDrawPosition({ x: 40, y: 0 }, { x: 0, y: 0 }, { width: TileSize, height: 28 }).x).toBe(40);
+    });
 });

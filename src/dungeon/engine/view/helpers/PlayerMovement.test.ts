@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import Level from "../../level/Level";
 import TileCollision from "../../level/TileCollision";
-import { MoveCollider, ResolveMove } from "./PlayerMovement";
+import { CentreTile, MoveCollider, ResolveMove } from "./PlayerMovement";
 
 /**
  * Frame-by-frame simulations of the real movement loop:
@@ -106,6 +106,32 @@ describe("open floor, holding right+down", () => {
         const step = t[t.length - 1].x - t[t.length - 2].x;
         expect(step).toBeGreaterThan(2.7);
         expect(step).toBeLessThan(2.9);
+    });
+
+    it("keeps a steady top speed on slow frames instead of accelerating forever", () => {
+        for (const dt of [1, 1.3, 2]) {
+            const t = simulate({ collider: floor, start: { x: 0, y: 0 }, keys: { right: true }, frames: 200, dt });
+            const last = t[t.length - 1];
+            expect(last.vx, `dt ${dt}`).toBeLessThan(5);
+            expect(last.vx, `dt ${dt}`).toBeCloseTo(t[t.length - 2].vx, 6);
+        }
+    });
+
+    it("moves at a given speed instead of the player's - how monsters use it", () => {
+        const player = { x: 0, y: 0 };
+        const monster = { x: 0, y: 0 };
+        ResolveMove(player, { x: 1, y: 0 }, 1, floor);
+        ResolveMove(monster, { x: 1, y: 0 }, 1, floor, 0.4);
+        expect(monster.x).toBeCloseTo(0.4);
+        expect(player.x).toBeCloseTo(0.8); // PlayerSpeed, unchanged
+    });
+});
+
+describe("CentreTile", () => {
+    it("is the tile under the centre of a one-tile box, not its top-left", () => {
+        expect(CentreTile({ x: 0, y: 0 })).toEqual({ x: 0, y: 0 });
+        expect(CentreTile({ x: 8, y: 7 })).toEqual({ x: 0, y: 0 });
+        expect(CentreTile({ x: 9, y: 9 })).toEqual({ x: 1, y: 1 });
     });
 });
 

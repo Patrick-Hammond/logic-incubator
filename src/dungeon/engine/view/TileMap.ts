@@ -11,6 +11,11 @@ import { ViewOrigin } from "./helpers/CameraWindow";
 
 type Band = { z: number; root: Container; layers: CompositeTilemap[] };
 
+/** Name of the layer (a `CompositeTilemap`) the player, monsters and spawners are drawn into - see `EntityRenderer`. */
+export const EntitiesLayer = "entities";
+/** Name of the layer (a plain `Container` of sprites, which unlike a tilemap can turn to any angle) shots are drawn into. */
+export const ProjectilesLayer = "projectiles";
+
 /**
  * `CompositeTilemap.tile` has no rotation/flip parameter - it always
  * draws the texture's own baked-in orientation. A brush's rotation and flips
@@ -56,12 +61,15 @@ export function LightTint(light: BakedLight): number {
  * additionally scaled by `camera.EffectiveZoom`, a whole-scene zoom driven by
  * the player's height (see `Camera.UpdateZoom`/`StepZoom`), so climbing
  * doesn't stay pinned at a perfect 1:1 - though it eases back to 1 if the
- * player stays put. The player renders into its own top layer, which gets the
- * same `EffectiveZoom` factor so it grows/shrinks in step with the world.
+ * player stays put. The player, monsters and spawners render into their own
+ * layer on top (`EntitiesLayer`), and shots into one above that
+ * (`ProjectilesLayer`); both get the same `EffectiveZoom` factor so they
+ * grow/shrink in step with the world.
  */
 export default class TileMapView extends GameComponent {
     private bands: Band[] = [];
-    private playerLayer: CompositeTilemap | null = null;
+    private entitiesLayer: CompositeTilemap | null = null;
+    private projectilesLayer: Container | null = null;
 
     constructor(private level: Level, private camera: Camera) {
         super();
@@ -78,10 +86,15 @@ export default class TileMapView extends GameComponent {
         });
         this.bands = [];
 
-        if (this.playerLayer) {
-            this.camera.root.removeChild(this.playerLayer);
-            this.playerLayer.destroy();
-            this.playerLayer = null;
+        if (this.entitiesLayer) {
+            this.camera.root.removeChild(this.entitiesLayer);
+            this.entitiesLayer.destroy();
+            this.entitiesLayer = null;
+        }
+        if (this.projectilesLayer) {
+            this.camera.root.removeChild(this.projectilesLayer);
+            this.projectilesLayer.destroy({ children: true });
+            this.projectilesLayer = null;
         }
 
         for (const z of this.level.depths) {
@@ -102,11 +115,17 @@ export default class TileMapView extends GameComponent {
             this.bands.push({ z, root, layers });
         }
 
-        this.playerLayer = new CompositeTilemap();
-        this.playerLayer.name = "player";
-        this.playerLayer.interactive = this.playerLayer.interactiveChildren = false;
-        this.playerLayer.scale.set(this.camera.Scale);
-        this.camera.root.addChild(this.playerLayer);
+        this.entitiesLayer = new CompositeTilemap();
+        this.entitiesLayer.name = EntitiesLayer;
+        this.entitiesLayer.interactive = this.entitiesLayer.interactiveChildren = false;
+        this.entitiesLayer.scale.set(this.camera.Scale);
+        this.camera.root.addChild(this.entitiesLayer);
+
+        this.projectilesLayer = new Container();
+        this.projectilesLayer.name = ProjectilesLayer;
+        this.projectilesLayer.interactive = this.projectilesLayer.interactiveChildren = false;
+        this.projectilesLayer.scale.set(this.camera.Scale);
+        this.camera.root.addChild(this.projectilesLayer);
 
         this.game.dispatcher.emit(LEVEL_CREATED);
 
@@ -122,8 +141,11 @@ export default class TileMapView extends GameComponent {
         const boundW = this.level.boundRect.width;
         const boundH = this.level.boundRect.height;
 
-        if (this.playerLayer) {
-            this.playerLayer.scale.set(camScale * cameraZoom);
+        if (this.entitiesLayer) {
+            this.entitiesLayer.scale.set(camScale * cameraZoom);
+        }
+        if (this.projectilesLayer) {
+            this.projectilesLayer.scale.set(camScale * cameraZoom);
         }
 
         for (let i = 0, len = this.bands.length; i < len; i++) {

@@ -10,7 +10,7 @@ describe("MonsterRoster", () => {
         expect(roster.Has("goblin")).toBe(false);
     });
 
-    it("knows exactly the loaded monsters, and asks the game for their idle animation", () => {
+    it("knows exactly the loaded monsters, and takes their idle animation from their definitions", () => {
         const roster = new MonsterRoster();
         roster.Load(TEST_MONSTERS);
         expect(roster.Types).toEqual(["goblin", "imp", "ogre"]);
@@ -18,6 +18,22 @@ describe("MonsterRoster", () => {
         expect(roster.Has("dragon")).toBe(false);
         expect(roster.Has(3)).toBe(false);
         expect(roster.IdleAnimation("ogre")).toBe("ogre_idle_anim");
+    });
+
+    it("hands out each monster's definition, and nothing for a monster it doesn't know", () => {
+        const roster = new MonsterRoster();
+        roster.Load(TEST_MONSTERS);
+        expect(roster.Def("imp")).toBe(TEST_MONSTERS.defs.imp);
+        expect(roster.Def("dragon")).toBeUndefined();
+        expect(roster.IdleAnimation("dragon")).toBe("dragon");
+    });
+
+    it("names the game's spawner sprite, if it has one", () => {
+        const roster = new MonsterRoster();
+        roster.Load(TEST_MONSTERS);
+        expect(roster.SpawnerSprite).toBeUndefined();
+        roster.Load({ ...TEST_MONSTERS, spawnerSprite: "mob_spawner" });
+        expect(roster.SpawnerSprite).toBe("mob_spawner");
     });
 
     it("defaults a new spawner's pool to the first monster when the game doesn't name one", () => {

@@ -1,30 +1,32 @@
-import {AnimatedSprite} from "pixi.js";
-import {CompositeTilemap} from "../../../_lib/tilemap";
+import {AnimatedSprite, Texture} from "pixi.js";
 import GameComponent from "../../../_lib/game/GameComponent";
 import AssetFactory from "../../../_lib/loading/AssetFactory";
 import {Vec2, Vec2Like} from "../../../_lib/math/Geometry";
 import {Scenes, TileSize} from "../../Constants";
+import type {PlayerSetup} from "../DungeonMain";
 import PlayerControl from "../input/PlayerControl";
+import {CreateHealth, DamageHealth, Health, TickHealth} from "../level/entities/Health";
 import Level from "../level/Level";
 import TileCollision from "../level/TileCollision";
 import {Camera} from "./Camera";
-import {ViewOrigin} from "./helpers/CameraWindow";
-import {ResolveMove} from "./helpers/PlayerMovement";
-import {SpriteDrawPosition} from "./helpers/SpriteDrawOffset";
-import {LightTint, TileGD8Rotation} from "./TileMap";
+import {BoxCentre, CentreTile, ResolveMove} from "./helpers/PlayerMovement";
 
+/** The player: moving, shooting and taking hits. Driven one frame at a time by `DungeonMain`; `EntityRenderer` draws it. */
 export class Player extends GameComponent {
     private controls: PlayerControl;
     private player: AnimatedSprite;
-    private targetLayer: CompositeTilemap | undefined;
     private velocity = new Vec2();
     private newPosition = new Vec2();
     private facingX = 1;
+    private health: Health;
+    private fireCooldown = 0;
+    private shot: Vec2Like | null = null;
 
     constructor(
         private camera: Camera,
         private collision: TileCollision,
-        private level: Level
+        private level: Level,
+        private setup: PlayerSetup
     ) {
         super();
 
@@ -33,10 +35,35 @@ export class Player extends GameComponent {
         this.player.animationSpeed = 0.1;
 
         this.controls = new PlayerControl(0);
-
-        this.game.ticker.add(this.OnUpdate, this);
+        this.health = CreateHealth(setup.hitPoints);
 
         this.AddToScene(Scenes.GAME);
+    }
+
+    /** Top-left of the player's one-tile collision box, in pixels. */
+    get Position(): Vec2Like {
+        return this.player.position;
+    }
+
+    get Centre(): Vec2Like {
+        return BoxCentre(this.player.position);
+    }
+
+    /** The tile the player's centre currently sits over - shared by height lookup, door triggering and monsters' path finding. */
+    get Tile(): Vec2Like {
+        return CentreTile(this.player.position);
+    }
+
+    get Texture(): Texture {
+        return this.player.texture;
+    }
+
+    get FacingX(): number {
+        return this.facingX;
+    }
+
+    get Health(): Health {
+        return this.health;
     }
 
     Init(playerStartPosition: Vec2Like | undefined) {
@@ -44,25 +71,56 @@ export class Player extends GameComponent {
             throw new Error("Player start position is not defined. Define it in the level data.");
         }
         this.player.position.set(playerStartPosition.x * TileSize, playerStartPosition.y * TileSize);
-        this.targetLayer = this.camera.root.getChildByName("player") as CompositeTilemap;
+        this.velocity.Set(0, 0);
+        this.facingX = 1;
+        this.health = CreateHealth(this.setup.hitPoints);
+        this.fireCooldown = 0;
+        this.shot = null;
     }
 
-    private OnUpdate(dt: number): void {
-        this.GetInput();
+    /** One frame: `dt` in frames (the ticker's delta, which movement is tuned to), `seconds` of real time for timers. */
+    Update(dt: number, seconds: number): void {
+        TickHealth(this.health, seconds);
+        this.GetInput(seconds);
         this.Move(dt);
-        const tile = this.PlayerTile();
+        const tile = this.Tile;
         this.MoveCamera(tile);
         this.level.UpdateDoors(tile.x, tile.y);
         this.level.UpdateVisibleRegions(tile.x, tile.y);
-        this.Render();
     }
 
-    private GetInput(): void {
-        const n = this.controls.Get().direction;
+    /** The direction of a shot fired this frame, handed over once - null if none was. */
+    TakeShot(): Vec2Like | null {
+        const shot = this.shot;
+        this.shot = null;
+        return shot;
+    }
+
+    /** Returns whether the hit landed - not while invulnerable from the last one, or already dead. */
+    Damage(damage: number): boolean {
+        return DamageHealth(this.health, damage);
+    }
+
+    private GetInput(seconds: number): void {
+        const input = this.controls.Get();
+        const n = input.direction;
         if (n.x !== 0) {
             this.facingX = n.x < 0 ? -1 : 1;
         }
         this.velocity.Offset(n.x, n.y);
+
+        this.fireCooldown = Math.max(0, this.fireCooldown - seconds);
+        const fire = input.fire;
+        if (!fire.IsZero()) {
+            // Face the way you shoot - Robotron style, moving one way while firing another.
+            if (fire.x !== 0) {
+                this.facingX = fire.x < 0 ? -1 : 1;
+            }
+            if (this.fireCooldown === 0) {
+                this.shot = { x: fire.x, y: fire.y };
+                this.fireCooldown = this.setup.shot.cooldown;
+            }
+        }
     }
 
     private Move(dt: number): void {
@@ -71,40 +129,11 @@ export class Player extends GameComponent {
         this.player.position.set(this.newPosition.x, this.newPosition.y);
     }
 
-    /** The tile the player's centre currently sits over - shared by height lookup and door triggering. */
-    private PlayerTile(): Vec2Like {
-        const half = (TileSize - 1) * 0.5;
-        return {
-            x: ((this.player.x + half) / TileSize) | 0,
-            y: ((this.player.y + half) / TileSize) | 0
-        };
-    }
-
     private MoveCamera(tile: Vec2Like): void {
         const z = this.level.HeightAt(tile.x, tile.y);
         this.camera.SetZ(z);
         this.camera.UpdateZoom(this.game.ticker.deltaMS / 1000);
 
         this.camera.Follow(this.player.x, this.player.y, 0.05);
-    }
-
-    private Render(): void {
-        if(!this.targetLayer) return;
-
-        // The player's own z band is scaled by camera.EffectiveZoom (see
-        // TileMapView), so its window origin must be computed the exact same
-        // way - not the raw ViewRect, which ignores that zoom and would drift
-        // the sprite away from its tile the moment EffectiveZoom moves off 1.
-        const cameraZoom = this.camera.EffectiveZoom;
-        const origin = ViewOrigin(this.camera.ViewRect.center, this.camera.BaseViewWidth, this.camera.BaseViewHeight, cameraZoom);
-
-        this.targetLayer.clear();
-        const draw = SpriteDrawPosition(this.player.position, origin, this.player.texture);
-        const tile = this.PlayerTile();
-        const tint = LightTint(this.level.LightAt(tile.x, tile.y));
-        this.targetLayer.tile(this.player.texture, draw.x, draw.y, { tint });
-        if (this.facingX < 0) {
-            this.targetLayer.tileRotate(TileGD8Rotation(0, this.facingX, 1));
-        }
     }
 }

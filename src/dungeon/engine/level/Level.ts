@@ -9,7 +9,8 @@ import {LEVEL_LOADED} from "../Events";
 import AssetMetadataStore from "./AssetMetadata";
 import {HeightAt} from "./Depth";
 import {FindDoorGroups} from "./Doors";
-import {IsSpawnerValue, SanitiseSpawnerValue, Spawner} from "./entities/Spawners";
+import MonsterRoster from "./entities/MonsterRoster";
+import {IsSpawnerValue, SanitiseSpawnerValue, Spawner, SpawnerCells} from "./entities/Spawners";
 import {FindImplicitPlacements} from "./ImplicitData";
 import {AMBIENT_LIGHT, AMBIENT_TINT, BakedLight, BakeLighting, IsLightValue, LightSource} from "./Lighting";
 import {FindRegions, Region, RegionIdsTouching} from "./Regions";
@@ -73,7 +74,7 @@ export default class Level {
     public visibleRegions: Set<number> = new Set<number>();
     public boundRect: Rectangle = new Rectangle();
     public playerStartPosition: Vec2Like | undefined;
-    /** Every cell painted with the `SPAWNER` data brush, in normalised map coordinates. */
+    /** Every cell painted with the `SPAWNER` data brush, in normalised map coordinates. Each one's `cells` - the footprint of the roster's `spawnerSprite` - are solid (in `collisionData`) until `RemoveSpawner`. */
     public spawners: Spawner[] = [];
     /** Distinct painted `Z_INDEX` heights, ascending, always including the unpainted default (0). `TileMapView` builds one band per entry - sparse, so a stray tile at an extreme height doesn't force bands for every height in between. */
     public depths: number[] = [0];
@@ -81,6 +82,42 @@ export default class Level {
     /** Height painted under the given grid cell (0 if unpainted). Drives the camera zoom. */
     HeightAt(tileX: number, tileY: number): number {
         return HeightAt(this.heightData, tileX, tileY);
+    }
+
+    /** Whether nothing can move into the given cell - a wall, a spawner or anywhere off the map. */
+    IsSolid(tileX: number, tileY: number): boolean {
+        if (tileX < 0 || tileY < 0 || tileX >= this.boundRect.width || tileY >= this.boundRect.height) {
+            return true;
+        }
+        const column = this.collisionData[tileX];
+        return !!(column && column[tileY]);
+    }
+
+    /**
+     * Opens up a destroyed spawner's cells: no longer solid, and each one joined to a region
+     * it borders - without that, the player standing there would be in no region at all, and
+     * `UpdateVisibleRegions` would hide everything but open doors.
+     */
+    RemoveSpawner(spawner: Spawner): void {
+        spawner.cells.forEach(({x, y}) => {
+            if (this.collisionData[ x ]) {
+                this.collisionData[ x ][ y ] = false;
+            }
+            const touching = this.boundaryRegionData[ x ]?.[ y ];
+            if (touching && touching.length) {
+                if (this.regionData[ x ] == null) {
+                    this.regionData[ x ] = [];
+                }
+                this.regionData[ x ][ y ] = touching[ 0 ];
+                this.regions[ touching[ 0 ] ]?.cells.push({x, y});
+                delete this.boundaryRegionData[ x ][ y ];
+            }
+        });
+
+        const index = this.spawners.indexOf(spawner);
+        if (index > -1) {
+            this.spawners.splice(index, 1);
+        }
     }
 
     /** Lighting under the given grid cell, already baked (see `Lighting.BakeLighting`) to `LightTint`'s expected shape. A cell no light's radius reaches reads as ambient (`AMBIENT_LIGHT`/`AMBIENT_TINT`), not fully lit. */
@@ -205,6 +242,12 @@ export default class Level {
         this.heightData = [];
         this.doorData = [];
         this.spawners = [];
+        const spawnerSprite = MonsterRoster.inst.SpawnerSprite;
+        const hasSpawnerSprite = spawnerSprite != null && AssetFactory.inst.Has(spawnerSprite);
+        if (spawnerSprite != null && !hasSpawnerSprite) {
+            AssetFactory.inst.WarnMissing(spawnerSprite);
+        }
+        const spawnerSize = hasSpawnerSprite ? AssetFactory.inst.CreateTexture(spawnerSprite) : undefined;
         const depths = new Set<number>([0]);
         const lights: LightSource[] = [];
         /** Per-cell door id (parallel to `doorData`, but tagged with *which* door type) - `FindDoorGroups` needs this to keep two different door types on adjacent cells from merging into one group. */
@@ -267,10 +310,19 @@ export default class Level {
                             lights.push({x: posX, y: posY, value: brush.data});
                         }
                         break;
-                    // Same reason as LIGHT - collected once, here only.
+                    // Same reason as LIGHT - collected once, here only. Its footprint is solid - a
+                    // Gauntlet-style generator you shoot, not walk through - and marked before
+                    // `FindRegions` below, so rooms are partitioned around it like any other wall.
                     case DataBrushName.SPAWNER:
                         if (IsSpawnerValue(brush.data)) {
-                            this.spawners.push({x: posX, y: posY, value: SanitiseSpawnerValue(brush.data)});
+                            const cells = SpawnerCells({x: posX, y: posY}, spawnerSize, TileSize);
+                            this.spawners.push({x: posX, y: posY, value: SanitiseSpawnerValue(brush.data), cells});
+                            cells.forEach(cell => {
+                                if(this.collisionData[ cell.x ] == null) {
+                                    this.collisionData[ cell.x ] = [];
+                                }
+                                this.collisionData[ cell.x ][ cell.y ] = true;
+                            });
                         }
                         break;
                 }
