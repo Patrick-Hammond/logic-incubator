@@ -1,5 +1,7 @@
 import { LoadFromLocalStorage } from "../../_lib/io/Storage";
 import EditorComponent from "./EditorComponent";
+import { IStyler } from "./maps/Styler";
+import { DataBrushIcons } from "./stores/EditorStore";
 import EditorOverlay from "./ui/dom/EditorOverlay";
 import BrushTool from "./views/Brush";
 import Canvas from "./views/Canvas";
@@ -20,9 +22,14 @@ export const EditorResources: ReadonlyArray<{ name: string; url: string }> = [
     { name: "small-font", url: "fonts/small-font-export.fnt" }
 ];
 
+/** What the editor needs from the game: its scenes and its art. */
 export interface IDungeonEditorOptions {
     /** The game's title scene, if it has one: T jumps there from the editor to preview the game's own front end. */
     titleScene?: string;
+    /** The sprite over each data brush's colour in the palette and on the map. A brush without one is just its colour. */
+    dataBrushIcons?: DataBrushIcons;
+    /** The game's tiles for the maps keys 1-8 generate (see `IStyler`). Without one, those keys do nothing. */
+    mapStyle?: IStyler;
 }
 
 export class DungeonEditor extends EditorComponent {
@@ -35,11 +42,11 @@ export class DungeonEditor extends EditorComponent {
         new Canvas();
         new BrushTool();
         new Tools();
-        new Palette();
+        new Palette(this.options.dataBrushIcons);
         new Layers();
-        new SelectedBrush();
+        new SelectedBrush(this.options.dataBrushIcons);
         new Toolbar();
-        new Keyboard(this.options.titleScene);
+        new Keyboard(this.options.titleScene, this.options.mapStyle);
         new Menu(this.options.titleScene);
 
         // The DOM panels go with the editor scene: shown now (this runs as it's first shown), and

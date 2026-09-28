@@ -30,7 +30,7 @@ export class Player extends GameComponent {
     ) {
         super();
 
-        this.player = AssetFactory.inst.CreateAnimatedSprite("wizzard_m_run_anim");
+        this.player = AssetFactory.inst.CreateAnimatedSprite(setup.sprite);
         this.player.play();
         this.player.animationSpeed = 0.1;
 

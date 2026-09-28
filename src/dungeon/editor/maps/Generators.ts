@@ -19,13 +19,16 @@ export const enum MapType {
     CELLULAR
 }
 
+/** The plain tiles a generated map is laid out with, before any styling - a game names its own (see `IStyler`). */
+export type MapTiles = { floor: string; wall: string };
+
 export interface IMap {
     type: MapType;
     levelData: Brush[];
     dungeon: Dungeon | Map;
 }
 
-export function GenerateMap(type: MapType, width: number, height: number): IMap {
+export function GenerateMap(type: MapType, width: number, height: number, tiles: MapTiles): IMap {
     const levelData: Brush[] = [];
     let dungeon: Dungeon | Map = null;
 
@@ -44,7 +47,7 @@ export function GenerateMap(type: MapType, width: number, height: number): IMap 
             dungeon.create((x: number, y: number, value: number) => {
                 if (value === 0) {
                     levelData.push({
-                        name: "floor_1",
+                        name: tiles.floor,
                         position: { x, y },
                         rotation: 0,
                         pixelOffset: { x: 0, y: 0 },
@@ -67,7 +70,7 @@ export function GenerateMap(type: MapType, width: number, height: number): IMap 
             dungeon.create((x: number, y: number, value: number) => {
                 if (value === 0) {
                     levelData.push({
-                        name: "floor_1",
+                        name: tiles.floor,
                         position: { x, y },
                         rotation: 0,
                         pixelOffset: { x: 0, y: 0 },
@@ -83,7 +86,7 @@ export function GenerateMap(type: MapType, width: number, height: number): IMap 
             dungeon.create((x: number, y: number, value: number) => {
                 if (value === 0) {
                     levelData.push({
-                        name: "floor_1",
+                        name: tiles.floor,
                         position: { x, y },
                         rotation: 0,
                         pixelOffset: { x: 0, y: 0 },
@@ -99,7 +102,7 @@ export function GenerateMap(type: MapType, width: number, height: number): IMap 
             dividedMaze.create((x: number, y: number, value: number) => {
                 if (value === 1) {
                     levelData.push({
-                        name: "wall_mid",
+                        name: tiles.wall,
                         position: { x, y },
                         rotation: 0,
                         pixelOffset: { x: 0, y: 0 },
@@ -115,7 +118,7 @@ export function GenerateMap(type: MapType, width: number, height: number): IMap 
             ellerMaze.create((x: number, y: number, value: number) => {
                 if (value === 1) {
                     levelData.push({
-                        name: "wall_mid",
+                        name: tiles.wall,
                         position: { x, y },
                         rotation: 0,
                         pixelOffset: { x: 0, y: 0 },
@@ -131,7 +134,7 @@ export function GenerateMap(type: MapType, width: number, height: number): IMap 
             iceyMaze.create((x: number, y: number, value: number) => {
                 if (value === 1) {
                     levelData.push({
-                        name: "wall_mid",
+                        name: tiles.wall,
                         position: { x, y },
                         rotation: 0,
                         pixelOffset: { x: 0, y: 0 },
@@ -149,7 +152,7 @@ export function GenerateMap(type: MapType, width: number, height: number): IMap 
                 cellular.create((x: number, y: number, value: number) => {
                     if (i === 2 && value === 0) {
                         levelData.push({
-                            name: "floor_1",
+                            name: tiles.floor,
                             position: { x, y },
                             rotation: 0,
                             pixelOffset: { x: 0, y: 0 },

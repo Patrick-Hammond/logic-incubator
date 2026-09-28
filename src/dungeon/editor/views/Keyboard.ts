@@ -4,14 +4,14 @@ import {GridBounds, Scenes, TileSize} from "../../Constants";
 import {LevelFile} from "../../engine/level/LevelFormat";
 import EditorComponent from "../EditorComponent";
 import {GenerateMap, IMap, MapType} from "../maps/Generators";
-import {Style0x7} from "../maps/Style0x7";
-import {ApplyMapStyle} from "../maps/Styler";
+import {ApplyMapStyle, IStyler} from "../maps/Styler";
 import {GenerateZTest} from "../maps/ZTest";
 import {EditorActions, IEditorState} from "../stores/EditorStore";
 import {LevelDataActions, LevelDataState} from "../stores/LevelDataStore";
 
 export default class Keyboard extends EditorComponent {
-    constructor(private readonly titleScene?: string) {
+    /** `mapStyle`: the game's tiles for the maps keys 1-8 generate - see `IDungeonEditorOptions`. */
+    constructor(private readonly titleScene?: string, private readonly mapStyle?: IStyler) {
         super();
 
         this.Create();
@@ -121,6 +121,10 @@ export default class Keyboard extends EditorComponent {
                     case Key.Five: // eller maze
                     case Key.Six: // icey maze
                     case Key.Seven: {
+                        // Generated maps are laid out in the game's tiles - nothing to do without its style.
+                        if (!this.mapStyle) {
+                            break;
+                        }
                         const ok = confirm("This will delete the current map. Are you sure?");
                         if (ok) {
                             this.editorStore.Dispatch({ type: EditorActions.RESET, data: { persistZoom: true } });
@@ -131,19 +135,22 @@ export default class Keyboard extends EditorComponent {
                             const h = GridBounds.height / scaledTileSize;
 
                             const mapType: MapType = e.keyCode - Key.One;
-                            let map: IMap = GenerateMap(mapType, w, h);
-                            map = ApplyMapStyle(map, new Style0x7());
+                            let map: IMap = GenerateMap(mapType, w, h, this.mapStyle);
+                            map = ApplyMapStyle(map, this.mapStyle);
                             this.levelDataStore.Load({ levelData: map.levelData } as LevelDataState);
                         }
                         break;
                     }
                     case Key.Eight: {
                         // per-tile z / scaling test map
+                        if (!this.mapStyle) {
+                            break;
+                        }
                         const ok = confirm("This will delete the current map. Are you sure?");
                         if (ok) {
                             this.editorStore.Dispatch({ type: EditorActions.RESET, data: { persistZoom: true } });
                             this.levelDataStore.Dispatch({ type: LevelDataActions.RESET });
-                            this.levelDataStore.Load({ levelData: GenerateZTest() } as LevelDataState);
+                            this.levelDataStore.Load({ levelData: GenerateZTest(this.mapStyle) } as LevelDataState);
                         }
                         break;
                     }

@@ -1,7 +1,7 @@
 /**
  * A monster spawner's authored properties - the value of the `SPAWNER` data
- * brush (drawn with the "skull" sprite for now). Pure - no pixi - so it runs
- * under the plain node test runner, same reasoning as Lighting.ts.
+ * brush. Pure - no pixi - so it runs under the plain node test runner, same
+ * reasoning as Lighting.ts.
  */
 
 import { Vec2Like } from "../../../../_lib/math/Geometry";

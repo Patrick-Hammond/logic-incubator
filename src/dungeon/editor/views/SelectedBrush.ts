@@ -6,7 +6,7 @@ import { DataBrushValue } from "../../engine/level/LevelFormat";
 import { OpenDataBrushDialog } from "../DataBrushDialog";
 import { DataBrushEditorFor } from "../DataBrushEditors";
 import EditorComponent from "../EditorComponent";
-import { EditorActions, IEditorState } from "../stores/EditorStore";
+import { DataBrushIcon, DataBrushIcons, EditorActions, IEditorState } from "../stores/EditorStore";
 import { ButtonEl, El, InjectStyles } from "../ui/dom/Dom";
 import EditorOverlay from "../ui/dom/EditorOverlay";
 import SpriteCanvas, { DATA_SWATCH_SIZE } from "../ui/dom/SpriteCanvas";
@@ -30,7 +30,8 @@ export default class SelectedBrush extends EditorComponent {
     private shownName: string = null;
     private animTime = 0;
 
-    constructor() {
+    /** `icons`: the game's sprite over each data brush's colour - see `DataBrushIcons`. */
+    constructor(private readonly icons: DataBrushIcons = {}) {
         super();
         this.AddToScene(Scenes.EDITOR);
     }
@@ -94,7 +95,8 @@ export default class SelectedBrush extends EditorComponent {
         const dataBrush = this.editorStore.state.dataBrushes.find(db => db.name === name);
         const known = this.assetFactory.Has(name);
         if (dataBrush) {
-            const icon = dataBrush.icon ? this.assetFactory.CreateTexture(dataBrush.icon) : null;
+            const iconName = DataBrushIcon(this.icons, dataBrush.name);
+            const icon = iconName ? this.assetFactory.CreateTexture(iconName) : null;
             this.preview.ShowSwatch(dataBrush.colour, icon, PREVIEW_SIZE / DATA_SWATCH_SIZE);
             this.kindText.textContent = "Data brush";
         } else if (name && known) {

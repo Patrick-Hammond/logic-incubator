@@ -83,8 +83,19 @@ export function EditableLayerCount(layers: Layer[]): number {
     return layers.filter(layer => !layer.readOnly).length;
 }
 
-/** `icon`: AssetFactory name (its first frame, for an animation) drawn over the brush's colour in the palette and on the map - see `Palette`. */
-export type DataBrush = { name: string; colour: number; icon?: string; value: DataBrushValue };
+export type DataBrush = { name: string; colour: number; value: DataBrushValue };
+
+/**
+ * A sprite (its first frame, for an animation) drawn over each data brush's colour in the palette
+ * and on the map. They're the game's art, so it picks them (`IDungeonEditorOptions.dataBrushIcons`);
+ * a brush without one shows just its colour.
+ */
+export type DataBrushIcons = { readonly [K in DataBrushName]?: string };
+
+/** `icons`' sprite for the named data brush, if it has one. */
+export function DataBrushIcon(icons: DataBrushIcons, name: string): string | undefined {
+    return (icons as { readonly [name: string]: string | undefined })[name];
+}
 
 interface IActionData {
     mouseButtonState?: MouseButtonState;
@@ -132,12 +143,11 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
             brushVisible: false,
             hoveredBrushName: "",
             dataBrushes: [
-                { name: DataBrushName.PLAYER_START, colour: 0xfe3464, icon: "knight_m_idle_anim", value: 0 },
-                { name: DataBrushName.COLLISION, colour: 0xffd166, icon: "wall_mid", value: 0 },
+                { name: DataBrushName.PLAYER_START, colour: 0xfe3464, value: 0 },
+                { name: DataBrushName.COLLISION, colour: 0xffd166, value: 0 },
                 { name: DataBrushName.Z_INDEX, colour: 0x06d6a0, value: 0 },
-                { name: DataBrushName.LIGHT, colour: 0xff8100, icon: "torch_1_anim", value: { brightness: 0.5, tint: 0xff8100, range: 5 } },
-                // The skull stands in for the spawner (for now), so placed spawners read as what they are.
-                { name: DataBrushName.SPAWNER, colour: 0x9b5de5, icon: "skull", value: DefaultSpawnerValue() }
+                { name: DataBrushName.LIGHT, colour: 0xff8100, value: { brightness: 0.5, tint: 0xff8100, range: 5 } },
+                { name: DataBrushName.SPAWNER, colour: 0x9b5de5, value: DefaultSpawnerValue() }
             ],
             layers: [],
             mouseButtonState: MouseButtonState.UP,
@@ -158,7 +168,7 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
      * builds it fresh from the current `DataBrushName` enum before this runs), but `SelectedDataBrush` and
      * the `BRUSH_CHANGED`/`DATA_BRUSH_INC`/`DEC` lookups key off the *loaded* catalogue, so the mismatched
      * entry's value can never be found again - see the "door"/"doors" mismatch this fixed in level.json.
-     * Reconcile on load: always keep the current code's set of brush names/colours/icons, carrying over each
+     * Reconcile on load: always keep the current code's set of brush names/colours, carrying over each
      * one's saved `value` only where its name still matches.
      *
      * `currentScene` is kept as-is rather than taken from the save: which scene is on screen isn't part of

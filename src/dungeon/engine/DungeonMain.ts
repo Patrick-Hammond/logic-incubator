@@ -15,8 +15,10 @@ import Hud from "./view/Hud";
 import {Player} from "./view/Player";
 import TileMapView from "./view/TileMap";
 
-/** The game's side of the player: how tough they are, what they shoot, and how the HUD shows it. */
+/** The game's side of the player: how they look, how tough they are, what they shoot, and how the HUD shows it. */
 export type PlayerSetup = {
+    /** Animation the player is drawn with. */
+    sprite: string;
     /** In half-hearts - see `Hud`. */
     hitPoints: number;
     /** Sprite names for a full, half and empty heart. */

@@ -1,9 +1,14 @@
 import Dungeon from "rot-js/lib/map/dungeon";
 import { Rectangle, RectangleLike } from "../../../_lib/math/Geometry";
 import { Brush } from "../../engine/level/LevelFormat";
-import { IMap, MapType } from "./Generators";
+import { IMap, MapTiles, MapType } from "./Generators";
 
-export interface IStyler {
+/**
+ * How the editor's map generators (keys 1-8) paint with a game's tiles: the plain floor and wall a
+ * map is laid out with, then each room restyled in the game's own art. A game hands one to the
+ * editor (`IDungeonEditorOptions.mapStyle`) - usually by extending `BaseStyle`.
+ */
+export interface IStyler extends MapTiles {
     StyleRoom(rect: RectangleLike, doors?: { [key: string]: number }): Brush[];
 }
 

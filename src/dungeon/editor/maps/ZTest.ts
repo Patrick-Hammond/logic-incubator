@@ -1,4 +1,5 @@
 import { Brush, DataBrushName } from "../../engine/level/LevelFormat";
+import { MapTiles } from "./Generators";
 
 /**
  * A hand-built map for exercising height / scaling without editor painting.
@@ -38,35 +39,35 @@ function height(out: Brush[], x: number, y: number, h: number): void {
     }
 }
 
-function room(out: Brush[], x0: number, y0: number, x1: number, y1: number, h: number, door: "left" | "right"): void {
+function room(out: Brush[], tiles: MapTiles, x0: number, y0: number, x1: number, y1: number, h: number, door: "left" | "right"): void {
     const doorY = (y0 + y1) >> 1;
     for (let x = x0; x <= x1; x++) {
         for (let y = y0; y <= y1; y++) {
             const perimeter = x === x0 || x === x1 || y === y0 || y === y1;
             const isDoor = (door === "right" && x === x1 && y === doorY) || (door === "left" && x === x0 && y === doorY);
             if (perimeter && !isDoor) {
-                out.push(mk("wall_mid", x, y, TILE_LAYER));
+                out.push(mk(tiles.wall, x, y, TILE_LAYER));
                 out.push(mk(DataBrushName.COLLISION, x, y, DATA_LAYER));
             } else {
-                out.push(mk("floor_1", x, y, TILE_LAYER));
+                out.push(mk(tiles.floor, x, y, TILE_LAYER));
             }
             height(out, x, y, h);
         }
     }
 }
 
-export function GenerateZTest(): Brush[] {
+export function GenerateZTest(tiles: MapTiles): Brush[] {
     const out: Brush[] = [];
 
-    room(out, 2, 2, 18, 14, 0, "right");
+    room(out, tiles, 2, 2, 18, 14, 0, "right");
     out.push(mk(DataBrushName.PLAYER_START, 5, ROW, DATA_LAYER)); // spawn
 
     STEP_H.forEach((h, i) => {
         const x = 19 + i;
-        out.push(mk("floor_1", x, ROW, TILE_LAYER));
-        out.push(mk("wall_mid", x, ROW - 1, TILE_LAYER));
+        out.push(mk(tiles.floor, x, ROW, TILE_LAYER));
+        out.push(mk(tiles.wall, x, ROW - 1, TILE_LAYER));
         out.push(mk(DataBrushName.COLLISION, x, ROW - 1, DATA_LAYER));
-        out.push(mk("wall_mid", x, ROW + 1, TILE_LAYER));
+        out.push(mk(tiles.wall, x, ROW + 1, TILE_LAYER));
         out.push(mk(DataBrushName.COLLISION, x, ROW + 1, DATA_LAYER));
         // height covers the whole strip footprint so walls scale with the floor
         height(out, x, ROW - 1, h);
@@ -74,7 +75,7 @@ export function GenerateZTest(): Brush[] {
         height(out, x, ROW + 1, h);
     });
 
-    room(out, 25, 2, 41, 14, HIGH_H, "left");
+    room(out, tiles, 25, 2, 41, 14, HIGH_H, "left");
 
     return out;
 }

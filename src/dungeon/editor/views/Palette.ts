@@ -2,7 +2,7 @@ import {Container, SCALE_MODES, Sprite} from "pixi.js";
 import AssetFactory from "../../../_lib/loading/AssetFactory";
 import { AnimationSpeed, Scenes } from "../../Constants";
 import EditorComponent from "../EditorComponent";
-import { EditorActions, IEditorState } from "../stores/EditorStore";
+import { DataBrushIcon, DataBrushIcons, EditorActions, IEditorState } from "../stores/EditorStore";
 import { ButtonEl, El, InjectStyles } from "../ui/dom/Dom";
 import EditorOverlay from "../ui/dom/EditorOverlay";
 import SpriteCanvas, { DATA_ICON_FIT, DATA_SWATCH_SIZE, FitIcon, VisibleBounds } from "../ui/dom/SpriteCanvas";
@@ -38,7 +38,8 @@ export default class Palette extends EditorComponent {
     private animTime = 0;
     private animFrame = 0;
 
-    constructor() {
+    /** `icons`: the game's sprite over each data brush's colour - see `DataBrushIcons`. */
+    constructor(private readonly icons: DataBrushIcons = {}) {
         super();
         this.AddToScene(Scenes.EDITOR);
     }
@@ -77,7 +78,8 @@ export default class Palette extends EditorComponent {
         dataBrushes.forEach(dataBrush => {
             const chip = ButtonEl("pl-chip", undefined, dataBrush.name);
             const swatch = new SpriteCanvas();
-            swatch.ShowSwatch(dataBrush.colour, dataBrush.icon ? this.assetFactory.CreateTexture(dataBrush.icon) : null, SWATCH_SCALE);
+            const iconName = DataBrushIcon(this.icons, dataBrush.name);
+            swatch.ShowSwatch(dataBrush.colour, iconName ? this.assetFactory.CreateTexture(iconName) : null, SWATCH_SCALE);
             chip.append(swatch.canvas, El("span", "pl-chip-label", dataBrush.name));
             chips.appendChild(this.AddBrushEvents(chip, dataBrush.name));
         });
@@ -220,8 +222,9 @@ export default class Palette extends EditorComponent {
         this.editorStore.state.dataBrushes.forEach(dataBrush => {
             square.tint = dataBrush.colour;
             let icon: Sprite = null;
-            if (dataBrush.icon) {
-                icon = new Sprite(this.assetFactory.CreateTexture(dataBrush.icon));
+            const iconName = DataBrushIcon(this.icons, dataBrush.name);
+            if (iconName) {
+                icon = new Sprite(this.assetFactory.CreateTexture(iconName));
                 const fit = FitIcon(VisibleBounds(icon.texture), DATA_SWATCH_SIZE, DATA_ICON_FIT);
                 icon.scale.set(fit.scale);
                 icon.position.set(fit.x, fit.y);

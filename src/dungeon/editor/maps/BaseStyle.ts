@@ -13,6 +13,9 @@ const defaultBrush: Brush = {
 };
 
 export abstract class BaseStyle implements IStyler {
+    abstract readonly floor: string;
+    abstract readonly wall: string;
+
     protected rect: RectangleLike;
     protected doors: Vec2Like[];
 

@@ -4,7 +4,7 @@ import { TEST_MONSTERS } from "../../engine/level/__fixtures__/TestMonsters";
 import MonsterRoster from "../../engine/level/entities/MonsterRoster";
 import { DefaultSpawnerValue } from "../../engine/level/entities/Spawners";
 import { DataBrushName } from "../../engine/level/LevelFormat";
-import EditorStore, { EditableLayerCount, EditorActions, EditorTool, IMPLICIT_LAYER_ID, MouseButtonState } from "./EditorStore";
+import EditorStore, { DataBrushIcon, EditableLayerCount, EditorActions, EditorTool, IMPLICIT_LAYER_ID, MouseButtonState } from "./EditorStore";
 
 MonsterRoster.inst.Load(TEST_MONSTERS);
 
@@ -84,22 +84,21 @@ describe("EditorStore layer rename", () => {
 });
 
 describe("EditorStore data brush icons", () => {
-    it("come from the code, not the save, so older saves get them too", () => {
+    it("aren't the store's - an older save's are dropped, as the game picks them (see DataBrushIcons)", () => {
         const store = new EditorStore();
         const saved = {
             ...store.state,
-            dataBrushes: store.state.dataBrushes.map(({ name, colour, value }) => ({ name, colour, value }))
+            dataBrushes: store.state.dataBrushes.map(db => ({ ...db, icon: "old_sprite" }))
         };
         store.Load(saved);
-        const icons: { [name: string]: string | undefined } = {};
-        store.state.dataBrushes.forEach(db => (icons[db.name] = db.icon));
-        expect(icons).toEqual({
-            [DataBrushName.PLAYER_START]: "knight_m_idle_anim",
-            [DataBrushName.COLLISION]: "wall_mid",
-            [DataBrushName.Z_INDEX]: undefined,
-            [DataBrushName.LIGHT]: "torch_1_anim",
-            [DataBrushName.SPAWNER]: "skull"
-        });
+        store.state.dataBrushes.forEach(db => expect(db, db.name).not.toHaveProperty("icon"));
+    });
+
+    it("are looked up by brush name, and a brush without one gets none", () => {
+        const icons = { [DataBrushName.LIGHT]: "torch" };
+        expect(DataBrushIcon(icons, DataBrushName.LIGHT)).toBe("torch");
+        expect(DataBrushIcon(icons, DataBrushName.Z_INDEX)).toBeUndefined();
+        expect(DataBrushIcon({}, "not-a-brush")).toBeUndefined();
     });
 });
 
