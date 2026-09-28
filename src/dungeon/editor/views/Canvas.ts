@@ -4,13 +4,14 @@ import AssetMetadataStore from "../../engine/level/AssetMetadata";
 import { FindImplicitPlacements } from "../../engine/level/ImplicitData";
 import { IsSpawnerValue } from "../../engine/level/entities/Spawners";
 import { IsLightValue } from "../../engine/level/Lighting";
+import { Brush, DataBrushName } from "../../engine/level/LevelFormat";
 import AssetFactory from "../../../_lib/loading/AssetFactory";
 import { DataBrushEditorFor } from "../DataBrushEditors";
 import ObjectPool from "../../../_lib/patterns/ObjectPool";
 import { AnimationSpeed, GridBounds, InitalScale, Scenes, TileSize } from "../../Constants";
 import EditorComponent from "../EditorComponent";
-import { DataBrushName, EditorActions, EditorTool, IEditorState, MouseButtonState } from "../stores/EditorStore";
-import { Brush, LevelDataActions, LevelDataState } from "../stores/LevelDataStore";
+import { EditorActions, EditorTool, IEditorState, MouseButtonState } from "../stores/EditorStore";
+import { LevelDataActions, LevelDataState } from "../stores/LevelDataStore";
 
 /** Doors aren't a paintable data brush, so they have no palette colour of their own to borrow. */
 const IMPLICIT_DOOR_COLOUR = 0x4cc9f0;

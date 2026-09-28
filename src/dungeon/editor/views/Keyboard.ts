@@ -1,6 +1,7 @@
 import {Key} from "../../../_lib/io/Keyboard";
 import {LoadTextFile, SaveTextFile, SaveToLocalStorage, ShowOpenFileDialog} from "../../../_lib/io/Storage";
 import {GridBounds, Scenes, TileSize} from "../../Constants";
+import {LevelFile} from "../../engine/level/LevelFormat";
 import EditorComponent from "../EditorComponent";
 import {GenerateMap, IMap, MapType} from "../maps/Generators";
 import {Style0x7} from "../maps/Style0x7";
@@ -27,13 +28,7 @@ export default class Keyboard extends EditorComponent {
             if (e.keyCode === Key.Enter) {
                 const isEditor = this.editorStore.state.currentScene === Scenes.EDITOR;
                 if (isEditor) {
-                    SaveToLocalStorage(
-                        "dungeonLevel",
-                        JSON.stringify({
-                            editorData: this.editorStore.state,
-                            levelData: this.levelDataStore.state
-                        })
-                    );
+                    SaveToLocalStorage("dungeonLevel", JSON.stringify(this.LevelFile()));
                 }
 
                 const scene = isEditor ? Scenes.GAME : Scenes.EDITOR;
@@ -89,13 +84,7 @@ export default class Keyboard extends EditorComponent {
                         this.editorStore.Dispatch({ type: EditorActions.DATA_BRUSH_DEC });
                         break;
                     case Key.S:
-                        SaveTextFile(
-                            "dungeonLevel.txt",
-                            JSON.stringify({
-                                editorData: this.editorStore.state,
-                                levelData: this.levelDataStore.state
-                            })
-                        );
+                        SaveTextFile("dungeonLevel.txt", JSON.stringify(this.LevelFile()));
                         break;
                     case Key.L:
                         ShowOpenFileDialog().then((fileList: FileList) => {
@@ -164,6 +153,11 @@ export default class Keyboard extends EditorComponent {
 
         // disable context menu
         document.body.oncontextmenu = () => false;
+    }
+
+    /** What Enter and S save: the engine's level format, with the rest of the editor's state riding along in `editorData`. */
+    private LevelFile(): LevelFile {
+        return { editorData: this.editorStore.state, levelData: this.levelDataStore.state };
     }
 
     private Render(prevState: IEditorState, state: IEditorState): void {

@@ -5,8 +5,9 @@ import { GridBounds, Scenes, TileSize } from "../../Constants";
 import { OpenDataBrushDialog } from "../DataBrushDialog";
 import { DataBrushEditorFor } from "../DataBrushEditors";
 import EditorComponent from "../EditorComponent";
+import { Brush } from "../../engine/level/LevelFormat";
 import { EditorActions, EditorTool, IEditorState, MouseButtonState } from "../stores/EditorStore";
-import { Brush, Layer, LevelDataActions } from "../stores/LevelDataStore";
+import { Layer, LevelDataActions } from "../stores/LevelDataStore";
 import { CellRect, FloodFill, RectCells, SpanRect, TopmostBrushAt } from "../tools/ToolGeometry";
 
 /** Whether the brush sprite follows the cursor under this tool - only for the tools that paint with it. */

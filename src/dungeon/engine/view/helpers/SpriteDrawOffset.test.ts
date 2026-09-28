@@ -2,7 +2,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { describe, expect, it } from "vitest";
 import { TileSize } from "../../../Constants";
-import { DataBrushName } from "../../../editor/stores/EditorStore";
+import { DataBrushName } from "../../level/LevelFormat";
 import { SpriteDrawPosition } from "./SpriteDrawOffset";
 
 /**

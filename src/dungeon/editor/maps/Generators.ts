@@ -7,7 +7,7 @@ import IceyMaze from "rot-js/lib/map/iceymaze";
 import Map from "rot-js/lib/map/map";
 import Rogue from "rot-js/lib/map/rogue";
 import Uniform from "rot-js/lib/map/uniform";
-import { Brush } from "../stores/LevelDataStore";
+import { Brush } from "../../engine/level/LevelFormat";
 
 export const enum MapType {
     DIGGER,

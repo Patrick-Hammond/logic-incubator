@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { TEST_MONSTERS } from "../engine/level/__fixtures__/TestMonsters";
 import MonsterRoster from "../engine/level/entities/MonsterRoster";
 import { DefaultSpawnerValue } from "../engine/level/entities/Spawners";
+import { DataBrushName } from "../engine/level/LevelFormat";
 import { DataBrushEditorFor } from "./DataBrushEditors";
-import { DataBrushName } from "./stores/EditorStore";
 
 MonsterRoster.inst.Load(TEST_MONSTERS);
 

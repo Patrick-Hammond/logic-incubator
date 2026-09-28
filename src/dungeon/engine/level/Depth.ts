@@ -2,7 +2,7 @@
  * Cell-height (z) maths. Pure - no pixi, no DOM - so it runs under the plain
  * node test runner (see Depth.test.ts).
  *
- * Height is painted per grid cell with the `Z_INDEX` (DepthBrushName) data brush
+ * Height is painted per grid cell with the `Z_INDEX` data brush (see LevelFormat.ts)
  * and is purely visual: movement and collision stay a single flat grid. The
  * renderer draws each cell's tiles grouped by that cell's z, each group at
  * `ZScale(z - playerZ)`, so the band the player stands on is always 1:1, bands

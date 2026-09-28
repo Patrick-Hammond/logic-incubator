@@ -3,8 +3,8 @@ import { AddTypes, SubtractTypes } from "../../../_lib/patterns/EnumerateTypes";
 import Store, { IAction } from "../../../_lib/patterns/redux/Store";
 import { InitalScale, Scenes } from "../../Constants";
 import { DefaultSpawnerValue, IsSpawnerValue, SanitiseSpawnerValue, SpawnerValue } from "../../engine/level/entities/Spawners";
-import { LightValue } from "../../engine/level/Lighting";
-import { Brush, Layer } from "./LevelDataStore";
+import { Brush, DataBrushName, DataBrushValue } from "../../engine/level/LevelFormat";
+import { Layer } from "./LevelDataStore";
 
 export const enum EditorActions {
     BRUSH_MOVED,
@@ -46,16 +46,6 @@ export const enum MouseButtonState {
     MIDDLE_DOWN
 }
 
-export const enum DataBrushName {
-    PLAYER_START = "player-start",
-    COLLISION = "collision",
-    Z_INDEX = "z-index",
-    LIGHT = "light",
-    SPAWNER = "spawner"
-}
-
-export type DataBrushValue = number | LightValue | SpawnerValue;
-
 /** What a left-click/drag on the map does - picked from the toolbar (see `Toolbar`, `Tools`). */
 export const enum EditorTool {
     BRUSH = "brush",
@@ -75,7 +65,7 @@ export const MaxEditableLayers = 16;
  * `AssetMetadata` (collision, door footprints, lights - see
  * `FindImplicitPlacements`) rather than hand-painted brushes. Always present
  * (re-added on load/reset), never holds brushes, and `isData` so
- * `Level.LoadEditorData` never mistakes it for a tile layer. Far below any id
+ * `Level.LoadLevel` never mistakes it for a tile layer. Far below any id
  * `NextDataLayerId` hands out (-1, -1000, -1999, ...).
  */
 export const IMPLICIT_LAYER_ID = -99999;

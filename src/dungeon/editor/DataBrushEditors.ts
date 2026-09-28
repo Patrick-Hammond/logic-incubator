@@ -11,7 +11,7 @@
 import MonsterRoster, { MonsterType } from "../engine/level/entities/MonsterRoster";
 import { DefaultSpawnerValue, IsSpawnerValue, SanitiseSpawnerValue } from "../engine/level/entities/Spawners";
 import { IsLightValue } from "../engine/level/Lighting";
-import { DataBrushName, DataBrushValue } from "./stores/EditorStore";
+import { DataBrushName, DataBrushValue } from "../engine/level/LevelFormat";
 import { ChoiceOption, FieldSpec, FormValues } from "./ui/dialog/FormDialog";
 
 /** Lookups the dialogs need from the running editor, passed in so this module stays pixi-free. */

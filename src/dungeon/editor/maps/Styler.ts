@@ -1,6 +1,6 @@
 import Dungeon from "rot-js/lib/map/dungeon";
 import { Rectangle, RectangleLike } from "../../../_lib/math/Geometry";
-import { Brush } from "../stores/LevelDataStore";
+import { Brush } from "../../engine/level/LevelFormat";
 import { IMap, MapType } from "./Generators";
 
 export interface IStyler {

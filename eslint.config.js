@@ -18,5 +18,23 @@ module.exports = tseslint.config(
       '@typescript-eslint/no-non-null-assertion': 'off',
       '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }]
     }
+  },
+  // Dependencies only point down: editor -> engine -> _lib.
+  {
+    // The engine owns the level format (engine/level/LevelFormat.ts); the editor only writes it.
+    files: ['src/dungeon/engine/**/*.ts', 'src/dungeon/Constants.ts'],
+    rules: {
+      'no-restricted-imports': ['error', {
+        patterns: [{ regex: '(^|/)editor(/|$)', message: 'The engine must not depend on the editor - it goes the other way.' }]
+      }]
+    }
+  },
+  {
+    files: ['src/_lib/**/*.ts'],
+    rules: {
+      'no-restricted-imports': ['error', {
+        patterns: [{ regex: '(^|/)dungeon(/|$)', message: '_lib must not depend on the dungeon engine or editor.' }]
+      }]
+    }
   }
 );

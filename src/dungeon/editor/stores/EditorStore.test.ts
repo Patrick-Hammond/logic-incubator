@@ -3,7 +3,8 @@ import { Scenes } from "../../Constants";
 import { TEST_MONSTERS } from "../../engine/level/__fixtures__/TestMonsters";
 import MonsterRoster from "../../engine/level/entities/MonsterRoster";
 import { DefaultSpawnerValue } from "../../engine/level/entities/Spawners";
-import EditorStore, { DataBrushName, EditableLayerCount, EditorActions, EditorTool, IMPLICIT_LAYER_ID, MouseButtonState } from "./EditorStore";
+import { DataBrushName } from "../../engine/level/LevelFormat";
+import EditorStore, { EditableLayerCount, EditorActions, EditorTool, IMPLICIT_LAYER_ID, MouseButtonState } from "./EditorStore";
 
 MonsterRoster.inst.Load(TEST_MONSTERS);
 

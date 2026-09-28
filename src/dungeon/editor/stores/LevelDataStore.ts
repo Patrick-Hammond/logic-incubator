@@ -3,19 +3,14 @@ import { AddTypes } from "../../../_lib/patterns/EnumerateTypes";
 import Store, { IAction } from "../../../_lib/patterns/redux/Store";
 import AssetMetadataStore from "../../engine/level/AssetMetadata";
 import { OrphanedExplicitData } from "../../engine/level/ImplicitData";
-import type { DataBrushValue } from "./EditorStore";
+import { Brush, DataBrushValue, LevelLayer } from "../../engine/level/LevelFormat";
 
-export type Brush = {
-    name: string;
-    position: Vec2Like;
-    pixelOffset: Vec2Like;
-    rotation: number;
-    scale: Vec2Like;
-    layerId: number;
-    data: DataBrushValue;
-};
-/** `readOnly` marks the editor's derived implicit-data layer (see `IMPLICIT_LAYER_ID` in EditorStore) - nothing can be painted on it. */
-export type Layer = { id: number; name: string; selected: boolean; visible: boolean; isData: boolean; readOnly?: boolean };
+/**
+ * A level's layer (see `LevelLayer`) plus what only the editor keeps: which one is selected and
+ * whether it's shown. `readOnly` marks the editor's derived implicit-data layer (see `IMPLICIT_LAYER_ID`
+ * in EditorStore) - nothing can be painted on it.
+ */
+export type Layer = LevelLayer & { selected: boolean; visible: boolean; readOnly?: boolean };
 export type LevelDataState = { levelData: LevelData };
 
 export const enum LevelDataActions {

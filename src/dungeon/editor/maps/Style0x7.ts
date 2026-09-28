@@ -1,6 +1,6 @@
 import RNG from "rot-js/lib/rng";
 import { Vec2Like, Rectangle } from "../../../_lib/math/Geometry";
-import { Brush } from "../stores/LevelDataStore";
+import { Brush } from "../../engine/level/LevelFormat";
 import { BaseStyle } from "./BaseStyle";
 
 export class Style0x7 extends BaseStyle {

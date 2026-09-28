@@ -2,14 +2,14 @@
  * Static point-light baking. Pure - no pixi - so it runs under the plain node
  * test runner, same reasoning as Doors.ts/Regions.ts.
  *
- * Baked once at level load (see `Level.LoadEditorData`), not recomputed per
+ * Baked once at level load (see `Level.LoadLevel`), not recomputed per
  * frame - this project has no moving lights, so there's no reason to pay for
  * falloff math every frame when a per-cell lookup already avoids it.
  */
 
 import { Vec2Like } from "../../../_lib/math/Geometry";
 
-/** A light's authored properties - either painted with the `LIGHT` data brush, or intrinsic to a tile via `AssetMetadata.light` (see `Level.LoadEditorData`). */
+/** A light's authored properties - either painted with the `LIGHT` data brush, or intrinsic to a tile via `AssetMetadata.light` (see `Level.LoadLevel`). */
 export type LightValue = { brightness: number; tint: number; range: number };
 
 /** Narrows a `Brush.data`/`DataBrush.value` to `LightValue`. Collision, z-index and player-start keep a plain number, but `SpawnerValue` is an object too, so this keys off `range` rather than just "is an object". Deliberately loose past that - callers that already trust the shape (e.g. a `LIGHT` brush placement) only need "is this the light variant"; see `IsCompleteLightValue` for untrusted input. */

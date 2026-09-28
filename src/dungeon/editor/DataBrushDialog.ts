@@ -1,7 +1,7 @@
 import AssetFactory from "../../_lib/loading/AssetFactory";
 import MonsterRoster, { MonsterType } from "../engine/level/entities/MonsterRoster";
+import { DataBrushValue } from "../engine/level/LevelFormat";
 import { DataBrushEditorFor } from "./DataBrushEditors";
-import { DataBrushValue } from "./stores/EditorStore";
 import { ChoiceOption, IsFormDialogOpen, OpenFormDialog } from "./ui/dialog/FormDialog";
 import SpriteCanvas from "./ui/dom/SpriteCanvas";
 

@@ -4,16 +4,16 @@
  * hand-painted on a data layer. Pure - no pixi - so it runs under the plain
  * node test runner (see ImplicitData.test.ts), same reasoning as Doors.ts.
  *
- * One source of truth for both consumers: `Level.LoadEditorData` bakes these
+ * One source of truth for both consumers: `Level.LoadLevel` bakes these
  * into its collision/door/light grids, and the editor's read-only implicit
  * layer (see `Canvas`) draws exactly the same list, so what the overlay shows
  * is what the game will do.
  */
 
 import { Vec2Like } from "../../../_lib/math/Geometry";
-import { DataBrushName, DataBrushValue } from "../../editor/stores/EditorStore";
 import { AssetMetadata } from "./AssetMetadata";
 import { DoorFootprint } from "./Doors";
+import { DataBrushName, DataBrushValue } from "./LevelFormat";
 import { IsLightValue, LightValue } from "./Lighting";
 
 export type ImplicitBrush = { name: string; position: Vec2Like; pixelOffset: Vec2Like; layerId: number; data?: DataBrushValue | null };

@@ -1,5 +1,4 @@
-import { DataBrushName } from "../stores/EditorStore";
-import { Brush } from "../stores/LevelDataStore";
+import { Brush, DataBrushName } from "../../engine/level/LevelFormat";
 
 /**
  * A hand-built map for exercising height / scaling without editor painting.

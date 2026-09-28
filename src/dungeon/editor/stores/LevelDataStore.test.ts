@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import AssetMetadataStore from "../../engine/level/AssetMetadata";
-import { DataBrushName } from "./EditorStore";
-import LevelDataStore, { Brush, Layer, LevelDataActions } from "./LevelDataStore";
+import { Brush, DataBrushName } from "../../engine/level/LevelFormat";
+import LevelDataStore, { Layer, LevelDataActions } from "./LevelDataStore";
 
 const TILE_LAYER: Layer = { id: 0, name: "layer 0", selected: true, visible: true, isData: false };
 const DATA_LAYER: Layer = { id: -1, name: "data layer -1", selected: false, visible: true, isData: true };

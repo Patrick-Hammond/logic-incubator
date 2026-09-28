@@ -7,6 +7,7 @@ import {LEVEL_CREATED, PLAYER_DIED} from "./Events";
 import AssetMetadataStore from "./level/AssetMetadata";
 import {Weapon} from "./level/entities/Projectiles";
 import Level from "./level/Level";
+import {LevelFile} from "./level/LevelFormat";
 import TileCollision from "./level/TileCollision";
 import {Camera} from "./view/Camera";
 import EntityRenderer from "./view/EntityRenderer";
@@ -127,8 +128,8 @@ export class DungeonMain extends GameComponent {
 
         const localData = LoadFromLocalStorage("dungeonLevel");
         if (localData && this.level) {
-            const data = JSON.parse(localData);
-            this.level.LoadEditorData(data);
+            const file: LevelFile = JSON.parse(localData);
+            this.level.LoadLevel(file);
         }
     }
 }

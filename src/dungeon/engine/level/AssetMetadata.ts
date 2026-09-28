@@ -2,7 +2,7 @@
  * Per-asset-name defaults for tile behaviour that would otherwise have to be
  * hand-painted on a data layer every time that sprite is placed - a wall's
  * collision, a door's door-ness, a torch's light. Loaded once at boot from
- * `assets-meta.json` (by the game's boot code) and consulted by `Level.LoadEditorData`
+ * `assets-meta.json` (by the game's boot code) and consulted by `Level.LoadLevel`
  * when building `collisionData`/`doorData`/the light list, so painting a wall
  * tile is enough on its own; an explicit `COLLISION`/`LIGHT` data brush at the
  * same cell still layers on top for one-off exceptions.

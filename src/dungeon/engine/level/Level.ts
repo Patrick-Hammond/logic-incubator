@@ -3,8 +3,6 @@ import Game from "../../../_lib/game/Game";
 import AssetFactory from "../../../_lib/loading/AssetFactory";
 import {Rectangle, Vec2Like} from "../../../_lib/math/Geometry";
 import {AnimationSpeed, TileSize} from "../../Constants";
-import {DataBrushName, DataBrushValue, IEditorState} from "../../editor/stores/EditorStore";
-import {Layer} from "../../editor/stores/LevelDataStore";
 import {LEVEL_LOADED} from "../Events";
 import AssetMetadataStore from "./AssetMetadata";
 import {HeightAt} from "./Depth";
@@ -12,18 +10,9 @@ import {FindDoorGroups} from "./Doors";
 import MonsterRoster from "./entities/MonsterRoster";
 import {IsSpawnerValue, SanitiseSpawnerValue, Spawner, SpawnerCells} from "./entities/Spawners";
 import {FindImplicitPlacements} from "./ImplicitData";
+import {Brush, DataBrushName, LevelFile, LevelLayer} from "./LevelFormat";
 import {AMBIENT_LIGHT, AMBIENT_TINT, BakedLight, BakeLighting, IsLightValue, LightSource} from "./Lighting";
 import {FindRegions, Region, RegionIdsTouching} from "./Regions";
-
-type Brush = {
-    name: string;
-    position: Vec2Like;
-    pixelOffset: Vec2Like;
-    rotation: number;
-    scale: Vec2Like;
-    layerId: number;
-    data: DataBrushValue;
-};
 
 export type Tile = Brush & {
     texture: Texture;
@@ -53,10 +42,10 @@ function CreateTile(brush: Brush): Tile | null {
 export default class Level {
     /** [layer][x][y] -> every tile painted at that cell, in paint order (later = drawn on top). */
     public levelData: Tile[][][][] = [];
-    public tileLayers: Layer[] = [];
+    public tileLayers: LevelLayer[] = [];
     /** Per-cell collision: `true` if any tile placed there has `collidable: true` in `AssetMetadata`, or the cell was painted with the `COLLISION` data brush (an explicit override/addition on top of the intrinsic default). */
     public collisionData: boolean[][] = [];
-    /** Per-cell height painted with the `Z_INDEX` (DepthBrushName) data brush. */
+    /** Per-cell height painted with the `Z_INDEX` data brush. */
     public heightData: number[][] = [];
     /** Per-cell lighting baked from point lights - both the `LIGHT` data brush and any placed tile with `light` in its `AssetMetadata` (see `LightAt`, `Lighting.BakeLighting`). */
     public lightData: BakedLight[][] = [];
@@ -233,7 +222,7 @@ export default class Level {
         );
     }
 
-    LoadEditorData(editorLevelData: {editorData: IEditorState, levelData: Brush[]}): void {
+    LoadLevel(file: LevelFile): void {
 
         this.DisposeTiles();
 
@@ -255,7 +244,7 @@ export default class Level {
 
         const idMap: {[ id: number ]: number} = {};
         let id = 0;
-        editorLevelData.editorData.layers.forEach(layer => {
+        file.editorData.layers.forEach(layer => {
             if(!layer.isData) {
                 this.tileLayers[ id ] = layer;
                 idMap[ layer.id ] = id;
@@ -263,7 +252,7 @@ export default class Level {
             }
         });
 
-        const levelData = editorLevelData.levelData["levelData"];
+        const levelData = file.levelData.levelData;
 
         // find map bounds
         const bounds = {x1: Number.MAX_VALUE, y1: Number.MAX_VALUE, x2: Number.MIN_VALUE, y2: Number.MIN_VALUE};

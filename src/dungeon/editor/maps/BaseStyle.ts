@@ -1,5 +1,5 @@
 import { Vec2Like, RectangleLike } from "../../../_lib/math/Geometry";
-import { Brush } from "../stores/LevelDataStore";
+import { Brush } from "../../engine/level/LevelFormat";
 import { IStyler } from "./Styler";
 
 const defaultBrush: Brush = {
