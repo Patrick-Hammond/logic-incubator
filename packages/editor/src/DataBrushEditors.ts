@@ -1,8 +1,15 @@
 /**
- * How each data brush's value is edited in the `FormDialog` popup: which
- * fields it shows, and how its value converts to and from the dialog's flat
- * form values. Brushes whose value the game never reads (player-start,
- * collision) have no entry, so the editor offers no edit button for them.
+ * How each editable value is edited in the `FormDialog` popup: which fields
+ * it shows, and how its value converts to and from the dialog's flat form
+ * values. Brushes whose value the game never reads (player-start, collision)
+ * have no entry, so the editor offers no edit button for them.
+ *
+ * "light" and "spawner" are keyed by their old `DataBrushName` string even
+ * though neither is a paintable data brush any more - a light or a spawner is
+ * now an ordinary tile placement (see `ImplicitData.EffectiveLight`/
+ * `EffectiveSpawner`), edited by the data-select tool clicking it on the map
+ * rather than a palette chip, but it's the exact same value shape and the
+ * exact same dialog either way.
  *
  * No pixi in here - monster pictures come in via `EditorImages` - so the
  * conversions run under the plain node test runner (see DataBrushEditors.test.ts).
@@ -51,7 +58,8 @@ const EDITORS: { [name: string]: DataBrushEditor } = {
         fromForm: form => Number(form.value)
     },
 
-    [DataBrushName.LIGHT]: {
+    // Not DataBrushName.LIGHT - it isn't one any more (see the module doc comment) - but the same string.
+    light: {
         title: "Light",
         subtitle: "A static point light, baked when the level loads.",
         fields: () => [
@@ -66,7 +74,8 @@ const EDITORS: { [name: string]: DataBrushEditor } = {
         fromForm: form => ({ brightness: Number(form.brightness), tint: Number(form.tint), range: Number(form.range) })
     },
 
-    [DataBrushName.SPAWNER]: {
+    // Not DataBrushName.SPAWNER - same reason as light, above.
+    spawner: {
         title: "Monster spawner",
         subtitle: "Produces monsters over time. Each spawn picks one of the selected types at random.",
         fields: images => [

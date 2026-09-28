@@ -6,13 +6,17 @@ const TILE = 16;
 const TILE_LAYER = 0;
 const DATA_LAYER = -1;
 
+const SPAWNER_VALUE = { monsters: ["imp"], interval: 3, maxAlive: 4, total: 0, activationRange: 10, hitPoints: 10 };
+
 const META: { [name: string]: AssetMetadata } = {
     wall: { collidable: true },
+    big_wall: { collidable: true },
     floor: {},
     door: { door: { id: 1, open: false } },
-    torch: { light: { brightness: 1, tint: 0xff8100, range: 5 } }
+    torch: { light: { brightness: 1, tint: 0xff8100, range: 5 } },
+    goblin_camp: { spawner: SPAWNER_VALUE }
 };
-const SIZES: { [name: string]: { width: number; height: number } } = { door: { width: 32, height: 32 } };
+const SIZES: { [name: string]: { width: number; height: number } } = { door: { width: 32, height: 32 }, big_wall: { width: 32, height: 32 } };
 
 function brush(name: string, x: number, y: number, layerId = TILE_LAYER, extra: Partial<ImplicitBrush> = {}): ImplicitBrush {
     return { name, position: { x, y }, pixelOffset: { x: 0, y: 0 }, layerId, ...extra };
@@ -41,6 +45,11 @@ describe("FindImplicitPlacements", () => {
         expect(result.doors.map(d => `${d.x},${d.y}:${d.id}`).sort()).toEqual(["5,5:1", "5,6:1", "6,5:1", "6,6:1"]);
     });
 
+    it("expands a collidable tile to every cell of its sprite footprint too, not just its anchor - a 32x32 column_wall/doors_frame_left on 16px tiles blocks its full 2x2 block", () => {
+        const result = find([brush("big_wall", 5, 5)]);
+        expect(result.collision.map(c => `${c.x},${c.y}`).sort()).toEqual(["5,5", "5,6", "6,5", "6,6"]);
+    });
+
     it("keeps editor-space coordinates, including negative ones (the editor doesn't normalise)", () => {
         const result = find([brush("door", 28, -4), brush("wall", -3, -1)]);
         expect(result.collision).toEqual([{ x: -3, y: -1 }]);
@@ -51,29 +60,44 @@ describe("FindImplicitPlacements", () => {
         expect(find([brush("torch", 2, 2)]).lights).toEqual([{ x: 2, y: 2, value: META.torch.light }]);
     });
 
-    it("drops an intrinsic light where an explicit LIGHT brush sits on the same cell", () => {
-        const explicit = brush("light", 2, 2, DATA_LAYER, { data: { brightness: 0.5, tint: 0xffffff, range: 3 } });
-        expect(find([brush("torch", 2, 2), explicit]).lights).toEqual([]);
-        // ...but only on that cell.
-        expect(find([brush("torch", 3, 2), explicit]).lights.length).toBe(1);
+    it("prefers a placement's own override over its asset's intrinsic light - see EffectiveLight", () => {
+        const override = { brightness: 0.5, tint: 0xffffff, range: 3 };
+        const result = find([brush("torch", 2, 2, TILE_LAYER, { data: override })]);
+        expect(result.lights).toEqual([{ x: 2, y: 2, value: override }]);
     });
 
-    it("ignores a LIGHT brush with no valid light value when deciding precedence", () => {
-        const broken = brush("light", 2, 2, DATA_LAYER, { data: 4 });
-        expect(find([brush("torch", 2, 2), broken]).lights.length).toBe(1);
+    it("falls back to the intrinsic light when the placement's own data isn't a light value", () => {
+        expect(find([brush("torch", 2, 2, TILE_LAYER, { data: 4 })]).lights).toEqual([{ x: 2, y: 2, value: META.torch.light }]);
+        expect(find([brush("torch", 2, 2, TILE_LAYER, { data: null })]).lights).toEqual([{ x: 2, y: 2, value: META.torch.light }]);
+    });
+
+    it("reports a tile's intrinsic spawner", () => {
+        expect(find([brush("goblin_camp", 4, 4)]).spawners).toEqual([{ x: 4, y: 4, value: SPAWNER_VALUE }]);
+    });
+
+    it("prefers a placement's own override over its asset's intrinsic spawner - see EffectiveSpawner", () => {
+        const override = { ...SPAWNER_VALUE, monsters: ["ogre"] };
+        const result = find([brush("goblin_camp", 4, 4, TILE_LAYER, { data: override })]);
+        expect(result.spawners).toEqual([{ x: 4, y: 4, value: override }]);
     });
 
     it("ignores brushes on data layers, even if their name has metadata", () => {
-        const result = find([brush("wall", 1, 1, DATA_LAYER), brush("door", 2, 2, DATA_LAYER)]);
+        const result = find([
+            brush("wall", 1, 1, DATA_LAYER),
+            brush("door", 2, 2, DATA_LAYER),
+            brush("torch", 3, 3, DATA_LAYER),
+            brush("goblin_camp", 4, 4, DATA_LAYER)
+        ]);
         expect(result.collision).toEqual([]);
         expect(result.doors).toEqual([]);
+        expect(result.lights).toEqual([]);
+        expect(result.spawners).toEqual([]);
     });
 });
 
 describe("OrphanedExplicitData", () => {
     const orphans = (erased: ImplicitBrush[], remaining: ImplicitBrush[]) =>
         OrphanedExplicitData(erased, remaining, layerId => layerId >= 0, name => META[name]);
-    const light = (x: number, y: number) => brush("light", x, y, DATA_LAYER, { data: { brightness: 0.5, tint: 0xffffff, range: 3 } });
 
     it("returns the collision brush under an erased collidable tile, and only on its cell", () => {
         const under = brush("collision", 1, 1, DATA_LAYER);
@@ -81,16 +105,18 @@ describe("OrphanedExplicitData", () => {
         expect(orphans([brush("wall", 1, 1)], [under, elsewhere])).toEqual([under]);
     });
 
-    it("returns the light brush overriding an erased lit tile's light", () => {
-        const override = light(2, 2);
-        expect(orphans([brush("torch", 2, 2)], [override])).toEqual([override]);
+    it("never orphans a light or spawner - neither lives on a data layer any more, so there's nothing left to outlive the tile (its override just goes with it)", () => {
+        const light = brush("light", 2, 2, DATA_LAYER, { data: { brightness: 0.5, tint: 0xffffff, range: 3 } });
+        const spawner = brush("spawner", 4, 4, DATA_LAYER, { data: SPAWNER_VALUE });
+        expect(orphans([brush("torch", 2, 2)], [light])).toEqual([]);
+        expect(orphans([brush("goblin_camp", 4, 4)], [spawner])).toEqual([]);
     });
 
     it("leaves data the erased tile didn't provide", () => {
         const collision = brush("collision", 1, 1, DATA_LAYER);
         const z = brush("z-index", 1, 1, DATA_LAYER, { data: 2 });
-        // A wall has no light, so a light on its cell isn't its override.
-        expect(orphans([brush("wall", 1, 1)], [light(1, 1), z])).toEqual([]);
+        // A wall has no z-index of its own to lose - erasing it leaves an unrelated one untouched.
+        expect(orphans([brush("wall", 1, 1)], [z])).toEqual([]);
         // Collision on a floor is a deliberate one-off, not the floor's.
         expect(orphans([brush("floor", 1, 1)], [collision])).toEqual([]);
     });

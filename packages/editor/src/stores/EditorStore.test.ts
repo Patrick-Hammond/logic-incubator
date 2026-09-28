@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import { Scenes } from "@logic-incubator/engine/Constants";
 import { TEST_MONSTERS } from "@logic-incubator/engine/level/__fixtures__/TestMonsters";
 import MonsterRoster from "@logic-incubator/engine/level/entities/MonsterRoster";
-import { DefaultSpawnerValue } from "@logic-incubator/engine/level/entities/Spawners";
 import { DataBrushName } from "@logic-incubator/engine/level/LevelFormat";
 import EditorStore, { DataBrushIcon, EditableLayerCount, EditorActions, EditorTool, IMPLICIT_LAYER_ID, MouseButtonState } from "./EditorStore";
 
@@ -49,19 +48,38 @@ describe("EditorStore implicit layer", () => {
         expect(implicitLayers(store)).toHaveLength(1);
     });
 
-    it("can't be duplicated or renamed", () => {
+    it("can't be duplicated (there's only ever the one data layer), and starts out named \"attributes\"", () => {
         const store = new EditorStore();
         store.Dispatch({ type: EditorActions.SELECT_LAYER, data: { layer: implicitLayers(store)[0] } });
         const before = store.state.layers;
         store.Dispatch({ type: EditorActions.DUPLICATE_LAYER });
-        store.Dispatch({ type: EditorActions.RENAME_LAYER });
         expect(store.state.layers).toBe(before);
+        expect(implicitLayers(store)[0].name).toBe("attributes");
     });
 
-    it("doesn't affect the id the next data layer gets", () => {
+    it("can be renamed, unlike every other readOnly restriction (nothing else can paint onto it or reorder it)", () => {
         const store = new EditorStore();
-        store.Dispatch({ type: EditorActions.ADD_DATA_LAYER });
-        expect(store.state.layers.find(layer => layer.isData && !layer.readOnly).id).toBe(-1);
+        store.Dispatch({ type: EditorActions.SELECT_LAYER, data: { layer: implicitLayers(store)[0] } });
+        store.Dispatch({ type: EditorActions.RENAME_LAYER, data: { name: "notes" } });
+        expect(implicitLayers(store)[0].name).toBe("notes");
+    });
+
+    it("brings a pre-rename save's fixed old name (\"implicit (read-only)\") up to \"attributes\" on load - safe because that name could never have been anything else (renaming wasn't allowed yet)", () => {
+        const store = new EditorStore();
+        const saved = {
+            ...store.state,
+            layers: [
+                { id: IMPLICIT_LAYER_ID, name: "implicit (read-only)", selected: false, visible: true, isData: true, readOnly: true },
+                { id: 0, name: "layer 0", selected: true, visible: true, isData: false }
+            ]
+        };
+        store.Load(saved);
+        expect(implicitLayers(store)[0].name).toBe("attributes");
+
+        // Already migrated (or freshly renamed to anything else) - re-loading the same state doesn't touch it again.
+        const before = store.state.layers;
+        store.Load(store.state);
+        expect(store.state.layers).toBe(before);
     });
 });
 
@@ -95,39 +113,18 @@ describe("EditorStore data brush icons", () => {
     });
 
     it("are looked up by brush name, and a brush without one gets none", () => {
-        const icons = { [DataBrushName.LIGHT]: "torch" };
-        expect(DataBrushIcon(icons, DataBrushName.LIGHT)).toBe("torch");
-        expect(DataBrushIcon(icons, DataBrushName.Z_INDEX)).toBeUndefined();
+        const icons = { [DataBrushName.Z_INDEX]: "ruler" };
+        expect(DataBrushIcon(icons, DataBrushName.Z_INDEX)).toBe("ruler");
+        expect(DataBrushIcon(icons, DataBrushName.COLLISION)).toBeUndefined();
         expect(DataBrushIcon({}, "not-a-brush")).toBeUndefined();
     });
 });
 
-describe("EditorStore spawner data brush", () => {
-    it("reconciles a saved spawner value, filling fields it was saved without", () => {
-        const store = new EditorStore();
-        const saved = {
-            ...store.state,
-            dataBrushes: [{ name: DataBrushName.SPAWNER, colour: 0, value: { monsters: ["imp"], interval: 1 } as never }]
-        };
-        store.Load(saved);
-        const spawner = store.state.dataBrushes.find(db => db.name === DataBrushName.SPAWNER);
-        expect(spawner.value).toEqual({ ...DefaultSpawnerValue(), monsters: ["imp"], interval: 1 });
-    });
-
-    it("ignores +/- on a spawner, and takes a value set from the dialog", () => {
-        const store = new EditorStore();
-        store.Dispatch({ type: EditorActions.ADD_DATA_LAYER });
-        store.Dispatch({ type: EditorActions.SELECT_LAYER, data: { layer: store.state.layers[store.state.layers.length - 1] } });
-        store.Dispatch({ type: EditorActions.BRUSH_CHANGED, data: { name: DataBrushName.SPAWNER } });
-        store.Dispatch({ type: EditorActions.DATA_BRUSH_INC });
-        expect(store.SelectedDataBrush.value).toEqual(DefaultSpawnerValue());
-
-        const value = { ...DefaultSpawnerValue(), monsters: ["ogre"] };
-        store.Dispatch({ type: EditorActions.SET_DATA_BRUSH_VALUE, data: { value } });
-        expect(store.SelectedDataBrush.value).toEqual(value);
-        expect(store.state.currentBrush.data).toEqual(value);
-    });
-});
+// Reconciling a saved spawner value, and +/- vs. the dialog on a SET_DATA_BRUSH_VALUE-carried object
+// value, used to be tested here against the SPAWNER data brush - it isn't one any more (see
+// LevelFormat.ts and DataBrushEditors.ts), so there's nothing left in `dataBrushes` an object value
+// like a spawner's could ever reach. `ImplicitData.test.ts` covers a spawner's own value now
+// (EffectiveSpawner/SanitiseSpawnerValue), and `Tools.EditableTargetAt`'s dialog-and-SET_DATA path.
 
 describe("EditorStore currentScene", () => {
     it("starts on the editor, the scene shown at boot, so its shortcuts work straight away", () => {
@@ -200,8 +197,8 @@ describe("EditorStore tools", () => {
     it("PICK_BRUSH takes a placed brush's name, layer and transform, but not its position", () => {
         const store = new EditorStore();
         store.Dispatch({ type: EditorActions.ADD_LAYER });
-        store.Dispatch({ type: EditorActions.ADD_DATA_LAYER });
-        const dataLayer = store.state.layers[store.state.layers.length - 1];
+        // "attributes", the one data layer, is always there - no need to add one.
+        const dataLayer = store.state.layers.find(l => l.isData);
         const tileLayer = store.state.layers.find(l => !l.isData);
         store.Dispatch({ type: EditorActions.SELECT_LAYER, data: { layer: dataLayer } });
         store.Dispatch({ type: EditorActions.BRUSH_MOVED, data: { position: { x: 4, y: 4 } } });
@@ -222,20 +219,18 @@ describe("EditorStore tools", () => {
 
     it("PICK_BRUSH on a placed data brush picks up its value too", () => {
         const store = new EditorStore();
-        store.Dispatch({ type: EditorActions.ADD_DATA_LAYER });
-        const dataLayer = store.state.layers[store.state.layers.length - 1];
-        const value = { ...DefaultSpawnerValue(), monsters: ["imp"] };
+        const dataLayer = store.state.layers.find(l => l.isData);
         const placed = {
-            name: DataBrushName.SPAWNER,
+            name: DataBrushName.Z_INDEX,
             position: { x: 1, y: 1 },
             pixelOffset: { x: 0, y: 0 },
             rotation: 0,
             scale: { x: 1, y: 1 },
             layerId: dataLayer.id,
-            data: value
+            data: 5
         };
         store.Dispatch({ type: EditorActions.PICK_BRUSH, data: { brush: placed } });
-        expect(store.SelectedDataBrush.value).toEqual(value);
+        expect(store.SelectedDataBrush.value).toBe(5);
         expect(store.SelectedLayer.id).toBe(dataLayer.id);
     });
 });

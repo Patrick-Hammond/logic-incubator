@@ -2,7 +2,8 @@ import {AnimatedSprite, BitmapText, Container, Graphics, interaction} from "pixi
 import { Key } from "@logic-incubator/lib/io/Keyboard";
 import AssetMetadataStore from "@logic-incubator/engine/level/AssetMetadata";
 import { FindImplicitPlacements } from "@logic-incubator/engine/level/ImplicitData";
-import { IsSpawnerValue } from "@logic-incubator/engine/level/entities/Spawners";
+import MonsterRoster from "@logic-incubator/engine/level/entities/MonsterRoster";
+import { IsSpawnerValue, SpawnerCells } from "@logic-incubator/engine/level/entities/Spawners";
 import { IsLightValue } from "@logic-incubator/engine/level/Lighting";
 import { Brush, DataBrushName } from "@logic-incubator/engine/level/LevelFormat";
 import AssetFactory from "@logic-incubator/lib/loading/AssetFactory";
@@ -14,8 +15,10 @@ import EditorComponent from "../EditorComponent";
 import { EditorActions, EditorTool, IEditorState, MouseButtonState } from "../stores/EditorStore";
 import { LevelDataActions, LevelDataState } from "../stores/LevelDataStore";
 
-/** Doors aren't a paintable data brush, so they have no palette colour of their own to borrow. */
+/** Doors, lights and spawners aren't paintable data brushes any more, so they have no palette colour of their own to borrow - these match their old ones (LIGHT's/SPAWNER's former swatch colours) so the map looks the same as before the change. */
 const IMPLICIT_DOOR_COLOUR = 0x4cc9f0;
+const IMPLICIT_LIGHT_COLOUR = 0xff8100;
+const IMPLICIT_SPAWNER_COLOUR = 0x9b5de5;
 
 export default class Canvas extends EditorComponent {
     private grid: Graphics = new Graphics();
@@ -195,14 +198,30 @@ export default class Canvas extends EditorComponent {
         const collisionColour = colourOf(DataBrushName.COLLISION);
         placements.collision.forEach(cell => drawCell(cell.x, cell.y, collisionColour));
         placements.doors.forEach(cell => drawCell(cell.x, cell.y, IMPLICIT_DOOR_COLOUR));
-        const lightColour = colourOf(DataBrushName.LIGHT);
         placements.lights.forEach(light => {
-            const pos = drawCell(light.x, light.y, lightColour);
+            const pos = drawCell(light.x, light.y, IMPLICIT_LIGHT_COLOUR);
             if (pos) {
                 const text = this.textPool.Get();
                 text.text = light.value.range.toString();
                 text.scale.set(state.viewScale);
                 text.position.set(pos.x + scaledTileSize * 0.5, pos.y + scaledTileSize * 0.5);
+                this.implicitContainer.addChild(text);
+            }
+        });
+        const spawnerSprite = MonsterRoster.inst.SpawnerSprite;
+        const spawnerSize = spawnerSprite && this.assetFactory.Has(spawnerSprite) ? this.assetFactory.CreateTexture(spawnerSprite) : undefined;
+        placements.spawners.forEach(spawner => {
+            const cells = SpawnerCells(spawner, spawnerSize, TileSize);
+            let labelPos: { x: number; y: number } | null = null;
+            cells.forEach(cell => {
+                const pos = drawCell(cell.x, cell.y, IMPLICIT_SPAWNER_COLOUR);
+                labelPos = labelPos || pos;
+            });
+            if (labelPos) {
+                const text = this.textPool.Get();
+                text.text = spawner.value.monsters.length.toString();
+                text.scale.set(state.viewScale);
+                text.position.set(labelPos.x + scaledTileSize * 0.5, labelPos.y + scaledTileSize * 0.5);
                 this.implicitContainer.addChild(text);
             }
         });

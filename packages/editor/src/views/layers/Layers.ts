@@ -17,17 +17,19 @@ function Icon(name: string): HTMLImageElement {
 }
 
 /**
- * The layer list and its toolbar: add tile/data layers, remove, rename, and
- * reorder. The list is first to last from the top, so later layers (drawn on
- * top on the map) are further down; it scrolls once there are more layers
- * than fit.
+ * The layer list and its toolbar: add tile layers, remove, rename, and
+ * reorder. There's no "add data layer" - "attributes", the one data layer,
+ * is always there and can't be removed, only renamed (double-click it, or
+ * the rename button - it's still `readOnly`, but that only ever meant
+ * "nothing paints onto it"). The list is first to last from the top, so
+ * later layers (drawn on top on the map) are further down; it scrolls once
+ * there are more layers than fit.
  */
 export default class Layers extends EditorComponent {
     private list: HTMLElement;
     private rows: LayerRow[] = [];
     private countText: HTMLElement;
     private addButton: HTMLButtonElement;
-    private addDataButton: HTMLButtonElement;
     private removeButton: HTMLButtonElement;
     private renameButton: HTMLButtonElement;
     private upButton: HTMLButtonElement;
@@ -50,8 +52,7 @@ export default class Layers extends EditorComponent {
         this.countText.title = "Editable layers in use, of the most allowed";
         header.appendChild(El("span", "ly-spacer"));
 
-        this.addButton = this.ToolButton(header, "plus", "Add tile layer", () => this.AddLayer(EditorActions.ADD_LAYER));
-        this.addDataButton = this.ToolButton(header, "data", "Add data layer", () => this.AddLayer(EditorActions.ADD_DATA_LAYER));
+        this.addButton = this.ToolButton(header, "plus", "Add tile layer", () => this.AddLayer());
         this.removeButton = this.ToolButton(header, "minus", "Remove layer", () => this.RemoveLayer());
         this.renameButton = this.ToolButton(header, "edit", "Rename layer (or double-click it)", () => this.RenameLayer());
         this.upButton = this.ToolButton(header, "arrow-up", "Move layer up", () => {
@@ -107,10 +108,11 @@ export default class Layers extends EditorComponent {
         const selectedIndex = layers.findIndex(layer => layer.selected);
         const selected = layers[selectedIndex];
         const editable = selected != null && !selected.readOnly;
-        const canAdd = EditableLayerCount(layers) < MaxEditableLayers;
-        this.addButton.disabled = this.addDataButton.disabled = !canAdd;
+        this.addButton.disabled = EditableLayerCount(layers) >= MaxEditableLayers;
         this.removeButton.disabled = !this.CanRemove(layers, selected);
-        this.renameButton.disabled = !editable;
+        // Renamable even when readOnly (just "attributes", which reordering/moving doesn't apply to -
+        // it's drawn as its own always-on-top overlay, not placed in the layer stack - so those two stay gated on `editable`).
+        this.renameButton.disabled = selected == null;
         this.upButton.disabled = !editable || selectedIndex <= 0;
         this.downButton.disabled = !editable || selectedIndex >= layers.length - 1;
         this.countText.textContent = EditableLayerCount(layers) + "/" + MaxEditableLayers;
@@ -158,9 +160,9 @@ export default class Layers extends EditorComponent {
         return button;
     }
 
-    private AddLayer(type: EditorActions.ADD_LAYER | EditorActions.ADD_DATA_LAYER): void {
+    private AddLayer(): void {
         if (EditableLayerCount(this.editorStore.state.layers) < MaxEditableLayers) {
-            this.editorStore.Dispatch({ type });
+            this.editorStore.Dispatch({ type: EditorActions.ADD_LAYER });
         }
     }
 
@@ -187,7 +189,7 @@ export default class Layers extends EditorComponent {
 
     private RenameLayer(): void {
         const layer = this.editorStore.SelectedLayer;
-        if (!layer || layer.readOnly || IsFormDialogOpen()) {
+        if (!layer || IsFormDialogOpen()) {
             return;
         }
         OpenFormDialog({

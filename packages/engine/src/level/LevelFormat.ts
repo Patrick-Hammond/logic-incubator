@@ -9,13 +9,18 @@ import type { Vec2Like } from "@logic-incubator/lib/math/Geometry";
 import type { SpawnerValue } from "./entities/Spawners";
 import type { LightValue } from "./Lighting";
 
-/** The data brushes: painted on data layers, and read by the engine rather than drawn. */
+/**
+ * The data brushes: painted on data layers, and read by the engine rather than drawn. A light or a
+ * spawner is no longer among them - both are placed as an ordinary tile brush instead, carrying
+ * their value via `AssetMetadata` (a default per asset name) or, per placement, an override in that
+ * tile's own `Brush.data` (see `ImplicitData.EffectiveLight`/`EffectiveSpawner`). "light"/"spawner"
+ * still identify their kind of value wherever one's edited (see `DataBrushEditors`) - just not as a
+ * paintable brush name any more.
+ */
 export const enum DataBrushName {
     PLAYER_START = "player-start",
     COLLISION = "collision",
-    Z_INDEX = "z-index",
-    LIGHT = "light",
-    SPAWNER = "spawner"
+    Z_INDEX = "z-index"
 }
 
 /** A data brush's value - a number (`Z_INDEX`'s height), or a light's or spawner's settings. */

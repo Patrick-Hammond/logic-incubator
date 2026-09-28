@@ -6,10 +6,15 @@ import { GridBounds } from "../Layout";
 import { OpenDataBrushDialog } from "../DataBrushDialog";
 import { DataBrushEditorFor } from "../DataBrushEditors";
 import EditorComponent from "../EditorComponent";
-import { Brush } from "@logic-incubator/engine/level/LevelFormat";
+import AssetMetadataStore from "@logic-incubator/engine/level/AssetMetadata";
+import { EffectiveLight, EffectiveSpawner } from "@logic-incubator/engine/level/ImplicitData";
+import { Brush, DataBrushValue } from "@logic-incubator/engine/level/LevelFormat";
 import { EditorActions, EditorTool, IEditorState, MouseButtonState } from "../stores/EditorStore";
 import { Layer, LevelDataActions } from "../stores/LevelDataStore";
 import { CellRect, FloodFill, RectCells, SpanRect, TopmostBrushAt } from "../tools/ToolGeometry";
+
+/** What the data-select tool found at a cell, and how to edit it: `editorKey` is what `OpenDataBrushDialog` looks up (an explicit data brush's own name, or "light"/"spawner" for an intrinsic tile value), `target` is the placed `Brush` `SET_DATA` writes the result onto. */
+type EditableTarget = { target: Brush; editorKey: string; value: DataBrushValue; context: string };
 
 /** Whether the brush sprite follows the cursor under this tool - only for the tools that paint with it. */
 export function ToolShowsBrush(tool: EditorTool): boolean {
@@ -30,7 +35,9 @@ type RectDrag = { anchor: Vec2Like; erase: boolean; brush: Brush };
  * - Brush: left paints, right erases, Ctrl+drag stamps a filled rectangle
  *   (right: erases one) - the editor's original mouse controls.
  * - Erase: left erases on the selected layer; Ctrl+drag erases a rectangle.
- * - Data select: click a placed light/spawner/height to edit its value.
+ * - Data select: click a placed height (an explicit data brush) to edit its value, or a tile with
+ *   an effective light/spawner (its own override, or its asset's default) to edit that instead -
+ *   see `EditableTargetAt`.
  * - Stamp: drag a rectangle to paint; hold Ctrl for just its border. Right-drag erases one.
  * - Dropper: click a tile (or on a data layer, a data brush) to paint with it.
  * - Fill: flood-fills the region of matching cells on the selected layer, within the visible map.
@@ -241,15 +248,13 @@ export default class Tools extends EditorComponent {
     }
 
     private EditPlacedData(state: IEditorState, cell: Vec2Like): void {
-        const target = this.EditableDataAt(state, cell);
-        if (!target) {
+        const editable = this.EditableTargetAt(state, cell);
+        if (!editable) {
             return;
         }
-        const layer = state.layers.find(l => l.id === target.layerId);
-        const context = `At ${target.position.x}, ${target.position.y} on “${layer ? layer.name : target.layerId}”.`;
-        OpenDataBrushDialog(target.name, target.data, context).then(value => {
+        OpenDataBrushDialog(editable.editorKey, editable.value, editable.context).then(value => {
             if (value != null) {
-                this.levelDataStore.Dispatch({ type: LevelDataActions.SET_DATA, data: { target, value }, canUndo: true });
+                this.levelDataStore.Dispatch({ type: LevelDataActions.SET_DATA, data: { target: editable.target, value }, canUndo: true });
             }
         });
     }
@@ -333,6 +338,48 @@ export default class Tools extends EditorComponent {
         return TopmostBrushAt(this.levelDataStore.state.levelData, layers, cell, brush => DataBrushEditorFor(brush.name) != null);
     }
 
+    /**
+     * What the data-select tool would edit at `cell`: an explicit data brush (height, on the
+     * "attributes" layer) if there is one there, else the topmost tile (on any visible tile layer)
+     * with an effective light or spawner - its own override, or its asset's default (see
+     * `EffectiveLight`/`EffectiveSpawner`) - to edit, since neither is a paintable data brush any more.
+     */
+    private EditableTargetAt(state: IEditorState, cell: Vec2Like): EditableTarget | undefined {
+        const explicit = this.EditableDataAt(state, cell);
+        if (explicit) {
+            const layer = state.layers.find(l => l.id === explicit.layerId);
+            return {
+                target: explicit,
+                editorKey: explicit.name,
+                value: explicit.data,
+                context: `At ${explicit.position.x}, ${explicit.position.y} on “${layer ? layer.name : explicit.layerId}”.`
+            };
+        }
+
+        const tileLayers = state.layers.filter(layer => !layer.isData);
+        const implicit = TopmostBrushAt(this.levelDataStore.state.levelData, tileLayers, cell, brush => this.IntrinsicValueOf(brush) != null);
+        const found = implicit && this.IntrinsicValueOf(implicit);
+        return (
+            found && {
+                target: implicit,
+                editorKey: found.kind,
+                value: found.value,
+                context: `“${implicit.name}” at ${implicit.position.x}, ${implicit.position.y}.`
+            }
+        );
+    }
+
+    /** `brush`'s effective light or spawner (see `EffectiveLight`/`EffectiveSpawner`), tagged with which kind it is - `EditableTargetAt` needs both to pick `OpenDataBrushDialog`'s editor. */
+    private IntrinsicValueOf(brush: Brush): { kind: "light" | "spawner"; value: DataBrushValue } | undefined {
+        const meta = AssetMetadataStore.inst.Get(brush.name);
+        const light = EffectiveLight(brush, meta);
+        if (light) {
+            return { kind: "light", value: light };
+        }
+        const spawner = EffectiveSpawner(brush, meta);
+        return spawner ? { kind: "spawner", value: spawner } : undefined;
+    }
+
     private Key(key: Key): boolean {
         return !!this.game.keyboard.KeyPressed(key);
     }
@@ -353,7 +400,7 @@ export default class Tools extends EditorComponent {
         } else if (state.tool === EditorTool.MOVE || this.Key(Key.Space)) {
             cursor = state.mouseButtonState === MouseButtonState.LEFT_DOWN ? "grabbing" : "grab";
         } else if (state.tool === EditorTool.DATA_SELECT) {
-            cursor = state.brushVisible && this.EditableDataAt(state, this.MapCell(state)) ? "pointer" : "default";
+            cursor = state.brushVisible && this.EditableTargetAt(state, this.MapCell(state)) ? "pointer" : "default";
         }
         this.SetCursor(cursor);
     }
@@ -417,10 +464,10 @@ export default class Tools extends EditorComponent {
                 break;
             }
             case EditorTool.DATA_SELECT: {
-                const brush = this.EditableDataAt(state, cell);
-                if (brush) {
+                const editable = this.EditableTargetAt(state, cell);
+                if (editable) {
                     this.OutlineCells(state, one, PICK_COLOUR);
-                    this.ShowLabel(state, cell, "Edit " + brush.name);
+                    this.ShowLabel(state, cell, "Edit " + editable.target.name);
                 }
                 break;
             }

@@ -8,10 +8,10 @@ import AssetMetadataStore from "./AssetMetadata";
 import {HeightAt} from "./Depth";
 import {FindDoorGroups} from "./Doors";
 import MonsterRoster from "./entities/MonsterRoster";
-import {IsSpawnerValue, SanitiseSpawnerValue, Spawner, SpawnerCells} from "./entities/Spawners";
+import {SanitiseSpawnerValue, Spawner, SpawnerCells} from "./entities/Spawners";
 import {FindImplicitPlacements} from "./ImplicitData";
 import {Brush, DataBrushName, LevelFile, LevelLayer} from "./LevelFormat";
-import {AMBIENT_LIGHT, AMBIENT_TINT, BakedLight, BakeLighting, IsLightValue, LightSource} from "./Lighting";
+import {AMBIENT_LIGHT, AMBIENT_TINT, BakedLight, BakeLighting, LightSource} from "./Lighting";
 import {FindRegions, Region, RegionIdsTouching} from "./Regions";
 
 export type Tile = Brush & {
@@ -289,31 +289,6 @@ export default class Level {
                         this.heightData[ posX ][ posY ] = brush.data as number;
                         depths.add(brush.data as number);
                         break;
-                    // Collected once here rather than also in the tile-data pass below (unlike the other
-                    // cases above, which are harmlessly re-assigned there too) - lights get baked into
-                    // `lightData` as a batch afterwards, so pushing the same placement twice would double
-                    // its contribution. (An intrinsic tile light on the same cell is dropped by
-                    // FindImplicitPlacements, so the explicit one wins.)
-                    case DataBrushName.LIGHT:
-                        if (IsLightValue(brush.data)) {
-                            lights.push({x: posX, y: posY, value: brush.data});
-                        }
-                        break;
-                    // Same reason as LIGHT - collected once, here only. Its footprint is solid - a
-                    // Gauntlet-style generator you shoot, not walk through - and marked before
-                    // `FindRegions` below, so rooms are partitioned around it like any other wall.
-                    case DataBrushName.SPAWNER:
-                        if (IsSpawnerValue(brush.data)) {
-                            const cells = SpawnerCells({x: posX, y: posY}, spawnerSize, TileSize);
-                            this.spawners.push({x: posX, y: posY, value: SanitiseSpawnerValue(brush.data), cells});
-                            cells.forEach(cell => {
-                                if(this.collisionData[ cell.x ] == null) {
-                                    this.collisionData[ cell.x ] = [];
-                                }
-                                this.collisionData[ cell.x ][ cell.y ] = true;
-                            });
-                        }
-                        break;
                 }
             }
         });
@@ -362,9 +337,11 @@ export default class Level {
             }
         });
 
-        // Intrinsic defaults from tiles' own AssetMetadata (collision, door footprints, lights) - the
-        // same list the editor's read-only implicit layer draws. They layer on top of the explicit
-        // data brushes above rather than overwriting them; an explicit LIGHT at the same cell wins.
+        // Intrinsic defaults from tiles' own AssetMetadata (collision, door footprints, lights,
+        // spawners) - the same list the editor's read-only implicit layer draws. Lights/spawners
+        // layer on top of the explicit COLLISION/Z_INDEX brushes above rather than overwriting them;
+        // a tile's own placement can override its own light/spawner (see `ImplicitData.EffectiveLight`/
+        // `EffectiveSpawner`), so there's nothing left here to take precedence over.
         const implicit = FindImplicitPlacements(
             levelData,
             layerId => idMap[ layerId ] != null,
@@ -375,6 +352,10 @@ export default class Level {
         implicit.collision.forEach(({x, y}) => {
             const posX = x - bounds.x1;
             const posY = y - bounds.y1;
+            // A collidable sprite's footprint nudged past the map's top/left edge - nothing to mark there.
+            if (posX < 0 || posY < 0) {
+                return;
+            }
             if(this.collisionData[ posX ] == null) {
                 this.collisionData[ posX ] = [];
             }
@@ -397,6 +378,18 @@ export default class Level {
             doorIds[ posX ][ posY ] = doorId;
         });
         implicit.lights.forEach(({x, y, value}) => lights.push({x: x - bounds.x1, y: y - bounds.y1, value}));
+        implicit.spawners.forEach(({x, y, value}) => {
+            const posX = x - bounds.x1;
+            const posY = y - bounds.y1;
+            const cells = SpawnerCells({x: posX, y: posY}, spawnerSize, TileSize);
+            this.spawners.push({x: posX, y: posY, value: SanitiseSpawnerValue(value), cells});
+            cells.forEach(cell => {
+                if(this.collisionData[ cell.x ] == null) {
+                    this.collisionData[ cell.x ] = [];
+                }
+                this.collisionData[ cell.x ][ cell.y ] = true;
+            });
+        });
 
         this.depths = Array.from(depths).sort((a, b) => a - b);
 
@@ -438,8 +431,11 @@ export default class Level {
             })
             .filter((door): door is Door => door != null);
 
+        // No PLAYER_START brush painted - land the player in the middle of the map rather than fail
+        // the whole level over one missing marker. Center of `boundRect`, not of the painted extent's
+        // raw bounds, since boundRect is already normalised to a zero origin like everything above.
         if (!this.playerStartPosition) {
-            throw new Error("Player start position is not defined. Define it in the level data.");
+            this.playerStartPosition = { x: Math.floor(this.boundRect.width / 2), y: Math.floor(this.boundRect.height / 2) };
         }
 
         this.UpdateVisibleRegions(this.playerStartPosition.x, this.playerStartPosition.y);

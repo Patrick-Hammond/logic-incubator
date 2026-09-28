@@ -3,7 +3,6 @@ import { AddTypes, SubtractTypes } from "@logic-incubator/lib/patterns/Enumerate
 import Store, { IAction } from "@logic-incubator/lib/patterns/redux/Store";
 import { Scenes } from "@logic-incubator/engine/Constants";
 import { InitalScale } from "../Layout";
-import { DefaultSpawnerValue, IsSpawnerValue, SanitiseSpawnerValue, SpawnerValue } from "@logic-incubator/engine/level/entities/Spawners";
 import { Brush, DataBrushName, DataBrushValue } from "@logic-incubator/engine/level/LevelFormat";
 import { Layer } from "./LevelDataStore";
 
@@ -29,7 +28,6 @@ export const enum EditorActions {
     RENAME_LAYER,
     SELECT_LAYER,
     DUPLICATE_LAYER,
-    ADD_DATA_LAYER,
     MOVE_LAYER_UP,
     MOVE_LAYER_DOWN,
     TOGGLE_LAYER_VISIBILITY,
@@ -62,22 +60,38 @@ export const enum EditorTool {
 export const MaxEditableLayers = 16;
 
 /**
- * Fixed id of the read-only layer that shows data the game derives from tiles'
- * `AssetMetadata` (collision, door footprints, lights - see
- * `FindImplicitPlacements`) rather than hand-painted brushes. Always present
- * (re-added on load/reset), never holds brushes, and `isData` so
- * `Level.LoadLevel` never mistakes it for a tile layer. Far below any id
- * `NextDataLayerId` hands out (-1, -1000, -1999, ...).
+ * Fixed id of "attributes", the one data layer: it shows data the game derives from tiles'
+ * `AssetMetadata` (collision, door footprints, lights, spawners - see `FindImplicitPlacements`)
+ * rather than hand-painted brushes, so it's still `readOnly` - nothing paints onto it, and
+ * `Level.LoadLevel` never mistakes it for a tile layer - but its *name* isn't; renaming it (see
+ * `RENAME_LAYER`) is the one thing about it that is editable. Always present (re-added on
+ * load/reset). There's deliberately no way to add another data layer alongside it - painting
+ * height/collision on more than one was never useful and just made "which layer is this on"
+ * a question worth asking.
  */
 export const IMPLICIT_LAYER_ID = -99999;
 
 function ImplicitLayer(): Layer {
-    return { id: IMPLICIT_LAYER_ID, name: "implicit (read-only)", selected: false, visible: true, isData: true, readOnly: true };
+    return { id: IMPLICIT_LAYER_ID, name: "attributes", selected: false, visible: true, isData: true, readOnly: true };
 }
 
-/** Returns `layers` untouched if it already has the implicit layer (so subscribers' reference checks don't see a change), else a copy with it prepended. */
+/**
+ * Returns `layers` untouched if it already has the implicit layer under its current name (so
+ * subscribers' reference checks don't see a change), else a copy with it prepended or renamed.
+ * Its name used to be fixed at "implicit (read-only)", with no way to rename it - so a layer still
+ * carrying that exact name is only ever the old default, never something a user chose, and safe to
+ * bring up to its new one ("attributes") automatically rather than leave every already-saved level
+ * behind.
+ */
 function WithImplicitLayer(layers: Layer[]): Layer[] {
-    return layers.some(layer => layer.id === IMPLICIT_LAYER_ID) ? layers : [ImplicitLayer(), ...layers];
+    const existing = layers.find(layer => layer.id === IMPLICIT_LAYER_ID);
+    if (!existing) {
+        return [ImplicitLayer(), ...layers];
+    }
+    if (existing.name === "implicit (read-only)") {
+        return layers.map(layer => (layer === existing ? { ...layer, name: "attributes" } : layer));
+    }
+    return layers;
 }
 
 export function EditableLayerCount(layers: Layer[]): number {
@@ -146,9 +160,7 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
             dataBrushes: [
                 { name: DataBrushName.PLAYER_START, colour: 0xfe3464, value: 0 },
                 { name: DataBrushName.COLLISION, colour: 0xffd166, value: 0 },
-                { name: DataBrushName.Z_INDEX, colour: 0x06d6a0, value: 0 },
-                { name: DataBrushName.LIGHT, colour: 0xff8100, value: { brightness: 0.5, tint: 0xff8100, range: 5 } },
-                { name: DataBrushName.SPAWNER, colour: 0x9b5de5, value: DefaultSpawnerValue() }
+                { name: DataBrushName.Z_INDEX, colour: 0x06d6a0, value: 0 }
             ],
             layers: [],
             mouseButtonState: MouseButtonState.UP,
@@ -189,11 +201,7 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
     private ReconcileDataBrushes(loaded: DataBrush[]): DataBrush[] {
         return this.DefaultState().dataBrushes.map(def => {
             const saved = loaded && loaded.find(db => db.name === def.name);
-            if (!saved) {
-                return def;
-            }
-            // A spawner saved before one of its fields existed (or hand-edited) gets the gaps filled in.
-            return { ...def, value: IsSpawnerValue(def.value) ? SanitiseSpawnerValue(saved.value as SpawnerValue) : saved.value };
+            return saved ? { ...def, value: saved.value } : def;
         });
     }
 
@@ -375,18 +383,14 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
                 const layer = { id: nextId, name: "layer " + nextId, selected: true, visible: true, isData: false };
                 return layers.concat(layer);
             }
-            case EditorActions.ADD_DATA_LAYER: {
-                const nextId = this.NextDataLayerId();
-                const layer = { id: nextId, name: "data layer " + nextId, selected: false, visible: true, isData: true };
-                return layers.concat(layer);
-            }
             case EditorActions.REMOVE_LAYER:
                 return layers.filter(layer => layer.selected === false);
             case EditorActions.RENAME_LAYER: {
-                // The new name comes from the Layers panel's rename dialog.
+                // The new name comes from the Layers panel's rename dialog. Renamable even for the
+                // read-only "attributes" layer - readOnly only ever meant "nothing paints onto it".
                 const selectedLayer = this.SelectedLayer;
                 const name = action.data && action.data.name;
-                if (!selectedLayer || selectedLayer.readOnly || !name) {
+                if (!selectedLayer || !name) {
                     return layers;
                 }
                 return layers.map(layer => (layer.id === selectedLayer.id ? { ...layer, name } : layer));
@@ -442,11 +446,12 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
             }
             case EditorActions.DUPLICATE_LAYER: {
                 const selectedLayer = this.SelectedLayer;
+                // readOnly rules out the one data layer ("attributes") along with painting onto it -
+                // it's never a tile layer, so what's left to duplicate is always a tile layer.
                 if (!selectedLayer || selectedLayer.readOnly) {
                     return layers;
                 }
-                const nextId = selectedLayer.isData ? this.NextDataLayerId() : this.NextLayerId();
-                const newLayer = { ...selectedLayer, id: nextId, selected: false };
+                const newLayer = { ...selectedLayer, id: this.NextLayerId(), selected: false };
                 return layers.concat(newLayer);
             }
             case EditorActions.RESET:
@@ -514,7 +519,7 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
 
     // helpers
 
-    /** Plain +/- stepping only applies to a numeric data brush value - LIGHT's and SPAWNER's object values are edited via the data dialog (see `DataBrushEditors`), so +/- is a harmless no-op while they're selected. */
+    /** Plain +/- stepping only applies to a numeric data brush value - every remaining one (player-start, collision, height) is a number, but a save from before light/spawner moved off the data-brush model could still hand this a `LightValue`/`SpawnerValue`, so the guard stays. */
     private CalcDataBrushValue(value: DataBrushValue, actionType: EditorActions): DataBrushValue {
         if (typeof value !== "number") {
             return value;
@@ -526,12 +531,6 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
     private NextLayerId(): number {
         const spriteLayers = this.state.layers.filter(layer => layer.isData === false);
         const nextId = spriteLayers.length ? spriteLayers.reduce((prev, curr) => (curr.id > prev.id ? curr : prev)).id + 1 : 0;
-        return nextId;
-    }
-
-    private NextDataLayerId(): number {
-        const dataLayers = this.state.layers.filter(layer => layer.isData && !layer.readOnly);
-        const nextId = dataLayers.length ? dataLayers.reduce((prev, curr) => (curr.id > prev.id ? curr : prev)).id - 999 : -1;
         return nextId;
     }
 

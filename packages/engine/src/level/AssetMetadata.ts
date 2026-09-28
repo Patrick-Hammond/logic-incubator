@@ -1,13 +1,16 @@
 /**
  * Per-asset-name defaults for tile behaviour that would otherwise have to be
  * hand-painted on a data layer every time that sprite is placed - a wall's
- * collision, a door's door-ness, a torch's light. Loaded once at boot from
- * `assets-meta.json` (by the game's boot code) and consulted by `Level.LoadLevel`
- * when building `collisionData`/`doorData`/the light list, so painting a wall
- * tile is enough on its own; an explicit `COLLISION`/`LIGHT` data brush at the
- * same cell still layers on top for one-off exceptions.
+ * collision, a door's door-ness, a torch's light, a marker's spawner. Loaded
+ * once at boot from `assets-meta.json` (by the game's boot code) and consulted
+ * by `Level.LoadLevel` when building `collisionData`/`doorData`/the light and
+ * spawner lists, so painting a torch or a spawner marker tile is enough on its
+ * own; a specific placement can still override its light or spawner value (see
+ * `ImplicitData.EffectiveLight`/`EffectiveSpawner`), and an explicit `COLLISION`
+ * brush at the same cell still adds to a tile's own collision for one-off cases.
  */
 
+import { SpawnerValue } from "./entities/Spawners";
 import { IsCompleteLightValue, LightValue } from "./Lighting";
 
 /** `id` pairs a door's two sprites (e.g. a wooden door's closed/open leaf) so multiple door types can coexist - `open` says which half of the pair this particular asset is. */
@@ -17,6 +20,7 @@ export type AssetMetadata = {
     collidable?: boolean;
     door?: DoorValue;
     light?: LightValue;
+    spawner?: SpawnerValue;
 };
 
 export type AssetMetadataMap = { [assetName: string]: AssetMetadata };
