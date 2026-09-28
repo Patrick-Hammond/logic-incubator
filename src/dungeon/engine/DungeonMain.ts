@@ -1,5 +1,4 @@
 import GameComponent from "../../_lib/game/GameComponent";
-import {LoadFromLocalStorage} from "../../_lib/io/Storage";
 import AssetFactory from "../../_lib/loading/AssetFactory";
 import {AssetPath} from "../Constants";
 import Encounter from "./Encounter";
@@ -29,6 +28,11 @@ export type PlayerSetup = {
 
 export type DungeonMainOptions = {
     player: PlayerSetup;
+    /**
+     * The level to play - asked for each time the scene starts, and again on every restart. A game
+     * returns its own shipped level, or in a dev build the level editor's latest save.
+     */
+    level: () => LevelFile | undefined;
 };
 
 /** Seconds between the player dying and the level starting over. */
@@ -115,9 +119,9 @@ export class DungeonMain extends GameComponent {
 
     /**
      * Re-fetches assets-meta.json (bypassing cache) before reloading the level, so a hand-edit to it
-     * shows up on every editor -> game switch, the same as a placed-brush edit already does via
-     * `LoadFromLocalStorage` below. Without this, `AssetMetadataStore` would keep serving whatever was
-     * loaded once at page boot (by the game's boot code) until a full page refresh.
+     * shows up on every editor -> game switch, the same as a placed-brush edit already does via the
+     * `level` option. Without this, `AssetMetadataStore` would keep serving whatever was loaded once
+     * at page boot (by the game's boot code) until a full page refresh.
      */
     private async Reload(): Promise<void> {
         try {
@@ -128,9 +132,8 @@ export class DungeonMain extends GameComponent {
             // rather than block the scene switch on it.
         }
 
-        const localData = LoadFromLocalStorage("dungeonLevel");
-        if (localData && this.level) {
-            const file: LevelFile = JSON.parse(localData);
+        const file = this.options.level();
+        if (file && this.level) {
             this.level.LoadLevel(file);
         }
     }

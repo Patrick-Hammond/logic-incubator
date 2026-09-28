@@ -1,6 +1,6 @@
-import { LoadFromLocalStorage } from "../../_lib/io/Storage";
 import EditorComponent from "./EditorComponent";
 import { IStyler } from "./maps/Styler";
+import { LoadSavedLevel } from "./SavedLevel";
 import { DataBrushIcons } from "./stores/EditorStore";
 import EditorOverlay from "./ui/dom/EditorOverlay";
 import BrushTool from "./views/Brush";
@@ -57,11 +57,10 @@ export class DungeonEditor extends EditorComponent {
         this.root.on("removed", () => overlay.SetVisible(false));
 
         // load local saved map
-        const localData = LoadFromLocalStorage("dungeonLevel");
-        if (localData) {
-            const data = JSON.parse(localData);
-            this.editorStore.Load(data.editorData);
-            this.levelDataStore.Load(data.levelData);
+        const saved = LoadSavedLevel();
+        if (saved) {
+            this.editorStore.Load(saved.editorData);
+            this.levelDataStore.Load(saved.levelData);
         }
     }
 }

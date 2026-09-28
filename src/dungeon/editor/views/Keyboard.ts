@@ -1,11 +1,11 @@
 import {Key} from "../../../_lib/io/Keyboard";
-import {LoadTextFile, SaveTextFile, SaveToLocalStorage, ShowOpenFileDialog} from "../../../_lib/io/Storage";
+import {LoadTextFile, SaveTextFile, ShowOpenFileDialog} from "../../../_lib/io/Storage";
 import {GridBounds, Scenes, TileSize} from "../../Constants";
-import {LevelFile} from "../../engine/level/LevelFormat";
 import EditorComponent from "../EditorComponent";
 import {GenerateMap, IMap, MapType} from "../maps/Generators";
 import {ApplyMapStyle, IStyler} from "../maps/Styler";
 import {GenerateZTest} from "../maps/ZTest";
+import {EditorSave, SaveLevel} from "../SavedLevel";
 import {EditorActions, IEditorState} from "../stores/EditorStore";
 import {LevelDataActions, LevelDataState} from "../stores/LevelDataStore";
 
@@ -28,7 +28,7 @@ export default class Keyboard extends EditorComponent {
             if (e.keyCode === Key.Enter) {
                 const isEditor = this.editorStore.state.currentScene === Scenes.EDITOR;
                 if (isEditor) {
-                    SaveToLocalStorage("dungeonLevel", JSON.stringify(this.LevelFile()));
+                    SaveLevel(this.LevelFile());
                 }
 
                 const scene = isEditor ? Scenes.GAME : Scenes.EDITOR;
@@ -163,7 +163,7 @@ export default class Keyboard extends EditorComponent {
     }
 
     /** What Enter and S save: the engine's level format, with the rest of the editor's state riding along in `editorData`. */
-    private LevelFile(): LevelFile {
+    private LevelFile(): EditorSave {
         return { editorData: this.editorStore.state, levelData: this.levelDataStore.state };
     }
 
