@@ -17,10 +17,13 @@
     "noImplicitAny": false,
     "noUnusedLocals": true,
     "noUnusedParameters": false,
-    "baseUrl": "./src/",
+    "baseUrl": ".",
     "paths": {
-      "@assets/*": ["assets/*"]
+      "@logic-incubator/lib/*": ["packages/lib/src/*"],
+      "@logic-incubator/engine/*": ["packages/engine/src/*"],
+      "@logic-incubator/editor/*": ["packages/editor/src/*"]
     }
   },
+  "include": ["packages/*/src"],
   "exclude": ["node_modules", "dist"]
 }

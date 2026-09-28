@@ -1,9 +1,12 @@
 const js = require('@eslint/js');
 const tseslint = require('typescript-eslint');
 
+// Packages reach each other by name (@logic-incubator/...), the way games do - never by a relative path into another package's folder.
+const BY_NAME = { regex: '^\\.{1,2}/(.*/)?(packages|lib/src|engine/src|editor/src)(/|$)', message: 'Import another package by its name (@logic-incubator/...), not a relative path.' };
+
 module.exports = tseslint.config(
   {
-    ignores: ['dist/', 'node_modules/', 'eslint.config.js', 'src/_lib/scripts/create-metadata.js']
+    ignores: ['dist/', 'node_modules/', 'eslint.config.js', 'packages/engine/scripts/create-metadata.js']
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
@@ -19,21 +22,27 @@ module.exports = tseslint.config(
       '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }]
     }
   },
-  // Dependencies only point down: editor -> engine -> _lib.
+  // Dependencies only point down: editor -> engine -> lib.
   {
-    // The engine owns the level format (engine/level/LevelFormat.ts); the editor only writes it.
-    files: ['src/dungeon/engine/**/*.ts', 'src/dungeon/Constants.ts'],
+    files: ['packages/editor/src/**/*.ts'],
+    rules: {
+      'no-restricted-imports': ['error', { patterns: [BY_NAME] }]
+    }
+  },
+  {
+    // The engine owns the level format (level/LevelFormat.ts); the editor only writes it.
+    files: ['packages/engine/src/**/*.ts'],
     rules: {
       'no-restricted-imports': ['error', {
-        patterns: [{ regex: '(^|/)editor(/|$)', message: 'The engine must not depend on the editor - it goes the other way.' }]
+        patterns: [BY_NAME, { regex: '^@logic-incubator/editor(/|$)', message: 'The engine must not depend on the editor - it goes the other way.' }]
       }]
     }
   },
   {
-    files: ['src/_lib/**/*.ts'],
+    files: ['packages/lib/src/**/*.ts'],
     rules: {
       'no-restricted-imports': ['error', {
-        patterns: [{ regex: '(^|/)dungeon(/|$)', message: '_lib must not depend on the dungeon engine or editor.' }]
+        patterns: [BY_NAME, { regex: '^@logic-incubator/(engine|editor)(/|$)', message: 'lib must not depend on the engine or editor.' }]
       }]
     }
   }

@@ -1,0 +1,15 @@
+{
+  "name": "@logic-incubator/editor",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Level editor for the engine: tile and data layers, brushes and tools, map generation",
+  "peerDependencies": {
+    "pixi.js": "5.2.1"
+  },
+  "dependencies": {
+    "@logic-incubator/engine": "*",
+    "@logic-incubator/lib": "*",
+    "@pixi/math": "5.2.1",
+    "rot-js": "^2.1.1"
+  }
+}

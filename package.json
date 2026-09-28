@@ -4,29 +4,25 @@
   "license": "",
   "author": "Patrick Hammond",
   "description": "",
+  "private": true,
   "engines": {
     "node": ">=20.9"
   },
-  "main": "./index.html",
+  "//workspaces": "Each package declares its own dependencies, pixi.js as a peer: lib (@logic-incubator/lib), engine (depends on lib) and editor (depends on engine and lib).",
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "lint": "eslint .",
     "test": "vitest run"
   },
   "keywords": [],
-  "dependencies": {
-    "@pixi/math": "5.2.1",
-    "eventemitter3": "^4.0.0",
-    "nipplejs": "^0.8.5",
-    "pixi.js": "5.2.1",
-    "rot-js": "^2.1.1",
-    "screenfull": "^5.2.0",
-    "stats.js": "^0.17.0"
-  },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/node": "^22.20.1",
     "eslint": "^10.10.0",
     "patch-package": "^8.0.1",
+    "pixi.js": "5.2.1",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.69.0",
     "vitest": "^5.0.0"
