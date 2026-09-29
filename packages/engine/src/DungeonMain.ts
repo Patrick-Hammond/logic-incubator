@@ -4,7 +4,7 @@ import { AssetPath } from "./Constants";
 import Encounter from "./Encounter";
 import {LEVEL_CREATED, PLAYER_DIED} from "./Events";
 import AssetMetadataStore from "./level/AssetMetadata";
-import {Weapon} from "./level/entities/Projectiles";
+import {WeaponDef} from "./level/entities/Projectiles";
 import Level from "./level/Level";
 import {LevelFile} from "./level/LevelFormat";
 import TileCollision from "./level/TileCollision";
@@ -22,8 +22,8 @@ export type PlayerSetup = {
     hitPoints: number;
     /** Sprite names for a full, half and empty heart. */
     hearts: {full: string; half: string; empty: string};
-    /** Fired while a fire direction is held (see `PlayerControl`). */
-    shot: Weapon;
+    /** Starting loadout - the first is equipped. Fired while a fire direction is held (see `PlayerControl`). */
+    weapons: WeaponDef[];
 };
 
 export type DungeonMainOptions = {
@@ -110,11 +110,11 @@ export class DungeonMain extends GameComponent {
         this.player.Update(dt, seconds);
         const shot = this.player.TakeShot();
         if (shot) {
-            this.encounter.Fire(this.player.Centre, shot, this.options.player.shot, "player");
+            this.encounter.Fire(this.player.Centre, shot, this.player.EquippedWeapon.shot, "player");
         }
         this.encounter.Update(dt, seconds, this.player);
         this.renderer.Render(this.player, this.encounter);
-        this.hud.Render(this.player.Health);
+        this.hud.Render(this.player.Health, this.player.Gold, this.player.EquippedWeapon.icon, this.player.Inventory);
     }
 
     /**

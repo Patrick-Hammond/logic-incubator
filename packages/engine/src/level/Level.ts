@@ -8,6 +8,7 @@ import AssetMetadataStore from "./AssetMetadata";
 import {HeightAt} from "./Depth";
 import {FindDoorGroups} from "./Doors";
 import MonsterRoster from "./entities/MonsterRoster";
+import {PickupValue} from "./entities/Pickups";
 import {SanitiseSpawnerValue, Spawner, SpawnerCells} from "./entities/Spawners";
 import {FindImplicitPlacements} from "./ImplicitData";
 import {Brush, DataBrushName, LevelFile, LevelLayer} from "./LevelFormat";
@@ -22,6 +23,9 @@ export type Tile = Brush & {
 
 /** One door: the cell(s) whose tile has a `door` id in its `AssetMetadata`, and the visual tile whose texture is swapped between `closedSprite`/`openSprite` (that door's own pair, resolved via `AssetMetadataStore.GetDoorPartner`) when the player overlaps any of them. `regionIds` is the (possibly empty) set of regions this door borders - see `Regions.ts`. */
 export type Door = { cells: Vec2Like[]; tile: Tile; isOpen: boolean; regionIds: number[]; openSprite: string; closedSprite: string };
+
+/** One pickup: the cell and tile whose `AssetMetadata` has a `pickup` value - see `CollectPickupsAt`. */
+export type Pickup = Vec2Like & { tile: Tile; value: PickupValue };
 
 /** Returns null (after a one-off warning) for a brush whose name isn't in the sprite sheet, so one bad name drops just its own tiles instead of throwing out of the whole level load. */
 function CreateTile(brush: Brush): Tile | null {
@@ -65,6 +69,8 @@ export default class Level {
     public playerStartPosition: Vec2Like | undefined;
     /** Every cell painted with the `SPAWNER` data brush, in normalised map coordinates. Each one's `cells` - the footprint of the roster's `spawnerSprite` - are solid (in `collisionData`) until `RemoveSpawner`. */
     public spawners: Spawner[] = [];
+    /** Every tile with a `pickup` in its `AssetMetadata`, not yet collected. See `CollectPickupsAt`. */
+    public pickups: Pickup[] = [];
     /** Distinct painted `Z_INDEX` heights, ascending, always including the unpainted default (0). `TileMapView` builds one band per entry - sparse, so a stray tile at an extreme height doesn't force bands for every height in between. */
     public depths: number[] = [0];
 
@@ -107,6 +113,27 @@ export default class Level {
         if (index > -1) {
             this.spawners.splice(index, 1);
         }
+    }
+
+    /**
+     * Collects every pickup at the given cell (call once per frame with the
+     * player's tile, like `UpdateDoors`): each one's tile stops drawing and it
+     * won't be offered again. Returns what was collected, for the caller to
+     * apply - `Level` itself has no notion of a player's gold/inventory/weapons.
+     */
+    CollectPickupsAt(tileX: number, tileY: number): PickupValue[] {
+        const here = this.pickups.filter(p => p.x === tileX && p.y === tileY);
+        here.forEach(pickup => {
+            this.levelData.forEach(layer => {
+                const stack = layer[pickup.x] && layer[pickup.x][pickup.y];
+                const index = stack ? stack.indexOf(pickup.tile) : -1;
+                if (index > -1) {
+                    stack.splice(index, 1);
+                }
+            });
+            this.pickups.splice(this.pickups.indexOf(pickup), 1);
+        });
+        return here.map(p => p.value);
     }
 
     /** Lighting under the given grid cell, already baked (see `Lighting.BakeLighting`) to `LightTint`'s expected shape. A cell no light's radius reaches reads as ambient (`AMBIENT_LIGHT`/`AMBIENT_TINT`), not fully lit. */
@@ -213,6 +240,18 @@ export default class Level {
         return null;
     }
 
+    /** Finds the tile whose own `AssetMetadata` has a `pickup` value at the given cell, searching every tile layer - null if none does. */
+    private FindPickupTile(x: number, y: number): Tile | null {
+        for (const layer of this.levelData) {
+            const stack = layer && layer[x] && layer[x][y];
+            const found = stack && stack.find(t => AssetMetadataStore.inst.Get(t.name)?.pickup != null);
+            if (found) {
+                return found;
+            }
+        }
+        return null;
+    }
+
     /** Stops animated tiles' sprites so reloading a level doesn't leave them ticking in the background forever. */
     private DisposeTiles(): void {
         this.levelData.forEach(layer =>
@@ -231,6 +270,7 @@ export default class Level {
         this.heightData = [];
         this.doorData = [];
         this.spawners = [];
+        this.pickups = [];
         const spawnerSprite = MonsterRoster.inst.SpawnerSprite;
         const hasSpawnerSprite = spawnerSprite != null && AssetFactory.inst.Has(spawnerSprite);
         if (spawnerSprite != null && !hasSpawnerSprite) {
@@ -389,6 +429,19 @@ export default class Level {
                 }
                 this.collisionData[ cell.x ][ cell.y ] = true;
             });
+        });
+        // Resolved against `this.levelData` (built above) rather than carried through `FindImplicitPlacements`
+        // itself, since collecting a pickup needs the actual `Tile` object to remove from its layer stack.
+        implicit.pickups.forEach(({x, y, value}) => {
+            const posX = x - bounds.x1;
+            const posY = y - bounds.y1;
+            if (posX < 0 || posY < 0) {
+                return;
+            }
+            const tile = this.FindPickupTile(posX, posY);
+            if (tile) {
+                this.pickups.push({x: posX, y: posY, tile, value});
+            }
         });
 
         this.depths = Array.from(depths).sort((a, b) => a - b);

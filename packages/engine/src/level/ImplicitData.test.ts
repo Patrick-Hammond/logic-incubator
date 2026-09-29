@@ -7,6 +7,7 @@ const TILE_LAYER = 0;
 const DATA_LAYER = -1;
 
 const SPAWNER_VALUE = { monsters: ["imp"], interval: 3, maxAlive: 4, total: 0, activationRange: 10, hitPoints: 10 };
+const GOLD_PICKUP: AssetMetadata["pickup"] = { kind: "gold", amount: 10 };
 
 const META: { [name: string]: AssetMetadata } = {
     wall: { collidable: true },
@@ -14,7 +15,8 @@ const META: { [name: string]: AssetMetadata } = {
     floor: {},
     door: { door: { id: 1, open: false } },
     torch: { light: { brightness: 1, tint: 0xff8100, range: 5 } },
-    goblin_camp: { spawner: SPAWNER_VALUE }
+    goblin_camp: { spawner: SPAWNER_VALUE },
+    sack_gold: { pickup: GOLD_PICKUP }
 };
 const SIZES: { [name: string]: { width: number; height: number } } = { door: { width: 32, height: 32 }, big_wall: { width: 32, height: 32 } };
 
@@ -81,17 +83,23 @@ describe("FindImplicitPlacements", () => {
         expect(result.spawners).toEqual([{ x: 4, y: 4, value: override }]);
     });
 
+    it("reports a tile's intrinsic pickup - no per-instance override, unlike light/spawner", () => {
+        expect(find([brush("sack_gold", 6, 6)]).pickups).toEqual([{ x: 6, y: 6, value: GOLD_PICKUP }]);
+    });
+
     it("ignores brushes on data layers, even if their name has metadata", () => {
         const result = find([
             brush("wall", 1, 1, DATA_LAYER),
             brush("door", 2, 2, DATA_LAYER),
             brush("torch", 3, 3, DATA_LAYER),
-            brush("goblin_camp", 4, 4, DATA_LAYER)
+            brush("goblin_camp", 4, 4, DATA_LAYER),
+            brush("sack_gold", 6, 6, DATA_LAYER)
         ]);
         expect(result.collision).toEqual([]);
         expect(result.doors).toEqual([]);
         expect(result.lights).toEqual([]);
         expect(result.spawners).toEqual([]);
+        expect(result.pickups).toEqual([]);
     });
 });
 

@@ -1,15 +1,17 @@
 /**
  * Per-asset-name defaults for tile behaviour that would otherwise have to be
  * hand-painted on a data layer every time that sprite is placed - a wall's
- * collision, a door's door-ness, a torch's light, a marker's spawner. Loaded
- * once at boot from `assets-meta.json` (by the game's boot code) and consulted
- * by `Level.LoadLevel` when building `collisionData`/`doorData`/the light and
- * spawner lists, so painting a torch or a spawner marker tile is enough on its
- * own; a specific placement can still override its light or spawner value (see
+ * collision, a door's door-ness, a torch's light, a marker's spawner, a gold
+ * sack's pickup. Loaded once at boot from `assets-meta.json` (by the game's
+ * boot code) and consulted by `Level.LoadLevel` when building
+ * `collisionData`/`doorData`/the light, spawner and pickup lists, so painting
+ * a torch, a spawner marker or a gold sack tile is enough on its own; a
+ * specific placement can still override its light or spawner value (see
  * `ImplicitData.EffectiveLight`/`EffectiveSpawner`), and an explicit `COLLISION`
  * brush at the same cell still adds to a tile's own collision for one-off cases.
  */
 
+import { PickupValue } from "./entities/Pickups";
 import { SpawnerValue } from "./entities/Spawners";
 import { IsCompleteLightValue, LightValue } from "./Lighting";
 
@@ -21,6 +23,8 @@ export type AssetMetadata = {
     door?: DoorValue;
     light?: LightValue;
     spawner?: SpawnerValue;
+    /** What the player gets for walking over this tile - it then disappears (see `Level.CollectPickupsAt`). */
+    pickup?: PickupValue;
 };
 
 export type AssetMetadataMap = { [assetName: string]: AssetMetadata };

@@ -3,7 +3,7 @@ import {ICameraControl} from "@logic-incubator/lib/game/display/CameraControl";
 import GameComponent from "@logic-incubator/lib/game/GameComponent";
 import { Rectangle } from "@logic-incubator/lib/math/Geometry";
 import { Lerp, Sign } from "@logic-incubator/lib/math/Utils";
-import { GameHeight, GameWidth, Scenes, TileSize } from "../Constants";
+import { GameHeight, PlayWidth, Scenes, TileSize } from "../Constants";
 import { CAMERA_MOVED } from "../Events";
 import { StepZoom, ZoomState } from "../level/Depth";
 
@@ -120,8 +120,8 @@ export class Camera extends GameComponent {
 
      protected OnInitialise() {
 
-        this.viewRect = new Rectangle(0, 0, Math.floor(GameWidth / TileSize / this.Zoom), Math.floor(GameHeight / TileSize / this.Zoom));
-        this.scale = Math.min(GameWidth / this.viewRect.width / TileSize, GameHeight / this.viewRect.height / TileSize);
+        this.viewRect = new Rectangle(0, 0, Math.floor(PlayWidth / TileSize / this.Zoom), Math.floor(GameHeight / TileSize / this.Zoom));
+        this.scale = Math.min(PlayWidth / this.viewRect.width / TileSize, GameHeight / this.viewRect.height / TileSize);
         this.scaledTileSize = TileSize * this.scale;
 
         this.baseViewWidth = this.viewRect.width;

@@ -27,6 +27,12 @@ export type Weapon = ShotSetup & {
     cooldown: number;
 };
 
+/** A `Weapon` plus the icon the HUD shows in the active-weapon slot while it's equipped - see `Player.EquippedWeapon`. */
+export type WeaponDef = {
+    icon: string;
+    shot: Weapon;
+};
+
 export type Projectile = {
     /** Centre, in pixels. */
     x: number;

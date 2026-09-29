@@ -1,19 +1,20 @@
 /**
  * The data a map gets for free from its tiles' `AssetMetadata` - a wall's
- * collision, a door's footprint, a torch's light, a marker's spawner - as
- * opposed to what's hand-painted on a data layer. Pure - no pixi - so it runs
- * under the plain node test runner (see ImplicitData.test.ts), same reasoning
- * as Doors.ts.
+ * collision, a door's footprint, a torch's light, a marker's spawner, a gold
+ * sack's pickup - as opposed to what's hand-painted on a data layer. Pure -
+ * no pixi - so it runs under the plain node test runner (see
+ * ImplicitData.test.ts), same reasoning as Doors.ts.
  *
  * One source of truth for both consumers: `Level.LoadLevel` bakes these
- * into its collision/door/light/spawner data, and the editor's read-only
- * implicit layer (see `Canvas`) draws exactly the same list, so what the
- * overlay shows is what the game will do.
+ * into its collision/door/light/spawner/pickup data, and the editor's
+ * read-only implicit layer (see `Canvas`) draws exactly the same list, so
+ * what the overlay shows is what the game will do.
  */
 
 import { Vec2Like } from "@logic-incubator/lib/math/Geometry";
 import { AssetMetadata } from "./AssetMetadata";
 import { DoorFootprint } from "./Doors";
+import { PickupValue } from "./entities/Pickups";
 import { IsSpawnerValue, SpawnerValue } from "./entities/Spawners";
 import { DataBrushName } from "./LevelFormat";
 import { IsLightValue, LightValue } from "./Lighting";
@@ -29,6 +30,8 @@ export type ImplicitPlacements = {
     lights: { x: number; y: number; value: LightValue }[];
     /** A tile's effective spawner (its own override, or its asset's default) - see `EffectiveSpawner`. */
     spawners: { x: number; y: number; value: SpawnerValue }[];
+    /** A tile's intrinsic pickup, straight from `AssetMetadata` - no per-instance override (unlike light/spawner). */
+    pickups: { x: number; y: number; value: PickupValue }[];
 };
 
 /** A tile's light: its own placement carries an override (painted or set via the data-select tool) if `data` is already a `LightValue`, else its asset's default from `AssetMetadata`, else none. */
@@ -53,7 +56,7 @@ export function FindImplicitPlacements(
     sizeFor: (assetName: string) => { width: number; height: number },
     tileSize: number
 ): ImplicitPlacements {
-    const placements: ImplicitPlacements = { collision: [], doors: [], lights: [], spawners: [] };
+    const placements: ImplicitPlacements = { collision: [], doors: [], lights: [], spawners: [], pickups: [] };
     brushes.forEach(brush => {
         if (!isTileLayer(brush.layerId)) {
             return;
@@ -77,6 +80,9 @@ export function FindImplicitPlacements(
         const spawner = EffectiveSpawner(brush, meta);
         if (spawner) {
             placements.spawners.push({ x, y, value: spawner });
+        }
+        if (meta?.pickup) {
+            placements.pickups.push({ x, y, value: meta.pickup });
         }
     });
     return placements;
