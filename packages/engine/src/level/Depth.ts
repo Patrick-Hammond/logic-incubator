@@ -121,3 +121,8 @@ export function HeightAt(heightData: ReadonlyArray<ReadonlyArray<number>>, tx: n
     const z = column && column[ty];
     return z || 0;
 }
+
+/** True if two heights differ enough that a mover should be blocked from stepping between them - more than one level at once, so stairs (a gradual 1-level-at-a-time climb) stay crossable but a sheer drop or climb doesn't. */
+export function IsHeightGap(z1: number, z2: number): boolean {
+    return Math.abs(z1 - z2) > 1;
+}

@@ -24,7 +24,7 @@ function collider(map: string): TileCollision {
             data[x][y] = rows[y][x] === "#";
         }
     }
-    return new TileCollision({ collisionData: data } as unknown as Level);
+    return new TileCollision({ collisionData: data, HeightAt: () => 0 } as unknown as Level);
 }
 
 describe("TileCollision geometry constants", () => {
@@ -293,5 +293,43 @@ describe("GapAlignY - the head-start target when a sideways step is blocked (doo
     it("also works for a leftward step into a doorway", () => {
         // Player in the corridor right of the wall (tileX 6) stepping left to reach tileX 5.
         expect(wall.GapAlignY({ x: 100, y: 74 }, -6)).toBe(80);
+    });
+});
+
+/** A collider with no walls, only the given per-cell heights (default 0 elsewhere) - IsHeightBlocked doesn't touch collisionData at all. */
+function heightCollider(heights: { [cell: string]: number }): TileCollision {
+    return new TileCollision({
+        collisionData: [],
+        HeightAt: (x: number, y: number) => heights[`${x},${y}`] ?? 0
+    } as unknown as Level);
+}
+
+describe("IsHeightBlocked", () => {
+    it("is false between two cells of equal height, including both unpainted (0)", () => {
+        const c = heightCollider({});
+        expect(c.IsHeightBlocked({ x: 0, y: 0 }, { x: 1, y: 0 })).toBe(false);
+
+        const level = heightCollider({ "2,2": 4, "3,2": 4 });
+        expect(level.IsHeightBlocked({ x: 2, y: 2 }, { x: 3, y: 2 })).toBe(false);
+    });
+
+    it("is false exactly one level apart, either direction", () => {
+        const c = heightCollider({ "0,0": 0, "1,0": 1, "2,0": -1 });
+        expect(c.IsHeightBlocked({ x: 0, y: 0 }, { x: 1, y: 0 })).toBe(false);
+        expect(c.IsHeightBlocked({ x: 1, y: 0 }, { x: 0, y: 0 })).toBe(false);
+        expect(c.IsHeightBlocked({ x: 0, y: 0 }, { x: 2, y: 0 })).toBe(false);
+    });
+
+    it("is true more than one level apart, either direction", () => {
+        const c = heightCollider({ "0,0": 0, "1,0": 2, "2,0": -3 });
+        expect(c.IsHeightBlocked({ x: 0, y: 0 }, { x: 1, y: 0 })).toBe(true);
+        expect(c.IsHeightBlocked({ x: 1, y: 0 }, { x: 0, y: 0 })).toBe(true);
+        expect(c.IsHeightBlocked({ x: 0, y: 0 }, { x: 2, y: 0 })).toBe(true);
+    });
+
+    it("only ever looks at the two given tiles, not any wall data", () => {
+        // collisionData is empty in heightCollider - a gap being reported has nothing to do with solidity.
+        const c = heightCollider({ "5,5": 0, "5,6": 9 });
+        expect(c.IsHeightBlocked({ x: 5, y: 5 }, { x: 5, y: 6 })).toBe(true);
     });
 });

@@ -42,11 +42,19 @@ export default class FlowField implements IFlowField {
     private targetY = Number.NaN;
     private dirty = true;
 
-    /** `isSolid` is read live on every recompute, so a cell that opens up (a destroyed spawner) only needs `MarkDirty`. */
+    /**
+     * `isSolid` is read live on every recompute, so a cell that opens up (a destroyed spawner) only
+     * needs `MarkDirty`. `isHeightGap` (see `Depth.IsHeightGap`), given the step's two endpoints, is
+     * separate from solidity - an otherwise-open neighbour a monster can't actually step to because
+     * of its height, so pathing doesn't route them into a gap they'd immediately bounce off (see
+     * `PlayerMovement.ResolveMove`'s own height check). Omit it where height doesn't matter - nothing
+     * is excluded on its account.
+     */
     constructor(
         readonly width: number,
         readonly height: number,
-        private isSolid: (x: number, y: number) => boolean
+        private isSolid: (x: number, y: number) => boolean,
+        private isHeightGap?: (x1: number, y1: number, x2: number, y2: number) => boolean
     ) {
         this.cost = new Int32Array(Math.max(0, width * height)).fill(UNREACHABLE);
         // Each cell is pushed at most once per neighbour that lowers its cost - 8 is a safe bound.
@@ -124,6 +132,9 @@ export default class FlowField implements IFlowField {
             const nx = x + n.x;
             const ny = y + n.y;
             if (!this.Open(nx, ny)) {
+                continue;
+            }
+            if (this.isHeightGap && this.isHeightGap(x, y, nx, ny)) {
                 continue;
             }
             if (n.x !== 0 && n.y !== 0 && (!this.Open(x + n.x, y) || !this.Open(x, y + n.y))) {

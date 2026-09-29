@@ -29,7 +29,7 @@ function wallWithGap(gapTile: number, gapWidth: number, totalTiles = 120, rows =
             data[x][y] = y === WALL_ROW && !(x >= gapTile && x < gapTile + gapWidth);
         }
     }
-    return new TileCollision({ collisionData: data } as unknown as Level);
+    return new TileCollision({ collisionData: data, HeightAt: () => 0 } as unknown as Level);
 }
 
 function inputVector(keys: { up?: boolean; down?: boolean; left?: boolean; right?: boolean }): { x: number; y: number } {
@@ -55,7 +55,7 @@ function verticalWall(wallCol: number, doorRow: number, cols = 40, rows = 4000):
             data[x][y] = x === wallCol && y !== doorRow;
         }
     }
-    return new TileCollision({ collisionData: data } as unknown as Level);
+    return new TileCollision({ collisionData: data, HeightAt: () => 0 } as unknown as Level);
 }
 
 function simulate(opts: {
@@ -99,7 +99,7 @@ describe("input pipeline", () => {
 });
 
 describe("open floor, holding right+down", () => {
-    const floor = new TileCollision({ collisionData: [] } as unknown as Level);
+    const floor = new TileCollision({ collisionData: [], HeightAt: () => 0 } as unknown as Level);
 
     it("settles to a horizontal step of ~2.8px/frame at dt=1", () => {
         const t = simulate({ collider: floor, start: { x: 0, y: 0 }, keys: { down: true, right: true }, frames: 60 });
@@ -124,6 +124,45 @@ describe("open floor, holding right+down", () => {
         ResolveMove(monster, { x: 1, y: 0 }, 1, floor, 0.4);
         expect(monster.x).toBeCloseTo(0.4);
         expect(player.x).toBeCloseTo(0.8); // PlayerSpeed, unchanged
+    });
+});
+
+describe("height gap blocking", () => {
+    /** No walls at all - only heights, keyed "x,y" in tile coordinates. Unlisted cells default to 0. */
+    function heightOnly(heights: { [cell: string]: number }): TileCollision {
+        return new TileCollision({
+            collisionData: [],
+            HeightAt: (x: number, y: number) => heights[`${x},${y}`] ?? 0
+        } as unknown as Level);
+    }
+
+    it("blocks a straight step into a cell more than one level different, exactly like a wall - even with no walls at all, proving this is independent of TestX/TestY/gap-align, not routed through them", () => {
+        const c = heightOnly({ "1,0": 5 });
+        const pos = { x: 0, y: 0 };
+        const vel = { x: 1, y: 0 };
+        ResolveMove(pos, vel, 100, c); // enough velocity to cross a tile many times over, if unblocked
+        expect(CentreTile(pos)).toEqual({ x: 0, y: 0 });
+        expect(vel.x).toBe(0);
+    });
+
+    it("allows a straight step exactly one level different", () => {
+        const c = heightOnly({ "1,0": 1 });
+        const pos = { x: 0, y: 0 };
+        ResolveMove(pos, { x: 1, y: 0 }, 100, c);
+        expect(CentreTile(pos)).toEqual({ x: 1, y: 0 });
+    });
+
+    it("blocks only the axis that crosses the gap - the other still resolves, sliding along the boundary like a wall", () => {
+        // From tile (0,0), height 0: stepping right lands in (1,0), still height 0 (clear); stepping
+        // down lands in (0,1), a 5-level cliff (blocked). Large velocity so both axes cover enough
+        // ground for CentreTile to actually cross into the neighbouring tile this one call.
+        const c = heightOnly({ "0,1": 5 });
+        const pos = { x: 0, y: 0 };
+        const vel = { x: 100, y: 100 };
+        ResolveMove(pos, vel, 1, c);
+        expect(pos.y).toBe(0);
+        expect(vel.y).toBe(0);
+        expect(CentreTile(pos)).toEqual({ x: 1, y: 0 });
     });
 });
 

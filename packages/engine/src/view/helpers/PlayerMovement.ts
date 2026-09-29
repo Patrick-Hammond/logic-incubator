@@ -19,6 +19,8 @@ export interface MoveCollider {
      * with; null = a real wall.
      */
     GapAlignY(from: Vec2Like, dir: number): number | null;
+    /** True if `toTile`'s height differs too much from `fromTile`'s (see `IsHeightGap`) for the mover to step between them - blocked like a wall, but never gap-aligned through. */
+    IsHeightBlocked(fromTile: Vec2Like, toTile: Vec2Like): boolean;
 }
 
 /** Per-frame velocity damping (raised to dt each frame). */
@@ -45,7 +47,10 @@ export function BoxCentre(position: Vec2Like): Vec2Like {
  * `position` and `velocity` are mutated in place: `position` is advanced by the
  * current velocity (clamped to one tile per axis per frame) and pushed back out
  * of anything solid, then `velocity` is zeroed on any axis that hit something
- * and damped.
+ * and damped. An axis whose wall-test is clear can still be blocked separately
+ * by `IsHeightBlocked` - a coarse per-move check (the mover's and the
+ * destination's centre tile), not part of the corner-sampled wall collision
+ * above, so it's never gap-aligned through the way a tight doorway can be.
  *
  * Extracted from what used to live inline in Player.Move, kept pure so it can
  * be unit-tested without a pixi/Game runtime. Both axes are tested from the
@@ -81,6 +86,7 @@ export function ResolveMove(
     let newY = from.y + deltaY;
 
     let headStarted = false;
+    const fromTile = CentreTile(from);
 
     if (deltaY !== 0) {
         const hit = collider.TestY(from, deltaY);
@@ -97,6 +103,9 @@ export function ResolveMove(
                 velocity.y = 0;
                 newY = hit;
             }
+        } else if (collider.IsHeightBlocked(fromTile, CentreTile({ x: from.x, y: newY }))) {
+            velocity.y = 0;
+            newY = from.y;
         }
     }
 
@@ -113,6 +122,9 @@ export function ResolveMove(
                 velocity.x = 0;
                 newX = hit;
             }
+        } else if (collider.IsHeightBlocked(fromTile, CentreTile({ x: newX, y: from.y }))) {
+            velocity.x = 0;
+            newX = from.x;
         }
     }
 

@@ -9,6 +9,7 @@
 import { RectangleLike, Vec2, Vec2Like } from "@logic-incubator/lib/math/Geometry";
 import { PlayerSpeed, TileSize } from "./Constants";
 import { MONSTER_KILLED, PLAYER_DAMAGED, PLAYER_DIED, SPAWNER_DESTROYED } from "./Events";
+import { IsHeightGap } from "./level/Depth";
 import { IMonsterBehaviour, Separation } from "./level/entities/Behaviours";
 import FlowField, { UNREACHABLE } from "./level/entities/FlowField";
 import { Health, IsDead } from "./level/entities/Health";
@@ -32,6 +33,7 @@ export interface EncounterLevel {
     boundRect: { width: number; height: number };
     IsSolid(tileX: number, tileY: number): boolean;
     IsCellVisible(tileX: number, tileY: number): boolean;
+    HeightAt(tileX: number, tileY: number): number;
     RemoveSpawner(spawner: Spawner): void;
 }
 
@@ -101,7 +103,12 @@ export default class Encounter {
         this.projectiles = [];
         this.spawners = this.level.spawners.map(CreateSpawnerState);
         this.spawnerFlash.clear();
-        this.flow = new FlowField(this.level.boundRect.width, this.level.boundRect.height, (x, y) => this.level.IsSolid(x, y));
+        this.flow = new FlowField(
+            this.level.boundRect.width,
+            this.level.boundRect.height,
+            (x, y) => this.level.IsSolid(x, y),
+            (x1, y1, x2, y2) => IsHeightGap(this.level.HeightAt(x1, y1), this.level.HeightAt(x2, y2))
+        );
     }
 
     /** Walking distances to the player, as of the last `Update`. */

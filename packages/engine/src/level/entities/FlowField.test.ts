@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { IsHeightGap } from "../Depth";
 import FlowField, { UNREACHABLE } from "./FlowField";
 
 /** A field over an ASCII map: `#` solid, anything else open. Rows are y, columns x. */
@@ -102,5 +103,37 @@ describe("FlowField", () => {
         const field = new FlowField(200, 200, () => false);
         field.Update(0, 0);
         expect(field.DistanceAt(199, 199)).toBeCloseTo(199 * 1.4, 5);
+    });
+});
+
+describe("FlowField height gaps", () => {
+    /** Same ASCII convention as Field, plus a "x,y" -> height map (unlisted cells default to 0), wired through IsHeightGap exactly as Encounter.ts wires it. */
+    function FieldWithHeights(rows: string[], heights: { [cell: string]: number }): FlowField {
+        const heightAt = (x: number, y: number) => heights[`${x},${y}`] ?? 0;
+        return new FlowField(
+            rows[0].length,
+            rows.length,
+            (x, y) => rows[y][x] === "#",
+            (x1, y1, x2, y2) => IsHeightGap(heightAt(x1, y1), heightAt(x2, y2))
+        );
+    }
+
+    it("excludes an otherwise-open neighbour more than one level away, even though nothing marks it solid", () => {
+        const field = FieldWithHeights(["...."], { "2,0": 5 });
+        field.Update(0, 0);
+        expect(field.DistanceAt(2, 0)).toBe(UNREACHABLE);
+        expect(field.DistanceAt(3, 0)).toBe(UNREACHABLE); // cut off beyond the gap too
+    });
+
+    it("still allows a one-level step", () => {
+        const field = FieldWithHeights(["..."], { "2,0": 1 });
+        field.Update(0, 0);
+        expect(field.DistanceAt(2, 0)).toBe(2);
+    });
+
+    it("omitting the callback excludes nothing on account of height - existing solid-only construction is unaffected", () => {
+        const field = new FlowField(3, 1, () => false); // no isHeightGap argument at all
+        field.Update(0, 0);
+        expect(field.DistanceAt(2, 0)).toBe(2);
     });
 });

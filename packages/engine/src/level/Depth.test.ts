@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BaseZScale, CameraZoom, CameraZoomRatio, HeightAt, MaxCameraZoom, MinCameraZoom, MinZFade, StepZoom, ZBandAlpha, ZFadeStep, ZoomSettleDelay, ZoomSettleSpeed, ZoomState, ZScale, ZScaleRatio } from "./Depth";
+import { BaseZScale, CameraZoom, CameraZoomRatio, HeightAt, IsHeightGap, MaxCameraZoom, MinCameraZoom, MinZFade, StepZoom, ZBandAlpha, ZFadeStep, ZoomSettleDelay, ZoomSettleSpeed, ZoomState, ZScale, ZScaleRatio } from "./Depth";
 
 describe("ZScale", () => {
     it("is BaseZScale at z 0", () => {
@@ -148,5 +148,27 @@ describe("HeightAt", () => {
         grid[4][7] = 3;
         expect(HeightAt(grid, 4, 7)).toBe(3);
         expect(HeightAt(grid, 4, 6)).toBe(0);
+    });
+});
+
+describe("IsHeightGap", () => {
+    it("is false for equal heights", () => {
+        expect(IsHeightGap(0, 0)).toBe(false);
+        expect(IsHeightGap(5, 5)).toBe(false);
+        expect(IsHeightGap(-2, -2)).toBe(false);
+    });
+
+    it("is false exactly 1 apart, either direction - a single step stays crossable", () => {
+        expect(IsHeightGap(0, 1)).toBe(false);
+        expect(IsHeightGap(1, 0)).toBe(false);
+        expect(IsHeightGap(-1, 0)).toBe(false);
+        expect(IsHeightGap(0, -1)).toBe(false);
+    });
+
+    it("is true more than 1 apart, either direction", () => {
+        expect(IsHeightGap(0, 2)).toBe(true);
+        expect(IsHeightGap(2, 0)).toBe(true);
+        expect(IsHeightGap(0, -2)).toBe(true);
+        expect(IsHeightGap(5, -1)).toBe(true);
     });
 });

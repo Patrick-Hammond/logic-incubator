@@ -1,11 +1,12 @@
 import { Rectangle, Vec2Like } from "@logic-incubator/lib/math/Geometry";
 import { TileSize } from "../Constants";
+import { IsHeightGap } from "./Depth";
 import Level from "./Level";
 
 export default class TileCollision {
     private playerBounds = new Rectangle(0, 0, TileSize - 1, TileSize - 1);
 
-    constructor(private level: Pick<Level, "collisionData">) {}
+    constructor(private level: Pick<Level, "collisionData" | "HeightAt">) {}
 
     TestX(from: Vec2Like, dir: number): number | null{
         this.playerBounds.x = from.x + dir;
@@ -114,6 +115,11 @@ export default class TileCollision {
         }
 
         return centreRow * TileSize;
+    }
+
+    /** See `IsHeightGap` - `fromTile`/`toTile` are grid coordinates, not pixels. */
+    IsHeightBlocked(fromTile: Vec2Like, toTile: Vec2Like): boolean {
+        return IsHeightGap(this.level.HeightAt(fromTile.x, fromTile.y), this.level.HeightAt(toTile.x, toTile.y));
     }
 
     private IsColliding(x: number, y: number): boolean {

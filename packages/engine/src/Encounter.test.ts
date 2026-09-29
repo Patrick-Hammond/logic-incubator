@@ -53,6 +53,7 @@ function TestLevel(rows: string[], spawners: Spawner[], visible: (x: number, y: 
         boundRect: { width, height },
         IsSolid: (x, y) => x < 0 || y < 0 || x >= width || y >= height || !!(collisionData[x] && collisionData[x][y]),
         IsCellVisible: visible,
+        HeightAt: () => 0,
         RemoveSpawner(spawner) {
             spawner.cells.forEach(c => mark(c.x, c.y, false));
             spawners.splice(spawners.indexOf(spawner), 1);
