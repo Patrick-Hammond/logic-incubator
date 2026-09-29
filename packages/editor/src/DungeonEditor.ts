@@ -1,7 +1,9 @@
+import { LEVEL_CREATED } from "@logic-incubator/engine/Events";
+import { Scenes } from "@logic-incubator/engine/Constants";
 import EditorComponent from "./EditorComponent";
 import { IStyler } from "./maps/Styler";
 import { LoadSavedLevel } from "./SavedLevel";
-import { DataBrushIcons } from "./stores/EditorStore";
+import { DataBrushIcons, EditorActions } from "./stores/EditorStore";
 import EditorOverlay from "./ui/dom/EditorOverlay";
 import BrushTool from "./views/Brush";
 import Canvas from "./views/Canvas";
@@ -35,6 +37,21 @@ export interface IDungeonEditorOptions {
 export class DungeonEditor extends EditorComponent {
     constructor(private readonly options: IDungeonEditorOptions = {}) {
         super();
+
+        // Keeps Enter's editor/game toggle (see Keyboard.ts) correct even when Scenes.GAME is
+        // reached some other way (the game's own title/character-select flow, not Enter) - without
+        // this, currentScene stays at its default (EDITOR) forever if the editor scene is never
+        // shown first, so the first Enter press from gameplay would think it's toggling FROM the
+        // editor and just stay on the game. LEVEL_CREATED fires whenever gameplay actually starts
+        // (DungeonMain, every scene-show and restart), regardless of how it was reached. Wired here
+        // in the constructor, not `Create()` - `Create()` only runs once the editor scene is first
+        // shown (see EditorComponent), which under a title-screen-first boot may never happen before
+        // this needs to already be listening.
+        this.game.dispatcher.on(LEVEL_CREATED, () => {
+            if (this.editorStore.state.currentScene !== Scenes.GAME) {
+                this.editorStore.Dispatch({ type: EditorActions.CHANGE_SCENE, data: { name: Scenes.GAME } });
+            }
+        });
     }
 
     protected Create(): void {
