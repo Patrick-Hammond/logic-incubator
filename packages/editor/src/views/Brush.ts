@@ -28,12 +28,16 @@ export default class BrushTool extends EditorComponent {
             }
 
             if (state.currentBrush.name !== "") {
+                // null for a data brush's name (player-start, collision, z-index, ...) - never a real
+                // sprite, so there's nothing to follow the cursor with; `Tools`' own preview covers it.
                 this.brush = this.assetFactory.Create(state.currentBrush.name);
                 if (this.brush instanceof AnimatedSprite) {
                     this.brush.play();
                     this.brush.animationSpeed = AnimationSpeed;
                 }
-                this.root.addChild(this.brush);
+                if (this.brush) {
+                    this.root.addChild(this.brush);
+                }
             }
         }
         if (!this.brush) {
