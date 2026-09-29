@@ -12,10 +12,9 @@ function implicitLayers(store: EditorStore) {
 }
 
 describe("EditorStore implicit layer", () => {
-    it("is present from the start, read-only, and not counted as editable", () => {
+    it("is present from the start, a data layer, and not counted as editable", () => {
         const store = new EditorStore();
         expect(implicitLayers(store)).toHaveLength(1);
-        expect(implicitLayers(store)[0].readOnly).toBe(true);
         expect(implicitLayers(store)[0].isData).toBe(true);
         expect(EditableLayerCount(store.state.layers)).toBe(0);
     });
@@ -57,11 +56,19 @@ describe("EditorStore implicit layer", () => {
         expect(implicitLayers(store)[0].name).toBe("attributes");
     });
 
-    it("can be renamed, unlike every other readOnly restriction (nothing else can paint onto it or reorder it)", () => {
+    it("can be renamed, like any other layer", () => {
         const store = new EditorStore();
         store.Dispatch({ type: EditorActions.SELECT_LAYER, data: { layer: implicitLayers(store)[0] } });
         store.Dispatch({ type: EditorActions.RENAME_LAYER, data: { name: "notes" } });
         expect(implicitLayers(store)[0].name).toBe("notes");
+    });
+
+    it("can be selected and painted on, like any other data layer - player-start/collision/z-index have nowhere else to go", () => {
+        const store = new EditorStore();
+        const implicit = implicitLayers(store)[0];
+        store.Dispatch({ type: EditorActions.SELECT_LAYER, data: { layer: implicit } });
+        store.Dispatch({ type: EditorActions.BRUSH_CHANGED, data: { name: DataBrushName.COLLISION } });
+        expect(store.state.currentBrush.layerId).toBe(IMPLICIT_LAYER_ID);
     });
 
     it("brings a pre-rename save's fixed old name (\"implicit (read-only)\") up to \"attributes\" on load - safe because that name could never have been anything else (renaming wasn't allowed yet)", () => {
@@ -69,7 +76,7 @@ describe("EditorStore implicit layer", () => {
         const saved = {
             ...store.state,
             layers: [
-                { id: IMPLICIT_LAYER_ID, name: "implicit (read-only)", selected: false, visible: true, isData: true, readOnly: true },
+                { id: IMPLICIT_LAYER_ID, name: "implicit (read-only)", selected: false, visible: true, isData: true },
                 { id: 0, name: "layer 0", selected: true, visible: true, isData: false }
             ]
         };

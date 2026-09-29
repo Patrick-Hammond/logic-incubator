@@ -7,10 +7,9 @@ import { Brush, DataBrushValue, LevelLayer } from "@logic-incubator/engine/level
 
 /**
  * A level's layer (see `LevelLayer`) plus what only the editor keeps: which one is selected and
- * whether it's shown. `readOnly` marks the editor's derived implicit-data layer (see `IMPLICIT_LAYER_ID`
- * in EditorStore) - nothing can be painted on it.
+ * whether it's shown.
  */
-export type Layer = LevelLayer & { selected: boolean; visible: boolean; readOnly?: boolean };
+export type Layer = LevelLayer & { selected: boolean; visible: boolean };
 export type LevelDataState = { levelData: LevelData };
 
 export const enum LevelDataActions {

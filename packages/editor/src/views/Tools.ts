@@ -276,10 +276,9 @@ export default class Tools extends EditorComponent {
         return isDataBrush === layer.isData ? { ...state.currentBrush, layerId: layer.id } : null;
     }
 
-    /** The selected layer, if it can be painted on. */
+    /** The selected layer, if there is one - every layer, including "attributes", can be painted on. */
     private EditableLayer(): Layer | undefined {
-        const layer = this.editorStore.SelectedLayer;
-        return layer && !layer.readOnly ? layer : undefined;
+        return this.editorStore.SelectedLayer;
     }
 
     /** The cursor's cell in map coordinates (what a brush's `position` holds), rather than relative to the view. */
@@ -327,14 +326,14 @@ export default class Tools extends EditorComponent {
     /** The dropper samples the selected layer's kind: tiles from tile layers, data brushes from data layers. */
     private PickableAt(state: IEditorState, cell: Vec2Like): Brush | undefined {
         const selected = this.editorStore.SelectedLayer;
-        const wantData = selected != null && selected.isData && !selected.readOnly;
-        const layers = state.layers.filter(layer => !layer.readOnly && layer.isData === wantData);
+        const wantData = selected != null && selected.isData;
+        const layers = state.layers.filter(layer => layer.isData === wantData);
         return TopmostBrushAt(this.levelDataStore.state.levelData, layers, cell);
     }
 
     /** The data brush on top at `cell` (on any visible data layer) whose value has a dialog. */
     private EditableDataAt(state: IEditorState, cell: Vec2Like): Brush | undefined {
-        const layers = state.layers.filter(layer => layer.isData && !layer.readOnly);
+        const layers = state.layers.filter(layer => layer.isData);
         return TopmostBrushAt(this.levelDataStore.state.levelData, layers, cell, brush => DataBrushEditorFor(brush.name) != null);
     }
 

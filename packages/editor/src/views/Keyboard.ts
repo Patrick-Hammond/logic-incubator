@@ -7,7 +7,7 @@ import {GenerateMap, IMap, MapType} from "../maps/Generators";
 import {ApplyMapStyle, IStyler} from "../maps/Styler";
 import {GenerateZTest} from "../maps/ZTest";
 import {EditorSave, SaveLevel} from "../SavedLevel";
-import {EditorActions, IEditorState} from "../stores/EditorStore";
+import {EditorActions, IEditorState, IMPLICIT_LAYER_ID} from "../stores/EditorStore";
 import {LevelDataActions, LevelDataState} from "../stores/LevelDataStore";
 
 export default class Keyboard extends EditorComponent {
@@ -65,9 +65,9 @@ export default class Keyboard extends EditorComponent {
                         }
                         break;
                     case Key.D:
-                        // The read-only implicit layer has no brushes of its own to duplicate - and COPY
-                        // below would otherwise copy into whatever layer happens to be last.
-                        if (shift && this.editorStore.SelectedLayer && !this.editorStore.SelectedLayer.readOnly) {
+                        // There's only ever the one "attributes" layer - and COPY below would otherwise
+                        // copy into whatever layer happens to be last.
+                        if (shift && this.editorStore.SelectedLayer && this.editorStore.SelectedLayer.id !== IMPLICIT_LAYER_ID) {
                             this.editorStore.Dispatch({ type: EditorActions.DUPLICATE_LAYER });
                             this.levelDataStore.Dispatch({
                                 type: LevelDataActions.COPY,

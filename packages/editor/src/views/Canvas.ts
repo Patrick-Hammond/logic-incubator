@@ -12,7 +12,7 @@ import ObjectPool from "@logic-incubator/lib/patterns/ObjectPool";
 import { AnimationSpeed, Scenes, TileSize } from "@logic-incubator/engine/Constants";
 import { GridBounds, InitalScale } from "../Layout";
 import EditorComponent from "../EditorComponent";
-import { EditorActions, EditorTool, IEditorState, MouseButtonState } from "../stores/EditorStore";
+import { EditorActions, EditorTool, IEditorState, IMPLICIT_LAYER_ID, MouseButtonState } from "../stores/EditorStore";
 import { LevelDataActions, LevelDataState } from "../stores/LevelDataStore";
 
 /** Doors, lights and spawners aren't paintable data brushes any more, so they have no palette colour of their own to borrow - these match their old ones (LIGHT's/SPAWNER's former swatch colours) so the map looks the same as before the change. */
@@ -26,7 +26,7 @@ export default class Canvas extends EditorComponent {
     private levelContainer = new Container();
     private layerContainers: ObjectPool<Container>;
     private textPool: ObjectPool<BitmapText>;
-    /** The read-only implicit layer's drawing - always on top of every real layer, and outside `layerContainers` so it never eats one of the (limited) editable layers' slots. */
+    /** The derived-data overlay's drawing (outlines, not the "attributes" layer's own painted brushes - see `layerDict` in `UpdateLevel`) - always on top of everything, and outside `layerContainers` so it never eats one of the (limited) editable layers' slots. */
     private implicitContainer = new Container();
     private implicitGraphics = new Graphics();
 
@@ -81,15 +81,22 @@ export default class Canvas extends EditorComponent {
 
             this.layerContainers.RestoreAll();
             const layerDict: { [id: number]: Container } = {};
+            let attributesContainer: Container | null = null;
             this.editorStore.state.layers.forEach(layer => {
-                if (layer.readOnly) {
-                    return;
-                }
                 const layerContainer = this.layerContainers.Get();
                 layerDict[layer.id] = layerContainer;
                 layerContainer.visible = layer.visible;
-                this.levelContainer.addChild(layerContainer);
+                if (layer.id === IMPLICIT_LAYER_ID) {
+                    // Added after every tile/data layer below, so a painted player-start/collision/
+                    // z-index marker stays visible over tile art instead of sitting underneath it.
+                    attributesContainer = layerContainer;
+                } else {
+                    this.levelContainer.addChild(layerContainer);
+                }
             });
+            if (attributesContainer) {
+                this.levelContainer.addChild(attributesContainer);
+            }
 
             const scaledTileSize = TileSize * this.editorStore.state.viewScale;
             const viewOffset = this.editorStore.state.viewOffset;
@@ -158,7 +165,7 @@ export default class Canvas extends EditorComponent {
         this.levelContainer.addChild(this.implicitContainer);
 
         const state = this.editorStore.state;
-        const implicitLayer = state.layers.find(layer => layer.readOnly);
+        const implicitLayer = state.layers.find(layer => layer.id === IMPLICIT_LAYER_ID);
         if (!implicitLayer || !implicitLayer.visible) {
             return;
         }

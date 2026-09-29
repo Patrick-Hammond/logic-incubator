@@ -56,23 +56,25 @@ export const enum EditorTool {
     MOVE = "move"
 }
 
-/** Max editable (non-`readOnly`) layers - a sanity cap; the Layers panel's list scrolls past what fits. */
+/** Max editable (non-attributes) layers - a sanity cap; the Layers panel's list scrolls past what fits. */
 export const MaxEditableLayers = 16;
 
 /**
- * Fixed id of "attributes", the one data layer: it shows data the game derives from tiles'
- * `AssetMetadata` (collision, door footprints, lights, spawners - see `FindImplicitPlacements`)
- * rather than hand-painted brushes, so it's still `readOnly` - nothing paints onto it, and
- * `Level.LoadLevel` never mistakes it for a tile layer - but its *name* isn't; renaming it (see
- * `RENAME_LAYER`) is the one thing about it that is editable. Always present (re-added on
- * load/reset). There's deliberately no way to add another data layer alongside it - painting
- * height/collision on more than one was never useful and just made "which layer is this on"
- * a question worth asking.
+ * Fixed id of "attributes", the one data layer: player-start, collision and z-index are painted
+ * onto it like any data brush, and it also draws the read-only overlay of what the game derives
+ * from tiles' own `AssetMetadata` (collision, door footprints, lights, spawners - see
+ * `FindImplicitPlacements`), so a cell's full picture - hand-placed and intrinsic - is always in
+ * one place. `isData: true` is what keeps `Level.LoadLevel` from ever mistaking it for a tile
+ * layer; its id is what everything else (duplicating, reordering, the layer badge) keys off, since
+ * it's the one layer that's always there rather than something a user added. Always present
+ * (re-added on load/reset). There's deliberately no way to add another data layer alongside it -
+ * painting height/collision on more than one was never useful and just made "which layer is this
+ * on" a question worth asking.
  */
 export const IMPLICIT_LAYER_ID = -99999;
 
 function ImplicitLayer(): Layer {
-    return { id: IMPLICIT_LAYER_ID, name: "attributes", selected: false, visible: true, isData: true, readOnly: true };
+    return { id: IMPLICIT_LAYER_ID, name: "attributes", selected: false, visible: true, isData: true };
 }
 
 /**
@@ -95,7 +97,7 @@ function WithImplicitLayer(layers: Layer[]): Layer[] {
 }
 
 export function EditableLayerCount(layers: Layer[]): number {
-    return layers.filter(layer => !layer.readOnly).length;
+    return layers.filter(layer => layer.id !== IMPLICIT_LAYER_ID).length;
 }
 
 export type DataBrush = { name: string; colour: number; value: DataBrushValue };
@@ -386,8 +388,7 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
             case EditorActions.REMOVE_LAYER:
                 return layers.filter(layer => layer.selected === false);
             case EditorActions.RENAME_LAYER: {
-                // The new name comes from the Layers panel's rename dialog. Renamable even for the
-                // read-only "attributes" layer - readOnly only ever meant "nothing paints onto it".
+                // The new name comes from the Layers panel's rename dialog.
                 const selectedLayer = this.SelectedLayer;
                 const name = action.data && action.data.name;
                 if (!selectedLayer || !name) {
@@ -446,9 +447,8 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
             }
             case EditorActions.DUPLICATE_LAYER: {
                 const selectedLayer = this.SelectedLayer;
-                // readOnly rules out the one data layer ("attributes") along with painting onto it -
-                // it's never a tile layer, so what's left to duplicate is always a tile layer.
-                if (!selectedLayer || selectedLayer.readOnly) {
+                // There's only ever the one "attributes" layer - what's left to duplicate is always a tile layer.
+                if (!selectedLayer || selectedLayer.id === IMPLICIT_LAYER_ID) {
                     return layers;
                 }
                 const newLayer = { ...selectedLayer, id: this.NextLayerId(), selected: false };

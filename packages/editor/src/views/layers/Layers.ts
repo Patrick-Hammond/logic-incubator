@@ -1,6 +1,6 @@
 import { AssetPath, Scenes } from "@logic-incubator/engine/Constants";
 import EditorComponent from "../../EditorComponent";
-import {EditableLayerCount, EditorActions, IEditorState, MaxEditableLayers} from "../../stores/EditorStore";
+import {EditableLayerCount, EditorActions, IEditorState, IMPLICIT_LAYER_ID, MaxEditableLayers} from "../../stores/EditorStore";
 import {Layer, LevelDataActions} from "../../stores/LevelDataStore";
 import {IsFormDialogOpen, OpenFormDialog} from "../../ui/dialog/FormDialog";
 import {ButtonEl, El, InjectStyles} from "../../ui/dom/Dom";
@@ -19,11 +19,12 @@ function Icon(name: string): HTMLImageElement {
 /**
  * The layer list and its toolbar: add tile layers, remove, rename, and
  * reorder. There's no "add data layer" - "attributes", the one data layer,
- * is always there and can't be removed, only renamed (double-click it, or
- * the rename button - it's still `readOnly`, but that only ever meant
- * "nothing paints onto it"). The list is first to last from the top, so
- * later layers (drawn on top on the map) are further down; it scrolls once
- * there are more layers than fit.
+ * is always there, can be painted on like any other, and can't be removed,
+ * duplicated or reordered (only renamed - double-click it, or the rename
+ * button): it's always drawn on top of the tile stack (see `Canvas`), so
+ * moving it within the list wouldn't change anything anyway. The list is
+ * first to last from the top, so later layers (drawn on top on the map) are
+ * further down; it scrolls once there are more layers than fit.
  */
 export default class Layers extends EditorComponent {
     private list: HTMLElement;
@@ -91,7 +92,7 @@ export default class Layers extends EditorComponent {
 
         layers.forEach((layer, index) => {
             const row = this.rows[index];
-            const kind = layer.readOnly ? "auto" : layer.isData ? "data" : "tile";
+            const kind = layer.id === IMPLICIT_LAYER_ID ? "auto" : layer.isData ? "data" : "tile";
             row.name.textContent = layer.name;
             row.row.title = layer.name;
             row.row.setAttribute("aria-selected", String(layer.selected));
@@ -107,11 +108,10 @@ export default class Layers extends EditorComponent {
 
         const selectedIndex = layers.findIndex(layer => layer.selected);
         const selected = layers[selectedIndex];
-        const editable = selected != null && !selected.readOnly;
+        const editable = selected != null && selected.id !== IMPLICIT_LAYER_ID;
         this.addButton.disabled = EditableLayerCount(layers) >= MaxEditableLayers;
         this.removeButton.disabled = !this.CanRemove(layers, selected);
-        // Renamable even when readOnly (just "attributes", which reordering/moving doesn't apply to -
-        // it's drawn as its own always-on-top overlay, not placed in the layer stack - so those two stay gated on `editable`).
+        // Renamable even for "attributes" (reordering/duplicating/removing aren't - those stay gated on `editable`).
         this.renameButton.disabled = selected == null;
         this.upButton.disabled = !editable || selectedIndex <= 0;
         this.downButton.disabled = !editable || selectedIndex >= layers.length - 1;
@@ -166,10 +166,10 @@ export default class Layers extends EditorComponent {
         }
     }
 
-    /** Never the read-only layer, nor the last tile layer. */
+    /** Never "attributes", nor the last tile layer. */
     private CanRemove(layers: Layer[], selectedLayer: Layer | undefined): boolean {
         const spriteLayers = layers.filter(layer => layer.isData === false);
-        return selectedLayer != null && !selectedLayer.readOnly && (spriteLayers.length > 1 || selectedLayer.isData);
+        return selectedLayer != null && selectedLayer.id !== IMPLICIT_LAYER_ID && (spriteLayers.length > 1 || selectedLayer.isData);
     }
 
     private RemoveLayer(): void {
@@ -178,11 +178,11 @@ export default class Layers extends EditorComponent {
             return;
         }
         this.editorStore.Dispatch({ type: EditorActions.REMOVE_LAYER });
-        // Not layers[0] - that's the read-only implicit layer, which leaves nothing to paint with.
+        // Not layers[0] - that's "attributes", better left for its own kind of data than picked by default.
         const layers = this.editorStore.state.layers;
         this.editorStore.Dispatch({
             type: EditorActions.SELECT_LAYER,
-            data: { layer: layers.find(layer => !layer.readOnly) || layers[0] }
+            data: { layer: layers.find(layer => layer.id !== IMPLICIT_LAYER_ID) || layers[0] }
         });
         this.levelDataStore.Dispatch({ type: LevelDataActions.ERASE_LAYER, data: { destLayer: selectedLayer } });
     }

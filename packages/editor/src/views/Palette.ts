@@ -5,7 +5,7 @@ import EditorComponent from "../EditorComponent";
 import { DataBrushIcon, DataBrushIcons, EditorActions, IEditorState } from "../stores/EditorStore";
 import { ButtonEl, El, InjectStyles } from "../ui/dom/Dom";
 import EditorOverlay from "../ui/dom/EditorOverlay";
-import SpriteCanvas, { DATA_ICON_FIT, DATA_SWATCH_SIZE, FitIcon, VisibleBounds } from "../ui/dom/SpriteCanvas";
+import SpriteCanvas from "../ui/dom/SpriteCanvas";
 
 /** A tab of tile brushes. There's only the one sprite sheet for now; another sheet becomes another entry. */
 type TileSet = { name: string; brushes: string[] };
@@ -14,7 +14,7 @@ type TileSet = { name: string; brushes: string[] };
 type Page = { tab: HTMLButtonElement; body: HTMLElement; animated: SpriteCanvas[] };
 
 /** What the selected layer can be painted with. */
-type Mode = "tiles" | "data" | "read-only";
+type Mode = "tiles" | "data";
 
 /** Tile thumbnails are drawn at 2x, as the Pixi palette did. */
 const TILE_SCALE = 2;
@@ -30,7 +30,6 @@ export default class Palette extends EditorComponent {
     private tabs: HTMLElement;
     private tileSetPages: Page[] = [];
     private dataPage: Page;
-    private readOnlyPage: Page;
     private activeTileSet = 0;
     private mode: Mode = null;
     private items: { [name: string]: HTMLElement } = {};
@@ -38,7 +37,7 @@ export default class Palette extends EditorComponent {
     private animTime = 0;
     private animFrame = 0;
 
-    /** `icons`: the game's sprite over each data brush's colour - see `DataBrushIcons`. */
+    /** `icons`: the game's sprite over each data brush's colour, shown only in its palette chip (see `DataBrushIcons`, `RegisterDataBrushTextures`) - telling brushes apart matters there, not on the map. */
     constructor(private readonly icons: DataBrushIcons = {}) {
         super();
         this.AddToScene(Scenes.EDITOR);
@@ -84,11 +83,6 @@ export default class Palette extends EditorComponent {
             chips.appendChild(this.AddBrushEvents(chip, dataBrush.name));
         });
 
-        this.readOnlyPage = this.AddPage(panel, "Read-only");
-        this.readOnlyPage.body.appendChild(
-            El("p", "pl-empty", "Nothing to paint here: this layer shows what the game works out from the tiles themselves. Select another layer to paint.")
-        );
-
         this.editorStore.Subscribe(this.Render, this);
         this.game.ticker.add(this.Animate, this);
         this.UpdateMode();
@@ -106,7 +100,7 @@ export default class Palette extends EditorComponent {
         if (!layer) {
             return;
         }
-        const mode: Mode = layer.readOnly ? "read-only" : layer.isData ? "data" : "tiles";
+        const mode: Mode = layer.isData ? "data" : "tiles";
         if (mode !== this.mode) {
             this.mode = mode;
             this.ShowPages();
@@ -116,8 +110,8 @@ export default class Palette extends EditorComponent {
     /** Shows the tabs that apply to the selected layer, and the active one's page. */
     private ShowPages(): void {
         const active = this.ActivePage();
-        const inMode = this.mode === "tiles" ? this.tileSetPages : this.mode === "data" ? [this.dataPage] : [this.readOnlyPage];
-        this.tileSetPages.concat(this.dataPage, this.readOnlyPage).forEach(page => {
+        const inMode = this.mode === "tiles" ? this.tileSetPages : [this.dataPage];
+        this.tileSetPages.concat(this.dataPage).forEach(page => {
             page.tab.style.display = inMode.indexOf(page) > -1 ? "" : "none";
             page.tab.setAttribute("aria-selected", String(page === active));
             page.body.style.display = page === active ? "" : "none";
@@ -130,8 +124,6 @@ export default class Palette extends EditorComponent {
                 return this.tileSetPages[this.activeTileSet];
             case "data":
                 return this.dataPage;
-            case "read-only":
-                return this.readOnlyPage;
             default:
                 return null;
         }
@@ -209,9 +201,12 @@ export default class Palette extends EditorComponent {
 
     /**
      * Paintable textures for the data brushes, registered with the AssetFactory under each brush's name
-     * so the map (`Canvas`) and cursor (`Brush`) draw them like any tile: the brush's colour at half
-     * opacity with its icon on top - the same picture `DrawDataBrushSwatch` draws in the DOM. Rendered
-     * at 4x, so icons shrunk to quarter-pixel scales (DATA_ICON_FIT) stay crisp when zoomed in.
+     * so the map (`Canvas`) and cursor (`Brush`) draw them like any tile: just the brush's colour at half
+     * opacity, deliberately without its icon - a collision marker shaped like `wall_mid` on the map reads
+     * as an actual wall tile, not a data overlay. The icon still appears in the palette chip (see the
+     * `dataBrushes.forEach` in `Create`, which draws it separately), where there's no such confusion -
+     * it's the one place telling brushes apart at a glance actually matters. Rendered at 4x so a texture
+     * this small stays crisp when zoomed in.
      */
     private RegisterDataBrushTextures(): void {
         const swatch = new Container();
@@ -221,21 +216,8 @@ export default class Palette extends EditorComponent {
 
         this.editorStore.state.dataBrushes.forEach(dataBrush => {
             square.tint = dataBrush.colour;
-            let icon: Sprite = null;
-            const iconName = DataBrushIcon(this.icons, dataBrush.name);
-            if (iconName) {
-                icon = new Sprite(this.assetFactory.CreateTexture(iconName));
-                const fit = FitIcon(VisibleBounds(icon.texture), DATA_SWATCH_SIZE, DATA_ICON_FIT);
-                icon.scale.set(fit.scale);
-                icon.position.set(fit.x, fit.y);
-                swatch.addChild(icon);
-            }
             const texture = this.game.renderer.generateTexture(swatch, SCALE_MODES.NEAREST, 4);
             AssetFactory.inst.Add(dataBrush.name, [dataBrush.name], [texture]);
-            if (icon) {
-                swatch.removeChild(icon);
-                icon.destroy();
-            }
         });
     }
 }
@@ -272,5 +254,4 @@ const STYLES = `
 .pl-tile[aria-pressed=true], .pl-chip[aria-pressed=true] { background: var(--ed-accent-bg); border-color: var(--ed-accent); color: var(--ed-text-strong); }
 .pl-tile canvas, .pl-chip canvas { display: block; image-rendering: pixelated; }
 .pl-chip-label { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pl-empty { margin: 0; padding: 18px 14px; color: var(--ed-faint); font-size: 12px; text-align: center; }
 `;
