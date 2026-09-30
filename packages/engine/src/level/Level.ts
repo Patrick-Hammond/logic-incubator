@@ -12,6 +12,7 @@ import {SanitiseSpawnerValue, Spawner, SpawnerCells} from "./entities/Spawners";
 import {FindImplicitPlacements} from "./ImplicitData";
 import {Brush, DataBrushName, LevelFile, LevelLayer} from "./LevelFormat";
 import {AMBIENT_LIGHT, AMBIENT_TINT, BakedLight, BakeLighting, LightSource} from "./Lighting";
+import {FindMapBounds} from "./MapBounds";
 import {FindRegions, Region, RegionIdsTouching} from "./Regions";
 
 export type Tile = Brush & {
@@ -255,13 +256,7 @@ export default class Level {
         const levelData = file.levelData.levelData;
 
         // find map bounds
-        const bounds = {x1: Number.MAX_VALUE, y1: Number.MAX_VALUE, x2: Number.MIN_VALUE, y2: Number.MIN_VALUE};
-        levelData.forEach(brush => {
-            bounds.x1 = Math.min(bounds.x1, brush.position.x);
-            bounds.y1 = Math.min(bounds.y1, brush.position.y);
-            bounds.x2 = Math.max(bounds.x2, brush.position.x);
-            bounds.y2 = Math.max(bounds.y2, brush.position.y);
-        });
+        const bounds = FindMapBounds(levelData);
 
         // normalise origin to zero
         this.boundRect = new Rectangle(0, 0, bounds.x2 - bounds.x1 + 2, bounds.y2 - bounds.y1 + 2);
