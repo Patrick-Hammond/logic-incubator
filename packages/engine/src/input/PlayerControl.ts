@@ -2,6 +2,7 @@ import GameComponent from "@logic-incubator/lib/game/GameComponent";
 import GamePad from "@logic-incubator/lib/io/GamePad";
 import Keyboard, {Key} from "@logic-incubator/lib/io/Keyboard";
 import {Vec2} from "@logic-incubator/lib/math/Geometry";
+import {IsStickPushed} from "./StickInput";
 
 export interface IPlayerInput {
     direction: Vec2;
@@ -54,10 +55,15 @@ export default class PlayerControl extends GameComponent {
             firing = this.keyboard.KeyPressed(Key.Space);
         } else {
             if (this.gamePad.controllers[this.playerId]) {
-                this.inputVector.Copy(this.gamePad.GetStick(this.playerId, 0, 0.005));
+                // GetStick is null for a controller without that stick (too few axes) - no movement then.
+                const move = this.gamePad.GetStick(this.playerId, 0, 0.005);
+                if (move) {
+                    this.inputVector.Copy(move);
+                }
                 // A dead zone well above the move stick's - a resting right stick mustn't keep firing.
+                // GetStick still hands back the (zeroed) stick while it rests, so check it's pushed, not just there.
                 const aim = this.gamePad.GetStick(this.playerId, 1, 0.3);
-                if (aim) {
+                if (IsStickPushed(aim)) {
                     firing = true;
                     aimX = aim.x;
                 }
