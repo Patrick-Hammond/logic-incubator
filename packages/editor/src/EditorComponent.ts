@@ -2,21 +2,10 @@ import GameComponent from "@logic-incubator/lib/game/GameComponent";
 import EditorStore from "./stores/EditorStore";
 import LevelDataStore from "./stores/LevelDataStore";
 
+/** A piece of the editor: a `GameComponent` with the editor's shared stores to hand. Its setup goes in `OnInitialise`, like any other component's. */
 export default abstract class EditorComponent extends GameComponent {
     private static _editorStore: EditorStore;
     private static _levelDataStore: LevelDataStore;
-    private created: boolean = false;
-
-    constructor() {
-        super();
-
-        this.root.on("added", () => {
-            if (!this.created) {
-                this.created = true;
-                this.Create();
-            }
-        });
-    }
 
     protected get editorStore(): EditorStore {
         if (!EditorComponent._editorStore) {
@@ -30,6 +19,4 @@ export default abstract class EditorComponent extends GameComponent {
         }
         return EditorComponent._levelDataStore;
     }
-
-    protected abstract Create(): void;
 }

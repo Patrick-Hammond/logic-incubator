@@ -1,4 +1,4 @@
-import { AssetPath, Scenes } from "@logic-incubator/engine/Constants";
+import { AssetPath } from "@logic-incubator/engine/Constants";
 import EditorComponent from "../../EditorComponent";
 import {EditableLayerCount, EditorActions, IEditorState, IMPLICIT_LAYER_ID, MaxEditableLayers} from "../../stores/EditorStore";
 import {Layer, LevelDataActions} from "../../stores/LevelDataStore";
@@ -37,14 +37,9 @@ export default class Layers extends EditorComponent {
     private downButton: HTMLButtonElement;
     private selectedIndex = -1;
 
-    constructor() {
-        super();
-        this.AddToScene(Scenes.EDITOR);
-    }
-
-    protected Create(): void {
+    protected OnInitialise(): void {
         InjectStyles("ly-styles", STYLES);
-        this.editorStore.Subscribe(this.Render, this);
+        this.Own(this.editorStore.Subscribe(this.Render, this));
 
         const panel = El("div", "ed-panel ly-panel");
         const header = panel.appendChild(El("div", "ed-panel-header"));
@@ -68,6 +63,7 @@ export default class Layers extends EditorComponent {
         this.list = panel.appendChild(El("div", "ly-list ed-scroll"));
         this.list.setAttribute("role", "listbox");
         EditorOverlay.inst.Slot("layers").appendChild(panel);
+        this.Own(() => panel.remove());
 
         // render initial
         this.editorStore.Dispatch({ type: EditorActions.REFRESH });

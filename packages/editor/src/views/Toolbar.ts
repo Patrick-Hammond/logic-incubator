@@ -1,5 +1,5 @@
 import { Key } from "@logic-incubator/lib/io/Keyboard";
-import { AssetPath, Scenes } from "@logic-incubator/engine/Constants";
+import { AssetPath } from "@logic-incubator/engine/Constants";
 import EditorComponent from "../EditorComponent";
 import { EditorActions, EditorTool, IEditorState } from "../stores/EditorStore";
 import { ButtonEl, El, InjectStyles } from "../ui/dom/Dom";
@@ -50,12 +50,7 @@ const TOOLS: ToolInfo[] = [
 export default class Toolbar extends EditorComponent {
     private buttons: { [tool: string]: HTMLButtonElement } = {};
 
-    constructor() {
-        super();
-        this.AddToScene(Scenes.EDITOR);
-    }
-
-    protected Create(): void {
+    protected OnInitialise(): void {
         InjectStyles("tb-styles", STYLES);
 
         const panel = El("div", "ed-panel tb-panel");
@@ -73,9 +68,10 @@ export default class Toolbar extends EditorComponent {
             this.buttons[info.tool] = button;
         });
         EditorOverlay.inst.Slot("tools").appendChild(panel);
+        this.Own(() => panel.remove());
 
-        this.game.keyboard.on("keydown", (e: KeyboardEvent) => {
-            if (this.editorStore.state.currentScene !== Scenes.EDITOR || e.ctrlKey || e.altKey || e.metaKey) {
+        this.ListenWhileShown(this.game.keyboard, "keydown", (e: KeyboardEvent) => {
+            if (e.ctrlKey || e.altKey || e.metaKey) {
                 return;
             }
             const info = TOOLS.find(t => t.key === e.keyCode);
@@ -84,7 +80,7 @@ export default class Toolbar extends EditorComponent {
             }
         });
 
-        this.editorStore.Subscribe(this.Render, this);
+        this.Own(this.editorStore.Subscribe(this.Render, this));
         this.Highlight(this.editorStore.state.tool);
     }
 

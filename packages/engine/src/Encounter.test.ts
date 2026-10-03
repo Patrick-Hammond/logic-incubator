@@ -108,7 +108,8 @@ function Setup(rows: string[], spawners: Spawner[], player: TestPlayer, visible?
         sizeFor: () => ({ width: 16, height: 16 }),
         random: () => 0
     });
-    const run = (frames: number, until?: () => boolean) => {
+    encounter.Reset();
+    const run =(frames: number, until?: () => boolean) => {
         for (let i = 0; i < frames && !(until && until()); i++) {
             // What the real Player.Update does for its own health each frame.
             TickHealth(player.Health, FRAME);

@@ -53,7 +53,6 @@ export class Camera extends GameComponent {
 
     constructor(private cameraControl?: ICameraControl) {
         super();
-        this.AddToScene(Scenes.GAME);
     }
 
     Move(x: number, y: number): void {
@@ -128,7 +127,7 @@ export class Camera extends GameComponent {
         this.baseViewHeight = this.viewRect.height;
 
         if(this.cameraControl) {
-            this.game.ticker.add(this.GetInput, this);
+            this.Tick(this.GetInput);
         }
     }
 

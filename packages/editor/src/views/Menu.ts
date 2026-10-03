@@ -1,4 +1,3 @@
-import { Scenes } from "@logic-incubator/engine/Constants";
 import EditorComponent from "../EditorComponent";
 import { El, InjectStyles } from "../ui/dom/Dom";
 import EditorOverlay from "../ui/dom/EditorOverlay";
@@ -23,17 +22,18 @@ export default class Menu extends EditorComponent {
     /** `titleScene`: see `IDungeonEditorOptions` - its T shortcut is only listed when the game has one. */
     constructor(private readonly titleScene?: string) {
         super();
-        this.AddToScene(Scenes.EDITOR);
     }
 
-    protected Create(): void {
+    protected OnInitialise(): void {
         InjectStyles("hb-styles", STYLES);
         const help = EditorOverlay.inst.Slot("help");
         const shortcuts = this.titleScene ? SHORTCUTS.concat([["Title screen", "T"]]) : SHORTCUTS;
-        shortcuts.forEach(([what, key]) => {
+        const items = shortcuts.map(([what, key]) => {
             const item = help.appendChild(El("span", "hb-item", what + " "));
             item.appendChild(El("kbd", "", key));
+            return item;
         });
+        this.Own(() => items.forEach(item => item.remove()));
     }
 }
 

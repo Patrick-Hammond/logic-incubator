@@ -34,7 +34,7 @@ export default class Game extends Application {
     public static inst: Game;
     public keyboard = new Keyboard();
     public gamePad = new GamePad();
-    public sceneManager = new SceneManager();
+    public sceneManager = new SceneManager(this.stage);
     public dispatcher = new EventEmitter();
     public resizeStrategy: IResizeStrategy;
 

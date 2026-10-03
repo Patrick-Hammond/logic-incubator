@@ -1,5 +1,5 @@
 import { Key } from "@logic-incubator/lib/io/Keyboard";
-import { AnimationSpeed, Scenes } from "@logic-incubator/engine/Constants";
+import { AnimationSpeed } from "@logic-incubator/engine/Constants";
 import { IsSpawnerValue } from "@logic-incubator/engine/level/entities/Spawners";
 import { IsLightValue } from "@logic-incubator/engine/level/Lighting";
 import { DataBrushValue } from "@logic-incubator/engine/level/LevelFormat";
@@ -33,10 +33,9 @@ export default class SelectedBrush extends EditorComponent {
     /** `icons`: the game's sprite over each data brush's colour - see `DataBrushIcons`. */
     constructor(private readonly icons: DataBrushIcons = {}) {
         super();
-        this.AddToScene(Scenes.EDITOR);
     }
 
-    protected Create(): void {
+    protected OnInitialise(): void {
         InjectStyles("sb-styles", STYLES);
 
         const card = El("div", "ed-panel sb-card");
@@ -52,13 +51,14 @@ export default class SelectedBrush extends EditorComponent {
         this.valueChip = this.valueRow.appendChild(El("span", "sb-chip"));
         this.valueText = this.valueRow.appendChild(El("span", "sb-value-text"));
         EditorOverlay.inst.Slot("selected").appendChild(card);
+        this.Own(() => card.remove());
 
-        this.editorStore.Subscribe(this.Render, this);
-        this.game.ticker.add(this.Animate, this);
+        this.Own(this.editorStore.Subscribe(this.Render, this));
+        this.Tick(this.Animate);
 
         // E: same as the edit button. Keydowns typed inside the dialog never reach here (see FormDialog).
-        this.game.keyboard.on("keydown", (e: KeyboardEvent) => {
-            if (e.keyCode === Key.E && this.editorStore.state.currentScene === Scenes.EDITOR) {
+        this.ListenWhileShown(this.game.keyboard, "keydown", (e: KeyboardEvent) => {
+            if (e.keyCode === Key.E) {
                 // Otherwise this same keypress types an "e" into the dialog field that just took focus.
                 e.preventDefault();
                 this.OpenDataEditor();
@@ -145,7 +145,7 @@ export default class SelectedBrush extends EditorComponent {
     }
 
     private Animate(delta: number): void {
-        if (this.preview.Animated && EditorOverlay.inst.Visible) {
+        if (this.preview.Animated) {
             this.animTime += delta * AnimationSpeed;
             this.preview.SetFrame(Math.floor(this.animTime));
         }

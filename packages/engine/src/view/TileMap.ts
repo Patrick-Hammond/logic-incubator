@@ -73,12 +73,19 @@ export default class TileMapView extends GameComponent {
 
     constructor(private level: Level, private camera: Camera) {
         super();
-
-        this.game.dispatcher.on(LEVEL_LOADED, this.OnLevelLoaded, this);
-        this.game.dispatcher.on(CAMERA_MOVED, this.Render, this);
     }
 
-    private OnLevelLoaded(): void {
+    protected OnInitialise(): void {
+        this.Listen(this.game.dispatcher, LEVEL_LOADED, this.OnLevelLoaded);
+        this.Listen(this.game.dispatcher, CAMERA_MOVED, this.Render);
+    }
+
+    protected OnDestroy(): void {
+        this.ClearBands();
+    }
+
+    /** Takes every band and layer this has put into the camera out of it, and destroys them. */
+    private ClearBands(): void {
         this.bands.forEach(band => {
             band.layers.forEach(layer => layer.clear());
             this.camera.root.removeChild(band.root);
@@ -96,6 +103,10 @@ export default class TileMapView extends GameComponent {
             this.projectilesLayer.destroy({ children: true });
             this.projectilesLayer = null;
         }
+    }
+
+    private OnLevelLoaded(): void {
+        this.ClearBands();
 
         for (const z of this.level.depths) {
             const root = new Container();

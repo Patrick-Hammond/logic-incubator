@@ -14,15 +14,13 @@ export default class Keyboard extends EditorComponent {
     /** `mapStyle`: the game's tiles for the maps keys 1-8 generate - see `IDungeonEditorOptions`. */
     constructor(private readonly titleScene?: string, private readonly mapStyle?: IStyler) {
         super();
-
-        this.Create();
     }
 
-    protected Create(): void {
-        this.editorStore.Subscribe(this.Render, this);
+    protected OnInitialise(): void {
+        this.Own(this.editorStore.Subscribe(this.Render, this));
 
-        // keyboard commands
-        this.game.keyboard.on("keydown", (e: KeyboardEvent) => {
+        // keyboard commands - for the editor's life, not just while it's showing: Enter is also the way back in from the game.
+        this.Listen(this.game.keyboard, "keydown", (e: KeyboardEvent) => {
             const shift = this.game.keyboard.KeyPressed(Key.Shift);
             const ctrl = this.game.keyboard.KeyPressed(Key.Ctrl);
 
@@ -160,7 +158,9 @@ export default class Keyboard extends EditorComponent {
         });
 
         // disable context menu
+        const contextMenu = document.body.oncontextmenu;
         document.body.oncontextmenu = () => false;
+        this.Own(() => (document.body.oncontextmenu = contextMenu));
     }
 
     /** What Enter and S save: the engine's level format, with the rest of the editor's state riding along in `editorData`. */

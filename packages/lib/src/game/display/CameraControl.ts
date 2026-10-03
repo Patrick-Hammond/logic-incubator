@@ -1,6 +1,6 @@
 import GamePad from "../../io/GamePad";
 import {Vec2} from "../../math/Geometry";
-import GameComponent from "../GameComponent";
+import Game from "../Game";
 
 export interface ICameraTransform {
     rotation: Vec2;
@@ -10,16 +10,14 @@ export interface ICameraControl {
     Get(): ICameraTransform;
 }
 
-export default class CameraControl extends GameComponent implements ICameraControl {
+export default class CameraControl implements ICameraControl {
 
     private rotationVector = new Vec2();
     private cameraInput: ICameraTransform = { rotation: new Vec2() };
     private gamePad: GamePad;
 
     constructor(private playerId: number) {
-        super();
-
-        this.gamePad = this.game.gamePad;
+        this.gamePad = Game.inst.gamePad;
     }
 
     Get(): ICameraTransform {

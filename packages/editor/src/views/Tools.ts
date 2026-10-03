@@ -54,28 +54,26 @@ export default class Tools extends EditorComponent {
     /** `keyAt` for the fill preview, cached per level data/layer. */
     private fillKeys: { levelData: Brush[]; layerId: number; keys: Map<string, string> } = null;
 
-    constructor() {
-        super();
-        this.AddToScene(Scenes.EDITOR);
-    }
-
-    protected Create(): void {
+    protected OnInitialise(): void {
         this.label = new Text("", { fontFamily: "Arial", fontSize: 12, fill: 0xffffff, stroke: 0x000000, strokeThickness: 3 });
         this.previewMask.beginFill(0xffffff).drawShape(GridBounds).endFill();
         this.preview.mask = this.previewMask;
         this.root.addChild(this.previewMask, this.preview, this.label);
 
-        this.editorStore.Subscribe(this.Render, this);
-        this.levelDataStore.Subscribe(() => this.DrawPreview(), this);
+        this.Own(this.editorStore.Subscribe(this.Render, this));
+        this.Own(this.levelDataStore.Subscribe(() => this.DrawPreview(), this));
 
-        this.game.keyboard.on("keydown", (e: KeyboardEvent) => this.OnKey(e));
-        this.game.keyboard.on("keyup", (e: KeyboardEvent) => this.OnKey(e));
+        this.ListenWhileShown(this.game.keyboard, "keydown", (e: KeyboardEvent) => this.OnKey(e));
+        this.ListenWhileShown(this.game.keyboard, "keyup", (e: KeyboardEvent) => this.OnKey(e));
+    }
 
-        // The cursor is the canvas's, so hand it back while another scene has the stage.
-        const scene = this.game.sceneManager.GetScene(Scenes.EDITOR).root;
-        scene.on("added", () => this.UpdateCursor());
-        scene.on("removed", () => this.SetCursor("inherit"));
+    protected OnShow(): void {
         this.UpdateCursor();
+    }
+
+    /** The cursor is the canvas's, so hand it back while another scene has the stage. */
+    protected OnHide(): void {
+        this.SetCursor("inherit");
     }
 
     private Render(prevState: IEditorState, state: IEditorState): void {
@@ -96,9 +94,6 @@ export default class Tools extends EditorComponent {
     }
 
     private OnKey(e: KeyboardEvent): void {
-        if (this.editorStore.state.currentScene !== Scenes.EDITOR) {
-            return;
-        }
         if (e.type === "keydown" && e.keyCode === Key.Escape && this.drag) {
             this.drag = null;
         }
@@ -387,7 +382,8 @@ export default class Tools extends EditorComponent {
 
     private UpdateCursor(): void {
         const state = this.editorStore.state;
-        if (!this.game.sceneManager.GetScene(Scenes.EDITOR).root.parent) {
+        // Store changes keep arriving while another scene has the stage - the cursor isn't ours then.
+        if (this.game.sceneManager.CurrentScene !== Scenes.EDITOR) {
             return;
         }
         let cursor = "crosshair";

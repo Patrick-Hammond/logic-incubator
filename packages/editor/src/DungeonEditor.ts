@@ -37,41 +37,37 @@ export interface IDungeonEditorOptions {
 export class DungeonEditor extends EditorComponent {
     constructor(private readonly options: IDungeonEditorOptions = {}) {
         super();
+    }
 
+    protected OnInitialise(): void {
         // Keeps Enter's editor/game toggle (see Keyboard.ts) correct even when Scenes.GAME is
         // reached some other way (the game's own title/character-select flow, not Enter) - without
         // this, currentScene stays at its default (EDITOR) forever if the editor scene is never
         // shown first, so the first Enter press from gameplay would think it's toggling FROM the
         // editor and just stay on the game. LEVEL_CREATED fires whenever gameplay actually starts
-        // (DungeonMain, every scene-show and restart), regardless of how it was reached. Wired here
-        // in the constructor, not `Create()` - `Create()` only runs once the editor scene is first
-        // shown (see EditorComponent), which under a title-screen-first boot may never happen before
-        // this needs to already be listening.
-        this.game.dispatcher.on(LEVEL_CREATED, () => {
+        // (DungeonMain, every scene-show and restart), regardless of how it was reached. Listened
+        // for the editor's whole life, not just while it's showing - under a title-screen-first boot
+        // it may well not be showing when gameplay starts.
+        this.Listen(this.game.dispatcher, LEVEL_CREATED, () => {
             if (this.editorStore.state.currentScene !== Scenes.GAME) {
                 this.editorStore.Dispatch({ type: EditorActions.CHANGE_SCENE, data: { name: Scenes.GAME } });
             }
         });
-    }
 
-    protected Create(): void {
         // views
-        new Canvas();
-        new BrushTool();
-        new Tools();
-        new Palette(this.options.dataBrushIcons);
-        new Layers();
-        new SelectedBrush(this.options.dataBrushIcons);
-        new Toolbar();
-        new Keyboard(this.options.titleScene, this.options.mapStyle);
-        new Menu(this.options.titleScene);
+        this.Attach(new Canvas());
+        this.Attach(new BrushTool());
+        this.Attach(new Tools());
+        this.Attach(new Palette(this.options.dataBrushIcons));
+        this.Attach(new Layers());
+        this.Attach(new SelectedBrush(this.options.dataBrushIcons));
+        this.Attach(new Toolbar());
+        this.Attach(new Keyboard(this.options.titleScene, this.options.mapStyle));
+        this.Attach(new Menu(this.options.titleScene));
 
-        // The DOM panels go with the editor scene: shown now (this runs as it's first shown), and
-        // hidden while SceneManager has it off the stage for the game or any of the game's own scenes.
-        const overlay = EditorOverlay.inst;
-        overlay.SetVisible(true);
-        this.root.on("added", () => overlay.SetVisible(true));
-        this.root.on("removed", () => overlay.SetVisible(false));
+        // The DOM panels (made visible by the first `EditorOverlay.inst`) go with the editor scene:
+        // off until it's shown - see `OnShow`.
+        EditorOverlay.inst.SetVisible(false);
 
         // load local saved map
         const saved = LoadSavedLevel();
@@ -79,5 +75,15 @@ export class DungeonEditor extends EditorComponent {
             this.editorStore.Load(saved.editorData);
             this.levelDataStore.Load(saved.levelData);
         }
+    }
+
+    /** The DOM panels are shown while the editor has the stage... */
+    protected OnShow(): void {
+        EditorOverlay.inst.SetVisible(true);
+    }
+
+    /** ...and hidden while the game, or any of the game's own scenes, has it. */
+    protected OnHide(): void {
+        EditorOverlay.inst.SetVisible(false);
     }
 }
