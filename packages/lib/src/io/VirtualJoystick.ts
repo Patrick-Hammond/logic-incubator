@@ -19,6 +19,12 @@ export default class VirtualJoystick {
         }
         return state.data.direction.angle as Direction;
     }
+
+    /** Takes every joystick off the page, and lets go of the touch listeners it put there. Safe to call twice. */
+    Destroy(): void {
+        this.joysticks.forEach(joystick => joystick.Destroy());
+        this.joysticks = [];
+    }
 }
 
 class Joystick {
@@ -34,8 +40,9 @@ class Joystick {
             this.state.evt = evt;
             this.state.data = data;
         });
-        this.manager.on("dir", (evt: EventData, data: JoystickOutputData) => {
-            this.state.dir = event.type;
+        this.manager.on("dir", (evt: EventData) => {
+            // The listener's own event - not `window.event`, which is what this read before, and is deprecated.
+            this.state.dir = evt.type;
         })
         this.manager.on("plain", (evt: EventData, data: JoystickOutputData) => {
             this.state.plain = evt.type;
@@ -44,5 +51,9 @@ class Joystick {
 
     GetState(): JoystickState {
         return this.state;
+    }
+
+    Destroy(): void {
+        this.manager.destroy();
     }
 }
