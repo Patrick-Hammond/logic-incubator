@@ -10,7 +10,7 @@
     {
       "name": "catgrab-dev",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["--prefix", "../catgrab", "run", "start", "--", "--port", "4203", "--no-open"],
+      "runtimeArgs": ["--prefix", "../cat-grab", "run", "start", "--", "--port", "4203", "--no-open"],
       "port": 4203
     }
   ]
