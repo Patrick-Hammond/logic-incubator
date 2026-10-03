@@ -12,6 +12,18 @@ export default class Loader {
         return Loader._inst;
     }
 
+    /**
+     * Cancels anything still loading, drops what was loaded and forgets the shared instance: the
+     * next `Loader.inst` starts from nothing. (The textures it made are Pixi's to free - see
+     * `Game.destroy`.) Safe to call when there's no instance, or twice.
+     */
+    public static Destroy(): void {
+        if (Loader._inst) {
+            Loader._inst.loader.destroy();
+            Loader._inst = undefined;
+        }
+    }
+
     private loader: PixiLoader;
 
     constructor() {

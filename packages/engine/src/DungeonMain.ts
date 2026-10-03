@@ -48,6 +48,8 @@ export class DungeonMain extends GameComponent {
     /** Seconds until the level restarts after the player died - 0 while they're alive. */
     private restartIn = 0;
     private restarting = false;
+    /** Whether a level has been created yet - there's nothing to play until the first one has loaded. */
+    private started = false;
 
     constructor(private options: DungeonMainOptions) {
         super();
@@ -56,43 +58,51 @@ export class DungeonMain extends GameComponent {
     protected OnInitialise(): void {
         const level = this.level = new Level();
 
-        const camera = new Camera();
-        new TileMapView(level, camera);
-        this.hud = new Hud(this.options.player.hearts);
+        // Attached in drawing order: the world, then the HUD over it.
+        const camera = this.Attach(new Camera());
+        this.Attach(new TileMapView(level, camera));
+        this.hud = this.Attach(new Hud(this.options.player.hearts));
 
-        this.game.dispatcher.on(LEVEL_CREATED, () => {
-            if(!this.player) {
-                const collision = new TileCollision(level);
-                this.player = new Player(camera, collision, level, this.options.player);
-                this.renderer = new EntityRenderer(camera, level);
-                this.encounter = new Encounter(level, {
-                    emit: (event, ...args) => this.game.dispatcher.emit(event, ...args),
-                    sizeFor: name => (AssetFactory.inst.Has(name) ? AssetFactory.inst.CreateTexture(name) : undefined)
-                });
-            } else {
-                this.encounter.Reset();
-            }
-            this.player.Init(level.playerStartPosition);
-            this.renderer.Init();
-            this.restartIn = 0;
-            this.restarting = false;
+        this.player = new Player(camera, new TileCollision(level), level, this.options.player);
+        this.renderer = new EntityRenderer(camera, level);
+        this.encounter = new Encounter(level, {
+            emit: (event, ...args) => this.game.dispatcher.emit(event, ...args),
+            sizeFor: name => (AssetFactory.inst.Has(name) ? AssetFactory.inst.CreateTexture(name) : undefined)
         });
-        this.game.dispatcher.on(PLAYER_DIED, () => (this.restartIn = RestartDelay));
 
-        this.game.ticker.add(this.OnUpdate, this);
+        this.Listen(this.game.dispatcher, LEVEL_CREATED, this.OnLevelCreated);
+        this.Listen(this.game.dispatcher, PLAYER_DIED, () => (this.restartIn = RestartDelay));
+        this.Tick(this.OnUpdate);
     }
 
     protected OnShow(): void {
         this.Reload();
     }
 
+    protected OnDestroy(): void {
+        this.player.Destroy();
+        this.level.Dispose();
+        // Drops anything a `Reload` still waiting on its fetch would otherwise carry on with.
+        this.level = this.player = this.encounter = this.renderer = this.hud = undefined;
+    }
+
+    /** A level has just been built (see `TileMapView`): start it over - the player, monsters and drawing, and the restart timer. */
+    private OnLevelCreated(): void {
+        this.encounter.Reset();
+        this.player.Reset(this.level.playerStartPosition);
+        this.renderer.Reset();
+        this.restartIn = 0;
+        this.restarting = false;
+        this.started = true;
+    }
+
     /**
-     * One frame of play - only while this scene is showing, so nothing moves (or spawns) behind
-     * the editor. `dt` is the ticker's frame delta, which movement is tuned to; timers run on
-     * real seconds.
+     * One frame of play - only while this scene is showing (see `Tick`), so nothing moves (or
+     * spawns) behind the editor. `dt` is the ticker's frame delta, which movement is tuned to;
+     * timers run on real seconds.
      */
     private OnUpdate(dt: number): void {
-        if (!this.root.parent || !this.player || !this.encounter) {
+        if (!this.started) {
             return;
         }
         const seconds = this.game.ticker.deltaMS / 1000;

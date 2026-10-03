@@ -5,11 +5,12 @@ export default class Keyboard extends EventEmitter {
     private map: { [keycode: number]: boolean } = {};
     private timestampMap: { [keycode: number]: Cancel } = {};
     private keyCount: number;
+    private handler: (ev: KeyboardEvent) => void;
 
     constructor() {
         super();
 
-        document.onkeydown = document.onkeyup = (ev: KeyboardEvent) => {
+        this.handler = (ev: KeyboardEvent) => {
             if (ev.type === "keydown") {
                 this.map[ev.keyCode] = true;
             } else {
@@ -19,6 +20,28 @@ export default class Keyboard extends EventEmitter {
             this.keyCount = Object.keys(this.map).length;
             this.emit(ev.type, ev);
         };
+        document.onkeydown = document.onkeyup = this.handler;
+    }
+
+    /** Lets go of the document's key events, and of everyone listening on this. Safe to call twice. */
+    Destroy(): void {
+        // Only what's still this keyboard's - a newer Keyboard (or the page) may have taken them over since.
+        if (document.onkeydown === this.handler) {
+            document.onkeydown = null;
+        }
+        if (document.onkeyup === this.handler) {
+            document.onkeyup = null;
+        }
+        this.removeAllListeners();
+        this.map = {};
+        this.keyCount = 0;
+        Object.keys(this.timestampMap).forEach(code => {
+            const cancel = this.timestampMap[code];
+            if (cancel) {
+                cancel();
+            }
+        });
+        this.timestampMap = {};
     }
 
     AnyKeyPressed(): boolean {

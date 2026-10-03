@@ -92,3 +92,85 @@ describe("GamePad.GetStickDirection", () => {
         expect(padWith(axes).GetStickDirection(0, stick, Threshold)).toBe(expected);
     });
 });
+
+describe("GamePad.Destroy", () => {
+    /** A `window` that records its listeners, so a test can see which are still attached. */
+    function recordingWindow(extra: object = {}) {
+        const attached = new Map<string, Set<unknown>>();
+        const listenersOf = (type: string) => attached.get(type) || new Set<unknown>();
+        vi.stubGlobal("window", {
+            ...extra,
+            addEventListener: (type: string, listener: unknown) => attached.set(type, listenersOf(type).add(listener)),
+            removeEventListener: (type: string, listener: unknown) => listenersOf(type).delete(listener),
+        });
+        return (type: string) => listenersOf(type).size;
+    }
+
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    it("takes back the window's connect and disconnect listeners", () => {
+        const attachedTo = recordingWindow({ GamepadEvent: class {} });
+        const pad = new GamePad();
+        expect(attachedTo("gamepadconnected")).toBe(1);
+        expect(attachedTo("gamepaddisconnected")).toBe(1);
+
+        pad.Destroy();
+
+        expect(attachedTo("gamepadconnected")).toBe(0);
+        expect(attachedTo("gamepaddisconnected")).toBe(0);
+    });
+
+    it("takes back the webkit listeners where that's what the browser has", () => {
+        const attachedTo = recordingWindow({ WebKitGamepadEvent: class {} });
+        const pad = new GamePad();
+        expect(attachedTo("webkitgamepadconnected")).toBe(1);
+
+        pad.Destroy();
+
+        expect(attachedTo("webkitgamepadconnected")).toBe(0);
+        expect(attachedTo("webkitgamepaddisconnected")).toBe(0);
+    });
+
+    it("forgets its controllers and stops everyone listening on it", () => {
+        recordingWindow({ GamepadEvent: class {} });
+        const pad = new GamePad();
+        pad.controllers[0] = { axes: [0, 0] } as unknown as Gamepad;
+        pad.on("connected", () => undefined);
+
+        pad.Destroy();
+
+        expect(pad.IsConnected()).toBe(false);
+        expect(pad.listenerCount("connected")).toBe(0);
+    });
+
+    it("is safe to call twice", () => {
+        recordingWindow({ GamepadEvent: class {} });
+        const pad = new GamePad();
+        pad.Destroy();
+        expect(() => pad.Destroy()).not.toThrow();
+    });
+
+    describe("in a browser without gamepad events, which polls instead", () => {
+        const pad0 = { index: 0, id: "test pad", buttons: [], axes: [0, 0] } as unknown as Gamepad;
+
+        it("polls with the right `this` - and stops once destroyed", () => {
+            vi.useFakeTimers();
+            vi.spyOn(console, "log").mockImplementation(() => undefined);
+            recordingWindow();
+            const getGamepads = vi.fn(() => [pad0]);
+            vi.stubGlobal("navigator", { getGamepads });
+            const pad = new GamePad();
+
+            vi.advanceTimersByTime(500);
+            // The scan used to be handed to setInterval bare, so it ran with no `this` and never found a controller.
+            expect(getGamepads).toHaveBeenCalledTimes(1);
+            expect(pad.IsConnected()).toBe(true);
+
+            pad.Destroy();
+            vi.advanceTimersByTime(5000);
+            expect(getGamepads).toHaveBeenCalledTimes(1);
+        });
+    });
+});

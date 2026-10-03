@@ -94,10 +94,9 @@ export default class Encounter {
     constructor(private level: EncounterLevel, private options: EncounterOptions) {
         this.random = options.random || Math.random;
         this.collision = new TileCollision(level);
-        this.Reset();
     }
 
-    /** Starts over from the level's spawners, as just loaded. Call on every `LEVEL_CREATED`. */
+    /** Starts over from the level's spawners, as just loaded. Call on every `LEVEL_CREATED` - there's nothing to fight until the first. */
     Reset(): void {
         this.monsters = [];
         this.projectiles = [];

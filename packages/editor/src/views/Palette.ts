@@ -1,6 +1,6 @@
 import {Container, SCALE_MODES, Sprite} from "pixi.js";
 import AssetFactory from "@logic-incubator/lib/loading/AssetFactory";
-import { AnimationSpeed, Scenes } from "@logic-incubator/engine/Constants";
+import { AnimationSpeed } from "@logic-incubator/engine/Constants";
 import EditorComponent from "../EditorComponent";
 import { DataBrushIcon, DataBrushIcons, EditorActions, IEditorState } from "../stores/EditorStore";
 import { ButtonEl, El, InjectStyles } from "../ui/dom/Dom";
@@ -40,10 +40,9 @@ export default class Palette extends EditorComponent {
     /** `icons`: the game's sprite over each data brush's colour, shown only in its palette chip (see `DataBrushIcons`, `RegisterDataBrushTextures`) - telling brushes apart matters there, not on the map. */
     constructor(private readonly icons: DataBrushIcons = {}) {
         super();
-        this.AddToScene(Scenes.EDITOR);
     }
 
-    protected Create(): void {
+    protected OnInitialise(): void {
         InjectStyles("pl-styles", STYLES);
         this.RegisterDataBrushTextures();
 
@@ -51,6 +50,7 @@ export default class Palette extends EditorComponent {
         this.tabs = panel.appendChild(El("div", "pl-tabs"));
         this.tabs.setAttribute("role", "tablist");
         EditorOverlay.inst.Slot("brushes").appendChild(panel);
+        this.Own(() => panel.remove());
 
         // Data brushes are registered as sprites too (above), but aren't tiles.
         const dataBrushNames = this.editorStore.state.dataBrushes.map(db => db.name);
@@ -83,8 +83,8 @@ export default class Palette extends EditorComponent {
             chips.appendChild(this.AddBrushEvents(chip, dataBrush.name));
         });
 
-        this.editorStore.Subscribe(this.Render, this);
-        this.game.ticker.add(this.Animate, this);
+        this.Own(this.editorStore.Subscribe(this.Render, this));
+        this.Tick(this.Animate);
         this.UpdateMode();
     }
 
@@ -188,7 +188,7 @@ export default class Palette extends EditorComponent {
     /** Steps the showing page's animated thumbnails at the same rate `AnimatedSprite` plays on the map. */
     private Animate(delta: number): void {
         const page = this.ActivePage();
-        if (!page || !page.animated.length || !EditorOverlay.inst.Visible) {
+        if (!page || !page.animated.length) {
             return;
         }
         this.animTime += delta * AnimationSpeed;

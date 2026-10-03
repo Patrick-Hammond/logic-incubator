@@ -9,7 +9,7 @@ import { Brush, DataBrushName } from "@logic-incubator/engine/level/LevelFormat"
 import AssetFactory from "@logic-incubator/lib/loading/AssetFactory";
 import { DataBrushEditorFor } from "../DataBrushEditors";
 import ObjectPool from "@logic-incubator/lib/patterns/ObjectPool";
-import { AnimationSpeed, Scenes, TileSize } from "@logic-incubator/engine/Constants";
+import { AnimationSpeed, TileSize } from "@logic-incubator/engine/Constants";
 import { GridBounds, InitalScale } from "../Layout";
 import EditorComponent from "../EditorComponent";
 import { EditorActions, EditorTool, IEditorState, IMPLICIT_LAYER_ID, MouseButtonState } from "../stores/EditorStore";
@@ -30,12 +30,7 @@ export default class Canvas extends EditorComponent {
     private implicitContainer = new Container();
     private implicitGraphics = new Graphics();
 
-    constructor() {
-        super();
-        this.AddToScene(Scenes.EDITOR);
-    }
-
-    protected Create(): void {
+    protected OnInitialise(): void {
         this.layerContainers = new ObjectPool<Container>(
             6,
             () => new Container(),
@@ -61,8 +56,8 @@ export default class Canvas extends EditorComponent {
         this.root.addChild(this.mask, this.grid, this.levelContainer);
         this.levelContainer.mask = this.mask;
 
-        this.levelDataStore.Subscribe(this.UpdateLevel, this);
-        this.editorStore.Subscribe(this.UpdateLayout, this);
+        this.Own(this.levelDataStore.Subscribe(this.UpdateLevel, this));
+        this.Own(this.editorStore.Subscribe(this.UpdateLayout, this));
 
         this.RedrawGrid(InitalScale);
 

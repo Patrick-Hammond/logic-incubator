@@ -1,7 +1,9 @@
 import { EventEmitter } from "eventemitter3";
-import {Application, interaction, settings, SCALE_MODES} from "pixi.js";
+import {Application, interaction, settings, SCALE_MODES, utils} from "pixi.js";
 import GamePad from "../io/GamePad";
 import Keyboard from "../io/Keyboard";
+import AssetFactory from "../loading/AssetFactory";
+import Loader from "../loading/Loader";
 import { StatsTicker } from "../utils/StatsTicker";
 import SceneManager from "./SceneManager";
 import * as ScreenFull from 'screenfull';
@@ -34,9 +36,14 @@ export default class Game extends Application {
     public static inst: Game;
     public keyboard = new Keyboard();
     public gamePad = new GamePad();
-    public sceneManager = new SceneManager();
+    public sceneManager = new SceneManager(this.stage);
     public dispatcher = new EventEmitter();
     public resizeStrategy: IResizeStrategy;
+
+    private destroyed = false;
+    /** The window's resize handler this installed - `destroy` only takes it back if nobody's replaced it since. */
+    private onResize: () => void;
+    private requestFullscreen: (() => void) | undefined;
 
     constructor(options: IGameOptions, showStats: boolean = false) {
         super(options);
@@ -55,15 +62,58 @@ export default class Game extends Application {
         }
 
         if(options.fullscreen && ScreenFull.isEnabled) {
-            this.interactionManager.once("pointerdown", () => ScreenFull.request(this.view));
+            this.requestFullscreen = () => ScreenFull.request(this.view);
+            this.interactionManager.once("pointerdown", this.requestFullscreen);
         }
 
         this.resizeStrategy = GetResizeStrategy(options.fit || "border");
-        const onResize = window.onresize = () => this.resizeStrategy.Resize(this.view);
-        onResize();
+        this.onResize = window.onresize = () => this.resizeStrategy.Resize(this.view);
+        this.onResize();
     }
 
     public get interactionManager(): interaction.InteractionManager {
         return this.renderer.plugins.interaction;
+    }
+
+    /**
+     * Takes the whole game down, in the order that lets each part rely on the ones after it: the
+     * scenes first (they release what they hold on the stage, the ticker and the input), then the
+     * input, the shared loader and registry, and every texture Pixi has cached - and only then
+     * Pixi's own application (its ticker, loader, stage and renderer). `Game.inst` is cleared, so
+     * a new `Game` can be made in the same page. Safe to call twice.
+     *
+     * Overrides `Application.destroy`, so either way of tearing down reaches all of this.
+     * `removeView` also takes the canvas off the page; unlike Pixi's it defaults to true, since
+     * the constructor is what put it there.
+     */
+    destroy(removeView = true, stageOptions?: Parameters<Application["destroy"]>[1]): void {
+        if (this.destroyed) {
+            return;
+        }
+        this.destroyed = true;
+
+        this.sceneManager.Destroy();
+
+        this.keyboard.Destroy();
+        this.gamePad.Destroy();
+        this.dispatcher.removeAllListeners();
+
+        if (window.onresize === this.onResize) {
+            window.onresize = null;
+        }
+        if (this.requestFullscreen) {
+            this.interactionManager.off("pointerdown", this.requestFullscreen);
+        }
+
+        AssetFactory.Destroy();
+        Loader.Destroy();
+        // Before the renderer goes: destroying a texture disposes its GPU copy through it.
+        utils.destroyTextureCache();
+
+        super.destroy(removeView, stageOptions);
+
+        if (Game.inst === this) {
+            Game.inst = undefined;
+        }
     }
 }

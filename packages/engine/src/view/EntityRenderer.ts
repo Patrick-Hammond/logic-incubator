@@ -47,7 +47,7 @@ export default class EntityRenderer {
     constructor(private camera: Camera, private level: Level) {}
 
     /** Picks up the layers `TileMapView` has just (re)built - call on every `LEVEL_CREATED`. */
-    Init(): void {
+    Reset(): void {
         this.entities = this.camera.root.getChildByName(EntitiesLayer) as CompositeTilemap;
         this.projectiles = this.camera.root.getChildByName(ProjectilesLayer) as Container;
         // The old projectiles layer took its sprites with it when it was destroyed.

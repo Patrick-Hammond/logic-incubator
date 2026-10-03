@@ -1,4 +1,4 @@
-import GameComponent from "@logic-incubator/lib/game/GameComponent";
+import Game from "@logic-incubator/lib/game/Game";
 import GamePad from "@logic-incubator/lib/io/GamePad";
 import Keyboard, {Key} from "@logic-incubator/lib/io/Keyboard";
 import {Vec2} from "@logic-incubator/lib/math/Geometry";
@@ -21,17 +21,15 @@ export interface IPlayerInput {
     aimX: number;
 }
 
-export default class PlayerControl extends GameComponent {
+export default class PlayerControl {
     private inputVector = new Vec2();
     private playerInput: IPlayerInput = { direction: new Vec2(), firing: false, aimX: 0 };
     private keyboard: Keyboard;
     private gamePad: GamePad;
 
     constructor(private playerId: number) {
-        super();
-
-        this.keyboard = this.game.keyboard;
-        this.gamePad = this.game.gamePad;
+        this.keyboard = Game.inst.keyboard;
+        this.gamePad = Game.inst.gamePad;
     }
 
     Get(): IPlayerInput {

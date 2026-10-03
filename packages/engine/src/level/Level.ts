@@ -253,8 +253,8 @@ export default class Level {
         return null;
     }
 
-    /** Stops animated tiles' sprites so reloading a level doesn't leave them ticking in the background forever. */
-    private DisposeTiles(): void {
+    /** Stops animated tiles' sprites so reloading a level (or dropping it, when the scene is destroyed) doesn't leave them ticking in the background forever. */
+    Dispose(): void {
         this.levelData.forEach(layer =>
             layer.forEach(column =>
                 column && column.forEach(cell => cell && cell.forEach(tile => tile.anim && tile.anim.stop()))
@@ -264,7 +264,7 @@ export default class Level {
 
     LoadLevel(file: LevelFile): void {
 
-        this.DisposeTiles();
+        this.Dispose();
 
         this.tileLayers = [];
         this.collisionData = [];

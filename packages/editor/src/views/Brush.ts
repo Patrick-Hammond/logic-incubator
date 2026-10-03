@@ -1,5 +1,5 @@
 import {AnimatedSprite, Sprite} from "pixi.js";
-import { AnimationSpeed, Scenes, TileSize } from "@logic-incubator/engine/Constants";
+import { AnimationSpeed, TileSize } from "@logic-incubator/engine/Constants";
 import { GridBounds } from "../Layout";
 import EditorComponent from "../EditorComponent";
 import { IEditorState } from "../stores/EditorStore";
@@ -9,13 +9,8 @@ import { ToolShowsBrush } from "./Tools";
 export default class BrushTool extends EditorComponent {
     private brush: Sprite | AnimatedSprite;
 
-    constructor() {
-        super();
-        this.AddToScene(Scenes.EDITOR);
-    }
-
-    protected Create(): void {
-        this.editorStore.Subscribe(this.Render, this);
+    protected OnInitialise(): void {
+        this.Own(this.editorStore.Subscribe(this.Render, this));
     }
 
     private Render(prevState: IEditorState, state: IEditorState): void {

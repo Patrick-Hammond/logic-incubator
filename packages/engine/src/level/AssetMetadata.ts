@@ -38,6 +38,11 @@ export default class AssetMetadataStore {
         return AssetMetadataStore._inst;
     }
 
+    /** Forgets the shared instance and the metadata it was loaded with: the next `AssetMetadataStore.inst` starts empty. Safe to call when there's no instance, or twice. */
+    static Destroy(): void {
+        AssetMetadataStore._inst = undefined;
+    }
+
     private map: AssetMetadataMap = {};
 
     /**

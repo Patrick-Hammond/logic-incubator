@@ -22,8 +22,16 @@ export default abstract class Store<T extends object, U> {
         return this._prevState;
     }
 
-    Subscribe(callback: (prevState: T, state: T) => void, context: any): void {
-        this.subscribers.push(callback.bind(context));
+    /** Calls `callback` (with `context` as `this`) on every state change. Returns the function that stops it. */
+    Subscribe(callback: (prevState: T, state: T) => void, context: any): () => void {
+        const bound = callback.bind(context);
+        this.subscribers.push(bound);
+        return () => {
+            const index = this.subscribers.indexOf(bound);
+            if (index >= 0) {
+                this.subscribers.splice(index, 1);
+            }
+        };
     }
 
     Dispatch(action: IAction<U>): void {
@@ -36,20 +44,20 @@ export default abstract class Store<T extends object, U> {
         this._state = this.Reduce(this._state, action);
 
         if (this._prevState !== this.state) {
-            this.subscribers.forEach(callback => callback(this._prevState, this._state));
+            this.Notify();
         }
     }
 
     Load(state: T): void {
         this._prevState = this.DefaultState();
         this._state = state;
-        this.subscribers.forEach(callback => callback(this._prevState, this._state));
+        this.Notify();
     }
 
     LoadJSON(json: string): void {
         this._prevState = this.DefaultState();
         this._state = JSON.parse(json);
-        this.subscribers.forEach(callback => callback(this._prevState, this._state));
+        this.Notify();
     }
 
     SerializeJSON(): string {
@@ -60,8 +68,13 @@ export default abstract class Store<T extends object, U> {
         if (this._undoStates.length && this.maxUndo > 0) {
             this._state = this._undoStates.pop();
             this._prevState = this._undoStates.length ? this._undoStates[this._undoStates.length - 1] : ({} as T);
-            this.subscribers.forEach(callback => callback(this._prevState, this._state));
+            this.Notify();
         }
+    }
+
+    /** Over a copy, so a subscriber that unsubscribes (itself or another) mid-notification doesn't make the next one get skipped. */
+    private Notify(): void {
+        this.subscribers.slice().forEach(callback => callback(this._prevState, this._state));
     }
 
     protected PushUndo(): void {

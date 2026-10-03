@@ -1,7 +1,7 @@
 import {Graphics, Sprite, Text, Texture} from "pixi.js";
 import GameComponent from "@logic-incubator/lib/game/GameComponent";
 import AssetFactory from "@logic-incubator/lib/loading/AssetFactory";
-import { GameHeight, GameWidth, PlayWidth, Scenes } from "../Constants";
+import { GameHeight, GameWidth, PlayWidth } from "../Constants";
 import type {PlayerSetup} from "../DungeonMain";
 import {Gold} from "../level/entities/Gold";
 import {Health} from "../level/entities/Health";
@@ -47,13 +47,15 @@ export default class Hud extends GameComponent {
 
     constructor(private sprites: PlayerSetup["hearts"]) {
         super();
+    }
 
+    protected OnInitialise(): void {
+        const sprites = this.sprites;
         const names = [sprites.full, sprites.half, sprites.empty];
         names.filter(name => !AssetFactory.inst.Has(name)).forEach(name => AssetFactory.inst.WarnMissing(name));
         this.heartsUsable = names.every(name => AssetFactory.inst.Has(name));
 
         this.root.interactive = this.root.interactiveChildren = false;
-        this.AddToScene(Scenes.GAME);
 
         this.DrawPanel();
         this.goldIcon = this.CreateIcon(PlayWidth + Margin, GoldY, WeaponBoxSize);

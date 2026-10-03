@@ -1,8 +1,8 @@
 import {AnimatedSprite, Texture} from "pixi.js";
-import GameComponent from "@logic-incubator/lib/game/GameComponent";
+import Game from "@logic-incubator/lib/game/Game";
 import AssetFactory from "@logic-incubator/lib/loading/AssetFactory";
 import {Vec2, Vec2Like} from "@logic-incubator/lib/math/Geometry";
-import { Scenes, TileSize } from "../Constants";
+import { TileSize } from "../Constants";
 import type {PlayerSetup} from "../DungeonMain";
 import PlayerControl from "../input/PlayerControl";
 import {AddGold, CreateGold, Gold} from "../level/entities/Gold";
@@ -15,8 +15,11 @@ import TileCollision from "../level/TileCollision";
 import {Camera} from "./Camera";
 import {BoxCentre, CentreTile, ResolveMove} from "./helpers/PlayerMovement";
 
-/** The player: moving, shooting and taking hits. Driven one frame at a time by `DungeonMain`; `EntityRenderer` draws it. */
-export class Player extends GameComponent {
+/**
+ * The player: moving, shooting and taking hits. Driven one frame at a time by `DungeonMain`, which
+ * `Reset`s it as each level starts and `Destroy`s it with the scene; `EntityRenderer` draws it.
+ */
+export class Player {
     private controls: PlayerControl;
     private player: AnimatedSprite;
     private velocity = new Vec2();
@@ -36,8 +39,6 @@ export class Player extends GameComponent {
         private level: Level,
         private setup: PlayerSetup
     ) {
-        super();
-
         this.player = AssetFactory.inst.CreateAnimatedSprite(setup.sprite);
         this.player.play();
         this.player.animationSpeed = 0.1;
@@ -47,8 +48,6 @@ export class Player extends GameComponent {
         this.gold = CreateGold();
         this.inventory = CreateInventory();
         this.weapons = setup.weapons;
-
-        this.AddToScene(Scenes.GAME);
     }
 
     /** Top-left of the player's one-tile collision box, in pixels. */
@@ -89,7 +88,13 @@ export class Player extends GameComponent {
         return this.weapons[this.equippedIndex];
     }
 
-    Init(playerStartPosition: Vec2Like | undefined) {
+    /** Stops the player's animation, which would otherwise keep ticking on the shared ticker for good. */
+    Destroy(): void {
+        this.player.destroy();
+    }
+
+    /** Back to the start of a level: at its start position, with full health and nothing collected. Call on every `LEVEL_CREATED`. */
+    Reset(playerStartPosition: Vec2Like | undefined) {
         if (!playerStartPosition) {
             throw new Error("Player start position is not defined. Define it in the level data.");
         }
@@ -175,7 +180,7 @@ export class Player extends GameComponent {
     private MoveCamera(tile: Vec2Like): void {
         const z = this.level.HeightAt(tile.x, tile.y);
         this.camera.SetZ(z);
-        this.camera.UpdateZoom(this.game.ticker.deltaMS / 1000);
+        this.camera.UpdateZoom(Game.inst.ticker.deltaMS / 1000);
 
         this.camera.Follow(this.player.x, this.player.y, 0.05);
     }
