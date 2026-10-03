@@ -26,7 +26,11 @@ export default class CameraControl extends GameComponent implements ICameraContr
         this.rotationVector.Set(0, 0);
 
         if (this.gamePad.controllers[this.playerId]) {
-            this.rotationVector.Copy(this.gamePad.GetStick(this.playerId, 0, 0.005));
+            // GetStick is null for a controller without that stick (too few axes) - no rotation then.
+            const stick = this.gamePad.GetStick(this.playerId, 0, 0.005);
+            if (stick) {
+                this.rotationVector.Copy(stick);
+            }
         }
 
         this.cameraInput.rotation.Copy(this.rotationVector);

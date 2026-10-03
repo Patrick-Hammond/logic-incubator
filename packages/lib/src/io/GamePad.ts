@@ -80,7 +80,8 @@ export default class GamePad extends EventEmitter {
             return null;
         }
 
-        if (stickId * 2 + 1 > controller.axes.length) {
+        // Stick N reads axes N*2 and N*2 + 1, so the controller needs both.
+        if (stickId * 2 + 2 > controller.axes.length) {
             return null;
         }
 
@@ -96,7 +97,8 @@ export default class GamePad extends EventEmitter {
             return null;
         }
 
-        if (stickId * 2 + 1 > controller.axes.length) {
+        // Stick N reads axes N*2 and N*2 + 1, so the controller needs both.
+        if (stickId * 2 + 2 > controller.axes.length) {
             return null;
         }
 
