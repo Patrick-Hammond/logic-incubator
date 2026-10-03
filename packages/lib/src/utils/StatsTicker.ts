@@ -14,6 +14,14 @@ export class StatsTicker extends Ticker {
         this.start();
     }
 
+    /** Takes the stats panel off the page along with the ticker. */
+    destroy(): void {
+        if (this.stats.dom.parentNode) {
+            this.stats.dom.parentNode.removeChild(this.stats.dom);
+        }
+        super.destroy();
+    }
+
     update(currentTime?: number): void {
         this.stats.begin();
         super.update(currentTime);

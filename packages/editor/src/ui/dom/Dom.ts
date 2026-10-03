@@ -24,6 +24,9 @@ export function ButtonEl(className: string, text?: string, title?: string): HTML
     return button;
 }
 
+/** The ids of the stylesheets `InjectStyles` has added, for `RemoveInjectedStyles`. */
+const injectedStyles: string[] = [];
+
 /** Adds `css` to the page once per `id`, however many times it's asked for. */
 export function InjectStyles(id: string, css: string): void {
     if (document.getElementById(id)) {
@@ -33,6 +36,17 @@ export function InjectStyles(id: string, css: string): void {
     style.id = id;
     style.textContent = css;
     document.head.appendChild(style);
+    injectedStyles.push(id);
+}
+
+/** Takes every stylesheet `InjectStyles` has added back off the page - the next `InjectStyles` for an id puts it in again. */
+export function RemoveInjectedStyles(): void {
+    injectedStyles.splice(0).forEach(id => {
+        const style = document.getElementById(id);
+        if (style && style.parentNode) {
+            style.parentNode.removeChild(style);
+        }
+    });
 }
 
 /** The theme variables and the classes shared across the editor's DOM UI. */

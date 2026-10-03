@@ -28,8 +28,26 @@ export default class EditorOverlay {
         return EditorOverlay._inst;
     }
 
+    /**
+     * Takes the overlay off the page (with the panels still in its slots) and forgets it: the next
+     * `EditorOverlay.inst` builds a fresh one. Safe to call when there's no overlay, or twice.
+     */
+    public static Destroy(): void {
+        const inst = EditorOverlay._inst;
+        if (inst) {
+            EditorOverlay._inst = undefined;
+            window.removeEventListener("resize", inst.onResize);
+            cancelAnimationFrame(inst.fitFrame);
+            if (inst.root.parentNode) {
+                inst.root.parentNode.removeChild(inst.root);
+            }
+        }
+    }
+
     private root: HTMLElement;
     private slots: { [slot: string]: HTMLElement } = {};
+    private onResize = () => this.Fit();
+    private fitFrame = 0;
 
     private constructor() {
         InjectTheme();
@@ -72,9 +90,9 @@ export default class EditorOverlay {
         document.body.appendChild(this.root);
 
         // Game's own window.onresize rescales the canvas; this listener is added after it, so runs after it.
-        window.addEventListener("resize", () => this.Fit());
+        window.addEventListener("resize", this.onResize);
         this.Fit();
-        requestAnimationFrame(() => this.Fit());
+        this.fitFrame = requestAnimationFrame(() => this.Fit());
     }
 
     Slot(name: OverlaySlot): HTMLElement {

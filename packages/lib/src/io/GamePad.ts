@@ -19,24 +19,48 @@ export default class GamePad extends EventEmitter {
     };
     private stick = new Vec2();
     private debugLog: boolean = true;
+    /** Undoes each window listener (or the polling timer) the constructor set up. */
+    private stopListening: (() => void)[] = [];
 
     constructor() {
         super();
 
         const haveEvents = "GamepadEvent" in window;
         const haveWebkitEvents = "WebKitGamepadEvent" in window;
+        const listen = (type: string, handler: (e: GamepadEvent) => void) => {
+            const listener = (e: Event) => handler(e as GamepadEvent);
+            window.addEventListener(type, listener);
+            this.stopListening.push(() => window.removeEventListener(type, listener));
+        };
         const connectHandler = (e: GamepadEvent) => this.AddGamePad(e.gamepad);
         const disconnectHandler = (e: GamepadEvent) => this.RemoveGamePad(e.gamepad);
 
         if (haveEvents) {
-            window.addEventListener("gamepadconnected", (e: GamepadEvent) => connectHandler(e));
-            window.addEventListener("gamepaddisconnected", (e: GamepadEvent) => disconnectHandler(e));
+            listen("gamepadconnected", connectHandler);
+            listen("gamepaddisconnected", disconnectHandler);
         } else if (haveWebkitEvents) {
-            window.addEventListener("webkitgamepadconnected", (e: GamepadEvent) => connectHandler(e));
-            window.addEventListener("webkitgamepaddisconnected", (e: GamepadEvent) => disconnectHandler(e));
+            listen("webkitgamepadconnected", connectHandler);
+            listen("webkitgamepaddisconnected", disconnectHandler);
         } else {
-            setInterval(this.ScanGamePads, 500);
+            // An arrow, not `this.ScanGamePads` - handed over bare, the scan ran with the wrong `this`.
+            const timer = setInterval(() => this.ScanGamePads(), 500);
+            this.stopListening.push(() => clearInterval(timer));
         }
+    }
+
+    /** Stops listening for (or polling for) controllers, and lets go of everyone listening on this. Safe to call twice. */
+    Destroy(): void {
+        this.stopListening.forEach(stop => stop());
+        this.stopListening = [];
+        this.removeAllListeners();
+        this.controllers = [];
+        Object.keys(this.timestampMap).forEach(id => {
+            const cancel = this.timestampMap[id];
+            if (cancel) {
+                cancel();
+            }
+        });
+        this.timestampMap = {};
     }
 
     IsConnected(): boolean {

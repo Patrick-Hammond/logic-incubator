@@ -54,6 +54,11 @@ export default class MonsterRoster {
         return MonsterRoster._inst;
     }
 
+    /** Forgets the shared instance and the roster it was loaded with: the next `MonsterRoster.inst` has no monsters until a roster is loaded again. Safe to call when there's no instance, or twice. */
+    static Destroy(): void {
+        MonsterRoster._inst = undefined;
+    }
+
     // No monsters until the game loads its roster.
     private roster: IMonsterRoster = { types: [], defs: {} };
 

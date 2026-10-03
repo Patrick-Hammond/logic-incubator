@@ -4,6 +4,7 @@ import EditorComponent from "./EditorComponent";
 import { IStyler } from "./maps/Styler";
 import { LoadSavedLevel } from "./SavedLevel";
 import { DataBrushIcons, EditorActions } from "./stores/EditorStore";
+import { RemoveInjectedStyles } from "./ui/dom/Dom";
 import EditorOverlay from "./ui/dom/EditorOverlay";
 import BrushTool from "./views/Brush";
 import Canvas from "./views/Canvas";
@@ -75,6 +76,13 @@ export class DungeonEditor extends EditorComponent {
             this.editorStore.Load(saved.editorData);
             this.levelDataStore.Load(saved.levelData);
         }
+    }
+
+    /** The views are gone by now, and have taken their own panels off the page; this lets go of what they shared. */
+    protected OnDestroy(): void {
+        EditorOverlay.Destroy();
+        RemoveInjectedStyles();
+        EditorComponent.DestroyStores();
     }
 
     /** The DOM panels are shown while the editor has the stage... */

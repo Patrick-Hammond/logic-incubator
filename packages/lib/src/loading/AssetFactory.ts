@@ -9,6 +9,15 @@ export default class AssetFactory {
         return AssetFactory._inst;
     }
 
+    /**
+     * Forgets the shared instance and every sprite and animation registered with it: the next
+     * `AssetFactory.inst` starts empty. (The textures themselves are Pixi's to free - see
+     * `Game.destroy`.) Safe to call when there's no instance, or twice.
+     */
+    public static Destroy(): void {
+        AssetFactory._inst = undefined;
+    }
+
     private names: { sprites: string[]; anims: string[] } = { sprites: [], anims: [] };
     private registry: { [name: string]: string[] } = {};
     private warnedMissing = new Set<string>();

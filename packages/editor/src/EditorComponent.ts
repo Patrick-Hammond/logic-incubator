@@ -7,6 +7,12 @@ export default abstract class EditorComponent extends GameComponent {
     private static _editorStore: EditorStore;
     private static _levelDataStore: LevelDataStore;
 
+    /** Forgets the shared stores and what they hold: the next editor starts from a blank map and the default settings. Safe to call twice. */
+    static DestroyStores(): void {
+        EditorComponent._editorStore = undefined;
+        EditorComponent._levelDataStore = undefined;
+    }
+
     protected get editorStore(): EditorStore {
         if (!EditorComponent._editorStore) {
             EditorComponent._editorStore = new EditorStore();
