@@ -1,5 +1,5 @@
 import { EventEmitter } from "eventemitter3";
-import {Application, interaction, settings, SCALE_MODES, utils} from "pixi.js";
+import {Application, interaction, settings, SCALE_MODES} from "pixi.js";
 import GamePad from "../io/GamePad";
 import Keyboard from "../io/Keyboard";
 import { StatsTicker } from "../utils/StatsTicker";
@@ -55,10 +55,7 @@ export default class Game extends Application {
         }
 
         if(options.fullscreen && ScreenFull.isEnabled) {
-            const mobileIOS = utils.isMobile.apple && (utils.isMobile.phone || utils.isMobile.tablet);
-            if(mobileIOS) {
-                this.interactionManager.once("pointerdown", () => ScreenFull.request(this.view));
-            }
+            this.interactionManager.once("pointerdown", () => ScreenFull.request(this.view));
         }
 
         this.resizeStrategy = GetResizeStrategy(options.fit || "border");

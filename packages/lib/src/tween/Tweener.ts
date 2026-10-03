@@ -14,6 +14,8 @@ export interface TweenOptions {
     repeat?: number;
     /** Called once the last play finishes - never, if `repeat` is `Infinity`. */
     onComplete?: () => void;
+    /** Called after every play finishes, including the last (alongside `onComplete`) - keeps firing with `repeat: Infinity`, once per round trip. */
+    onRound?: () => void;
 }
 
 /**
@@ -42,7 +44,7 @@ export function TweenWithOptions<T extends object>(
     ms: number,
     options: TweenOptions = {}
 ): Cancel {
-    const { easing = Easing.Linear, pingPong = false, repeat = 0, onComplete } = options;
+    const { easing = Easing.Linear, pingPong = false, repeat = 0, onComplete, onRound } = options;
     const values = target as unknown as Dictionary<number>;
     const toValues = to as Dictionary<number>;
     const keys = Object.keys(to);
@@ -50,8 +52,11 @@ export function TweenWithOptions<T extends object>(
     const from: Dictionary<number> = {};
     keys.forEach(key => from[key] = values[key]);
 
+    const roundMs = (pingPong ? 2 : 1) * ms;
+
     const finish = () => {
         keys.forEach(key => values[key] = pingPong ? from[key] : toValues[key]);
+        CallbackDone(onRound);
         CallbackDone(onComplete);
     };
 
@@ -60,14 +65,23 @@ export function TweenWithOptions<T extends object>(
         return () => {};
     }
 
-    const duration = (repeat + 1) * (pingPong ? 2 : 1) * ms;
+    const duration = (repeat + 1) * roundMs;
     let elapsed = 0;
+    let roundsDone = 0;
     const tick = () => {
         elapsed += Ticker.shared.deltaMS;
         if (elapsed >= duration) {
             cancel();
             finish();
             return;
+        }
+
+        if (onRound) {
+            const rounds = Math.floor(elapsed / roundMs);
+            while (roundsDone < rounds) {
+                roundsDone++;
+                CallbackDone(onRound);
+            }
         }
 
         const leg = Math.floor(elapsed / ms);
