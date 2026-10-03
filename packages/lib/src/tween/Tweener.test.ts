@@ -134,4 +134,65 @@ describe("TweenWithOptions", () => {
         expect(target.x).toBe(5);
         expect(onComplete).toHaveBeenCalledTimes(1);
     });
+
+    it("onRound fires after each ping-pong round trip, not each leg", () => {
+        const target = { x: 0 };
+        const onRound = vi.fn();
+        TweenWithOptions(target, { x: 100 }, 100, { pingPong: true, repeat: 2, onRound });
+
+        step(100);  // out leg done - not a full round yet
+        expect(onRound).not.toHaveBeenCalled();
+        step(100);  // back leg done - round 1 complete
+        expect(onRound).toHaveBeenCalledTimes(1);
+        step(200);  // round 2 complete
+        expect(onRound).toHaveBeenCalledTimes(2);
+        step(200);  // round 3 complete - the last, alongside onComplete
+        expect(onRound).toHaveBeenCalledTimes(3);
+    });
+
+    it("onRound fires alongside onComplete on the last round, in that order", () => {
+        const target = { x: 0 };
+        const calls: string[] = [];
+        const onRound = () => calls.push("round");
+        const onComplete = () => calls.push("complete");
+        TweenWithOptions(target, { x: 100 }, 100, { pingPong: true, onRound, onComplete });
+
+        step(200);
+        expect(calls).toEqual(["round", "complete"]);
+    });
+
+    it("onRound keeps firing once per round trip with repeat: Infinity, where onComplete never fires", () => {
+        const target = { x: 0 };
+        const onRound = vi.fn();
+        const onComplete = vi.fn();
+        const cancel = TweenWithOptions(target, { x: 100 }, 100, { pingPong: true, repeat: Infinity, onRound, onComplete });
+
+        step(200);
+        expect(onRound).toHaveBeenCalledTimes(1);
+        step(200);
+        expect(onRound).toHaveBeenCalledTimes(2);
+        expect(onComplete).not.toHaveBeenCalled();
+
+        cancel();
+    });
+
+    it("onRound fires once per play without pingPong too", () => {
+        const target = { x: 0 };
+        const onRound = vi.fn();
+        TweenWithOptions(target, { x: 100 }, 100, { repeat: 1, onRound });
+
+        step(100);
+        expect(onRound).toHaveBeenCalledTimes(1);
+        step(100);
+        expect(onRound).toHaveBeenCalledTimes(2);
+    });
+
+    it("onRound fires once when ms <= 0, alongside onComplete", () => {
+        const target = { x: 5 };
+        const onRound = vi.fn();
+        const onComplete = vi.fn();
+        TweenWithOptions(target, { x: 100 }, 0, { onRound, onComplete });
+        expect(onRound).toHaveBeenCalledTimes(1);
+        expect(onComplete).toHaveBeenCalledTimes(1);
+    });
 });
