@@ -2,6 +2,9 @@
 
 code microbes.. microdes
 
+**Documentation: [`docs/`](docs/README.md)** - a [user guide](docs/user-guide.md) (setup, a first game, scenes, assets,
+input, the dungeon engine, the level editor, testing) and an [API reference](docs/api-reference.md).
+
 The shared code the games build on - there's nothing to run here. An npm workspace of three
 packages, whose dependencies only point down (editor -> engine -> lib):
 
