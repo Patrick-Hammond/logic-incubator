@@ -40,6 +40,11 @@ export type DungeonMainOptions = {
      * scene is destroyed. Without it the level uses only what's already loaded - `global`.
      */
     levelBundle?: () => string | undefined;
+    /**
+     * The animation to draw the player with, asked for each time a level starts, like `level`: when it
+     * returns one it is used in place of `player.sprite` - how a game lets the player pick a character.
+     */
+    playerSprite?: () => string | undefined;
 };
 
 /** Seconds between the player dying and the level starting over. */
@@ -106,6 +111,7 @@ export class DungeonMain extends GameComponent {
     /** A level has just been built (see `TileMapView`): start it over - the player, monsters and drawing, and the restart timer. */
     private OnLevelCreated(): void {
         this.encounter.Reset();
+        this.player.SetSprite((this.options.playerSprite && this.options.playerSprite()) || this.options.player.sprite);
         this.player.Reset(this.level.playerStartPosition);
         this.renderer.Reset();
         this.restartIn = 0;

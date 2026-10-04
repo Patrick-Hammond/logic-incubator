@@ -22,6 +22,8 @@ import {BoxCentre, CentreTile, ResolveMove} from "./helpers/PlayerMovement";
 export class Player {
     private controls: PlayerControl;
     private player: AnimatedSprite;
+    /** The animation `player` is drawn with. */
+    private spriteName: string;
     private velocity = new Vec2();
     private newPosition = new Vec2();
     private facingX = 1;
@@ -39,9 +41,7 @@ export class Player {
         private level: Level,
         private setup: PlayerSetup
     ) {
-        this.player = AssetFactory.inst.CreateAnimatedSprite(setup.sprite);
-        this.player.play();
-        this.player.animationSpeed = 0.1;
+        this.player = this.CreateSprite(setup.sprite);
 
         this.controls = new PlayerControl(0);
         this.health = CreateHealth(setup.hitPoints);
@@ -93,6 +93,18 @@ export class Player {
         this.player.destroy();
     }
 
+    /** Draws the player with another animation from now on - where they are is kept, and the one they already have is left alone. */
+    SetSprite(name: string): void {
+        if (name === this.spriteName) {
+            return;
+        }
+        const previous = this.player;
+        this.player = this.CreateSprite(name);
+        this.player.position.copyFrom(previous.position);
+        // Stops the old one, which would otherwise keep ticking on the shared ticker for good.
+        previous.destroy();
+    }
+
     /** Back to the start of a level: at its start position, with full health and nothing collected. Call on every `LEVEL_CREATED`. */
     Reset(playerStartPosition: Vec2Like | undefined) {
         if (!playerStartPosition) {
@@ -131,6 +143,14 @@ export class Player {
     /** Returns whether the hit landed - not while invulnerable from the last one, or already dead. */
     Damage(damage: number): boolean {
         return DamageHealth(this.health, damage);
+    }
+
+    private CreateSprite(name: string): AnimatedSprite {
+        const sprite = AssetFactory.inst.CreateAnimatedSprite(name);
+        sprite.play();
+        sprite.animationSpeed = 0.1;
+        this.spriteName = name;
+        return sprite;
     }
 
     private GetInput(seconds: number): void {
