@@ -7,14 +7,19 @@ import { OpenDataBrushDialog } from "../DataBrushDialog";
 import { DataBrushEditorFor } from "../DataBrushEditors";
 import EditorComponent from "../EditorComponent";
 import AssetMetadataStore from "@logic-incubator/engine/level/AssetMetadata";
-import { EffectiveLight, EffectiveSpawner } from "@logic-incubator/engine/level/ImplicitData";
+import { DoorFootprint, EffectiveDoorLock } from "@logic-incubator/engine/level/Doors";
+import { EffectiveLight, EffectivePickup, EffectiveSpawner } from "@logic-incubator/engine/level/ImplicitData";
 import { Brush, DataBrushValue } from "@logic-incubator/engine/level/LevelFormat";
 import { EditorActions, EditorTool, IEditorState, MouseButtonState } from "../stores/EditorStore";
 import { Layer, LevelDataActions } from "../stores/LevelDataStore";
-import { CellRect, FloodFill, RectCells, SpanRect, TopmostBrushAt } from "../tools/ToolGeometry";
+import { BoundsOfCells, CellRect, FloodFill, RectCells, SpanRect, TopmostBrushAt, TopmostBrushCovering } from "../tools/ToolGeometry";
 
-/** What the data-select tool found at a cell, and how to edit it: `editorKey` is what `OpenDataBrushDialog` looks up (an explicit data brush's own name, or "light"/"spawner" for an intrinsic tile value), `target` is the placed `Brush` `SET_DATA` writes the result onto. */
-type EditableTarget = { target: Brush; editorKey: string; value: DataBrushValue; context: string };
+/**
+ * What the data-select tool found at a cell, and how to edit it: `editorKey` is what `OpenDataBrushDialog` looks up (an
+ * explicit data brush's own name, or "light"/"spawner"/"pickup"/"door" for an intrinsic tile value), `target` is the placed
+ * `Brush` `SET_DATA` writes the result onto, and `cells` is every cell of it - one for a data brush, a sprite's whole footprint for a tile.
+ */
+type EditableTarget = { target: Brush; editorKey: string; value: DataBrushValue; context: string; cells: Vec2Like[] };
 
 /** Whether the brush sprite follows the cursor under this tool - only for the tools that paint with it. */
 export function ToolShowsBrush(tool: EditorTool): boolean {
@@ -35,9 +40,9 @@ type RectDrag = { anchor: Vec2Like; erase: boolean; brush: Brush };
  * - Brush: left paints, right erases, Ctrl+drag stamps a filled rectangle
  *   (right: erases one) - the editor's original mouse controls.
  * - Erase: left erases on the selected layer; Ctrl+drag erases a rectangle.
- * - Data select: click a placed height (an explicit data brush) to edit its value, or a tile with
- *   an effective light/spawner (its own override, or its asset's default) to edit that instead -
- *   see `EditableTargetAt`.
+ * - Data select (only with a data layer selected): click a placed data brush (a height, a pickup) to edit its
+ *   value, or a tile with an effective light, spawner, pickup or door lock (its own override, or its asset's
+ *   default) to edit that instead - on any cell of the tile's sprite, not just its top-left - see `EditableTargetAt`.
  * - Stamp: drag a rectangle to paint; hold Ctrl for just its border. Right-drag erases one.
  * - Dropper: click a tile (or on a data layer, a data brush) to paint with it.
  * - Fill: flood-fills the region of matching cells on the selected layer, within the visible map.
@@ -333,10 +338,12 @@ export default class Tools extends EditorComponent {
     }
 
     /**
-     * What the data-select tool would edit at `cell`: an explicit data brush (height, on the
-     * "attributes" layer) if there is one there, else the topmost tile (on any visible tile layer)
-     * with an effective light or spawner - its own override, or its asset's default (see
-     * `EffectiveLight`/`EffectiveSpawner`) - to edit, since neither is a paintable data brush any more.
+     * What the data-select tool would edit at `cell`: an explicit data brush (a height or a pickup, on the
+     * "attributes" layer) if there is one there, else the topmost tile (on any visible tile layer) whose
+     * sprite covers the cell and has an effective light, spawner, pickup or door lock - its own override, or
+     * its asset's default (see `EffectiveLight` and the rest) - to edit, since none of those is a paintable
+     * data brush of its own. A tile covers every cell of its sprite, so a 2x2 spawner or door is the same
+     * target wherever it's clicked (see `FootprintOf`).
      */
     private EditableTargetAt(state: IEditorState, cell: Vec2Like): EditableTarget | undefined {
         const explicit = this.EditableDataAt(state, cell);
@@ -346,32 +353,60 @@ export default class Tools extends EditorComponent {
                 target: explicit,
                 editorKey: explicit.name,
                 value: explicit.data,
-                context: `At ${explicit.position.x}, ${explicit.position.y} on “${layer ? layer.name : explicit.layerId}”.`
+                context: `At ${explicit.position.x}, ${explicit.position.y} on “${layer ? layer.name : explicit.layerId}”.`,
+                cells: [explicit.position]
             };
         }
 
         const tileLayers = state.layers.filter(layer => !layer.isData);
-        const implicit = TopmostBrushAt(this.levelDataStore.state.levelData, tileLayers, cell, brush => this.IntrinsicValueOf(brush) != null);
+        const implicit = TopmostBrushCovering(
+            this.levelDataStore.state.levelData,
+            tileLayers,
+            cell,
+            brush => this.FootprintOf(brush),
+            brush => this.IntrinsicValueOf(brush) != null
+        );
         const found = implicit && this.IntrinsicValueOf(implicit);
         return (
             found && {
                 target: implicit,
                 editorKey: found.kind,
                 value: found.value,
-                context: `“${implicit.name}” at ${implicit.position.x}, ${implicit.position.y}.`
+                context: `“${implicit.name}” at ${implicit.position.x}, ${implicit.position.y}.`,
+                cells: this.FootprintOf(implicit)
             }
         );
     }
 
-    /** `brush`'s effective light or spawner (see `EffectiveLight`/`EffectiveSpawner`), tagged with which kind it is - `EditableTargetAt` needs both to pick `OpenDataBrushDialog`'s editor. */
-    private IntrinsicValueOf(brush: Brush): { kind: "light" | "spawner"; value: DataBrushValue } | undefined {
+    /** Every cell the brush's sprite covers on the map - the same footprint the engine gives a door or a collidable tile (see `DoorFootprint`); just its own cell if the sheet doesn't have the sprite. */
+    private FootprintOf(brush: Brush): Vec2Like[] {
+        if (!this.assetFactory.Has(brush.name)) {
+            return [brush.position];
+        }
+        return DoorFootprint(brush.position, this.assetFactory.CreateTexture(brush.name), brush.pixelOffset, TileSize);
+    }
+
+    /**
+     * `brush`'s effective light, spawner, pickup or door lock (see `EffectiveLight` and the rest), tagged with
+     * which kind it is - `EditableTargetAt` needs that to pick `OpenDataBrushDialog`'s editor. A tile with more
+     * than one gets the first in that order; a door's value is the lock, its own or its sprite's.
+     */
+    private IntrinsicValueOf(brush: Brush): { kind: "light" | "spawner" | "pickup" | "door"; value: DataBrushValue } | undefined {
         const meta = AssetMetadataStore.inst.Get(brush.name);
         const light = EffectiveLight(brush, meta);
         if (light) {
             return { kind: "light", value: light };
         }
         const spawner = EffectiveSpawner(brush, meta);
-        return spawner ? { kind: "spawner", value: spawner } : undefined;
+        if (spawner) {
+            return { kind: "spawner", value: spawner };
+        }
+        const pickup = EffectivePickup(brush, meta);
+        if (pickup) {
+            return { kind: "pickup", value: pickup };
+        }
+        const lock = EffectiveDoorLock(brush, meta);
+        return lock !== undefined ? { kind: "door", value: { lock } } : undefined;
     }
 
     private Key(key: Key): boolean {
@@ -461,7 +496,8 @@ export default class Tools extends EditorComponent {
             case EditorTool.DATA_SELECT: {
                 const editable = this.EditableTargetAt(state, cell);
                 if (editable) {
-                    this.OutlineCells(state, one, PICK_COLOUR);
+                    // The whole sprite, so it's plain that any cell of it will do.
+                    this.OutlineCells(state, BoundsOfCells(editable.cells), PICK_COLOUR);
                     this.ShowLabel(state, cell, "Edit " + editable.target.name);
                 }
                 break;

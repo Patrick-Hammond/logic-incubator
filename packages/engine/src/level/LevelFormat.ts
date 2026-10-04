@@ -6,7 +6,9 @@
  */
 
 import type { Vec2Like } from "@logic-incubator/lib/math/Geometry";
+import type { PickupValue } from "./entities/Pickups";
 import type { SpawnerValue } from "./entities/Spawners";
+import type { DoorLockValue } from "./Doors";
 import type { LightValue } from "./Lighting";
 
 /**
@@ -16,15 +18,21 @@ import type { LightValue } from "./Lighting";
  * tile's own `Brush.data` (see `ImplicitData.EffectiveLight`/`EffectiveSpawner`). "light"/"spawner"
  * still identify their kind of value wherever one's edited (see `DataBrushEditors`) - just not as a
  * paintable brush name any more.
+ *
+ * `PICKUP` turns whatever tile is at its cell into a pickup, for items that aren't one by default
+ * (their asset has no `pickup` in `AssetMetadata`); a tile that is one can be edited, via the same
+ * popup, in its own `Brush.data` instead (see `ImplicitData.EffectivePickup`). Door locks work the
+ * same way, but only as a tile's own value - there's no door data brush.
  */
 export const enum DataBrushName {
     PLAYER_START = "player-start",
     COLLISION = "collision",
-    Z_INDEX = "z-index"
+    Z_INDEX = "z-index",
+    PICKUP = "pickup"
 }
 
-/** A data brush's value - a number (`Z_INDEX`'s height), or a light's or spawner's settings. */
-export type DataBrushValue = number | LightValue | SpawnerValue;
+/** A data brush's value - a number (`Z_INDEX`'s height), or a light's, spawner's, pickup's or door lock's settings. */
+export type DataBrushValue = number | LightValue | SpawnerValue | PickupValue | DoorLockValue;
 
 /** One placed tile or data brush. `position` is in map cells; `layerId` is its layer's `id`; `data` is null on a tile. */
 export type Brush = {

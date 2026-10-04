@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CreateHealth, DamageHealth, InvulnerableTime, IsDead, TickHealth } from "./Health";
+import { CreateHealth, DamageHealth, HealHealth, InvulnerableTime, IsDead, TickHealth } from "./Health";
 
 describe("Health", () => {
     it("takes a hit, then shrugs off more until its invulnerability wears off", () => {
@@ -27,5 +27,30 @@ describe("Health", () => {
         const health = CreateHealth(2);
         expect(DamageHealth(health, 0)).toBe(false);
         expect(health.invulnerable).toBe(0);
+    });
+});
+
+describe("HealHealth", () => {
+    it("restores hit points, never past the maximum", () => {
+        const health = CreateHealth(6);
+        DamageHealth(health, 4, 0);
+        expect(HealHealth(health, 1)).toBe(true);
+        expect(health.hitPoints).toBe(3);
+        expect(HealHealth(health, 10)).toBe(true);
+        expect(health.hitPoints).toBe(6);
+    });
+
+    it("does nothing at full health, for no amount, or for the dead", () => {
+        const full = CreateHealth(6);
+        expect(HealHealth(full, 2)).toBe(false);
+        const hurt = CreateHealth(6);
+        DamageHealth(hurt, 2, 0);
+        expect(HealHealth(hurt, 0)).toBe(false);
+        expect(HealHealth(hurt, -3)).toBe(false);
+        expect(hurt.hitPoints).toBe(4);
+        const dead = CreateHealth(2);
+        DamageHealth(dead, 5, 0);
+        expect(HealHealth(dead, 2)).toBe(false);
+        expect(dead.hitPoints).toBe(0);
     });
 });

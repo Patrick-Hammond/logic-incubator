@@ -32,6 +32,15 @@ export function DamageHealth(health: Health, damage: number, invulnerableTime = 
     return true;
 }
 
+/** Restores up to `amount` hit points, never past the maximum - nothing for the dead, or for no amount. Returns whether any came back. */
+export function HealHealth(health: Health, amount: number): boolean {
+    if (amount <= 0 || IsDead(health) || health.hitPoints >= health.max) {
+        return false;
+    }
+    health.hitPoints = Math.min(health.max, health.hitPoints + amount);
+    return true;
+}
+
 /** Counts invulnerability down by `dt` seconds. */
 export function TickHealth(health: Health, dt: number): void {
     health.invulnerable = Math.max(0, health.invulnerable - dt);

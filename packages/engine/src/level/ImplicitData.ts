@@ -13,8 +13,8 @@
 
 import { Vec2Like } from "@logic-incubator/lib/math/Geometry";
 import { AssetMetadata } from "./AssetMetadata";
-import { DoorFootprint } from "./Doors";
-import { PickupValue } from "./entities/Pickups";
+import { DoorFootprint, EffectiveDoorLock } from "./Doors";
+import { IsPickupValue, PickupValue } from "./entities/Pickups";
 import { IsSpawnerValue, SpawnerValue } from "./entities/Spawners";
 import { DataBrushName } from "./LevelFormat";
 import { IsLightValue, LightValue } from "./Lighting";
@@ -30,7 +30,9 @@ export type ImplicitPlacements = {
     lights: { x: number; y: number; value: LightValue }[];
     /** A tile's effective spawner (its own override, or its asset's default) - see `EffectiveSpawner`. */
     spawners: { x: number; y: number; value: SpawnerValue }[];
-    /** A tile's intrinsic pickup, straight from `AssetMetadata` - no per-instance override (unlike light/spawner). */
+    /** One per door placement, at its footprint's first cell: the lock id a key has to match to open it (see `EffectiveDoorLock`). */
+    doorLocks: { x: number; y: number; lock: number }[];
+    /** A tile's effective pickup (its own override, or its asset's default) - see `EffectivePickup`. */
     pickups: { x: number; y: number; value: PickupValue }[];
 };
 
@@ -42,6 +44,11 @@ export function EffectiveLight(brush: ImplicitBrush, meta: AssetMetadata | undef
 /** A tile's spawner: its own placement carries an override (see `EffectiveLight`) if `data` is already a `SpawnerValue`, else its asset's default from `AssetMetadata`, else none. */
 export function EffectiveSpawner(brush: ImplicitBrush, meta: AssetMetadata | undefined): SpawnerValue | undefined {
     return IsSpawnerValue(brush.data) ? brush.data : meta?.spawner;
+}
+
+/** A tile's pickup: its own placement carries an override (see `EffectiveLight`) if `data` is already a `PickupValue`, else its asset's default from `AssetMetadata`, else none. */
+export function EffectivePickup(brush: ImplicitBrush, meta: AssetMetadata | undefined): PickupValue | undefined {
+    return IsPickupValue(brush.data) ? brush.data : meta?.pickup;
 }
 
 /**
@@ -56,7 +63,7 @@ export function FindImplicitPlacements(
     sizeFor: (assetName: string) => { width: number; height: number },
     tileSize: number
 ): ImplicitPlacements {
-    const placements: ImplicitPlacements = { collision: [], doors: [], lights: [], spawners: [], pickups: [] };
+    const placements: ImplicitPlacements = { collision: [], doors: [], doorLocks: [], lights: [], spawners: [], pickups: [] };
     brushes.forEach(brush => {
         if (!isTileLayer(brush.layerId)) {
             return;
@@ -71,6 +78,7 @@ export function FindImplicitPlacements(
             if (meta.door) {
                 const id = meta.door.id;
                 footprint.forEach(cell => placements.doors.push({ x: cell.x, y: cell.y, id }));
+                placements.doorLocks.push({ x: footprint[0].x, y: footprint[0].y, lock: EffectiveDoorLock(brush, meta) });
             }
         }
         const light = EffectiveLight(brush, meta);
@@ -81,8 +89,9 @@ export function FindImplicitPlacements(
         if (spawner) {
             placements.spawners.push({ x, y, value: spawner });
         }
-        if (meta?.pickup) {
-            placements.pickups.push({ x, y, value: meta.pickup });
+        const pickup = EffectivePickup(brush, meta);
+        if (pickup) {
+            placements.pickups.push({ x, y, value: pickup });
         }
     });
     return placements;

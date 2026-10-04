@@ -141,3 +141,48 @@ describe("OrphanedExplicitData", () => {
         expect(orphans([brush("wall", 1, 1, DATA_LAYER)], [collision])).toEqual([]);
     });
 });
+
+describe("pickups and door locks in FindImplicitPlacements", () => {
+    const KEY: AssetMetadata["pickup"] = { kind: "key", id: 3 };
+
+    it("takes a tile's pickup from its asset", () => {
+        const result = find([brush("sack_gold", 2, 3)]);
+        expect(result.pickups).toEqual([{ x: 2, y: 3, value: GOLD_PICKUP }]);
+    });
+
+    it("lets a placement carry its own pickup, over its asset's", () => {
+        const result = find([brush("sack_gold", 2, 3, TILE_LAYER, { data: KEY as never })]);
+        expect(result.pickups).toEqual([{ x: 2, y: 3, value: KEY }]);
+    });
+
+    it("lets a plain tile become a pickup by carrying one", () => {
+        expect(find([brush("floor", 1, 1, TILE_LAYER, { data: KEY as never })]).pickups).toEqual([{ x: 1, y: 1, value: KEY }]);
+    });
+
+    it("ignores data that isn't a pickup - a light's, or a malformed one - and falls back to the asset's", () => {
+        const light = { brightness: 1, tint: 0, range: 4 };
+        expect(find([brush("sack_gold", 0, 0, TILE_LAYER, { data: light })]).pickups[0].value).toBe(GOLD_PICKUP);
+        expect(find([brush("sack_gold", 0, 0, TILE_LAYER, { data: { kind: "gold" } })]).pickups[0].value).toBe(GOLD_PICKUP);
+        expect(find([brush("floor", 0, 0, TILE_LAYER, { data: { kind: "gold" } })]).pickups).toEqual([]);
+    });
+
+    it("gives each door placement one lock, at its footprint's first cell - unlocked (-1) unless it sets its own", () => {
+        expect(find([brush("door", 5, 5)]).doorLocks).toEqual([{ x: 5, y: 5, lock: -1 }]);
+        expect(find([brush("door", 5, 5, TILE_LAYER, { data: { lock: 9 } })]).doorLocks).toEqual([{ x: 5, y: 5, lock: 9 }]);
+        expect(find([brush("door", 5, 5, TILE_LAYER, { data: { lock: 0 } })]).doorLocks).toEqual([{ x: 5, y: 5, lock: 0 }]);
+    });
+
+    it("puts a door placement's lock at the first cell of its footprint even when the sprite is nudged off its anchor", () => {
+        const nudged = find([brush("door", 5, 5, TILE_LAYER, { pixelOffset: { x: 16, y: 0 } })]);
+        expect(nudged.doorLocks).toEqual([{ x: 4, y: 5, lock: -1 }]);
+    });
+
+    it("leaves a door's cells tagged by its sprite pair id, whatever its lock", () => {
+        const result = find([brush("door", 5, 5, TILE_LAYER, { data: { lock: 9 } })]);
+        expect(result.doors.every(cell => cell.id === 1)).toBe(true);
+    });
+
+    it("has no locks for tiles that aren't doors", () => {
+        expect(find([brush("wall", 1, 1), brush("torch", 2, 2)]).doorLocks).toEqual([]);
+    });
+});

@@ -1435,16 +1435,17 @@ A **brush** is one placed thing: a tile (`name` is a bare sprite or animation na
 data layer). Layers draw in list order, later on top. The engine reads only what `LevelFormat.ts` types; the editor saves
 more of its own state alongside.
 
-There are exactly three **data brushes**, painted on the one `attributes` data layer:
+There are exactly four **data brushes**, painted on the one `attributes` data layer:
 
 | Name | `data` | Effect |
 | --- | --- | --- |
 | `player-start` | - | Where the player starts (required: a level without one throws "Player start position is not defined"). |
 | `collision` | - | Marks a cell solid, in addition to whatever tiles there declare. |
 | `z-index` | number | The cell's **height** ([9.7](#97-heights)). |
+| `pickup` | a `PickupValue` | Turns whatever tile is on top at that cell into a pickup (it disappears when collected), for an item that isn't one by default. Edited with its popup - choose gold, health, a key, a weapon or an item. |
 
-Lights, spawners, doors and pickups are **not** brushes: they are ordinary tiles that carry their behaviour in
-`assets-meta.json`.
+Lights, spawners and doors are **not** brushes: they are ordinary tiles that carry their behaviour in
+`assets-meta.json` (a pickup can be either: a tile that is one by default, or a `pickup` brush over any other).
 
 ### 9.6 `assets-meta.json`: tile behaviour by sprite name
 
@@ -1471,16 +1472,28 @@ a deleted one is removed - with a warning if it had anything in it); you only fi
 | `category` | Which palette tab the **level editor** lists the sprite under: `dungeon`, `entities`, `weapons`, `items`, `misc` or `user` ([10.3](#103-layers-data-brushes-and-palette-categories)). Has no effect in play. A sprite with none is listed under Misc; an unknown value is a build error (and a console warning at run time). |
 | `collidable` | Blocks movement. |
 | `light` | A point light: `brightness` (peak, 0..1+; it is clamped to 1), `tint` (hex colour as a number), `range` (radius in tiles). Baked once at level load with linear falloff; overlapping lights keep whichever is brighter at each cell. Cells no light reaches have a dim ambient level. A hand-edited light missing a field is dropped with a console warning naming the sprite rather than baking black. |
-| `door` | `id` pairs a door's two sprites (closed and open); `open` says which half this is. The door swaps when the player's tile enters any of its footprint cells and swaps back when they leave. Nothing blocks movement - it reads as "walked open". |
+| `door` | `id` pairs a door's two sprites (closed and open); `open` says which half this is. The door swaps when the player's tile enters any of its footprint cells and swaps back when they leave, so it reads as "walked open" - unless that placement is locked, when the player needs its key ([9.6.1](#961-keys-and-locked-doors)). |
 | `spawner` | Produces `monsters` (a pool, picked at random) every `interval` s, at most `maxAlive` at once, `total` in all (0 = unlimited), only within `activationRange` tiles of the player (0 = always). `hitPoints` is the damage to destroy it (0 = indestructible). Its sprite's footprint is solid until destroyed. |
-| `pickup` | What walking over it gives: gold, an inventory item (`sprite`), or a weapon. The tile then disappears. |
+| `pickup` | What walking over it gives: `gold` or `health` (an `amount`; health is in half-hearts and never goes past the maximum), a `key` (an `id`), a `weapon`, or an inventory `item` (its `sprite`, or - left out - the tile's own). The tile then disappears. A malformed one is dropped with a console warning naming the sprite. |
 
-A **specific placement** can override its light or spawner values (the editor's data-select tool edits them per placement);
+A **specific placement** can override its light, spawner, pickup or door lock (the editor's data-select tool edits them per placement);
 `assets-meta` is the default for the sprite. Metadata is per bundle: a level's bundle can have its own
 `assets-meta.json`, looked up before `global`'s, so a level can restyle a tile's behaviour as well as its art.
 
 Doors and fog: the level is divided into walkable **regions**; only regions reachable from the player through *open*
 doors are drawn, so closing a door conceals what is behind it again.
+
+#### 9.6.1 Keys and locked doors
+
+Every door has a **lock id**, and by default it is `-1`: **unlocked**. The player opens an unlocked door by walking onto it,
+with or without keys - so a level with no keys behaves exactly as it always did. To lock a door, use the data-select tool's
+*Door lock* popup: tick **Locked** and give it a **Key id** (0 or more; kept in the tile's `data` as `{ "lock": n }`). The
+player then opens that door only if they carry a **key with the same id** (a `key` pickup, `{ "kind": "key", "id": n }`);
+without it the door is a wall to them. There is no master key. They see the keys they carry (each one's sprite and its id) in
+the HUD's *Keys* panel. Keys aren't used up, and a second key with an id already held adds nothing. Dying and restarting the
+level drops them. A door's `door.id` in `assets-meta.json` is only what pairs its closed and open sprites - it is not its lock.
+
+Monsters can never open or enter a closed door (see `Encounter` in the API reference), whatever keys the player has.
 
 ### 9.7 Heights
 
@@ -1583,6 +1596,7 @@ export const EditorSetup: IDungeonEditorOptions = {
         [DataBrushName.PLAYER_START]: "knight_m_idle_anim",
         [DataBrushName.COLLISION]: "wall_mid",
         [DataBrushName.Z_INDEX]: "floor_stairs",
+        [DataBrushName.PICKUP]: "sack_gold",
     },
     mapStyle: new MyStyle(),                   // the game's tiles for generated maps (keys 1-8); without it those keys do nothing
 };
@@ -1599,7 +1613,7 @@ The editor opens as a full-window overlay: a **map canvas** on the left; on the 
 | --- | --- | --- |
 | `B` | Brush | Left paints; right erases; Ctrl+drag paints a filled rectangle. |
 | `X` | Erase | Erases from the selected layer; Ctrl+drag a rectangle. |
-| `A` | Attributes (data select) | Click a placed light, spawner or height to edit its value in a dialog. |
+| `A` | Attributes (data select) | Click a placed light, spawner, pickup, door or height - any cell of its sprite, not just the top-left - to edit its value in a dialog. Only offered while a data layer (the attributes layer) is selected; its button is hidden, and the key does nothing, with a tile layer selected. |
 | `U` | Stamp | Drag a rectangle of the brush; hold Ctrl for just the border; right-drag erases a rectangle. Esc cancels. |
 | `I` | Dropper | Click a tile to paint with it (on the attributes layer, a data brush with its value). |
 | `G` | Fill | Flood-fills matching cells on the selected layer, up to the edge of the view. |

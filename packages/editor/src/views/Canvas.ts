@@ -3,10 +3,10 @@ import { Key } from "@logic-incubator/lib/io/Keyboard";
 import AssetMetadataStore from "@logic-incubator/engine/level/AssetMetadata";
 import { FindImplicitPlacements } from "@logic-incubator/engine/level/ImplicitData";
 import MonsterRoster from "@logic-incubator/engine/level/entities/MonsterRoster";
-import { IsSpawnerValue, SpawnerCells } from "@logic-incubator/engine/level/entities/Spawners";
-import { IsLightValue } from "@logic-incubator/engine/level/Lighting";
+import { SpawnerCells } from "@logic-incubator/engine/level/entities/Spawners";
 import { Brush, DataBrushName } from "@logic-incubator/engine/level/LevelFormat";
 import AssetFactory from "@logic-incubator/lib/loading/AssetFactory";
+import { MapLabel } from "../DataLabels";
 import { DataBrushEditorFor } from "../DataBrushEditors";
 import ObjectPool from "@logic-incubator/lib/patterns/ObjectPool";
 import { AnimationSpeed, TileSize } from "@logic-incubator/engine/Constants";
@@ -16,7 +16,7 @@ import { EditorFontName } from "../EditorAssets";
 import { EditorActions, EditorTool, IEditorState, IMPLICIT_LAYER_ID, MouseButtonState } from "../stores/EditorStore";
 import { LevelDataActions, LevelDataState } from "../stores/LevelDataStore";
 
-/** Doors, lights and spawners aren't paintable data brushes any more, so they have no palette colour of their own to borrow - these match their old ones (LIGHT's/SPAWNER's former swatch colours) so the map looks the same as before the change. */
+/** Doors, lights and spawners aren't paintable data brushes any more, so they have no palette colour of their own to borrow - these match their old ones (LIGHT's/SPAWNER's former swatch colours) so the map looks the same as before the change. A pickup does have one - the PICKUP brush's, whether it's painted or a tile's own. */
 const IMPLICIT_DOOR_COLOUR = 0x4cc9f0;
 const IMPLICIT_LIGHT_COLOUR = 0xff8100;
 const IMPLICIT_SPAWNER_COLOUR = 0x9b5de5;
@@ -128,15 +128,10 @@ export default class Canvas extends EditorComponent {
                         // Player-start and collision values mean nothing (no editor for them), and a "0" would sit over their icons.
                         if (brush.data !== null && DataBrushEditorFor(brush.name)) {
                             const text = this.textPool.Get();
-                            // A LightValue is shown as just its range, matching every other data brush's
-                            // convention of a single bare number - brightness/tint are only relevant once
-                            // you're editing the light (see SelectedBrush), not at a map-overview glance.
-                            // Likewise a spawner shows how many monster types it draws from.
-                            text.text = IsLightValue(brush.data)
-                                ? brush.data.range.toString()
-                                : IsSpawnerValue(brush.data)
-                                  ? brush.data.monsters.length.toString()
-                                  : brush.data.toString();
+                            // A short tag, not the whole value - a light shows just its range, a spawner how many
+                            // monster types it draws from, a pickup its kind and number (see `MapLabel`). The rest
+                            // only matters once you're editing it (see SelectedBrush), not at a map-overview glance.
+                            text.text = MapLabel(brush.data);
                             sprite.addChild(text);
                         }
                         layerDict[brush.layerId].addChild(sprite);
@@ -150,7 +145,8 @@ export default class Canvas extends EditorComponent {
      * Outlines every placement the game derives from tiles' `AssetMetadata`
      * (see `FindImplicitPlacements` - the same function `Level` uses, so this
      * is exactly what the game will get): collision, each cell of a door's
-     * sprite footprint, and intrinsic lights labelled with their range. Drawn
+     * sprite footprint (labelled with its lock), intrinsic lights labelled with their
+     * range, spawners with their monster count and pickups with their kind. Drawn
      * outlined over a faint fill, so it reads differently from the solid
      * squares of hand-painted data brushes.
      */
@@ -198,9 +194,32 @@ export default class Canvas extends EditorComponent {
             return { x: posX, y: posY };
         };
 
+        /** A tag at the middle of a cell, in the overlay's font - skipped if there's no tag, or the cell is off the grid. */
+        const labelCell = (x: number, y: number, tag: string): void => {
+            if (!tag) {
+                return;
+            }
+            const posX = (x - state.viewOffset.x) * scaledTileSize + GridBounds.x;
+            const posY = (y - state.viewOffset.y) * scaledTileSize + GridBounds.y;
+            if (!GridBounds.contains(posX, posY)) {
+                return;
+            }
+            const text = this.textPool.Get();
+            text.text = tag;
+            text.scale.set(state.viewScale);
+            text.position.set(posX + scaledTileSize * 0.5, posY + scaledTileSize * 0.5);
+            this.implicitContainer.addChild(text);
+        };
+
         const collisionColour = colourOf(DataBrushName.COLLISION);
         placements.collision.forEach(cell => drawCell(cell.x, cell.y, collisionColour));
         placements.doors.forEach(cell => drawCell(cell.x, cell.y, IMPLICIT_DOOR_COLOUR));
+        placements.doorLocks.forEach(door => labelCell(door.x, door.y, MapLabel({ lock: door.lock })));
+        const pickupColour = colourOf(DataBrushName.PICKUP);
+        placements.pickups.forEach(pickup => {
+            drawCell(pickup.x, pickup.y, pickupColour);
+            labelCell(pickup.x, pickup.y, MapLabel(pickup.value));
+        });
         placements.lights.forEach(light => {
             const pos = drawCell(light.x, light.y, IMPLICIT_LIGHT_COLOUR);
             if (pos) {

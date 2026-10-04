@@ -4,6 +4,30 @@
  */
 
 import { Vec2Like } from "@logic-incubator/lib/math/Geometry";
+import type { AssetMetadata } from "./AssetMetadata";
+import { NoLock } from "./entities/Keys";
+
+/**
+ * A door placement's own lock id, set with the data-select tool and kept in the tile's `Brush.data` -
+ * what a key's id has to match to open it (see `Keys.CanOpen`). Without one the door is unlocked:
+ * `NoLock` (-1), which opens for anyone. (The asset's `door.id` is no lock - it only pairs the door's
+ * closed and open sprites.)
+ */
+export type DoorLockValue = { lock: number };
+
+/** Narrows a `Brush.data` to `DoorLockValue` - the only value with a `lock`. */
+export function IsDoorLockValue(value: unknown): value is DoorLockValue {
+    const lock = (value as DoorLockValue | null | undefined)?.lock;
+    return typeof value === "object" && value !== null && typeof lock === "number" && Number.isFinite(lock);
+}
+
+/** A door tile's lock id: its own placement's (see `DoorLockValue`), else `NoLock` - undefined if the tile isn't a door. */
+export function EffectiveDoorLock(brush: { data?: unknown }, meta: AssetMetadata | undefined): number | undefined {
+    if (!meta || !meta.door) {
+        return undefined;
+    }
+    return IsDoorLockValue(brush.data) ? brush.data.lock : NoLock;
+}
 
 const NEIGHBOUR_OFFSETS: ReadonlyArray<Vec2Like> = [
     { x: 1, y: 0 },

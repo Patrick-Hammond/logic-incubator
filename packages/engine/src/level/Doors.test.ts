@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DoorFootprint, FindDoorGroups } from "./Doors";
+import { DoorFootprint, EffectiveDoorLock, FindDoorGroups, IsDoorLockValue } from "./Doors";
 import { FindRegions } from "./Regions";
 
 /** Build a door-id grid from an ASCII map. Any non-'.' character is a door cell, its id being that character's char code (so '#' and '$' are automatically different ids) - '.' is unpainted. */
@@ -158,5 +158,38 @@ describe("DoorFootprint", () => {
         anchorOnly[2] = [];
         anchorOnly[2][2] = true;
         expect(FindRegions(collision, anchorOnly, width, height).regions.length).toBe(1);
+    });
+});
+
+describe("door locks", () => {
+    const door = { door: { id: 2, open: false } };
+
+    it("recognises a lock value by its lock number, and nothing else", () => {
+        expect(IsDoorLockValue({ lock: 3 })).toBe(true);
+        expect(IsDoorLockValue({ lock: 0 })).toBe(true);
+        expect(IsDoorLockValue({ lock: "3" })).toBe(false);
+        expect(IsDoorLockValue({ lock: Number.NaN })).toBe(false);
+        expect(IsDoorLockValue({ kind: "key", id: 3 })).toBe(false);
+        expect(IsDoorLockValue(3)).toBe(false);
+        expect(IsDoorLockValue(null)).toBe(false);
+        expect(IsDoorLockValue(undefined)).toBe(false);
+    });
+
+    it("is unlocked (-1) unless the placement sets its own - whatever id the sprite has, which only pairs its closed and open halves", () => {
+        expect(EffectiveDoorLock({ data: null }, door)).toBe(-1);
+        expect(EffectiveDoorLock({}, door)).toBe(-1);
+        expect(EffectiveDoorLock({ data: { lock: 7 } }, door)).toBe(7);
+        expect(EffectiveDoorLock({ data: { lock: 0 } }, door)).toBe(0);
+        expect(EffectiveDoorLock({ data: { lock: -1 } }, door)).toBe(-1);
+    });
+
+    it("ignores a data value that isn't a lock - a light or pickup on the same tile mustn't change it", () => {
+        expect(EffectiveDoorLock({ data: { brightness: 1, tint: 0, range: 3 } }, door)).toBe(-1);
+        expect(EffectiveDoorLock({ data: { kind: "gold", amount: 1 } }, door)).toBe(-1);
+    });
+
+    it("is nothing for a tile that isn't a door", () => {
+        expect(EffectiveDoorLock({ data: { lock: 7 } }, {})).toBeUndefined();
+        expect(EffectiveDoorLock({ data: { lock: 7 } }, undefined)).toBeUndefined();
     });
 });
