@@ -69,6 +69,10 @@ export type FormDialogOptions = {
     values: FormValues;
     /** Return an error message to disable Save (shown in the footer), or null when the values are acceptable. Re-run on every change. */
     validate?: (values: FormValues) => string | null;
+    /** What the confirming button says (default "Save"). */
+    saveLabel?: string;
+    /** What the cancelling button says (default "Cancel"); `null` leaves it out - a message with only an OK. Escape and a click outside still cancel. */
+    cancelLabel?: string | null;
 };
 
 /** Whether the field is offered for these values (see `FieldBase.visibleWhen`). */
@@ -112,10 +116,14 @@ export function OpenFormDialog(options: FormDialogOptions): Promise<FormValues |
 
         const footer = El("div", "fd-footer");
         const error = El("span", "fd-error");
-        const cancelButton = El("button", "ed-button", "Cancel");
-        const saveButton = El("button", "ed-button fd-primary", "Save");
+        const cancelButton = El("button", "ed-button", options.cancelLabel || "Cancel");
+        const saveButton = El("button", "ed-button fd-primary", options.saveLabel || "Save");
         cancelButton.type = saveButton.type = "button";
-        footer.append(error, cancelButton, saveButton);
+        footer.append(error);
+        if (options.cancelLabel !== null) {
+            footer.append(cancelButton);
+        }
+        footer.append(saveButton);
         panel.appendChild(footer);
 
         const revalidate = () => {

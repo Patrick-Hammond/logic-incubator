@@ -3,6 +3,9 @@ import { Scenes } from "@logic-incubator/engine/Constants";
 import EditorComponent from "./EditorComponent";
 import { IStyler } from "./maps/Styler";
 import { LoadSavedLevel } from "./SavedLevel";
+import { PeekRecovery, TakeRecovery } from "./sprite/Recovery";
+import { PeekResumeNote, TakeResumeNote } from "./sprite/Resume";
+import { BrowserStorage } from "./sprite/SpriteEditor";
 import { DataBrushIcons, EditorActions } from "./stores/EditorStore";
 import { RemoveInjectedStyles } from "./ui/dom/Dom";
 import EditorOverlay from "./ui/dom/EditorOverlay";
@@ -24,6 +27,16 @@ export interface IDungeonEditorOptions {
     dataBrushIcons?: DataBrushIcons;
     /** The game's tiles for the maps keys 1-8 generate (see `IStyler`). Without one, those keys do nothing. */
     mapStyle?: IStyler;
+}
+
+/**
+ * The scene a game should start in when the page has just reloaded under the sprite editor - after a sprite was saved and the window
+ * closed, or because the page reloaded while the window was open - the level editor, so the artist lands back where they were; or
+ * undefined for any other start. A game with a front end asks this when it boots, and shows its usual first scene on undefined.
+ */
+export function ResumeEditorScene(): string | undefined {
+    const session = BrowserStorage(() => window.sessionStorage);
+    return PeekResumeNote(session) || PeekRecovery(session) ? Scenes.EDITOR : undefined;
 }
 
 export class DungeonEditor extends EditorComponent {
@@ -79,6 +92,25 @@ export class DungeonEditor extends EditorComponent {
     /** The DOM panels are shown while the editor has the stage... */
     protected OnShow(): void {
         EditorOverlay.inst.SetVisible(true);
+        this.PickSavedSprite();
+        this.RestoreSpriteEditor();
+    }
+
+    /** If the page reloaded while the sprite editor was open (see `Recovery`), the window comes back with the sprite as it was. */
+    private RestoreSpriteEditor(): void {
+        const recovery = TakeRecovery(BrowserStorage(() => window.sessionStorage));
+        if (recovery) {
+            this.RecoverSpriteEditor(recovery);
+        }
+    }
+
+    /** After the page reloaded for a saved sprite (see `ResumeEditorScene`): the sprite is the picked brush, on its own tab. */
+    private PickSavedSprite(): void {
+        const note = TakeResumeNote(BrowserStorage(() => window.sessionStorage));
+        const layer = this.editorStore.SelectedLayer;
+        if (note && this.assetFactory.Has(note.name) && layer && !layer.isData) {
+            this.editorStore.Dispatch({ type: EditorActions.BRUSH_CHANGED, data: { name: note.name } });
+        }
     }
 
     /** ...and hidden while the game, or any of the game's own scenes, has it. */

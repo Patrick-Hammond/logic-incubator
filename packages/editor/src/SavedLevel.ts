@@ -13,6 +13,11 @@ const KEY = "dungeonLevel";
 /** What the editor saves - a `LevelFile` (so the engine can load it), with the editor's whole state riding along in `editorData`. */
 export type EditorSave = LevelFile & { editorData: IEditorState; levelData: LevelDataState };
 
+/** What gets saved from the editor's two stores - the same for Enter (play), S (to a file) and the sprite editor's reload. */
+export function MakeEditorSave(editorData: IEditorState, levelData: LevelDataState): EditorSave {
+    return { editorData, levelData };
+}
+
 export function SaveLevel(save: EditorSave): void {
     SaveToLocalStorage(KEY, JSON.stringify(save));
 }

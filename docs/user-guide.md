@@ -1011,6 +1011,12 @@ exports.afterScan = function (context) {
 
 `context.Report(level, message, bundle?, file?)` adds a diagnostic; an `"error"` fails the build.
 
+A plugin may also export **`onSpriteSaved(context)`**, which the dev server's sprite service ([10.6](#106-the-sprite-editor)) calls right after the
+sprite editor saves a sprite, so a plugin can keep its own files in step at once instead of at the next build. `context` has
+`bundle` (the bundle model as it was before the save), `name`, `isNew`, `category` (the palette tab a new tile was made under),
+`copyMetaFrom` (the sprite a "save as" copies from), `config` and `Report(level, message)`. `asset-meta-plugin.js` uses it to add a new
+sprite's `assets-meta.json` entry with its category.
+
 ### 5.13 Diagnostics
 
 | Message (abridged) | Cause and fix |
@@ -1564,7 +1570,7 @@ its icons then):
 
 ```ts
 // src/editor/Editor.ts - only the dev build's entry point imports this
-import { DungeonEditor } from "@logic-incubator/editor/DungeonEditor";
+import { DungeonEditor, ResumeEditorScene } from "@logic-incubator/editor/DungeonEditor";
 import { EditorBundle } from "@logic-incubator/editor/EditorAssets";
 import { LoadSavedLevel } from "@logic-incubator/editor/SavedLevel";
 
@@ -1573,6 +1579,7 @@ export const Editor: GameEditor = {
     bundles: [EditorBundle],                              // loaded before create()
     create: () => new DungeonEditor(EditorSetup),
     savedLevel: LoadSavedLevel,                           // the editor's latest save, if any
+    startScene: ResumeEditorScene,                        // optional: come back up in the editor after the sprite editor's reload (10.6)
 };
 ```
 
@@ -1605,7 +1612,8 @@ export const EditorSetup: IDungeonEditorOptions = {
 ### 10.2 Using it
 
 The editor opens as a full-window overlay: a **map canvas** on the left; on the right the **brush palette**, the
-**selected brush**, and the **layer list**; and a vertical **toolbar** of tools at the far right.
+**selected brush** (with an **Edit** button - `E` - that opens a tile in the [sprite editor](#106-the-sprite-editor)), and the **layer list**; and a
+vertical **toolbar** of tools at the far right. Each palette tab ends in a **+** that starts a new tile in that category.
 
 **Tools** (also keys):
 
@@ -1644,7 +1652,8 @@ The editor opens as a full-window overlay: a **map canvas** on the left; on the 
   Each sprite's tab is its `category` in `assets-meta.json` ([9.6](#96-assets-metajson-tile-behaviour-by-sprite-name)); a sprite
   without one is under Misc, so a new sprite is findable at once and you sort it later. Inside a tab the sprites are in name order,
   which keeps an animation (`wall_fountain_mid_red_anim`) next to the tiles it goes with. Empty tabs stay (the User tab starts
-  empty and says how to fill it), so a tab is always where you last found it.
+  empty and says how to fill it), so a tab is always where you last found it. Picking a brush that is on another tab - from the
+  dropper, or when the editor comes back after a sprite was saved - switches to its tab.
 - The categories are read when the editor is created, so the game's metadata must already be loaded then - add the game scene
   (which binds the metadata, [9.1](#91-how-the-pieces-fit)) before the editor scene, and load `global` first.
 - Tile layers draw in list order; add, rename, hide (the eye), reorder and duplicate them in the layer panel.
@@ -1683,6 +1692,117 @@ at a cell. See `in-dungeons-we-dwell/src/editor/Style0x7.ts` for a complete one.
 2. When it is right, press **S** to download `dungeonLevel.txt`.
 3. Save that JSON over `assets/level1/data/level.json`, run `npm run assets` (the manifest hash changes), commit.
 4. The production build plays the shipped file; it never contains the editor.
+
+### 10.6 The sprite editor
+
+Select a tile and press **Edit** (or `E`) on the selected-brush card, or click the **+** at the end of a palette tab, to draw in the
+**sprite editor**: a full-window pixel editor for the sprite's source PNGs. **+** starts a *new* tile under that tab - it asks for a
+name, a bundle, a size and a frame count, and the tile is listed under that tab once saved. Both buttons appear only while the dev
+server is running ([how saving works](#how-saving-works)).
+
+**Layout.** Menus along the top (File, Edit, Sprite, View, Palette, Help) with **Save** and **Close**; the **tools** and their options
+on the left; the canvas in the middle (wheel or `+` / `-` zooms, Space-drag or middle-drag pans, `0` fits it to the window); the
+**palette**, colour editor and **channel mixer** on the right; the **frames** with playback along the bottom. **Help > Keyboard
+shortcuts** lists every key.
+
+**Tools.** The left button paints the foreground colour and the right button the background colour.
+
+| Key | Tool | Notes |
+| --- | --- | --- |
+| `B` | Pencil | Brush size and shape in the options (`[` / `]` change the size); Shift-click draws a line from the last point. |
+| `E` | Eraser | Paints the palette's transparent entry (one is added if the sprite has none). |
+| `L` `R` `O` | Line, rectangle, ellipse | Shift snaps to 45 degrees / a square / a circle. "Filled shapes" is in the options. |
+| `G` | Fill | Touching pixels only, or - unticked - every pixel of that colour. |
+| `I` | Colour picker | Alt-click picks with any tool. |
+| `M` | Select | Drag a marquee; drag inside it to move the pixels (Ctrl-drag copies them); arrows nudge (Shift: 8); `Ctrl+C` / `X` / `V`, `Delete`, flip and rotate in the Edit menu. Pasted and moved pixels float until you click elsewhere, change tool, or change frame; Esc or `Ctrl+Z` drops them. Transparent pixels in a selection let what is underneath show through. **Crop to selection** (the Edit and Sprite menus, or the button in the options) cuts every frame down to the selected area, which becomes the new canvas. |
+
+The **Mirror** options draw on both sides of the vertical and/or horizontal middle at once, shapes included.
+
+**Colour: one 256-colour palette, with alpha.** A sprite is *indexed*: each pixel is an index into the sprite's palette of up to 256
+colours, every one with its own alpha (0 is transparent). A new sprite starts with the classic 256-colour layout (transparent, the 15
+system colours, a 6x6x6 cube, 24 greys). By convention slot 0 is transparent - it is what the eraser paints.
+
+- **Picking.** Click a swatch for the foreground, right-click for the background; Ctrl-click adds to a selection and Shift-click
+  extends it (the mixer can target the selection); drag one swatch onto another to **swap** them - the picture follows. `+` adds a
+  slot, `-` removes the selected ones (pixels that used them take the nearest colour left).
+- **Editing a colour.** Red, green, blue and alpha sliders, a hex box (`#rrggbb` or `#rrggbbaa`) and the browser's colour picker.
+  Dragging a slider is a single undo step.
+- **Extract palette** (Palette menu). *From the sprite* rebuilds the palette from the colours the sprite really uses - unused entries
+  go, and if you set a lower limit than the number of colours, similar ones are merged (median cut) - and the picture stays as it
+  was. *From an image file* (anything the browser can open) extracts up to *N* colours from that picture, then you choose: re-match
+  the sprite to it, fill the palette slots with it, or just keep it in your palettes.
+- **Save and load custom palettes.** *Save palette* keeps the sprite's palette (alpha included) under a name in this browser's local
+  storage, ready for any sprite; *Load palette* offers six built-ins (Default 256, PICO-8, Game Boy, EGA, Greys, Web safe) and yours;
+  *My palettes* renames and deletes. Loading either **fills the palette slots** - pixels keep their indices, so the sprite
+  recolours - or **re-matches the sprite**, moving pixels to the nearest of the new colours so it looks the same. *Import / Export
+  palette file* reads and writes `.pal` (JASC), `.gpl` (GIMP) and `.json` (the one that keeps alpha).
+- **Sort** (brightness, hue, most used) and **Remove unused colours** rearrange the palette without changing the picture.
+- **Channel mixer** (right-hand panel), as in Photoshop: for the output channel you pick (red, green, blue - or gray, with
+  Monochrome on) set how much of each source channel goes into it (-200% to +200%) plus a constant (-100% to +100%); alpha has its
+  own scale and offset. Presets give greyscale, sepia, invert, channel swaps and rotations, darken, lighten, warm and cool. Changes
+  **preview** live on the canvas, the palette and the frames; apply them to all colours or only the selected ones. **Apply** is one
+  undo step. Fully transparent entries are never touched.
+
+**Frames and playback.** An animation is several frames of the same size. In the strip, click a thumbnail to edit that frame and
+drag one onto another to reorder; the buttons add a blank frame, duplicate, delete, move and reverse. **Onion skin** shows the
+neighbouring frames faintly, tinted, under the one you edit. Playback has play / pause (`Enter`), stop, a speed in frames per
+second (12 by default, the speed tiles animate at in the game) and loop / ping-pong / once, and plays in a preview beside the strip
+while you carry on editing; `,` and `.` step through the frames.
+
+**Save, Save as, Revert, Close.** `Ctrl+S` saves; `Ctrl+Shift+S` saves a copy under a new name (optionally copying the original's
+tile properties) and carries on editing the copy; *Revert to saved* reloads the files; `Esc` or *Close* asks first if there are
+unsaved changes.
+
+#### How saving works
+
+Saving writes **source PNGs** into the game's asset folders and lets the watching build pack them like any other art change:
+
+- An existing sprite is saved where it is. A new one goes in `assets/<bundle>/sprites/<sheet>/` - the bundle you chose, and the
+  sheet (a folder; `user` by default).
+- One frame is `name.png`; several are `name_f0.png`, `name_f1.png`... When a sprite changes from one to the other (or loses frames),
+  the files that no longer belong are removed.
+- They are **indexed PNGs** (palette and alpha entries kept), so reopening a saved sprite gives back exactly the same palette and
+  indices. A sprite that is not indexed, or whose frames have different palettes, gets a palette extracted when it is opened (merged
+  to fit 256 colours if need be, and the editor says so).
+- A new tile gets its `assets-meta.json` entry straight away, with the palette tab it was made under as its `category`; *Save as*
+  with "Copy tile properties" copies the original's entry (collision, light, pickup...).
+- The dev build packs the change in about ten seconds and the status bar says when it has. The running page cannot see new art until
+  it is reloaded, so **closing the sprite editor after a save reloads the page**: the level you were editing is kept first (the way
+  Enter keeps it for play), the game starts back in the level editor, and the saved sprite is the picked brush, shown on its own tab.
+  The sprite editor's undo history does not survive that reload.
+- **If the page reloads while the sprite editor is open** - F5, or the dev server doing it: a rebuild that type-checks the whole game (a
+  new sprite changes `src/generated/assets.d.ts`) can block it long enough to drop the page's connection, and the page then reloads - the
+  editor keeps your work. As the page unloads it snapshots the sprite (pictures, palette, where it's to be saved, any unsaved edits) and
+  the level to session storage, and the next load puts the window back, with a note, on the level editor. Undo history is the one thing
+  that doesn't come back. With unsaved edits the browser may also ask "Leave site?" first.
+
+**Limits.** 1x1 to 512x512 pixels, up to 100 frames, every frame the same size. A sprite in a pre-packed sheet (`<sheet>.json` +
+`<sheet>.png`) has no source frames, and the editor's own bundle is dev-only, so neither can be edited. A sprite's name is lowercase
+letters, digits and `_` (at most 48), cannot end in `_f` and a number (that marks an animation frame), and must not already be used -
+by *anything* - in its bundle.
+
+**The dev-server service.** `AssetsWebpackPlugin` mounts the sprite service at `/__sprite-api` on the webpack dev server, in
+development mode only (`new AssetsWebpackPlugin({ configPath, spriteApi: false })` leaves it out); there is nothing of it in a
+production build, and no Edit or **+** buttons either. Because it writes files on your disk it answers only requests from this
+machine, addressed to `localhost`, from the page's own origin, carrying an `X-Sprite-Editor` header - so open the game on
+`http://localhost:...`, not the LAN address, to edit sprites. It never takes a path: the editor names a bundle and a sprite, and a
+save is planned in full first (the bundle is re-classified as it would be afterwards, and a save that would add an error - a name
+clash, a gap in an animation - writes nothing). See the [API reference](api-reference.md#sprite-api).
+
+**Wiring it into a game.** The sprite editor comes with `DungeonEditor`; the only thing a game adds is the way back after the
+reload. Give the game's `GameEditor` a `startScene` and use it when choosing the first scene:
+
+```ts
+// src/editor/Editor.ts
+import { DungeonEditor, ResumeEditorScene } from "@logic-incubator/editor/DungeonEditor";
+export const Editor: GameEditor = { bundles: [EditorBundle], create: () => new DungeonEditor(EditorSetup), savedLevel: LoadSavedLevel, startScene: ResumeEditorScene };
+
+// src/Dungeon.ts - at the end of Boot, instead of always showing the enter screen
+game.sceneManager.ShowScene((editor && editor.startScene && editor.startScene()) || FrontEndScenes.ENTER);
+```
+
+`ResumeEditorScene()` is the editor's scene only on a load straight after the sprite editor closed with a save, or after the page reloaded
+under an open one, and `undefined` otherwise, so the game's normal front end is untouched.
 
 ---
 
@@ -1786,6 +1906,18 @@ different case/extension (`Enter.png`, `enter.ogg`): ids ignore both.
 
 **The webpack dev server rebuilds in a loop.** Two builds are writing the same `.assets/` folder, or something else writes
 inside a watched assets root. Run one build at a time.
+
+**There is no Edit button, or no + on the palette tabs.** The sprite editor needs the dev server's sprite service: it exists only under
+`npm start` (webpack mode `development`, with `AssetsWebpackPlugin`'s `spriteApi` not switched off), and answers only to `localhost` - open the game
+at `http://localhost:<port>/`, not the machine's network address. `GET /__sprite-api/list` (with an `X-Sprite-Editor: 1` header) should answer.
+The Edit button is also absent for a data brush and for a texture made at run time, which are not from a bundle.
+
+**Saving a sprite says "That would leave the bundle with errors".** The service re-classifies the bundle as it would be after the save and refuses one
+that would add an error - usually a name another asset already has (ids ignore the extension and the folder), or a name ending in `_f<number>`.
+The message names the problem; nothing was written.
+
+**The art I saved isn't in the level editor.** The page only loads new art on a reload: close the sprite editor (it reloads for you after a save). If
+the status bar never said the build had packed it, look at the dev server's console for an asset-build error.
 
 **A bundle never unloads.** Something still holds a handle (`Acquire` without `Release`), another bundle depends on it, or
 it was loaded with `LoadBundle` (pinned). `game.assets.Stats()` shows each bundle's `refs` and `pinned`.

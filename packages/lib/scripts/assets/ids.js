@@ -15,6 +15,9 @@ const BUNDLE_NAME = /^[a-z][a-z0-9_]*$/;
 /** Two groups: the animation's name, then the frame's index. */
 const DEFAULT_ANIM_PATTERN = "^(.+)_f(\\d+)$";
 
+/** The longest sprite name the editor will save (file names stay sane). */
+const MAX_SPRITE_NAME = 48;
+
 /** UTF-16 code unit order: the same on every machine and locale, unlike `localeCompare` - output must be byte-stable. */
 function CompareKeys(a, b) {
     return a < b ? -1 : a > b ? 1 : 0;
@@ -109,6 +112,39 @@ function GroupFrames(names, pattern) {
     return { sprites, animations, diagnostics };
 }
 
+/**
+ * What's wrong with `name` as the name of a sprite the editor saves, or null. Stricter than a loose file name: a name ending
+ * in `_f<N>` would be read back as frame N of another sprite, so it can't be a sprite's own name.
+ * (The editor has the same rules in packages/editor/src/sprite/SpriteNames.ts; its tests hold the two together.)
+ */
+function SpriteNameProblem(name) {
+    if (typeof name !== "string" || !name) {
+        return "a sprite needs a name";
+    }
+    if (name.length > MAX_SPRITE_NAME) {
+        return `sprite names are up to ${MAX_SPRITE_NAME} characters`;
+    }
+    if (!LOCAL_NAME.test(name)) {
+        return "sprite names use only lowercase letters, digits and underscores";
+    }
+    if (/_f\d+$/.test(name)) {
+        return 'a sprite name can\'t end in "_f" and a number - that marks an animation frame';
+    }
+    return null;
+}
+
+/** The files a sprite of `count` frames is saved as: one `name.png`, or a `name_f<N>.png` per frame, in frame order. */
+function FrameFileNames(name, count) {
+    if (count <= 1) {
+        return [name + ".png"];
+    }
+    const files = [];
+    for (let i = 0; i < count; i++) {
+        files.push(`${name}_f${i}.png`);
+    }
+    return files;
+}
+
 const KINDS_BY_EXTENSION = {
     png: "image", jpg: "image", jpeg: "image", webp: "image",
     ogg: "sound", m4a: "sound", mp3: "sound", wav: "sound",
@@ -154,6 +190,9 @@ function Suggest(name, candidates) {
 
 module.exports = {
     DEFAULT_ANIM_PATTERN,
+    MAX_SPRITE_NAME,
+    SpriteNameProblem,
+    FrameFileNames,
     CompareKeys,
     NormalizeLocalName,
     IsValidLocalName,

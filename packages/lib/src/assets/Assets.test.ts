@@ -389,6 +389,13 @@ describe("accessors", () => {
         expect(assets.Url("global.click")).toBe("assets/global/sounds/click.m4a?v=g1");
     });
 
+    it("remembers where the manifest was read from", async () => {
+        expect(assets.ManifestUrl).toBe("");
+        const fetched = new Assets({ loader, fetch: (() => Promise.resolve({ ok: true, json: () => Promise.resolve(manifest) })) as unknown as typeof fetch });
+        await fetched.Init("assets/manifest.json");
+        expect(fetched.ManifestUrl).toBe("assets/manifest.json");
+    });
+
     it("throws for asking before Init", () => {
         const fresh = new Assets({ loader });
         expect(() => fresh.Texture("global.title")).toThrow("haven't been initialised");

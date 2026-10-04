@@ -1,4 +1,6 @@
 import { Key } from "@logic-incubator/lib/io/Keyboard";
+import AssetFactory from "@logic-incubator/lib/loading/AssetFactory";
+import AssetMetadataStore from "@logic-incubator/engine/level/AssetMetadata";
 import { AnimationSpeed } from "@logic-incubator/engine/Constants";
 import { IsPickupValue } from "@logic-incubator/engine/level/entities/Pickups";
 import { IsSpawnerValue } from "@logic-incubator/engine/level/entities/Spawners";
@@ -8,6 +10,7 @@ import { DescribePickup } from "../DataLabels";
 import { OpenDataBrushDialog } from "../DataBrushDialog";
 import { DataBrushEditorFor } from "../DataBrushEditors";
 import EditorComponent from "../EditorComponent";
+import { SharedSpriteApi } from "../sprite/SpriteApi";
 import { DataBrushIcon, DataBrushIcons, EditorActions, IEditorState } from "../stores/EditorStore";
 import { ButtonEl, El, InjectStyles } from "../ui/dom/Dom";
 import EditorOverlay from "../ui/dom/EditorOverlay";
@@ -17,8 +20,9 @@ const PREVIEW_SIZE = 64;
 
 /**
  * The card under the brush picker: a preview of the brush being hovered (or
- * else the one picked), what it is, and - for a data brush with a popup
- * editor - its value and an Edit button (also E).
+ * else the one picked), what it is, and an Edit button (also E): for a data
+ * brush with a popup editor, its value; for a tile - while the dev server's
+ * sprite service is there - the sprite editor.
  */
 export default class SelectedBrush extends EditorComponent {
     private preview = new SpriteCanvas();
@@ -31,6 +35,8 @@ export default class SelectedBrush extends EditorComponent {
     /** The brush on the card, or null before the first `ShowBrush`. */
     private shownName: string = null;
     private animTime = 0;
+    /** Whether the dev server's sprite service answered - a tile has an Edit button only if so. */
+    private spriteEditable = false;
 
     /** `icons`: the game's sprite over each data brush's colour - see `DataBrushIcons`. */
     constructor(private readonly icons: DataBrushIcons = {}) {
@@ -48,7 +54,7 @@ export default class SelectedBrush extends EditorComponent {
         this.kindText = kindRow.appendChild(El("span", "sb-kind"));
         this.editButton = kindRow.appendChild(ButtonEl("ed-button sb-edit", "Edit", "Edit this brush's value"));
         this.editButton.appendChild(El("kbd", "", "E"));
-        this.editButton.addEventListener("click", () => this.OpenDataEditor());
+        this.editButton.addEventListener("click", () => this.OpenEditor());
         this.valueRow = info.appendChild(El("div", "sb-value"));
         this.valueChip = this.valueRow.appendChild(El("span", "sb-chip"));
         this.valueText = this.valueRow.appendChild(El("span", "sb-value-text"));
@@ -60,10 +66,16 @@ export default class SelectedBrush extends EditorComponent {
 
         // E: same as the edit button. Keydowns typed inside the dialog never reach here (see FormDialog).
         this.ListenWhileShown(this.game.keyboard, "keydown", (e: KeyboardEvent) => {
-            if (e.keyCode === Key.E) {
+            if (e.keyCode === Key.E && this.CanEdit()) {
                 // Otherwise this same keypress types an "e" into the dialog field that just took focus.
                 e.preventDefault();
-                this.OpenDataEditor();
+                this.OpenEditor();
+            }
+        });
+        SharedSpriteApi.Available().then(available => {
+            if (available && this.spriteEditable === false && this.editButton.isConnected) {
+                this.spriteEditable = true;
+                this.ShowValue();
             }
         });
 
@@ -118,8 +130,10 @@ export default class SelectedBrush extends EditorComponent {
         const dataBrush = state.dataBrushes.find(db => db.name === this.shownName);
         const editable = dataBrush != null && DataBrushEditorFor(dataBrush.name) != null;
         this.valueRow.style.visibility = editable ? "" : "hidden";
-        // The dialog edits the picked brush, so no button while previewing another one.
-        this.editButton.style.display = editable && dataBrush.name === state.currentBrush.name ? "" : "none";
+        // The dialogs edit the picked brush, so no button while previewing another one.
+        const tile = this.IsEditableTile(this.shownName);
+        this.editButton.style.display = (editable || tile) && this.shownName === state.currentBrush.name ? "" : "none";
+        this.editButton.title = tile ? "Edit this tile in the sprite editor" : "Edit this brush's value";
         if (!editable) {
             return;
         }
@@ -153,6 +167,37 @@ export default class SelectedBrush extends EditorComponent {
         if (this.preview.Animated) {
             this.animTime += delta * AnimationSpeed;
             this.preview.SetFrame(Math.floor(this.animTime));
+        }
+    }
+
+    /** A tile (not a data brush) the sprite editor can open - it's in a bundle, and the dev server's sprite service is there. */
+    private IsEditableTile(name: string): boolean {
+        return this.spriteEditable && !!name && !this.editorStore.state.dataBrushes.some(db => db.name === name) && this.SpriteBundle(name) !== null;
+    }
+
+    /** The bundle a tile's art is in, or null for one that isn't from a bundle (a runtime-made texture). */
+    private SpriteBundle(name: string): { bundle: string; local: string } | null {
+        const id = AssetFactory.inst.Resolve(name);
+        const dot = id ? id.indexOf(".") : -1;
+        return dot > 0 ? { bundle: id.slice(0, dot), local: id.slice(dot + 1) } : null;
+    }
+
+    /** Whether the Edit button / E has something to open for the picked brush. */
+    private CanEdit(): boolean {
+        const dataBrush = this.editorStore.SelectedDataBrush;
+        return dataBrush ? DataBrushEditorFor(dataBrush.name) != null : this.IsEditableTile(this.editorStore.state.currentBrush.name);
+    }
+
+    /** Edit: the data brush's value, or the tile in the sprite editor. */
+    private OpenEditor(): void {
+        if (this.editorStore.SelectedDataBrush) {
+            this.OpenDataEditor();
+            return;
+        }
+        const name = this.editorStore.state.currentBrush.name;
+        const source = this.IsEditableTile(name) && this.SpriteBundle(name);
+        if (source) {
+            this.OpenSpriteEditor({ kind: "edit", bundle: source.bundle, name: source.local, category: AssetMetadataStore.inst.CategoryOf(source.local) });
         }
     }
 

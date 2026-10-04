@@ -6,7 +6,7 @@ import EditorComponent from "../EditorComponent";
 import {GenerateMap, IMap, MapType} from "../maps/Generators";
 import {ApplyMapStyle, IStyler} from "../maps/Styler";
 import {GenerateZTest} from "../maps/ZTest";
-import {EditorSave, SaveLevel} from "../SavedLevel";
+import {EditorSave, MakeEditorSave, SaveLevel} from "../SavedLevel";
 import {EditorActions, IEditorState, IMPLICIT_LAYER_ID} from "../stores/EditorStore";
 import {LevelDataActions, LevelDataState} from "../stores/LevelDataStore";
 
@@ -167,7 +167,7 @@ export default class Keyboard extends EditorComponent {
 
     /** What Enter and S save: the engine's level format, with the rest of the editor's state riding along in `editorData`. */
     private LevelFile(): EditorSave {
-        return { editorData: this.editorStore.state, levelData: this.levelDataStore.state };
+        return MakeEditorSave(this.editorStore.state, this.levelDataStore.state);
     }
 
     private Render(prevState: IEditorState, state: IEditorState): void {

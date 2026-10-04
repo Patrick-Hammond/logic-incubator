@@ -82,6 +82,7 @@ export default class Assets extends EventEmitter {
     private fetcher: typeof fetch;
 
     private manifest: Manifest | undefined;
+    private manifestUrl = "";
     private baseUrl = "";
     private sound: ISoundAdapter | undefined;
     private retries = 2;
@@ -122,6 +123,11 @@ export default class Assets extends EventEmitter {
         return !!this.manifest && this.manifest.dev;
     }
 
+    /** Where `Init` read the manifest from ("" if it was given one directly) - for a tool that wants to see whether it has changed since. */
+    get ManifestUrl(): string {
+        return this.manifestUrl;
+    }
+
     /** Bundles a bare name is looked up in, nearest first. */
     get Scope(): string[] {
         return this.scope.slice();
@@ -137,6 +143,7 @@ export default class Assets extends EventEmitter {
         const manifest = ValidateManifest(await response.json());
         this.EnsureAlive();
         this.InitWithManifest(manifest, manifestUrl.slice(0, manifestUrl.lastIndexOf("/") + 1), options);
+        this.manifestUrl = manifestUrl;
     }
 
     /** As `Init`, with the manifest already in hand (and `baseUrl` ending in "/" or empty). */

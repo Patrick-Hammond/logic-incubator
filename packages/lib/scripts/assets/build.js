@@ -30,7 +30,10 @@ const { ValidateModel } = require("./validate");
 
 const KIND_DIRS = { image: "images", sound: "sounds", data: "data", binary: "binary", font: "fonts" };
 
-/** Scans every root and classifies each bundle folder. */
+/**
+ * Scans every root and classifies each bundle folder. Each model also carries the bundle's `dir`, whether it's `devOnly`, its
+ * `files` (as scanned) and the parsed `rawConfig` (bundle.json) - what the sprite API needs to plan a change without a rescan.
+ */
 function ScanAndClassify(config, diagnostics) {
     const found = [];
     config.roots.forEach(root => {
@@ -61,7 +64,7 @@ function ScanAndClassify(config, diagnostics) {
             readText: rel => fs.readFileSync(path.join(bundle.dir, rel), "utf8")
         });
         diagnostics.push(...model.diagnostics);
-        return Object.assign(model, { dir: bundle.dir, devOnly: bundle.devOnly });
+        return Object.assign(model, { dir: bundle.dir, devOnly: bundle.devOnly, files: bundle.files, rawConfig: raw });
     });
 }
 
@@ -299,4 +302,4 @@ function BuildAssets(options) {
     return finish();
 }
 
-module.exports = { BuildAssets };
+module.exports = { BuildAssets, ScanAndClassify };
