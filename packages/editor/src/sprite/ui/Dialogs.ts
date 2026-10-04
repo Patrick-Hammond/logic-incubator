@@ -105,6 +105,16 @@ export function ReadSaveAs(values: FormValues): SaveAsChoice {
     return { name: text(values.name), bundle: text(values.bundle), sheet: text(values.sheet), category: text(values.category), copyProperties: values.copyProperties === true };
 }
 
+/** Clone: Save as's questions (where the copy goes, and whether it takes the original's tile properties), asked before the copy is made. Read it with `ReadSaveAs`. */
+export function CloneDialog(args: Parameters<typeof SaveAsDialog>[0]): FormDialogOptions {
+    return {
+        ...SaveAsDialog(args),
+        title: "Clone tile",
+        subtitle: "Makes a copy under a new name and opens it to edit; the original stays as it is.",
+        saveLabel: "Clone"
+    };
+}
+
 // ---------------------------------------------------------------------------------------------- the picture
 
 /** The nine places the old picture can sit on a resized canvas, as the choice values the dialog uses. */

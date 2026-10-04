@@ -1,7 +1,8 @@
 /**
- * Opening the sprite editor: for an existing sprite (read from the dev server's source PNGs) or a new one (asks where it
- * goes and how big, first). Either way it resolves, once the window is closed, with whether anything was saved - though
- * a save reloads the page when the window closes, so the caller usually won't be around to hear.
+ * Opening the sprite editor: for an existing sprite (read from the dev server's source PNGs), a new one (asks where it
+ * goes and how big, first) or a clone of one (asks where the copy goes, saves it, and opens it). Each resolves, once the window
+ * is closed, with whether anything was saved - though a save reloads the page when the window closes, so the caller usually
+ * won't be around to hear.
  */
 
 import { OpenFormDialog } from "../ui/dialog/FormDialog";
@@ -11,7 +12,8 @@ import { SpriteApi } from "./SpriteApi";
 import { BlankState, SpriteState, StateFromImages } from "./SpriteDocument";
 import SpriteEditor, { SpriteEditorContext, SpriteOrigin } from "./SpriteEditor";
 import { ChooseStore, Download, HostedSprites } from "./SpriteStore";
-import { Category, NewSpriteDialog, ReadNewSprite } from "./ui/Dialogs";
+import { SuggestCopyName } from "./SpriteNames";
+import { Category, CloneDialog, NewSpriteDialog, ReadNewSprite, ReadSaveAs } from "./ui/Dialogs";
 import { DownloadBytes } from "./ui/FileIo";
 
 /**
@@ -28,6 +30,8 @@ async function Resolve(host: SpriteEditorHost): Promise<SpriteEditorContext> {
 
 export type SpriteEditorRequest =
     | { kind: "edit"; bundle: string; name: string; category?: string }
+    /** A copy of this sprite under a new name, saved straight away and opened for editing. */
+    | { kind: "clone"; bundle: string; name: string; category?: string }
     /** A new sprite, offered under this palette tab. */
     | { kind: "new"; category: string };
 
@@ -78,6 +82,7 @@ export async function OpenSpriteEditor(host: SpriteEditorHost, request: SpriteEd
     let state: SpriteState;
     let origin: SpriteOrigin;
     let notice = "";
+    let clone = false;
     try {
         ctx = await Resolve(host);
         if (request.kind === "edit") {
@@ -89,6 +94,35 @@ export async function OpenSpriteEditor(host: SpriteEditorHost, request: SpriteEd
                 notice = "That sprite used more than 256 colours, so similar ones were merged to fit the palette.";
             } else if (ctx.store.Kind === "download") {
                 notice = "Read from the art this page has loaded, so its palette was extracted again. Download saves it as a file to put in your game's assets folder.";
+            }
+        } else if (request.kind === "clone") {
+            const { info, images } = await ctx.store.Read(request.bundle, request.name);
+            const imported = StateFromImages(images);
+            const bundles = await ctx.store.List();
+            const home = bundles.find(b => b.name === request.bundle);
+            // A copy can't join a pre-packed atlas, so one from such a sheet is offered the "user" sheet instead.
+            const sheet = info.sheet && !(home && home.packedSheets.indexOf(info.sheet) >= 0) ? info.sheet : "user";
+            const values = await OpenFormDialog(
+                CloneDialog({
+                    bundles,
+                    categories: ctx.categories as Category[],
+                    name: SuggestCopyName(request.name, home ? home.names : []),
+                    bundle: request.bundle,
+                    sheet,
+                    category: request.category || ctx.categories[0].id,
+                    // A download can't write the copy's entry, but it can tell you the line to add - with the original's properties if `metaOf` knows them.
+                    canCopyProperties: ctx.store.Kind === "disk" || !!ctx.metaOf
+                })
+            );
+            if (!values) {
+                return false;
+            }
+            const choice = ReadSaveAs(values);
+            state = imported.state;
+            origin = { bundle: choice.bundle, name: choice.name, mode: "create", sheet: choice.sheet, category: choice.category, copyMetaFrom: choice.copyProperties ? request.name : undefined, applied: false, savedFrames: 0 };
+            clone = true;
+            if (imported.reduced) {
+                notice = "That sprite used more than 256 colours, so similar ones were merged to fit the palette.";
             }
         } else {
             const bundles = await ctx.store.List();
@@ -106,7 +140,7 @@ export async function OpenSpriteEditor(host: SpriteEditorHost, request: SpriteEd
             origin = { bundle: choice.bundle, name: choice.name, mode: "create", sheet: choice.sheet, category: choice.category, applied: false, savedFrames: 0 };
         }
     } catch (error) {
-        await Problem(request.kind === "edit" ? "Can't edit that sprite" : "Can't start a new sprite", error);
+        await Problem(request.kind === "edit" ? "Can't edit that sprite" : request.kind === "clone" ? "Can't clone that sprite" : "Can't start a new sprite", error);
         return false;
     } finally {
         opening = false;
@@ -116,6 +150,10 @@ export async function OpenSpriteEditor(host: SpriteEditorHost, request: SpriteEd
         const editor = new SpriteEditor(ctx, state, origin, applied => resolve(applied));
         if (notice) {
             editor.Notify(notice);
+        }
+        if (clone) {
+            // The copy is made now - that's what Clone is - and the window stays open on it for whatever comes next.
+            void editor.Save();
         }
     });
 }

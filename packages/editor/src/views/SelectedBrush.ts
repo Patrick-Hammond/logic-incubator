@@ -20,7 +20,9 @@ const PREVIEW_SIZE = 64;
 /**
  * The card under the brush picker: a preview of the brush being hovered (or
  * else the one picked), what it is, and an Edit button (also E): for a data
- * brush with a popup editor, its value; for a tile, the sprite editor.
+ * brush with a popup editor, its value; for a tile, the sprite editor - and, for a tile, a Clone button (also C) that copies it
+ * under a new name and opens the copy. A tile's two buttons share the card's third row (where a data brush shows its value), so
+ * the line saying what the tile is keeps the whole width.
  */
 export default class SelectedBrush extends EditorComponent {
     private preview = new SpriteCanvas();
@@ -29,7 +31,10 @@ export default class SelectedBrush extends EditorComponent {
     private valueRow: HTMLElement;
     private valueChip: HTMLElement;
     private valueText: HTMLElement;
+    private kindRow: HTMLElement;
+    private tileActions: HTMLElement;
     private editButton: HTMLButtonElement;
+    private cloneButton: HTMLButtonElement;
     /** The brush on the card, or null before the first `ShowBrush`. */
     private shownName: string = null;
     private animTime = 0;
@@ -46,26 +51,33 @@ export default class SelectedBrush extends EditorComponent {
         card.appendChild(El("div", "sb-preview")).appendChild(this.preview.canvas);
         const info = card.appendChild(El("div", "sb-info"));
         this.nameText = info.appendChild(El("div", "sb-name"));
-        const kindRow = info.appendChild(El("div", "sb-kind-row"));
-        this.kindText = kindRow.appendChild(El("span", "sb-kind"));
-        this.editButton = kindRow.appendChild(ButtonEl("ed-button sb-edit", "Edit", "Edit this brush's value"));
+        this.kindRow = info.appendChild(El("div", "sb-kind-row"));
+        this.kindText = this.kindRow.appendChild(El("span", "sb-kind"));
+        this.editButton = this.kindRow.appendChild(ButtonEl("ed-button sb-edit", "Edit", "Edit this brush's value"));
         this.editButton.appendChild(El("kbd", "", "E"));
         this.editButton.addEventListener("click", () => this.OpenEditor());
         this.valueRow = info.appendChild(El("div", "sb-value"));
         this.valueChip = this.valueRow.appendChild(El("span", "sb-chip"));
         this.valueText = this.valueRow.appendChild(El("span", "sb-value-text"));
+        this.tileActions = info.appendChild(El("div", "sb-actions"));
+        this.cloneButton = this.tileActions.appendChild(ButtonEl("ed-button sb-edit sb-clone", "Clone", "Copy this tile under a new name and edit the copy"));
+        this.cloneButton.appendChild(El("kbd", "", "C"));
+        this.cloneButton.addEventListener("click", () => this.CloneTile());
         EditorOverlay.inst.Slot("selected").appendChild(card);
         this.Own(() => card.remove());
 
         this.Own(this.editorStore.Subscribe(this.Render, this));
         this.Tick(this.Animate);
 
-        // E: same as the edit button. Keydowns typed inside the dialog never reach here (see FormDialog).
+        // E and C: same as the edit and clone buttons. Keydowns typed inside the dialog never reach here (see FormDialog).
         this.ListenWhileShown(this.game.keyboard, "keydown", (e: KeyboardEvent) => {
             if (e.keyCode === Key.E && this.CanEdit()) {
                 // Otherwise this same keypress types an "e" into the dialog field that just took focus.
                 e.preventDefault();
                 this.OpenEditor();
+            } else if (e.keyCode === Key.C && !e.ctrlKey && !e.metaKey && !e.altKey && this.CanClone()) {
+                e.preventDefault();
+                this.CloneTile();
             }
         });
 
@@ -120,10 +132,22 @@ export default class SelectedBrush extends EditorComponent {
         const dataBrush = state.dataBrushes.find(db => db.name === this.shownName);
         const editable = dataBrush != null && DataBrushEditorFor(dataBrush.name) != null;
         this.valueRow.style.visibility = editable ? "" : "hidden";
-        // The dialogs edit the picked brush, so no button while previewing another one.
+        // The dialogs edit the picked brush, so no buttons while previewing another one.
         const tile = this.IsEditableTile(this.shownName);
-        this.editButton.style.display = (editable || tile) && this.shownName === state.currentBrush.name ? "" : "none";
+        const picked = this.shownName === state.currentBrush.name;
+        this.editButton.style.display = (editable || tile) && picked ? "" : "none";
         this.editButton.title = tile ? "Edit this tile in the sprite editor" : "Edit this brush's value";
+        // A tile's buttons take the row a data brush's value would be on - hidden, not gone, while another tile is previewed, so the card keeps its height.
+        this.valueRow.style.display = tile ? "none" : "";
+        // The card keeps one height whichever it's showing: a tile's kind line is shorter (no button beside it), its buttons row taller.
+        this.kindRow.style.minHeight = tile ? "16px" : "";
+        this.tileActions.style.display = tile ? "" : "none";
+        this.tileActions.style.visibility = picked ? "" : "hidden";
+        if (tile) {
+            this.tileActions.insertBefore(this.editButton, this.cloneButton);
+        } else {
+            this.kindRow.appendChild(this.editButton);
+        }
         if (!editable) {
             return;
         }
@@ -178,6 +202,11 @@ export default class SelectedBrush extends EditorComponent {
         return dataBrush ? DataBrushEditorFor(dataBrush.name) != null : this.IsEditableTile(this.editorStore.state.currentBrush.name);
     }
 
+    /** Whether the Clone button / C has something to copy: the picked brush is a tile. */
+    private CanClone(): boolean {
+        return !this.editorStore.SelectedDataBrush && this.IsEditableTile(this.editorStore.state.currentBrush.name);
+    }
+
     /** Edit: the data brush's value, or the tile in the sprite editor. */
     private OpenEditor(): void {
         if (this.editorStore.SelectedDataBrush) {
@@ -188,6 +217,15 @@ export default class SelectedBrush extends EditorComponent {
         const source = this.IsEditableTile(name) && this.SpriteBundle(name);
         if (source) {
             this.OpenSpriteEditor({ kind: "edit", bundle: source.bundle, name: source.local, category: AssetMetadataStore.inst.CategoryOf(source.local) });
+        }
+    }
+
+    /** Clone: asks where the copy goes, saves it, and opens it in the sprite editor. */
+    private CloneTile(): void {
+        const name = this.editorStore.state.currentBrush.name;
+        const source = this.CanClone() && this.SpriteBundle(name);
+        if (source) {
+            this.OpenSpriteEditor({ kind: "clone", bundle: source.bundle, name: source.local, category: AssetMetadataStore.inst.CategoryOf(source.local) });
         }
     }
 
@@ -216,6 +254,7 @@ const STYLES = `
 .sb-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .sb-name { font-weight: bold; color: var(--ed-text-strong); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sb-kind-row { display: flex; align-items: center; gap: 6px; min-height: 22px; }
+.sb-actions { display: flex; align-items: center; gap: 6px; min-height: 22px; }
 .sb-kind { flex: 1; min-width: 0; font-size: 11px; color: var(--ed-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sb-edit { display: inline-flex; align-items: center; gap: 5px; padding: 2px 5px 2px 8px; font-size: 12px; }
 .sb-value { display: flex; align-items: center; gap: 5px; min-height: 16px; font-size: 12px; color: var(--ed-label); white-space: nowrap; overflow: hidden; }

@@ -1,6 +1,6 @@
 import { createRequire } from "module";
 import { describe, expect, it } from "vitest";
-import { FrameFileNames, MaxNameLength, NormalizeSpriteName, ParseFrameFile, SuggestSpriteName, ValidateSpriteName } from "./SpriteNames";
+import { FrameFileNames, MaxNameLength, NormalizeSpriteName, ParseFrameFile, SuggestCopyName, SuggestSpriteName, ValidateSpriteName } from "./SpriteNames";
 
 // The build pipeline's own rules: the editor must write names it reads back the way the editor meant.
 const ids = createRequire(__filename)("../../../lib/scripts/assets/ids.js");
@@ -132,5 +132,31 @@ describe("ParseFrameFile", () => {
             const expected = reference ? { name: reference.name, index: reference.index } : { name: ids.NormalizeLocalName(base), index: null };
             expect(ParseFrameFile(base + ".png"), base).toEqual(expected);
         });
+    });
+});
+
+describe("SuggestCopyName", () => {
+    it("adds _copy, and counts up from 2 while that's taken", () => {
+        expect(SuggestCopyName("torch", [])).toBe("torch_copy");
+        expect(SuggestCopyName("torch", ["torch", "wall"])).toBe("torch_copy");
+        expect(SuggestCopyName("torch", ["torch_copy"])).toBe("torch_copy2");
+        expect(SuggestCopyName("torch", ["torch_copy", "torch_copy2", "torch_copy3"])).toBe("torch_copy4");
+    });
+
+    it("always gives a name the editor accepts, even for a name that is already as long as they go", () => {
+        ["torch", "wall_1", "a", "x".repeat(MaxNameLength), "gem_"].forEach(name => {
+            expect(ValidateSpriteName(SuggestCopyName(name, [name])), name).toBeNull();
+        });
+    });
+
+    it("keeps trying different names when the base has to be cut short", () => {
+        const long = "x".repeat(MaxNameLength);
+        const taken: string[] = [long];
+        for (let i = 0; i < 12; i++) {
+            const next = SuggestCopyName(long, taken);
+            expect(taken).not.toContain(next);
+            expect(next.length).toBeLessThanOrEqual(MaxNameLength);
+            taken.push(next);
+        }
     });
 });

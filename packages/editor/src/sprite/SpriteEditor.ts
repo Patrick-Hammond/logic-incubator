@@ -24,7 +24,7 @@ import { StorageLike, WriteResumeNote } from "./Resume";
 import { SpriteApiError } from "./SpriteApi";
 import { SpriteDocument, SpriteState, StateFromImages } from "./SpriteDocument";
 import { DescribeDownload, Download, MetaSnippet, ObsoleteFiles, PackDownload, SpriteStore } from "./SpriteStore";
-import { SuggestSpriteName } from "./SpriteNames";
+import { SuggestCopyName } from "./SpriteNames";
 import { View } from "./Viewport";
 import CanvasView, { BackdropKind } from "./ui/CanvasView";
 import {
@@ -937,15 +937,11 @@ export default class SpriteEditor {
             return;
         }
         const taken = (bundles.find(b => b.name === this.origin.bundle) || { names: [] as string[] }).names;
-        let suggestion = SuggestSpriteName(this.origin.name + "_copy");
-        for (let n = 2; taken.indexOf(suggestion) >= 0; n++) {
-            suggestion = SuggestSpriteName(`${this.origin.name}_copy${n}`);
-        }
         const values = await this.Ask(
             SaveAsDialog({
                 bundles,
                 categories: this.ctx.categories as Category[],
-                name: suggestion,
+                name: SuggestCopyName(this.origin.name, taken),
                 bundle: this.origin.bundle,
                 sheet: this.origin.sheet || "user",
                 category: this.origin.category || this.ctx.categories[0].id,

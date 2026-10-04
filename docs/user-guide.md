@@ -1612,7 +1612,7 @@ export const EditorSetup: IDungeonEditorOptions = {
 ### 10.2 Using it
 
 The editor opens as a full-window overlay: a **map canvas** on the left; on the right the **brush palette**, the
-**selected brush** (with an **Edit** button - `E` - that opens a tile in the [sprite editor](#106-the-sprite-editor)), and the **layer list**; and a
+**selected brush** (with an **Edit** button - `E` - that opens a tile in the [sprite editor](#106-the-sprite-editor), and a **Clone** button - `C` - that copies it), and the **layer list**; and a
 vertical **toolbar** of tools at the far right. Each palette tab ends in a **+** that starts a new tile in that category.
 
 **Tools** (also keys):
@@ -1697,7 +1697,10 @@ at a cell. See `in-dungeons-we-dwell/src/editor/Style0x7.ts` for a complete one.
 
 Select a tile and press **Edit** (or `E`) on the selected-brush card, or click the **+** at the end of a palette tab, to draw in the
 **sprite editor**: a full-window pixel editor for the sprite's source PNGs. **+** starts a *new* tile under that tab - it asks for a
-name, a bundle, a size and a frame count, and the tile is listed under that tab once saved. Both buttons are there in any build that
+name, a bundle, a size and a frame count, and the tile is listed under that tab once saved. **Clone** (or `C`), next to **Edit**, makes a
+copy of the selected tile: it asks for the copy's name, bundle, sheet and palette tab - suggesting `<name>_copy` beside the original - and whether to
+copy the original's tile properties (collision, light, pickup...), saves the copy straight away, and opens it in the editor to carry on with. The
+original is untouched, and closing the window afterwards brings the level editor back with the copy picked. These buttons are there in any build that
 includes the editor; what **Save** does depends on where the page is running - it writes the files itself under the dev server on
 `localhost`, and anywhere else it downloads them ([how saving works](#how-saving-works)).
 
@@ -1937,7 +1940,11 @@ mode ([10.6](#away-from-the-dev-server-downloads)). The service exists only unde
 `AssetsWebpackPlugin`'s `spriteApi` not switched off) and answers only to `localhost` - open the game at `http://localhost:<port>/`, not the
 machine's network address. `GET /__sprite-api/list` (with an `X-Sprite-Editor: 1` header) should answer.
 
-**There is no Edit button.** It is absent for a data brush and for a texture made at run time, which are not from a bundle.
+**There is no Edit or Clone button.** Both are absent for a data brush and for a texture made at run time, which are not from a bundle.
+
+**Clone (or Edit) says "Frame 1 is 8x18 but frame 0 is 8x16".** The sprite editor needs every frame of an animation to be the same size, and this one's
+frames differ (in the sample game, `torch_1_anim` and `flame_1_anim`, whose frames were trimmed to their flame). Nothing was written. Copy those files
+by hand, or resize the frames to match first.
 
 **Opening a sprite says it "isn't loaded in this page" or can't tell which atlas it came from.** In download mode a sprite is read back from the atlas the
 page loaded, so its bundle must be loaded (a level's own sprites only while that level's bundle is). A sprite whose atlas stores it rotated can't be read back.

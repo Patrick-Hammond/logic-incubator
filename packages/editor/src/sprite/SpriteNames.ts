@@ -43,6 +43,19 @@ export function SuggestSpriteName(raw: string): string {
     return name.replace(/^_+|_+$/g, "");
 }
 
+/**
+ * A name for a copy of `name`: `name_copy`, or `name_copy2`, `name_copy3`... when that's taken (`taken` is what's already in the bundle).
+ * The base is cut short first when it must, so the suffix always survives and every try is a different name.
+ */
+export function SuggestCopyName(name: string, taken: ReadonlyArray<string>): string {
+    const attempt = (suffix: string) => SuggestSpriteName(name.slice(0, MaxNameLength - suffix.length) + suffix);
+    let suggestion = attempt("_copy");
+    for (let n = 2; taken.indexOf(suggestion) >= 0; n++) {
+        suggestion = attempt("_copy" + n);
+    }
+    return suggestion;
+}
+
 /** The file names for a sprite of `count` frames: just `name.png`, or one `name_f<N>.png` per frame. */
 export function FrameFileNames(name: string, count: number): string[] {
     if (count <= 1) {
