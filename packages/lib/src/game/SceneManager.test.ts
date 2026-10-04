@@ -29,7 +29,6 @@ vi.mock("pixi.js", () => {
 });
 vi.mock("./Game", () => ({ default: { inst: {} } }));
 vi.mock("../loading/AssetFactory", () => ({ default: { inst: {} } }));
-vi.mock("../loading/Loader", () => ({ default: { inst: {} } }));
 
 let log: string[];
 let manager: SceneManager;

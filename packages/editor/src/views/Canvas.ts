@@ -12,6 +12,7 @@ import ObjectPool from "@logic-incubator/lib/patterns/ObjectPool";
 import { AnimationSpeed, TileSize } from "@logic-incubator/engine/Constants";
 import { GridBounds, InitalScale } from "../Layout";
 import EditorComponent from "../EditorComponent";
+import { EditorFontName } from "../EditorAssets";
 import { EditorActions, EditorTool, IEditorState, IMPLICIT_LAYER_ID, MouseButtonState } from "../stores/EditorStore";
 import { LevelDataActions, LevelDataState } from "../stores/LevelDataStore";
 
@@ -40,7 +41,7 @@ export default class Canvas extends EditorComponent {
         this.textPool = new ObjectPool<BitmapText>(
             100,
             () => {
-                const b = new BitmapText("", { font: { name: "small-font", size: 6 } });
+                const b = new BitmapText("", { font: { name: EditorFontName(this.game.assets), size: 6 } });
                 b.position.set(8, 8);
                 b.anchor = 0.5;
                 return b;

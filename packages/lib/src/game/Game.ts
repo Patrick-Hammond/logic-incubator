@@ -1,9 +1,10 @@
 import { EventEmitter } from "eventemitter3";
 import {Application, interaction, settings, SCALE_MODES, utils} from "pixi.js";
+import Assets from "../assets/Assets";
+import { CreateAssets } from "../assets/PixiAssets";
 import GamePad from "../io/GamePad";
 import Keyboard from "../io/Keyboard";
 import AssetFactory from "../loading/AssetFactory";
-import Loader from "../loading/Loader";
 import { StatsTicker } from "../utils/StatsTicker";
 import SceneManager from "./SceneManager";
 import * as ScreenFull from 'screenfull';
@@ -37,6 +38,8 @@ export default class Game extends Application {
     public keyboard = new Keyboard();
     public gamePad = new GamePad();
     public sceneManager = new SceneManager(this.stage);
+    /** This game's asset bundles - `await game.assets.Init(manifestUrl)` then `LoadBundle("global")` before the scenes that use them. Taken down with the game. */
+    public assets: Assets = CreateAssets(() => this.ticker);
     public dispatcher = new EventEmitter();
     public resizeStrategy: IResizeStrategy;
 
@@ -75,10 +78,16 @@ export default class Game extends Application {
         return this.renderer.plugins.interaction;
     }
 
+    /** Whether `destroy` has run - for async code (a boot that's loading) to notice the game went away under it. */
+    public get Destroyed(): boolean {
+        return this.destroyed;
+    }
+
     /**
      * Takes the whole game down, in the order that lets each part rely on the ones after it: the
      * scenes first (they release what they hold on the stage, the ticker and the input), then the
-     * input, the shared loader and registry, and every texture Pixi has cached - and only then
+     * input, the asset bundles (in-flight loads abandoned, sounds and fonts - process-wide tables -
+     * removed), the shared sprite registry, and every texture Pixi has cached - and only then
      * Pixi's own application (its ticker, loader, stage and renderer). `Game.inst` is cleared, so
      * a new `Game` can be made in the same page. Safe to call twice.
      *
@@ -97,6 +106,7 @@ export default class Game extends Application {
         this.keyboard.Destroy();
         this.gamePad.Destroy();
         this.dispatcher.removeAllListeners();
+        this.assets.Destroy();
 
         if (window.onresize === this.onResize) {
             window.onresize = null;
@@ -106,7 +116,6 @@ export default class Game extends Application {
         }
 
         AssetFactory.Destroy();
-        Loader.Destroy();
         // Before the renderer goes: destroying a texture disposes its GPU copy through it.
         utils.destroyTextureCache();
 

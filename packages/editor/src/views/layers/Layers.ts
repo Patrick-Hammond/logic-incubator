@@ -1,5 +1,6 @@
-import { AssetPath } from "@logic-incubator/engine/Constants";
+import type Assets from "@logic-incubator/lib/assets/Assets";
 import EditorComponent from "../../EditorComponent";
+import { EditorIcon } from "../../EditorAssets";
 import {EditableLayerCount, EditorActions, IEditorState, IMPLICIT_LAYER_ID, MaxEditableLayers} from "../../stores/EditorStore";
 import {Layer, LevelDataActions} from "../../stores/LevelDataStore";
 import {IsFormDialogOpen, OpenFormDialog} from "../../ui/dialog/FormDialog";
@@ -9,9 +10,9 @@ import EditorOverlay from "../../ui/dom/EditorOverlay";
 /** One list row's elements, reused across renders (so a double-click's two clicks land on the same element even though the first re-renders the list). */
 type LayerRow = { row: HTMLElement; eyeButton: HTMLButtonElement; eye: HTMLImageElement; badge: HTMLElement; name: HTMLElement };
 
-function Icon(name: string): HTMLImageElement {
+function Icon(assets: Assets, name: string): HTMLImageElement {
     const img = document.createElement("img");
-    img.src = AssetPath + "icons/" + name + ".png";
+    img.src = assets.Url(EditorIcon(name));
     img.alt = "";
     return img;
 }
@@ -95,7 +96,7 @@ export default class Layers extends EditorComponent {
             row.row.classList.toggle("ly-hidden", !layer.visible);
             row.badge.textContent = kind;
             row.badge.className = "ly-badge ly-" + kind;
-            const eyeIcon = AssetPath + "icons/" + (layer.visible ? "eye" : "eye-slash") + ".png";
+            const eyeIcon = this.game.assets.Url(EditorIcon(layer.visible ? "eye" : "eye-slash"));
             if (row.eye.getAttribute("src") !== eyeIcon) {
                 row.eye.src = eyeIcon;
             }
@@ -125,7 +126,7 @@ export default class Layers extends EditorComponent {
         const row = this.list.appendChild(El("div", "ly-row"));
         row.setAttribute("role", "option");
         const eyeButton = row.appendChild(ButtonEl("ed-icon-button ly-eye"));
-        const eye = eyeButton.appendChild(Icon("eye"));
+        const eye = eyeButton.appendChild(Icon(this.game.assets, "eye"));
         const badge = row.appendChild(El("span", "ly-badge"));
         const name = row.appendChild(El("span", "ly-name"));
 
@@ -151,7 +152,7 @@ export default class Layers extends EditorComponent {
     private ToolButton(parent: HTMLElement, icon: string, title: string, onClick: () => void): HTMLButtonElement {
         const button = parent.appendChild(ButtonEl("ed-icon-button", undefined, title));
         button.setAttribute("aria-label", title);
-        button.appendChild(Icon(icon));
+        button.appendChild(Icon(this.game.assets, icon));
         button.addEventListener("click", onClick);
         return button;
     }

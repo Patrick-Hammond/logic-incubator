@@ -39,7 +39,6 @@ vi.mock("pixi.js", () => {
 });
 vi.mock("./Game", () => ({ default: { inst: { ticker } } }));
 vi.mock("../loading/AssetFactory", () => ({ default: { inst: {} } }));
-vi.mock("../loading/Loader", () => ({ default: { inst: {} } }));
 
 /** Records every hook into a shared log, tagged with its own name. */
 class Probe extends GameComponent {
