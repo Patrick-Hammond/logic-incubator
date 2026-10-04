@@ -1453,8 +1453,8 @@ a deleted one is removed - with a warning if it had anything in it); you only fi
 
 ```jsonc
 {
-  "wall_mid":        { "collidable": true },
-  "torch_1_anim":    { "light": { "brightness": 5, "tint": 15856113, "range": 15 } },
+  "wall_mid":        { "category": "dungeon", "collidable": true },
+  "torch_1_anim":    { "category": "dungeon", "light": { "brightness": 5, "tint": 15856113, "range": 15 } },
   "doors_leaf_closed": { "door": { "id": 1, "open": false } },
   "doors_leaf_open":   { "door": { "id": 1, "open": true } },
   "mob_spawner":     { "spawner": { "monsters": ["goblin"], "interval": 3, "maxAlive": 4, "total": 0, "activationRange": 10, "hitPoints": 10 } },
@@ -1467,6 +1467,7 @@ a deleted one is removed - with a warning if it had anything in it); you only fi
 
 | Key | Meaning |
 | --- | --- |
+| `category` | Which palette tab the **level editor** lists the sprite under: `dungeon`, `entities`, `weapons`, `items`, `misc` or `user` ([10.3](#103-layers-data-brushes-and-palette-categories)). Has no effect in play. A sprite with none is listed under Misc; an unknown value is a build error (and a console warning at run time). |
 | `collidable` | Blocks movement. |
 | `light` | A point light: `brightness` (peak, 0..1+; it is clamped to 1), `tint` (hex colour as a number), `range` (radius in tiles). Baked once at level load with linear falloff; overlapping lights keep whichever is brighter at each cell. Cells no light reaches have a dim ambient level. A hand-edited light missing a field is dropped with a console warning naming the sprite rather than baking black. |
 | `door` | `id` pairs a door's two sprites (closed and open); `open` says which half this is. The door swaps when the player's tile enters any of its footprint cells and swaps back when they leave. Nothing blocks movement - it reads as "walked open". |
@@ -1620,8 +1621,17 @@ The editor opens as a full-window overlay: a **map canvas** on the left; on the 
 | `1`-`7` | Generate a map (digger, rogue, uniform, divided maze, eller maze, icey maze, cellular) in your tiles. |
 | `8` | Generate a height test map. |
 
-### 10.3 Layers and data brushes
+### 10.3 Layers, data brushes and palette categories
 
+- **The palette is split into tabs by category**: **Dungeon** (floors, walls, doors, traps, columns, torches and other fixtures),
+  **Entities** (monsters and characters, and the spawner marker), **Weapons**, **Items** (pickups, gold, chests, potions),
+  **Misc** (everything else - hearts, loose props) and **User** (content your users add). A data layer shows the **Data** tab instead.
+  Each sprite's tab is its `category` in `assets-meta.json` ([9.6](#96-assets-metajson-tile-behaviour-by-sprite-name)); a sprite
+  without one is under Misc, so a new sprite is findable at once and you sort it later. Inside a tab the sprites are in name order,
+  which keeps an animation (`wall_fountain_mid_red_anim`) next to the tiles it goes with. Empty tabs stay (the User tab starts
+  empty and says how to fill it), so a tab is always where you last found it.
+- The categories are read when the editor is created, so the game's metadata must already be loaded then - add the game scene
+  (which binds the metadata, [9.1](#91-how-the-pieces-fit)) before the editor scene, and load `global` first.
 - Tile layers draw in list order; add, rename, hide (the eye), reorder and duplicate them in the layer panel.
 - The one **attributes** layer is always present. Player start, collision and z-index are painted on it, and it also
   draws a read-only overlay of what the game *derives* from tiles' metadata (collision, door footprints, lights,

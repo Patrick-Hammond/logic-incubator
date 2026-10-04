@@ -1,15 +1,14 @@
 import {Container, SCALE_MODES} from "pixi.js";
 import AssetFactory from "@logic-incubator/lib/loading/AssetFactory";
 import { AnimationSpeed } from "@logic-incubator/engine/Constants";
+import AssetMetadataStore from "@logic-incubator/engine/level/AssetMetadata";
 import EditorComponent from "../EditorComponent";
 import { EditorIcon } from "../EditorAssets";
 import { DataBrushIcon, DataBrushIcons, EditorActions, IEditorState } from "../stores/EditorStore";
 import { ButtonEl, El, InjectStyles } from "../ui/dom/Dom";
 import EditorOverlay from "../ui/dom/EditorOverlay";
 import SpriteCanvas from "../ui/dom/SpriteCanvas";
-
-/** A tab of tile brushes. There's only the one sprite sheet for now; another sheet becomes another entry. */
-type TileSet = { name: string; brushes: string[] };
+import { EmptyTabHint, GroupByCategory } from "./PaletteCategories";
 
 /** A tab and its own scrolling page (so each keeps its scroll position). */
 type Page = { tab: HTMLButtonElement; body: HTMLElement; animated: SpriteCanvas[] };
@@ -23,9 +22,10 @@ const TILE_SCALE = 2;
 const SWATCH_SCALE = 4;
 
 /**
- * The brush picker: tile-set tabs over a scrolling grid of tile brushes, or
- * the data brushes when a data layer is selected. Hovering a brush previews
- * it in `SelectedBrush`; clicking picks it.
+ * The brush picker: a tab per category (Dungeon, Entities, Weapons, Items, Misc, User) over a scrolling
+ * grid of that category's tile brushes, or the data brushes when a data layer is selected. A sprite's
+ * category is set in the game's assets-meta.json (see `AssetCategories`); one with none is under Misc.
+ * Hovering a brush previews it in `SelectedBrush`; clicking picks it.
  */
 export default class Palette extends EditorComponent {
     private tabs: HTMLElement;
@@ -53,20 +53,22 @@ export default class Palette extends EditorComponent {
         EditorOverlay.inst.Slot("brushes").appendChild(panel);
         this.Own(() => panel.remove());
 
-        // Data brushes are registered as sprites too (above), but aren't tiles.
+        // Data brushes are registered as sprites too (above), but aren't tiles. Which tab a sprite is under comes
+        // from its metadata, so the game's metadata has to be loaded before the editor is created.
         const dataBrushNames = this.editorStore.state.dataBrushes.map(db => db.name);
-        const tileSets: TileSet[] = [
-            {
-                name: "Dungeon",
-                brushes: this.assetFactory.SpriteNames.concat(this.assetFactory.AnimationNames).filter(name => dataBrushNames.indexOf(name) === -1)
-            }
-        ];
+        const tileSets = GroupByCategory(
+            this.assetFactory.SpriteNames.concat(this.assetFactory.AnimationNames).filter(name => dataBrushNames.indexOf(name) === -1),
+            name => AssetMetadataStore.inst.CategoryOf(name)
+        );
         tileSets.forEach((tileSet, index) => {
             const page = this.AddPage(panel, tileSet.name, tileSet.brushes.length);
             page.tab.addEventListener("click", () => {
                 this.activeTileSet = index;
                 this.ShowPages();
             });
+            if (!tileSet.brushes.length) {
+                page.body.appendChild(El("div", "pl-empty", EmptyTabHint(tileSet.id)));
+            }
             const grid = page.body.appendChild(El("div", "pl-grid"));
             tileSet.brushes.forEach(name => grid.appendChild(this.CreateTileItem(page, name)));
             this.tileSetPages.push(page);
@@ -224,14 +226,13 @@ export default class Palette extends EditorComponent {
 }
 
 const STYLES = `
+/* Six category tabs don't fit the sidebar's width in one row, so they wrap onto a second. */
 .pl-tabs {
-    display: flex; align-items: flex-end; gap: 2px; flex: 0 0 auto;
+    display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0 2px; flex: 0 0 auto;
     padding: 4px 8px 0; border-bottom: 1px solid var(--ed-divider);
-    overflow-x: auto; scrollbar-width: none;
 }
-.pl-tabs::-webkit-scrollbar { display: none; }
 .pl-tab {
-    display: flex; align-items: baseline; gap: 6px; margin-bottom: -1px; padding: 5px 10px 6px;
+    display: flex; align-items: baseline; gap: 5px; margin-bottom: -1px; padding: 5px 8px 6px;
     background: none; border: none; border-bottom: 2px solid transparent;
     color: var(--ed-muted); font: inherit; font-size: 12px; font-weight: bold; white-space: nowrap; cursor: pointer;
 }
@@ -239,6 +240,7 @@ const STYLES = `
 .pl-tab[aria-selected=true] { color: var(--ed-text-strong); border-bottom-color: var(--ed-accent); }
 .pl-count { font-size: 11px; font-weight: normal; color: var(--ed-faint); }
 .pl-page { flex: 1 1 auto; min-height: 0; padding: 6px; box-sizing: border-box; }
+.pl-empty { padding: 10px 4px; color: var(--ed-faint); font-size: 12px; line-height: 1.4; }
 .pl-grid { display: flex; flex-wrap: wrap; align-items: flex-end; align-content: flex-start; gap: 3px; }
 .pl-tile {
     display: flex; align-items: flex-end; justify-content: center; box-sizing: border-box;

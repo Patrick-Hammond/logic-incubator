@@ -14,12 +14,19 @@
  * its sprites are tiles. Runs after the scan and before packing, so the file is hashed as it will
  * ship. With `--check` it writes nothing and reports an error if the file is out of date.
  *
+ * It also checks each entry's `category` (the editor palette tab, see AssetCategories in
+ * src/level/AssetMetadata.ts) is one the editor knows, so a typo is a build error rather than a sprite
+ * that quietly turns up under Misc.
+ *
  * Replaces the sync that used to live in create-metadata.js, which read the packed frames.json and
  * so had its own copy of the animation-frame naming rule; here the names come from the build's scan.
  */
 
 const fs = require("fs");
 const path = require("path");
+
+/** The palette's categories. Plain Node can't import src/level/AssetMetadata.ts, so this repeats its list; AssetMetadata.test.ts fails if they drift apart. */
+const CATEGORIES = ["dungeon", "entities", "weapons", "items", "misc", "user"];
 
 function ReadJson(file) {
     return JSON.parse(fs.readFileSync(file, "utf8"));
@@ -48,6 +55,13 @@ function SyncBundle(bundle, context) {
         return;
     }
 
+    Object.keys(existing).forEach(name => {
+        const category = existing[name] && existing[name].category;
+        if (category !== undefined && CATEGORIES.indexOf(category) < 0) {
+            context.Report("error", `"${name}" has an unknown category ${JSON.stringify(category)} - use one of ${CATEGORIES.join(", ")}.`, bundle.name, rel);
+        }
+    });
+
     const names = bundle.assets.filter(a => a.kind === "sprite" || a.kind === "animation").map(a => a.local);
     const added = names.filter(name => !Object.prototype.hasOwnProperty.call(existing, name));
     const known = new Set(names);
@@ -69,6 +83,8 @@ function SyncBundle(bundle, context) {
     fs.writeFileSync(file, text, "utf8");
     context.Report("warning", `synced with the sprites: ${added.length} added, ${removed.length} removed.`, bundle.name, rel);
 }
+
+exports.CATEGORIES = CATEGORIES;
 
 exports.afterScan = function (context) {
     context.bundles.forEach(bundle => SyncBundle(bundle, context));
