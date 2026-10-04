@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { BundleInfo } from "../SpriteApi";
 import { FieldSpec, FormDialogOptions, IsFieldVisible } from "../../ui/dialog/FormDialog";
 import {
-    AnchorChoices, AnchorFromValue, ApplyPaletteDialog, CheckTarget, ExportPaletteDialog, ExtractDialog, LoadPaletteDialog, ManagePalettesDialog, MaxSheetLength, NewSpriteDialog,
+    AnchorChoices, AnchorFromValue, ApplyPaletteDialog, CheckTarget, CloneDialog, ExportPaletteDialog, ExtractDialog, LoadPaletteDialog, ManagePalettesDialog, MaxSheetLength, NewSpriteDialog,
     ReadNewSprite, ReadSaveAs, ResizeDialog, SaveAsDialog, SavePaletteDialog, ShiftDialog
 } from "./Dialogs";
 
@@ -107,6 +107,28 @@ describe("SaveAsDialog", () => {
     it("reads the choice", () => {
         expect(ReadSaveAs({ name: "a", bundle: "b", sheet: "c", category: "d", copyProperties: true })).toEqual({ name: "a", bundle: "b", sheet: "c", category: "d", copyProperties: true });
         expect(ReadSaveAs({ name: "a" }).copyProperties).toBe(false);
+    });
+});
+
+describe("CloneDialog", () => {
+    const args = { bundles, categories, name: "crate_copy", bundle: "global", sheet: "dungeon", category: "dungeon", canCopyProperties: true };
+
+    it("is Save as's questions under its own title, with the original's properties copied by default", () => {
+        const clone = CloneDialog(args);
+        const saveAs = SaveAsDialog(args);
+        expect(clone.title).toBe("Clone tile");
+        expect(clone.saveLabel).toBe("Clone");
+        expect(clone.fields).toEqual(saveAs.fields);
+        expect(clone.values).toEqual({ name: "crate_copy", bundle: "global", sheet: "dungeon", category: "dungeon", copyProperties: true });
+        expect(fieldKeys(CloneDialog({ ...args, canCopyProperties: false }))).not.toContain("copyProperties");
+    });
+
+    it("won't let the copy take the original's name, or go in a pre-packed atlas", () => {
+        const clone = CloneDialog(args);
+        expect(valid(clone)).toBeNull();
+        expect(valid(clone, { name: "crate" })).toMatch(/already taken/);
+        expect(valid(clone, { bundle: "level1", sheet: "atlas" })).toMatch(/pre-packed/);
+        expect(ReadSaveAs({ ...clone.values, copyProperties: false }).copyProperties).toBe(false);
     });
 });
 
