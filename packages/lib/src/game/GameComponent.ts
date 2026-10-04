@@ -1,6 +1,5 @@
 import {Container} from "pixi.js";
 import AssetFactory from "../loading/AssetFactory";
-import Loader from "../loading/Loader";
 import Game from "./Game";
 
 /** What `Listen` needs of an event source: eventemitter3's `on`/`off` - `game.dispatcher`, `game.keyboard`, a Pixi display object. */
@@ -29,7 +28,6 @@ export default abstract class GameComponent {
 
     protected game: Game;
     protected assetFactory: AssetFactory;
-    protected loader: Loader;
 
     private initialised = false;
     private shown = false;
@@ -41,7 +39,6 @@ export default abstract class GameComponent {
     constructor() {
         this.game = Game.inst;
         this.assetFactory = AssetFactory.inst;
-        this.loader = Loader.inst;
     }
 
     // Driven by the owner (SceneManager, or the component that attached this one). Each is a no-op when repeated.

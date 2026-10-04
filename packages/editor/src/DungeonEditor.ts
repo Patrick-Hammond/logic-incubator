@@ -16,15 +16,6 @@ import SelectedBrush from "./views/SelectedBrush";
 import Toolbar from "./views/Toolbar";
 import Tools from "./views/Tools";
 
-/**
- * Loader entries the editor draws with, for the game to add to its loader (baseUrl `AssetPath`) alongside
- * its own. The files are in editor/assets, which the game's build copies into its assets folder.
- */
-export const EditorResources: ReadonlyArray<{ name: string; url: string }> = [
-    { name: "data-square", url: "icons/square.png" },
-    { name: "small-font", url: "fonts/small-font-export.fnt" }
-];
-
 /** What the editor needs from the game: its scenes and its art. */
 export interface IDungeonEditorOptions {
     /** The game's title scene, if it has one: T jumps there from the editor to preview the game's own front end. */

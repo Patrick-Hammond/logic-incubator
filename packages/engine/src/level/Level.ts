@@ -34,7 +34,7 @@ function CreateTile(brush: Brush): Tile | null {
         AssetFactory.inst.WarnMissing(brush.name);
         return null;
     }
-    if (AssetFactory.inst.AnimationNames.indexOf(brush.name) > -1) {
+    if (AssetFactory.inst.IsAnimation(brush.name)) {
         const anim = AssetFactory.inst.CreateAnimatedSprite(brush.name);
         anim.animationSpeed = AnimationSpeed;
         // Random start frame so identical brushes (e.g. several torches) don't all pulse in lockstep.

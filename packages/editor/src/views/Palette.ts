@@ -1,7 +1,8 @@
-import {Container, SCALE_MODES, Sprite} from "pixi.js";
+import {Container, SCALE_MODES} from "pixi.js";
 import AssetFactory from "@logic-incubator/lib/loading/AssetFactory";
 import { AnimationSpeed } from "@logic-incubator/engine/Constants";
 import EditorComponent from "../EditorComponent";
+import { EditorIcon } from "../EditorAssets";
 import { DataBrushIcon, DataBrushIcons, EditorActions, IEditorState } from "../stores/EditorStore";
 import { ButtonEl, El, InjectStyles } from "../ui/dom/Dom";
 import EditorOverlay from "../ui/dom/EditorOverlay";
@@ -210,7 +211,7 @@ export default class Palette extends EditorComponent {
      */
     private RegisterDataBrushTextures(): void {
         const swatch = new Container();
-        const square = Sprite.from("data-square");
+        const square = this.game.assets.Sprite(EditorIcon("square"));
         square.alpha = 0.5;
         swatch.addChild(square);
 

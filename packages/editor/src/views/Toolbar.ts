@@ -1,5 +1,5 @@
 import { Key } from "@logic-incubator/lib/io/Keyboard";
-import { AssetPath } from "@logic-incubator/engine/Constants";
+import { EditorIcon } from "../EditorAssets";
 import EditorComponent from "../EditorComponent";
 import { EditorActions, EditorTool, IEditorState } from "../stores/EditorStore";
 import { ButtonEl, El, InjectStyles } from "../ui/dom/Dom";
@@ -61,7 +61,7 @@ export default class Toolbar extends EditorComponent {
             const button = panel.appendChild(ButtonEl("tb-tool", undefined, `${info.name} (${info.keyLabel})\n${info.hint}`));
             button.setAttribute("aria-label", info.name);
             const icon = button.appendChild(document.createElement("img"));
-            icon.src = AssetPath + "icons/" + info.icon + ".png";
+            icon.src = this.game.assets.Url(EditorIcon(info.icon));
             icon.alt = "";
             button.appendChild(El("span", "tb-key", info.keyLabel));
             button.addEventListener("click", () => this.SetTool(info.tool));

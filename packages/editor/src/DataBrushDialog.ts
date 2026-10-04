@@ -11,7 +11,7 @@ const monsterImages: { [type: string]: ChoiceOption["image"] | undefined } = {};
 function MonsterImage(type: MonsterType): ChoiceOption["image"] | undefined {
     if (!(type in monsterImages)) {
         const name = MonsterRoster.inst.IdleAnimation(type);
-        if (AssetFactory.inst.AnimationNames.indexOf(name) === -1) {
+        if (!AssetFactory.inst.IsAnimation(name)) {
             monsterImages[type] = undefined;
         } else {
             const image = new SpriteCanvas();

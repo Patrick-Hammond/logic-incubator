@@ -2,14 +2,24 @@
   "name": "@logic-incubator/lib",
   "version": "1.0.0",
   "private": true,
-  "description": "Reusable game framework: game loop and scenes, loading, input, tweening, tilemap rendering, filters",
+  "description": "Reusable game framework: game loop and scenes, asset bundles and their build pipeline, input, tweening, tilemap rendering, filters",
   "peerDependencies": {
-    "pixi.js": "5.2.1"
+    "pixi.js": "5.2.1",
+    "pixi-sound": "^3.0.4"
   },
   "dependencies": {
     "eventemitter3": "^4.0.0",
     "nipplejs": "^0.8.5",
     "screenfull": "^5.2.0",
     "stats.js": "^0.17.0"
+  },
+  "devDependencies": {
+    "maxrects-packer": "2.7.3",
+    "pngjs": "7.0.0"
+  },
+  "peerDependenciesMeta": {
+    "pixi-sound": {
+      "optional": true
+    }
   }
 }

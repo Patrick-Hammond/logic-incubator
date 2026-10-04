@@ -22,14 +22,15 @@ vi.mock("pixi.js", async () => {
         settings: {},
         SCALE_MODES: { NEAREST: 0 },
         utils: { destroyTextureCache: () => calls.push("textures") },
+        UPDATE_PRIORITY: { UTILITY: -50 },
     };
 });
 vi.mock("screenfull", () => ({ isEnabled: true, request: vi.fn() }));
 vi.mock("../io/Keyboard", () => ({ default: class { Destroy = () => calls.push("keyboard"); } }));
 vi.mock("../io/GamePad", () => ({ default: class { Destroy = () => calls.push("gamepad"); } }));
 vi.mock("./SceneManager", () => ({ default: class { Destroy = () => calls.push("scenes"); } }));
+vi.mock("../assets/PixiAssets", () => ({ CreateAssets: () => ({ Destroy: () => calls.push("bundles") }) }));
 vi.mock("../loading/AssetFactory", () => ({ default: { Destroy: () => calls.push("assets") } }));
-vi.mock("../loading/Loader", () => ({ default: { Destroy: () => calls.push("loader") } }));
 vi.mock("../utils/StatsTicker", () => ({ StatsTicker: class {} }));
 
 let win: { onresize: unknown };
@@ -53,9 +54,9 @@ function fullscreenListeners(game: Game): number {
 }
 
 describe("Game.destroy", () => {
-    it("tears down in the order each part can rely on the next: scenes, input, shared registries, textures, then Pixi's own", () => {
+    it("tears down in the order each part can rely on the next: scenes, input, asset bundles, shared registry, textures, then Pixi's own", () => {
         makeGame().destroy();
-        expect(calls).toEqual(["scenes", "keyboard", "gamepad", "assets", "loader", "textures", "pixi"]);
+        expect(calls).toEqual(["scenes", "keyboard", "gamepad", "bundles", "assets", "textures", "pixi"]);
     });
 
     it("takes the canvas off the page by default, and hands stage options on to Pixi", () => {
@@ -94,6 +95,13 @@ describe("Game.destroy", () => {
         game.dispatcher.on("anything", () => undefined);
         game.destroy();
         expect(game.dispatcher.listenerCount("anything")).toBe(0);
+    });
+
+    it("reports itself destroyed, so async boot code can stop", () => {
+        const game = makeGame();
+        expect(game.Destroyed).toBe(false);
+        game.destroy();
+        expect(game.Destroyed).toBe(true);
     });
 
     it("clears Game.inst, so a new Game can be made", () => {

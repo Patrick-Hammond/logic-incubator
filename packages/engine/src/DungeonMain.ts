@@ -1,9 +1,10 @@
 import GameComponent from "@logic-incubator/lib/game/GameComponent";
 import AssetFactory from "@logic-incubator/lib/loading/AssetFactory";
-import { AssetPath } from "./Constants";
 import Encounter from "./Encounter";
 import {LEVEL_CREATED, PLAYER_DIED} from "./Events";
 import AssetMetadataStore from "./level/AssetMetadata";
+import { AssetMetadataBinding, BindAssetMetadata } from "./level/AssetMetadataBinding";
+import LevelAssets from "./level/LevelAssets";
 import {WeaponDef} from "./level/entities/Projectiles";
 import Level from "./level/Level";
 import {LevelFile} from "./level/LevelFormat";
@@ -33,6 +34,12 @@ export type DungeonMainOptions = {
      * returns its own shipped level, or in a dev build the level editor's latest save.
      */
     level: () => LevelFile | undefined;
+    /**
+     * The asset bundle the level plays in, asked for with each start like `level`: loaded (with
+     * what it depends on) before the level is built, and let go of when another is asked for or the
+     * scene is destroyed. Without it the level uses only what's already loaded - `global`.
+     */
+    levelBundle?: () => string | undefined;
 };
 
 /** Seconds between the player dying and the level starting over. */
@@ -45,6 +52,7 @@ export class DungeonMain extends GameComponent {
     private encounter: Encounter | undefined;
     private renderer: EntityRenderer | undefined;
     private hud: Hud | undefined;
+    private levelAssets: LevelAssets | undefined;
     /** Seconds until the level restarts after the player died - 0 while they're alive. */
     private restartIn = 0;
     private restarting = false;
@@ -70,6 +78,11 @@ export class DungeonMain extends GameComponent {
             sizeFor: name => (AssetFactory.inst.Has(name) ? AssetFactory.inst.CreateTexture(name) : undefined)
         });
 
+        // Each bundle's metadata (collision, doors, light...) follows the bundle in and out.
+        const metadata: AssetMetadataBinding = BindAssetMetadata(this.game.assets, AssetMetadataStore.inst);
+        this.Own(() => metadata.Dispose());
+        this.levelAssets = new LevelAssets(this.game.assets, metadata);
+
         this.Listen(this.game.dispatcher, LEVEL_CREATED, this.OnLevelCreated);
         this.Listen(this.game.dispatcher, PLAYER_DIED, () => (this.restartIn = RestartDelay));
         this.Tick(this.OnUpdate);
@@ -82,8 +95,12 @@ export class DungeonMain extends GameComponent {
     protected OnDestroy(): void {
         this.player.Destroy();
         this.level.Dispose();
-        // Drops anything a `Reload` still waiting on its fetch would otherwise carry on with.
-        this.level = this.player = this.encounter = this.renderer = this.hud = undefined;
+        if (this.options.levelBundle && !this.game.assets.IsDestroyed) {
+            // Lets go of the level's bundle (its textures go a frame later, once this scene has left the stage).
+            this.game.assets.UseLevelBundle().catch(() => undefined);
+        }
+        // Drops anything a `Reload` still waiting on its assets would otherwise carry on with.
+        this.level = this.player = this.encounter = this.renderer = this.hud = this.levelAssets = undefined;
     }
 
     /** A level has just been built (see `TileMapView`): start it over - the player, monsters and drawing, and the restart timer. */
@@ -128,22 +145,14 @@ export class DungeonMain extends GameComponent {
     }
 
     /**
-     * Re-fetches assets-meta.json (bypassing cache) before reloading the level, so a hand-edit to it
-     * shows up on every editor -> game switch, the same as a placed-brush edit already does via the
-     * `level` option. Without this, `AssetMetadataStore` would keep serving whatever was loaded once
-     * at page boot (by the game's boot code) until a full page refresh.
+     * Gets the level's assets ready (see `LevelAssets`), then builds the level - at the start of
+     * every visit and after every death.
      */
     private async Reload(): Promise<void> {
-        try {
-            const res = await fetch(AssetPath + "assets-meta.json", { cache: "no-store" });
-            AssetMetadataStore.inst.Load(await res.json());
-        } catch {
-            // Dev-time convenience refetch - if it fails, keep whatever metadata is already loaded
-            // rather than block the scene switch on it.
-        }
-
+        const ready = await this.levelAssets.Prepare(this.options.levelBundle && this.options.levelBundle());
         const file = this.options.level();
-        if (file && this.level) {
+        // The scene may have been destroyed while the assets loaded.
+        if (ready && file && this.level) {
             this.level.LoadLevel(file);
         }
     }
