@@ -5,7 +5,7 @@ import { createRequire } from "module";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { AssetCategories } from "../src/level/AssetMetadata";
 
-const { afterScan, CATEGORIES } = createRequire(import.meta.url)("./asset-meta-plugin.js");
+const { afterScan, onSpriteSaved, CATEGORIES } = createRequire(import.meta.url)("./asset-meta-plugin.js");
 
 type Report = { level: string; message: string; bundle?: string };
 let dir: string;
@@ -107,5 +107,78 @@ describe("asset-meta plugin", () => {
         run(["a", "new_one"], [], { a: { category: "items", pickup: { kind: "gold", amount: 1 } }, gone: {} });
         expect(read().a).toEqual({ category: "items", pickup: { kind: "gold", amount: 1 } });
         expect(read().new_one).toEqual({});
+    });
+});
+
+describe("asset-meta plugin: a sprite saved by the editor", () => {
+    const bundle = (withMeta = true) => ({
+        name: "global",
+        dir,
+        assets: withMeta ? [{ kind: "data", local: "assets_meta", files: [{ rel: "data/assets-meta.json" }] }] : []
+    });
+    const saved = (extra: object, withMeta = true): Report[] => {
+        const reports: Report[] = [];
+        onSpriteSaved({ bundle: bundle(withMeta), name: "gem", isNew: true, Report: (level: string, message: string) => reports.push({ level, message }), ...extra });
+        return reports;
+    };
+    const start = (meta: object) => fs.writeFileSync(metaFile(), JSON.stringify(meta, null, "\t") + "\n");
+
+    it("gets an entry carrying the category it was made under, the keys staying sorted", () => {
+        start({ wall: { collidable: true }, apple: {} });
+        expect(saved({ category: "items" })).toEqual([]);
+        expect(Object.keys(read())).toEqual(["apple", "gem", "wall"]);
+        expect(read().gem).toEqual({ category: "items" });
+        expect(read().wall).toEqual({ collidable: true });
+    });
+
+    it("gets a copy of another sprite's entry - a copy, not the same object - and the chosen category wins", () => {
+        start({ wall: { category: "dungeon", collidable: true, light: { brightness: 1, tint: 2, range: 3 } } });
+        saved({ copyMetaFrom: "wall" });
+        expect(read().gem).toEqual(read().wall);
+        saved({ name: "gem2", copyMetaFrom: "wall", category: "user" });
+        expect(read().gem2).toEqual({ category: "user", collidable: true, light: { brightness: 1, tint: 2, range: 3 } });
+        expect(read().wall.category).toBe("dungeon");
+    });
+
+    it("copies nothing from a sprite it doesn't know", () => {
+        start({ wall: { collidable: true } });
+        saved({ copyMetaFrom: "nope" });
+        expect(read().gem).toEqual({});
+    });
+
+    it("gets an empty entry if nothing was asked", () => {
+        start({});
+        saved({});
+        expect(read()).toEqual({ gem: {} });
+    });
+
+    it("leaves an existing entry alone, and does nothing for an overwrite", () => {
+        start({ gem: { collidable: true } });
+        saved({ category: "items" });
+        expect(read().gem).toEqual({ collidable: true });
+        start({});
+        saved({ isNew: false, category: "items" });
+        expect(read()).toEqual({});
+    });
+
+    it("warns about a category it doesn't know, and adds the entry without one", () => {
+        start({});
+        const reports = saved({ category: "Weapon" });
+        expect(reports).toHaveLength(1);
+        expect(reports[0].level).toBe("warning");
+        expect(reports[0].message).toContain('"Weapon"');
+        expect(read().gem).toEqual({});
+    });
+
+    it("leaves a bundle with no assets-meta.json alone", () => {
+        expect(saved({ category: "items" }, false)).toEqual([]);
+        expect(fs.existsSync(metaFile())).toBe(false);
+    });
+
+    it("reports a file that isn't valid JSON and doesn't overwrite it", () => {
+        fs.writeFileSync(metaFile(), "{ nope");
+        const reports = saved({ category: "items" });
+        expect(reports[0].level).toBe("error");
+        expect(fs.readFileSync(metaFile(), "utf8")).toBe("{ nope");
     });
 });

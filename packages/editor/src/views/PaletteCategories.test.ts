@@ -51,4 +51,10 @@ describe("EmptyTabHint", () => {
         expect(EmptyTabHint("user")).toContain('"category": "user"');
         expect(EmptyTabHint("weapons")).toBe("No sprites in this category.");
     });
+
+    it("points at the + when the sprite editor is there to use", () => {
+        expect(EmptyTabHint("weapons", true)).toBe("No sprites in this category. Click + to draw one.");
+        expect(EmptyTabHint("user", true)).toContain("Click +");
+        expect(EmptyTabHint("user", true)).toContain('"category": "user"');
+    });
 });

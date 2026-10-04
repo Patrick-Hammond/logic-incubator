@@ -1,7 +1,7 @@
 import { createRequire } from "module";
 import { describe, expect, it } from "vitest";
 
-const { CompareKeys, GroupFrames, IsValidBundleName, IsValidLocalName, KindOfExtension, MakeId, NormalizeLocalName, ParseFrameName, SplitId, Suggest } = createRequire(import.meta.url)("./ids.js");
+const { CompareKeys, FrameFileNames, GroupFrames, IsValidBundleName, IsValidLocalName, KindOfExtension, MakeId, MAX_SPRITE_NAME, NormalizeLocalName, ParseFrameName, SpriteNameProblem, SplitId, Suggest } = createRequire(import.meta.url)("./ids.js");
 
 // every one of these was once read as an animation frame and silently dropped
 const CONTAINS_F_SPRITES = [
@@ -105,5 +105,44 @@ describe("CompareKeys / Suggest", () => {
     it("suggests the nearest name for a likely typo, and nothing for an unrelated one", () => {
         expect(Suggest("dependsOnn", ["dependsOn", "preload", "ignore"])).toBe("dependsOn");
         expect(Suggest("zzzzzzzz", ["dependsOn", "preload"])).toBeUndefined();
+    });
+});
+
+describe("SpriteNameProblem", () => {
+    it("accepts the names real sprites have, including ones with _f in them", () => {
+        [...CONTAINS_F_SPRITES, "bomb", "a", "zombie_anim", "f1", "_x"].forEach(name => expect(SpriteNameProblem(name), name).toBeNull());
+    });
+
+    it("explains what's wrong with the rest", () => {
+        expect(SpriteNameProblem("")).toMatch(/needs a name/);
+        expect(SpriteNameProblem(undefined)).toMatch(/needs a name/);
+        expect(SpriteNameProblem(5)).toMatch(/needs a name/);
+        expect(SpriteNameProblem("a".repeat(MAX_SPRITE_NAME + 1))).toMatch(/up to 48/);
+        expect(SpriteNameProblem("Wall")).toMatch(/lowercase/);
+        expect(SpriteNameProblem("a b")).toMatch(/lowercase/);
+        expect(SpriteNameProblem("a-b")).toMatch(/lowercase/);
+        expect(SpriteNameProblem("a/b")).toMatch(/lowercase/);
+        expect(SpriteNameProblem("..")).toMatch(/lowercase/);
+        expect(SpriteNameProblem("bomb_f0")).toMatch(/_f/);
+        expect(SpriteNameProblem("bomb_f12")).toMatch(/_f/);
+    });
+});
+
+describe("FrameFileNames", () => {
+    it("is one plain file, or a numbered file per frame", () => {
+        expect(FrameFileNames("a", 1)).toEqual(["a.png"]);
+        expect(FrameFileNames("a", 0)).toEqual(["a.png"]);
+        expect(FrameFileNames("a", 3)).toEqual(["a_f0.png", "a_f1.png", "a_f2.png"]);
+    });
+
+    it("is grouped back into exactly that sprite or animation", () => {
+        [1, 2, 5, 11].forEach(count => {
+            const files = FrameFileNames("flame", count).map((f: string) => f.replace(/\.png$/, ""));
+            const grouped = GroupFrames(files);
+            expect(grouped.diagnostics).toEqual([]);
+            expect(grouped.sprites.length + grouped.animations.length).toBe(1);
+            expect((grouped.sprites[0] || grouped.animations[0]).name).toBe("flame");
+            expect((grouped.sprites[0] || grouped.animations[0]).frames).toEqual(files);
+        });
     });
 });

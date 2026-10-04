@@ -66,7 +66,8 @@ configuration files and plugin interface. For explanations, examples and workflo
 [Map styling](#map-styling) ·
 [Stores](#stores) ·
 [EditorComponent](#editorcomponent) ·
-[UI helpers](#ui-helpers)
+[UI helpers](#ui-helpers) ·
+[Sprite editor](#sprite-editor)
 
 ---
 
@@ -255,6 +256,7 @@ interface BundleHandle {
 | `IsReady` | `boolean` | A manifest has been read. |
 | `IsDestroyed` | `boolean` | |
 | `IsDev` | `boolean` | The manifest was built without `--production`. |
+| `ManifestUrl` | `string` | Where `Init` read the manifest from (`""` if it was given one directly). |
 | `Scope` | `string[]` | Bundles a bare sprite name resolves in, nearest first, `global` last. A copy. |
 
 ### Initialisation
@@ -610,11 +612,45 @@ exports.afterScan = function (context) { ... }
 | `production` | `true` under `--production`. |
 | `Report(level, message, bundle?, file?)` | Adds a diagnostic. |
 
+A plugin may also export `onSpriteSaved(context)`, called by the [sprite API](#sprite-api) after a save: `{ bundle, name, isNew, category?, copyMetaFrom?, config, Report(level, message) }`
+(`bundle` is the model as it was before the save).
+
 ### `AssetsWebpackPlugin`
 
 `@logic-incubator/lib/scripts/assets/webpack-plugin` (CommonJS `module.exports`). `new AssetsWebpackPlugin({ configPath })`. Runs
 `BuildAssets` on `beforeRun` and `watchRun`, with `production` = `compiler.options.mode === "production"`; logs diagnostics through
-webpack's infrastructure logger; fails the compile on errors; registers each root as a context dependency.
+webpack's infrastructure logger; fails the compile on errors; registers each root as a context dependency. A build that fails because a file was gone for a
+moment (`ENOENT`, `EBUSY`, `EPERM` or `EACCES` - an editor saving by delete-and-write, `git checkout`) is retried up to three times, 250 ms apart,
+rather than failing the compile (a failed watch compile leaves the dev server waiting until something else changes); any other error fails at once. Outside `production` mode it also mounts
+the [sprite API](#sprite-api) at `/__sprite-api` on the dev server (added to any `devServer.setupMiddlewares` the game has); `{ spriteApi: false }`
+leaves it out.
+
+### Sprite API
+
+`packages/lib/scripts/assets/sprite-api.js` - what the in-game sprite editor talks to. `AssetsWebpackPlugin` mounts `CreateSpriteApi({ configPath })`
+at `/__sprite-api` on the dev server (not in `production` mode; `spriteApi: false` disables it). Plain Node; the planning functions take the loaded
+config, so tests run them on a temp folder with no server.
+
+| Request | Response |
+| --- | --- |
+| `GET /list` | `{ bundles: [{ name, sheets, packedSheets, names }] }` - the editable bundles (not `devOnly`), their sheet folders and pre-packed sheets, and every asset name in them. |
+| `GET /sprite?bundle=&name=` | `{ bundle, name, kind, frames, sheet, dir, editable, reason }` - `editable` is false (with a `reason`) for a pre-packed or dev-only sprite. |
+| `GET /frame?bundle=&name=&index=` | The frame's source PNG (`image/png`). |
+| `POST /save` | Body `{ bundle, name, mode: "overwrite" \| "create", sheet?, category?, copyMetaFrom?, frames: [base64 PNG...] }` -> `{ ok, bundle, name, kind, frames, width, height, written, removed, changed, notes }`. |
+
+Errors are `{ error, details? }` with `400` (bad request), `403` (refused or a dev-only bundle), `404`, `409` (the name is taken), `413` (over 48 MB),
+`422` (can't be edited, or the bundle would be left with an error) or `500`.
+
+Every request must come from loopback, with a `localhost` `Host`, no foreign `Origin`, and the header `X-Sprite-Editor: 1`; the service never answers a
+CORS preflight. `RefuseRequest(req)` is the check (exported for tests).
+
+Exports: `CreateSpriteApi`, `ListBundles(config)`, `DescribeSprite(config, bundle, name)`, `ReadFrame(config, bundle, name, index)`, `ParseSaveRequest(body)`,
+`PlanSave(config, request)` (works out the files to write and remove, and re-classifies the bundle as it would be - throws an `ApiError` if that adds an
+error), `ApplySave(plan)` (writes new files through dot-named temp files, then removes old ones), `SaveSprite(config, body)` (all of those, then each
+plugin's `onSpriteSaved`), `RefuseRequest`, `ApiError`, `MAX_FRAMES` (100), `MAX_SIZE` (512), `DEFAULT_SHEET` (`"user"`).
+
+`ids.js` gained the naming rules the service and the editor share: `SpriteNameProblem(name)` (a message, or `null`), `FrameFileNames(name, count)` and
+`MAX_SPRITE_NAME`. `build.js` exports `ScanAndClassify`, whose models now also carry `files` and `rawConfig`.
 
 ---
 
@@ -1230,7 +1266,9 @@ Keyboard: arrows or WASD, Space. Gamepad (only when no key is down): left stick 
 
 ## DungeonEditor
 
-`@logic-incubator/editor/DungeonEditor` - `class DungeonEditor extends EditorComponent`.
+`@logic-incubator/editor/DungeonEditor` - `class DungeonEditor extends EditorComponent`. Also exports `ResumeEditorScene(): string | undefined`: the editor scene's name on the page load
+straight after the [sprite editor](#sprite-editor) reloaded the page, `undefined` otherwise (for a game's `GameEditor.startScene`). Once shown, the editor takes the
+saved sprite's note and picks it as the brush.
 
 ```ts
 new DungeonEditor(options: IDungeonEditorOptions = {})
@@ -1259,7 +1297,7 @@ EditorFontName(assets: Assets): string                 // the face of the editor
 
 ## SavedLevel
 
-`@logic-incubator/editor/SavedLevel`: `type EditorSave = LevelFile & { editorData: IEditorState; levelData: LevelDataState }`;
+`@logic-incubator/editor/SavedLevel`: `type EditorSave = LevelFile & { editorData: IEditorState; levelData: LevelDataState }`; `MakeEditorSave(editorData, levelData)`;
 `SaveLevel(save)`, `LoadSavedLevel(): EditorSave | undefined` - the localStorage copy (key `dungeonLevel`) saved when Enter hands the level to the game.
 
 ## Map styling
@@ -1301,7 +1339,8 @@ Layout constants (`@logic-incubator/editor/Layout`): `EditorWidth` (1280), `Edit
 ## EditorComponent
 
 `@logic-incubator/editor/EditorComponent` - `abstract class EditorComponent extends GameComponent`: gives `editorStore` and `levelDataStore` (shared, lazily created)
-to its subclasses; `static DestroyStores()` forgets them. Its setup goes in `OnInitialise` like any component.
+to its subclasses; `static DestroyStores()` forgets them; `protected OpenSpriteEditor(request): Promise<boolean>` opens the [sprite editor](#sprite-editor) with a context built from the
+stores. Its setup goes in `OnInitialise` like any component.
 
 ## UI helpers
 
@@ -1312,8 +1351,37 @@ Used by the editor's own views; available for editor extensions.
 | `ui/dom/Dom` | `El(tag, className, text?)`, `ButtonEl(className, text?, title?)`, `InjectStyles(id, css)`, `RemoveInjectedStyles()`, `InjectTheme()` |
 | `ui/dom/EditorOverlay` | `default class EditorOverlay` - singleton DOM overlay (`inst`, `Destroy()`), `Slot(name: OverlaySlot): HTMLElement` with `OverlaySlot = "brushes" \| "selected" \| "layers" \| "tools" \| "help"`, `SetVisible(visible)` |
 | `ui/dom/SpriteCanvas` | `default class SpriteCanvas` (draws textures to a 2D canvas); `FitIcon`, `VisibleBounds`, `DrawTexture`, `DrawDataBrushSwatch` |
-| `ui/dialog/FormDialog` | `OpenFormDialog(options: FormDialogOptions): Promise<FormValues \| null>`, `IsFormDialogOpen()`; field specs `NumberField`, `TextField`, `ColourField`, `ToggleField`, `ChoiceField` (exactly one option), `MultiChoiceField` (`FieldSpec`), `ChoiceOption`; any field can have `visibleWhen(values)` to show only while it applies to the other values (a pickup's key id only for a key); `IsFieldVisible(field, values)` |
+| `ui/dialog/FormDialog` | `OpenFormDialog(options: FormDialogOptions): Promise<FormValues \| null>`, `IsFormDialogOpen()`; field specs `NumberField`, `TextField`, `ColourField`, `ToggleField`, `ChoiceField` (exactly one option), `MultiChoiceField` (`FieldSpec`), `ChoiceOption`; any field can have `visibleWhen(values)` to show only while it applies to the other values (a pickup's key id only for a key); `IsFieldVisible(field, values)`; options may set `saveLabel` and `cancelLabel` (`null` leaves Cancel out - a message with just an OK, which the sprite editor uses for alerts and confirms) |
 | `DataBrushEditors` | `DataBrushEditorFor(name): DataBrushEditor \| undefined` - the dialog definitions for editing a value: `"light"`, `"spawner"`, `"pickup"` (the `PICKUP` brush's name - the same popup for the brush and for a tile that gives one), `"door"` (a door tile's lock: a Locked checkbox that reveals its key id) and the height. `EditorImages` carries the lookups they need from the game's art (`monster`, `hasSprite`) |
 | `DataLabels` | `PickupLabel(pickup)`, `MapLabel(value)` (the short tag drawn over a value on the attributes overlay: `G10`, `H2`, `K3`, `W`, `I`, `L3` for a locked door - an unlocked one has no tag...; only characters the bitmap font has), `DescribePickup(pickup)`, `DescribeLock(lock)` (pure) |
-| `views/PaletteCategories` | `type TileSet = { id: AssetCategory; name; brushes: string[] }`; `GroupByCategory(names, categoryOf): TileSet[]` (one set per category, in `AssetCategories` order, empty ones included, each sorted by name); `EmptyTabHint(id): string` (pure) |
+| `views/PaletteCategories` | `type TileSet = { id: AssetCategory; name; brushes: string[] }`; `GroupByCategory(names, categoryOf): TileSet[]` (one set per category, in `AssetCategories` order, empty ones included, each sorted by name); `EmptyTabHint(id, canCreate?): string` (pure); `EmptyTabHint(id, canCreate?)` mentions the tab's + when the sprite editor is available |
 | `tools/ToolGeometry` | `SpanRect(a, b)`, `RectCells(rect, border?)`, `InRect(rect, x, y)`, `FloodFill(start, bounds, keyAt)`, `TopmostBrushAt(...)` (a brush is only at its anchor cell), `TopmostBrushCovering(brushes, layers, cell, footprintOf, accept?)` (a brush is on top at every cell of its footprint - what the data-select tool uses, so a 2x2 spawner or door is the target wherever it's clicked), `BoundsOfCells(cells)`, `type CellRect` |
+
+## Sprite editor
+
+`@logic-incubator/editor/sprite/` - the sprite editor ([user guide 10.6](user-guide.md#106-the-sprite-editor)). Everything below the UI is pure (no DOM) and unit-tested.
+
+| Module | What it is |
+| --- | --- |
+| `Colour` | `Rgba`, `Rgb`, `Transparent`, `PackColour` / `UnpackColour`, `ColourHex(c, withAlpha?)`, `ParseColour`, `Luminance`, `Hue`, `Saturation`, `ClampByte`. |
+| `Png` | `DecodePng(bytes): Promise<{ width, height, rgba, indexed? }>` (all colour types and bit depths, Adam7, `tRNS`; `indexed` has `palette` and `indices` for palette PNGs), `EncodeIndexedPng(width, height, indices, palette)`, `EncodeRgbaPng`. Uses the browser's / Node's `CompressionStream`. |
+| `Palette` | `MaxPaletteSize` (256), `DefaultPalette()`, `NearestIndex`, `IndexImage`, `RemapIndices`, `ExtractPalette(images, max, sort) -> { palette, exact }` (median cut; slot 0 transparent), `CompactPalette`, `SortPalette`, `FormatPalette("json" \| "pal" \| "gpl", name, colours)`, `ParsePalette(text)`. |
+| `ChannelMixer` | `Mixer`, `IdentityMixer()`, `MixColour`, `MixPalette(palette, mixer, indices?)`, `MixerPresets`, `IsIdentityMixer`, `WeightRange`, `ConstantRange`. |
+| `PaletteLibrary` | `new PaletteLibrary(storage)` - named palettes in local storage (`List`, `Get`, `Save`, `Delete`, `Rename`, `UnusedName`), `BuiltInPalettes`, `WithTransparentFirst`, `CheckPaletteName`. Works for the session if storage is blocked. |
+| `Bitmap` | Palette-index bitmaps and the drawing maths: `LinePoints`, `RectPoints`, `EllipsePoints`, `BrushOffsets`, `PlotPoints` (with mirror), `FloodFill`, regions (`ReadRegion`, `WriteRegion`, `FillRegion`), `FlipHorizontal` / `FlipVertical`, `RotateClockwise` / `RotateCounterClockwise`, `ResizeBitmap`, `ShiftBitmap`, `CountUsage`. |
+| `SpriteDocument` | The sprite being edited: immutable `SpriteState` (`width`, `height`, `palette`, `frames`) with copy-on-write undo (`Undo`, `Redo`, `MarkSaved`, `Dirty`, `Reset`), `ReplaceFrame`, frame operations (`AddFrame`, `RemoveFrame`, `MoveFrame`, `ReverseFrames`), `Resize`, `Crop(rect)` (every frame cut to a rectangle, clipped to the picture - false if there's nothing to crop), `TransformFrames`, palette operations (`SetColour` - with a coalescing key so a slider drag is one step -, `AddColour`, `SwapColours`, `RemoveColours`, `SortColours`, `RemoveUnusedColours`, `ExtractPaletteFromSprite`, `RemapToPalette`, `LoadColours`, `ApplyMixer`), `StateFromImages(decoded)`, `BlankState`, `ToRgba`. |
+| `ToolController` | The drawing tools' pointer logic: `PointerDown` / `Move` / `Up`, `PreviewFrame` (the frame as it will be), `Marquee`, selection (`Copy`, `Cut`, `Paste`, `Delete`, `FlipSelection`, `RotateSelection`, `NudgeSelection`, `SelectAll`, `CropRect` - the selection as it lies on the frame, floating pixels put down first, for `SpriteDocument.Crop`), `Flush`, `Cancel`, `UndoFirst`, `SetTool`; `ToolSettings`, `SpriteClipboard`. |
+| `Playback` | Frame timing for the preview: `Playback(frameCount)`, `Advance(ms)`, `Play` / `Pause` / `Stop` / `Seek`, `SetFps`, `SetMode("loop" \| "pingpong" \| "once")`; `DefaultFps` (12). |
+| `SpriteNames` | The naming rules, matching `ids.js`: `ValidateSpriteName`, `SuggestSpriteName`, `NormalizeSpriteName`, `FrameFileNames`, `ParseFrameFile`. |
+| `SpriteApi` | The client of the [sprite API](#sprite-api): `new SpriteApi(fetch?)` with `Available()`, `List()`, `Describe`, `ReadSprite`, `Save`; `SharedSpriteApi`; `SpriteApiError`; `ToBase64`. |
+| `ManifestWatch` | `ReadBundleHash(manifestUrl, bundle)` and `WaitForBundleChange(...)` - how the editor knows a save's rebuild has landed. |
+| `Resume` | The note left in session storage when the window closes after a save: `WriteResumeNote`, `TakeResumeNote`, `PeekResumeNote`. |
+| `Recovery` | The snapshot taken as the page unloads under an open window, so a reload doesn't lose the sprite: `SpriteOrigin`, `Recovery`, `WriteRecovery`, `TakeRecovery`, `PeekRecovery`, `ClearRecovery`, `SerializeRecovery` / `ParseRecovery` (validates everything; stale ones, older than ten minutes, are ignored). |
+| `Viewport` | Zoom and pan maths: `ScreenToImage`, `ImageCell`, `ZoomAt`, `StepZoom`, `FitView`, `PanBy`. |
+| `OpenSpriteEditor` | `OpenSpriteEditor(context, request, defaults): Promise<boolean>` - `request` is `{ kind: "edit", bundle, name, category? }` or `{ kind: "new", category }`; resolves when the window closes. `RecoverSpriteEditor(context, recovery)` puts the window back after a reload. |
+| `SpriteEditor` | `default class SpriteEditor` - the window itself (`SpriteEditor.Active`); `SpriteEditorContext` is what it needs of the page (`api`, `manifestUrl`, `categories`, `persistLevel()`, `reload()`, storages). |
+| `ui/*` | The window's parts: `CanvasView`, `Toolbox`, `PalettePanel`, `MixerPanel`, `Timeline`, `Menu`, `Dialogs` (the `FormDialog` descriptions and their checks), `FileIo`, `Icons`, `Styles`. |
+
+Views open it with `EditorComponent`'s protected `OpenSpriteEditor(request)`, which builds the context from the editor's stores. `DungeonEditor` exports
+`ResumeEditorScene(): string | undefined` - the editor scene's name on the load right after the sprite editor reloaded the page (or the page reloaded under an open
+window), otherwise `undefined` - for a game's `GameEditor.startScene`. `SavedLevel` exports `MakeEditorSave(editorData, levelData)`.

@@ -18,6 +18,10 @@
  * src/level/AssetMetadata.ts) is one the editor knows, so a typo is a build error rather than a sprite
  * that quietly turns up under Misc.
  *
+ * The in-game sprite editor tells it when it saves a sprite (`onSpriteSaved`): a new sprite gets its entry straight away - with
+ * the palette tab it was made under as its `category`, or a copy of another sprite's entry (a "Save as") - rather than the bare
+ * {} the next sync would add.
+ *
  * Replaces the sync that used to live in create-metadata.js, which read the packed frames.json and
  * so had its own copy of the animation-frame naming rule; here the names come from the build's scan.
  */
@@ -88,4 +92,40 @@ exports.CATEGORIES = CATEGORIES;
 
 exports.afterScan = function (context) {
     context.bundles.forEach(bundle => SyncBundle(bundle, context));
+};
+
+const Has = (object, key) => Object.prototype.hasOwnProperty.call(object, key);
+
+/**
+ * A sprite was saved by the editor. If it's a new one in a bundle that has an assets-meta.json, adds its entry: a copy of
+ * `copyMetaFrom`'s (if given and present), with `category` set when one was asked for. An entry that's there is never touched.
+ */
+exports.onSpriteSaved = function (context) {
+    const bundle = context.bundle;
+    const meta = bundle.assets.find(a => a.kind === "data" && a.local === "assets_meta");
+    if (!meta || !context.isNew) {
+        return;
+    }
+    const rel = meta.files[0].rel;
+    const file = path.join(bundle.dir, rel);
+    let existing;
+    try {
+        existing = ReadJson(file);
+    } catch (error) {
+        context.Report("error", `${rel} isn't valid JSON (${error.message}), so "${context.name}" wasn't added to it.`);
+        return;
+    }
+    if (Has(existing, context.name)) {
+        return;
+    }
+    const entry = context.copyMetaFrom && Has(existing, context.copyMetaFrom) ? JSON.parse(JSON.stringify(existing[context.copyMetaFrom])) : {};
+    if (context.category !== undefined) {
+        if (CATEGORIES.indexOf(context.category) < 0) {
+            context.Report("warning", `"${context.category}" isn't a palette category (${CATEGORIES.join(", ")}), so "${context.name}" was left without one.`);
+        } else {
+            entry.category = context.category;
+        }
+    }
+    const names = Object.keys(existing).concat(context.name);
+    fs.writeFileSync(file, JSON.stringify(SortedMerge(names, Object.assign({}, existing, { [context.name]: entry })), null, "\t") + "\n", "utf8");
 };

@@ -1,9 +1,10 @@
 import {Container, SCALE_MODES} from "pixi.js";
 import AssetFactory from "@logic-incubator/lib/loading/AssetFactory";
 import { AnimationSpeed } from "@logic-incubator/engine/Constants";
-import AssetMetadataStore from "@logic-incubator/engine/level/AssetMetadata";
+import AssetMetadataStore, { AssetCategory } from "@logic-incubator/engine/level/AssetMetadata";
 import EditorComponent from "../EditorComponent";
 import { EditorIcon } from "../EditorAssets";
+import { SharedSpriteApi } from "../sprite/SpriteApi";
 import { DataBrushIcon, DataBrushIcons, EditorActions, IEditorState } from "../stores/EditorStore";
 import { ButtonEl, El, InjectStyles } from "../ui/dom/Dom";
 import EditorOverlay from "../ui/dom/EditorOverlay";
@@ -37,6 +38,11 @@ export default class Palette extends EditorComponent {
     private selectedItem: HTMLElement = null;
     private animTime = 0;
     private animFrame = 0;
+    /** The "+" at the end of each tile list, and the tab's empty-list hint - both change once the sprite editor is known to be available. */
+    private adders: { button: HTMLElement; hint: HTMLElement | null; id: AssetCategory }[] = [];
+    /** Which tile-set tab each brush is on, so picking a brush from elsewhere (the picker, a keyboard shortcut) shows its tab. */
+    private tabOf: { [name: string]: number } = {};
+    private alive = true;
 
     /** `icons`: the game's sprite over each data brush's colour, shown only in its palette chip (see `DataBrushIcons`, `RegisterDataBrushTextures`) - telling brushes apart matters there, not on the map. */
     constructor(private readonly icons: DataBrushIcons = {}) {
@@ -51,7 +57,10 @@ export default class Palette extends EditorComponent {
         this.tabs = panel.appendChild(El("div", "pl-tabs"));
         this.tabs.setAttribute("role", "tablist");
         EditorOverlay.inst.Slot("brushes").appendChild(panel);
-        this.Own(() => panel.remove());
+        this.Own(() => {
+            this.alive = false;
+            panel.remove();
+        });
 
         // Data brushes are registered as sprites too (above), but aren't tiles. Which tab a sprite is under comes
         // from its metadata, so the game's metadata has to be loaded before the editor is created.
@@ -66,11 +75,18 @@ export default class Palette extends EditorComponent {
                 this.activeTileSet = index;
                 this.ShowPages();
             });
-            if (!tileSet.brushes.length) {
-                page.body.appendChild(El("div", "pl-empty", EmptyTabHint(tileSet.id)));
-            }
+            const hint = tileSet.brushes.length ? null : page.body.appendChild(El("div", "pl-empty", EmptyTabHint(tileSet.id)));
             const grid = page.body.appendChild(El("div", "pl-grid"));
-            tileSet.brushes.forEach(name => grid.appendChild(this.CreateTileItem(page, name)));
+            tileSet.brushes.forEach(name => {
+                grid.appendChild(this.CreateTileItem(page, name));
+                this.tabOf[name] = index;
+            });
+            // Only offered once the dev server's sprite service has answered - a production build has none.
+            const button = ButtonEl("pl-tile pl-add", "+", `New tile in ${tileSet.name}`);
+            button.style.display = "none";
+            button.addEventListener("click", () => this.OpenSpriteEditor({ kind: "new", category: tileSet.id }));
+            grid.appendChild(button);
+            this.adders.push({ button, hint, id: tileSet.id });
             this.tileSetPages.push(page);
         });
 
@@ -89,12 +105,32 @@ export default class Palette extends EditorComponent {
         this.Own(this.editorStore.Subscribe(this.Render, this));
         this.Tick(this.Animate);
         this.UpdateMode();
+        SharedSpriteApi.Available().then(available => {
+            if (available && this.alive) {
+                this.adders.forEach(adder => {
+                    adder.button.style.display = "";
+                    if (adder.hint) {
+                        adder.hint.textContent = EmptyTabHint(adder.id, true);
+                    }
+                });
+            }
+        });
     }
 
     private Render(prevState: IEditorState, state: IEditorState): void {
         this.UpdateMode();
         if (prevState.currentBrush.name !== state.currentBrush.name) {
             this.Highlight(state.currentBrush.name);
+            this.ShowTabOf(state.currentBrush.name);
+        }
+    }
+
+    /** Switches to the tab a picked brush is on, if it isn't showing. */
+    private ShowTabOf(name: string): void {
+        const tab = this.tabOf[name];
+        if (this.mode === "tiles" && tab !== undefined && tab !== this.activeTileSet) {
+            this.activeTileSet = tab;
+            this.ShowPages();
         }
     }
 
@@ -257,4 +293,6 @@ const STYLES = `
 .pl-tile[aria-pressed=true], .pl-chip[aria-pressed=true] { background: var(--ed-accent-bg); border-color: var(--ed-accent); color: var(--ed-text-strong); }
 .pl-tile canvas, .pl-chip canvas { display: block; image-rendering: pixelated; }
 .pl-chip-label { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pl-add { align-items: center; color: var(--ed-link); font: inherit; font-size: 20px; line-height: 1; }
+.pl-add:hover { color: var(--ed-text-strong); }
 `;
