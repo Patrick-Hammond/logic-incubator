@@ -426,7 +426,7 @@ const game = new Game(
         width: 1280, height: 720,
         backgroundColor: 0x000000,
         fit: "border",       // "border" (default: scale to fit, letterbox) | "centered" | "none"
-        fullscreen: true,    // request fullscreen on the first pointer click
+        fullscreen: true,    // request fullscreen (the whole page, so DOM overlays stay visible) on the first pointer click
         pixelArt: true,      // NEAREST scaling for textures
     },
     true                      // second argument: show the stats.js panel

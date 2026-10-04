@@ -1,3 +1,4 @@
+import * as ScreenFull from "screenfull";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import Game from "./Game";
 
@@ -34,13 +35,16 @@ vi.mock("../loading/AssetFactory", () => ({ default: { Destroy: () => calls.push
 vi.mock("../utils/StatsTicker", () => ({ StatsTicker: class {} }));
 
 let win: { onresize: unknown };
+/** `document.documentElement`: given a field of its own so a deep-equal match can't mistake it for the mocked canvas, also `{}`. */
+const page = { tagName: "HTML" };
 
 beforeEach(() => {
     calls.length = 0;
+    vi.mocked(ScreenFull.request).mockClear();
     pixi.destroyArgs = [];
     win = { onresize: null };
     vi.stubGlobal("window", win);
-    vi.stubGlobal("document", { body: { appendChild: () => undefined } });
+    vi.stubGlobal("document", { body: { appendChild: () => undefined }, documentElement: page });
 });
 
 afterEach(() => {
@@ -52,6 +56,30 @@ const makeGame = (fullscreen = false) => new Game({ fit: "none", fullscreen });
 function fullscreenListeners(game: Game): number {
     return (game.interactionManager as unknown as { listenerCount(event: string): number }).listenerCount("pointerdown");
 }
+
+describe("Game fullscreen", () => {
+    it("goes fullscreen on the first click, as the whole page rather than the canvas, so the DOM UI over the canvas stays visible", () => {
+        const game = makeGame(true);
+        expect(ScreenFull.request).not.toHaveBeenCalled();
+        game.interactionManager.emit("pointerdown");
+        expect(ScreenFull.request).toHaveBeenCalledTimes(1);
+        expect(ScreenFull.request).toHaveBeenCalledWith(page);
+        expect(ScreenFull.request).not.toHaveBeenCalledWith(game.view);
+    });
+
+    it("asks only once, however many clicks follow", () => {
+        const game = makeGame(true);
+        game.interactionManager.emit("pointerdown");
+        game.interactionManager.emit("pointerdown");
+        expect(ScreenFull.request).toHaveBeenCalledTimes(1);
+    });
+
+    it("doesn't ask when the option is off", () => {
+        const game = makeGame();
+        game.interactionManager.emit("pointerdown");
+        expect(ScreenFull.request).not.toHaveBeenCalled();
+    });
+});
 
 describe("Game.destroy", () => {
     it("tears down in the order each part can rely on the next: scenes, input, asset bundles, shared registry, textures, then Pixi's own", () => {

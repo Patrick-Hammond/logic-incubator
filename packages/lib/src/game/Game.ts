@@ -65,7 +65,10 @@ export default class Game extends Application {
         }
 
         if(options.fullscreen && ScreenFull.isEnabled) {
-            this.requestFullscreen = () => ScreenFull.request(this.view);
+            // The whole page, not the canvas: a browser paints only the fullscreen element and its descendants,
+            // so with the canvas as the target every DOM element over it (the editor's panels and dialogs, the
+            // stats panel) vanished - and its `:fullscreen` styles overrode the resize strategy's scaling of the canvas.
+            this.requestFullscreen = () => ScreenFull.request(document.documentElement);
             this.interactionManager.once("pointerdown", this.requestFullscreen);
         }
 

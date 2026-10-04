@@ -88,7 +88,7 @@ new Game(options: IGameOptions, showStats?: boolean)
 | --- | --- | --- |
 | `width`, `height` | `number` | Canvas size in pixels. |
 | `fit` | `"none" \| "border" \| "centered"` | How the canvas fits the window (default `"border"`). See [Display helpers](#display-helpers). |
-| `fullscreen` | `boolean` | Requests fullscreen (screenfull) on the first pointer click. |
+| `fullscreen` | `boolean` | Requests fullscreen (screenfull) on the first pointer click. The target is the whole page (`document.documentElement`), not the canvas - a browser only paints the fullscreen element's subtree, so DOM UI you put over the canvas (the editor's panels, dialogs) stays visible. |
 | `pixelArt` | `boolean` | Sets pixi's default scale mode to NEAREST. |
 | `view` | `HTMLCanvasElement` | Use an existing canvas. |
 | `autoStart`, `transparent`, `autoDensity`, `antialias`, `preserveDrawingBuffer`, `resolution`, `forceCanvas`, `backgroundColor`, `clearBeforeRender`, `forceFXAA`, `powerPreference`, `sharedTicker`, `sharedLoader`, `resizeTo` | | Passed to pixi's `Application`. |
