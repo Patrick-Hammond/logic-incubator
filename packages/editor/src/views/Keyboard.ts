@@ -77,9 +77,11 @@ export default class Keyboard extends EditorComponent {
                         }
                         break;
                     case Key.Add:
+                    case Key.Period:
                         this.editorStore.Dispatch({ type: EditorActions.DATA_BRUSH_INC });
                         break;
                     case Key.Subtract:
+                    case Key.Comma:
                         this.editorStore.Dispatch({ type: EditorActions.DATA_BRUSH_DEC });
                         break;
                     case Key.S:
