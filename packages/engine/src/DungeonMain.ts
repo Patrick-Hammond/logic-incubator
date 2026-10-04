@@ -76,7 +76,8 @@ export class DungeonMain extends GameComponent {
         this.Attach(new TileMapView(level, camera));
         this.hud = this.Attach(new Hud(this.options.player.hearts));
 
-        this.player = new Player(camera, new TileCollision(level), level, this.options.player);
+        // A door the player has no key for is a wall to them; one they have the key for isn't - they walk onto it to open it.
+        this.player = new Player(camera, new TileCollision(level, (x, y) => !!this.player && this.player.IsLockedOut(x, y)), level, this.options.player);
         this.renderer = new EntityRenderer(camera, level);
         this.encounter = new Encounter(level, {
             emit: (event, ...args) => this.game.dispatcher.emit(event, ...args),
@@ -147,7 +148,7 @@ export class DungeonMain extends GameComponent {
         }
         this.encounter.Update(dt, seconds, this.player);
         this.renderer.Render(this.player, this.encounter);
-        this.hud.Render(this.player.Health, this.player.Gold, this.player.EquippedWeapon.icon, this.player.Inventory);
+        this.hud.Render(this.player.Health, this.player.Gold, this.player.EquippedWeapon.icon, this.player.Inventory, this.player.Keys);
     }
 
     /**

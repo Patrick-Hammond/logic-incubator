@@ -3,7 +3,7 @@ import { Scenes } from "@logic-incubator/engine/Constants";
 import { TEST_MONSTERS } from "@logic-incubator/engine/level/__fixtures__/TestMonsters";
 import MonsterRoster from "@logic-incubator/engine/level/entities/MonsterRoster";
 import { DataBrushName } from "@logic-incubator/engine/level/LevelFormat";
-import EditorStore, { DataBrushIcon, EditableLayerCount, EditorActions, EditorTool, IMPLICIT_LAYER_ID, MouseButtonState } from "./EditorStore";
+import EditorStore, { DataBrushIcon, EditableLayerCount, EditorActions, EditorTool, IMPLICIT_LAYER_ID, MouseButtonState, ToolFitsLayer } from "./EditorStore";
 
 MonsterRoster.inst.Load(TEST_MONSTERS);
 
@@ -239,5 +239,147 @@ describe("EditorStore tools", () => {
         store.Dispatch({ type: EditorActions.PICK_BRUSH, data: { brush: placed } });
         expect(store.SelectedDataBrush.value).toBe(5);
         expect(store.SelectedLayer.id).toBe(dataLayer.id);
+    });
+});
+
+describe("the data-select tool needs a data layer", () => {
+    const selectAttributes = (store: EditorStore) => store.Dispatch({ type: EditorActions.SELECT_LAYER, data: { layer: implicitLayers(store)[0] } });
+    const setTool = (store: EditorStore, tool: EditorTool) => store.Dispatch({ type: EditorActions.SET_TOOL, data: { tool } });
+
+    it("says which tools suit which layer: data-select only a data layer, everything else any", () => {
+        const data = { id: 1, name: "a", selected: true, visible: true, isData: true };
+        const tiles = { ...data, isData: false };
+        expect(ToolFitsLayer(EditorTool.DATA_SELECT, data)).toBe(true);
+        expect(ToolFitsLayer(EditorTool.DATA_SELECT, tiles)).toBe(false);
+        expect(ToolFitsLayer(EditorTool.DATA_SELECT, undefined)).toBe(false);
+        [EditorTool.BRUSH, EditorTool.ERASE, EditorTool.STAMP, EditorTool.DROPPER, EditorTool.FILL, EditorTool.MOVE].forEach(tool => {
+            expect(ToolFitsLayer(tool, data), tool).toBe(true);
+            expect(ToolFitsLayer(tool, tiles), tool).toBe(true);
+            expect(ToolFitsLayer(tool, undefined), tool).toBe(true);
+        });
+    });
+
+    it("can be picked while the attributes layer is selected", () => {
+        const store = new EditorStore();
+        selectAttributes(store);
+        setTool(store, EditorTool.DATA_SELECT);
+        expect(store.state.tool).toBe(EditorTool.DATA_SELECT);
+    });
+
+    it("can't be picked with a tile layer selected, or with no layer selected at all - the brush stays", () => {
+        const store = new EditorStore();
+        setTool(store, EditorTool.DATA_SELECT);
+        expect(store.state.tool).toBe(EditorTool.BRUSH);
+
+        store.Dispatch({ type: EditorActions.ADD_LAYER });
+        setTool(store, EditorTool.DATA_SELECT);
+        expect(store.state.tool).toBe(EditorTool.BRUSH);
+    });
+
+    it("gives way to the brush when a tile layer is selected, whichever way that happens", () => {
+        const store = new EditorStore();
+        store.Dispatch({ type: EditorActions.ADD_LAYER });
+        const tileLayer = store.state.layers.find(layer => !layer.isData);
+
+        // Clicking its row...
+        selectAttributes(store);
+        setTool(store, EditorTool.DATA_SELECT);
+        store.Dispatch({ type: EditorActions.SELECT_LAYER, data: { layer: tileLayer } });
+        expect(store.state.tool).toBe(EditorTool.BRUSH);
+
+        // ...adding another...
+        selectAttributes(store);
+        setTool(store, EditorTool.DATA_SELECT);
+        store.Dispatch({ type: EditorActions.ADD_LAYER });
+        expect(store.state.tool).toBe(EditorTool.BRUSH);
+
+        // ...or the dropper picking a tile, which selects the layer it was on.
+        selectAttributes(store);
+        setTool(store, EditorTool.DATA_SELECT);
+        const picked = { ...store.state.currentBrush, name: "wall", layerId: tileLayer.id };
+        store.Dispatch({ type: EditorActions.PICK_BRUSH, data: { brush: picked } });
+        expect(store.SelectedLayer.id).toBe(tileLayer.id);
+        expect(store.state.tool).toBe(EditorTool.BRUSH);
+    });
+
+    it("isn't brought back by going back to the attributes layer - it's picked again, from the toolbar", () => {
+        const store = new EditorStore();
+        store.Dispatch({ type: EditorActions.ADD_LAYER });
+        selectAttributes(store);
+        setTool(store, EditorTool.DATA_SELECT);
+        store.Dispatch({ type: EditorActions.SELECT_LAYER, data: { layer: store.state.layers.find(layer => !layer.isData) } });
+        selectAttributes(store);
+        expect(store.state.tool).toBe(EditorTool.BRUSH);
+    });
+
+    it("leaves every other tool alone when the layer changes", () => {
+        const store = new EditorStore();
+        store.Dispatch({ type: EditorActions.ADD_LAYER });
+        [EditorTool.ERASE, EditorTool.STAMP, EditorTool.DROPPER, EditorTool.FILL, EditorTool.MOVE].forEach(tool => {
+            setTool(store, tool);
+            selectAttributes(store);
+            expect(store.state.tool, tool).toBe(tool);
+            store.Dispatch({ type: EditorActions.SELECT_LAYER, data: { layer: store.state.layers.find(layer => !layer.isData) } });
+            expect(store.state.tool, tool).toBe(tool);
+        });
+    });
+
+    it("is checked on load too: kept where the loaded map has a data layer selected, dropped where it has a tile layer", () => {
+        const store = new EditorStore();
+        selectAttributes(store);
+        setTool(store, EditorTool.DATA_SELECT);
+        const attributes = implicitLayers(store)[0];
+
+        store.Load({ ...store.state, layers: [{ ...attributes, selected: true }] });
+        expect(store.state.tool).toBe(EditorTool.DATA_SELECT);
+
+        const tileLayer = { id: 0, name: "layer 0", selected: true, visible: true, isData: false };
+        store.Load({ ...store.state, layers: [{ ...attributes, selected: false }, tileLayer] });
+        expect(store.state.tool).toBe(EditorTool.BRUSH);
+    });
+});
+
+describe("the pickup data brush", () => {
+    it("is one of the palette's data brushes, starting as one gold piece", () => {
+        const brush = new EditorStore().state.dataBrushes.find(db => db.name === DataBrushName.PICKUP);
+        expect(brush).toBeDefined();
+        expect(brush.value).toEqual({ kind: "gold", amount: 1 });
+    });
+
+    it("has its own colour, none of the other data brushes' - the map and palette tell them apart by it", () => {
+        const colours = new EditorStore().state.dataBrushes.map(db => db.colour);
+        expect(new Set(colours).size).toBe(colours.length);
+    });
+
+    it("is added to a map saved before it existed, and keeps the value of one saved with it", () => {
+        const store = new EditorStore();
+        const old = { ...store.state, dataBrushes: store.state.dataBrushes.filter(db => db.name !== DataBrushName.PICKUP) };
+        store.Load(old);
+        expect(store.state.dataBrushes.find(db => db.name === DataBrushName.PICKUP).value).toEqual({ kind: "gold", amount: 1 });
+
+        const key = { kind: "key", id: 4 } as const;
+        store.Load({ ...store.state, dataBrushes: store.state.dataBrushes.map(db => (db.name === DataBrushName.PICKUP ? { ...db, value: key } : db)) });
+        expect(store.state.dataBrushes.find(db => db.name === DataBrushName.PICKUP).value).toEqual(key);
+    });
+
+    it("takes the value its popup sets, carried onto the brush that's painted", () => {
+        const store = new EditorStore();
+        // Picking a brush puts it on the selected layer, so there has to be one.
+        store.Dispatch({ type: EditorActions.SELECT_LAYER, data: { layer: implicitLayers(store)[0] } });
+        store.Dispatch({ type: EditorActions.BRUSH_CHANGED, data: { name: DataBrushName.PICKUP } });
+        expect(store.state.currentBrush.data).toEqual({ kind: "gold", amount: 1 });
+        store.Dispatch({ type: EditorActions.SET_DATA_BRUSH_VALUE, data: { value: { kind: "health", amount: 4 } } });
+        expect(store.SelectedDataBrush.value).toEqual({ kind: "health", amount: 4 });
+        expect(store.state.currentBrush.data).toEqual({ kind: "health", amount: 4 });
+    });
+
+    it("isn't stepped by + and - the way a height is - its value isn't a number", () => {
+        const store = new EditorStore();
+        store.Dispatch({ type: EditorActions.SELECT_LAYER, data: { layer: implicitLayers(store)[0] } });
+        store.Dispatch({ type: EditorActions.BRUSH_CHANGED, data: { name: DataBrushName.PICKUP } });
+        const before = store.SelectedDataBrush.value;
+        store.Dispatch({ type: EditorActions.DATA_BRUSH_INC });
+        store.Dispatch({ type: EditorActions.DATA_BRUSH_DEC });
+        expect(store.SelectedDataBrush.value).toEqual(before);
     });
 });

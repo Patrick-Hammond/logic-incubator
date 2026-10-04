@@ -1,13 +1,16 @@
 import { Key } from "@logic-incubator/lib/io/Keyboard";
 import { EditorIcon } from "../EditorAssets";
 import EditorComponent from "../EditorComponent";
-import { EditorActions, EditorTool, IEditorState } from "../stores/EditorStore";
+import { EditorActions, EditorTool, IEditorState, ToolFitsLayer } from "../stores/EditorStore";
 import { ButtonEl, El, InjectStyles } from "../ui/dom/Dom";
 import EditorOverlay from "../ui/dom/EditorOverlay";
 
 type ToolInfo = { tool: EditorTool; icon: string; name: string; key: Key; keyLabel: string; hint: string };
 
-/** Top to bottom. What each does on the map is `Tools`'. Shortcut letters avoid the editor's existing keys (E edits data, H/V flip, R rotates, S saves...). */
+/**
+ * Top to bottom. What each does on the map is `Tools`'. Shortcut letters avoid the editor's existing keys (E edits data, H/V flip, R rotates, S saves...).
+ * Data select is only shown while a data layer is selected (see `ToolFitsLayer`) - a tile layer has no data to select.
+ */
 const TOOLS: ToolInfo[] = [
     { tool: EditorTool.BRUSH, icon: "brush", name: "Brush", key: Key.B, keyLabel: "B", hint: "Paint the brush. Right-click erases; Ctrl+drag paints a rectangle." },
     { tool: EditorTool.ERASE, icon: "eraser", name: "Erase", key: Key.X, keyLabel: "X", hint: "Erase from the selected layer. Ctrl+drag erases a rectangle." },
@@ -17,7 +20,7 @@ const TOOLS: ToolInfo[] = [
         name: "Data select",
         key: Key.A,
         keyLabel: "A",
-        hint: "Click a placed light, spawner or height to edit its value."
+        hint: "Click a placed light, spawner, pickup, door or height - any cell of it - to edit its value. Only available with the attributes layer selected."
     },
     {
         tool: EditorTool.STAMP,
@@ -75,13 +78,14 @@ export default class Toolbar extends EditorComponent {
                 return;
             }
             const info = TOOLS.find(t => t.key === e.keyCode);
-            if (info) {
+            if (info && this.IsOffered(info.tool)) {
                 this.SetTool(info.tool);
             }
         });
 
         this.Own(this.editorStore.Subscribe(this.Render, this));
         this.Highlight(this.editorStore.state.tool);
+        this.ShowOffered();
     }
 
     private SetTool(tool: EditorTool): void {
@@ -94,6 +98,19 @@ export default class Toolbar extends EditorComponent {
         if (prevState.tool !== state.tool) {
             this.Highlight(state.tool);
         }
+        if (prevState.layers !== state.layers) {
+            this.ShowOffered();
+        }
+    }
+
+    /** Whether the tool can be used with the layer that's selected now. */
+    private IsOffered(tool: EditorTool): boolean {
+        return ToolFitsLayer(tool, this.editorStore.SelectedLayer);
+    }
+
+    /** Hides the buttons of the tools that can't be used with the selected layer. */
+    private ShowOffered(): void {
+        TOOLS.forEach(info => (this.buttons[info.tool].style.display = this.IsOffered(info.tool) ? "" : "none"));
     }
 
     private Highlight(tool: EditorTool): void {

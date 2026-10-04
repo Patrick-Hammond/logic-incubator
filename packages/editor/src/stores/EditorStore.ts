@@ -3,6 +3,7 @@ import { AddTypes, SubtractTypes } from "@logic-incubator/lib/patterns/Enumerate
 import Store, { IAction } from "@logic-incubator/lib/patterns/redux/Store";
 import { Scenes } from "@logic-incubator/engine/Constants";
 import { InitalScale } from "../Layout";
+import { DefaultPickupValue } from "@logic-incubator/engine/level/entities/Pickups";
 import { Brush, DataBrushName, DataBrushValue } from "@logic-incubator/engine/level/LevelFormat";
 import { Layer } from "./LevelDataStore";
 
@@ -45,7 +46,10 @@ export const enum MouseButtonState {
     MIDDLE_DOWN
 }
 
-/** What a left-click/drag on the map does - picked from the toolbar (see `Toolbar`, `Tools`). */
+/**
+ * What a left-click/drag on the map does - picked from the toolbar (see `Toolbar`, `Tools`). The data-select
+ * tool is only on offer while a data layer is selected (see `ToolFitsLayer`), as that's where data lives.
+ */
 export const enum EditorTool {
     BRUSH = "brush",
     ERASE = "erase",
@@ -54,6 +58,11 @@ export const enum EditorTool {
     DROPPER = "dropper",
     FILL = "fill",
     MOVE = "move"
+}
+
+/** Whether `tool` can be used with `layer` selected: every tool can, except data-select, which wants a data layer (the "attributes" one). */
+export function ToolFitsLayer(tool: EditorTool, layer: Layer | undefined): boolean {
+    return tool !== EditorTool.DATA_SELECT || (layer !== undefined && layer.isData);
 }
 
 /** Max editable (non-attributes) layers - a sanity cap; the Layers panel's list scrolls past what fits. */
@@ -162,7 +171,8 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
             dataBrushes: [
                 { name: DataBrushName.PLAYER_START, colour: 0xfe3464, value: 0 },
                 { name: DataBrushName.COLLISION, colour: 0xffd166, value: 0 },
-                { name: DataBrushName.Z_INDEX, colour: 0x06d6a0, value: 0 }
+                { name: DataBrushName.Z_INDEX, colour: 0x06d6a0, value: 0 },
+                { name: DataBrushName.PICKUP, colour: 0xf15bb5, value: DefaultPickupValue() }
             ],
             layers: [],
             mouseButtonState: MouseButtonState.UP,
@@ -191,12 +201,14 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
      * otherwise switch scenes on load or disable the editor shortcuts again. Likewise the current `tool`.
      */
     Load(state: IEditorState): void {
+        const layers = WithImplicitLayer((state && state.layers) || []);
         super.Load({
             ...state,
             currentScene: this.state.currentScene,
-            tool: this.state.tool,
+            // Still the current tool - unless the loaded layers have a tile layer selected, which data-select can't be used on.
+            tool: this.UsableTool(this.state.tool, layers),
             dataBrushes: this.ReconcileDataBrushes(state && state.dataBrushes),
-            layers: WithImplicitLayer((state && state.layers) || [])
+            layers
         });
     }
 
@@ -208,18 +220,19 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
     }
 
     protected Reduce(state: IEditorState, action: IAction<IActionData>): IEditorState {
+        const layers = WithImplicitLayer(this.UpdateLayers(state.layers, action));
         const newState = {
             dataBrushes: this.UpdateDataBrushes(state.dataBrushes, action),
             currentBrush: this.UpdateBrush(state.currentBrush, action),
             brushVisible: this.UpdateBrushVisible(state.brushVisible, action),
             hoveredBrushName: this.UpdateHoveredBrushName(state.hoveredBrushName, action),
-            layers: WithImplicitLayer(this.UpdateLayers(state.layers, action)),
+            layers,
             mouseButtonState: this.UpdateMouseButton(state.mouseButtonState, action),
             mouseDownPosition: this.UpdateMouseDownPosition(state.mouseDownPosition, action),
             viewOffset: this.UpdateViewOffset(state.viewOffset, action),
             viewScale: this.UpdateViewScale(state.viewScale, action),
             currentScene: this.UpdateCurrentScene(state.currentScene, action),
-            tool: this.UpdateTool(state.tool, action)
+            tool: this.UsableTool(this.UpdateTool(state.tool, action), layers)
         };
         return newState as IEditorState;
     }
@@ -518,6 +531,15 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
     }
 
     // helpers
+
+    /**
+     * `tool`, or the brush if it can't be used with the layer that's now selected - data-select with a tile
+     * layer, whether that came from picking the layer, adding one, the dropper picking a tile off one, or
+     * the tool being asked for in the first place. Decided here rather than in each of those, so none can be missed.
+     */
+    private UsableTool(tool: EditorTool, layers: Layer[]): EditorTool {
+        return ToolFitsLayer(tool, layers.find(layer => layer.selected)) ? tool : EditorTool.BRUSH;
+    }
 
     /** Plain +/- stepping only applies to a numeric data brush value - every remaining one (player-start, collision, height) is a number, but a save from before light/spawner moved off the data-brush model could still hand this a `LightValue`/`SpawnerValue`, so the guard stays. */
     private CalcDataBrushValue(value: DataBrushValue, actionType: EditorActions): DataBrushValue {

@@ -6,11 +6,11 @@ import { TileSize } from "../Constants";
 import type {PlayerSetup} from "../DungeonMain";
 import PlayerControl from "../input/PlayerControl";
 import {AddGold, CreateGold, Gold} from "../level/entities/Gold";
-import {CreateHealth, DamageHealth, Health, TickHealth} from "../level/entities/Health";
+import {CreateHealth, DamageHealth, Health, HealHealth, TickHealth} from "../level/entities/Health";
 import {AddItem, CreateInventory, Inventory} from "../level/entities/Inventory";
-import {PickupValue} from "../level/entities/Pickups";
+import {AddKey, CanOpen, CreateKeyRing, KeyRing} from "../level/entities/Keys";
 import {WeaponDef} from "../level/entities/Projectiles";
-import Level from "../level/Level";
+import Level, {CollectedPickup} from "../level/Level";
 import TileCollision from "../level/TileCollision";
 import {Camera} from "./Camera";
 import {BoxCentre, CentreTile, ResolveMove} from "./helpers/PlayerMovement";
@@ -30,6 +30,7 @@ export class Player {
     private health: Health;
     private gold: Gold;
     private inventory: Inventory;
+    private keys: KeyRing;
     private weapons: WeaponDef[];
     private equippedIndex = 0;
     private fireCooldown = 0;
@@ -47,6 +48,7 @@ export class Player {
         this.health = CreateHealth(setup.hitPoints);
         this.gold = CreateGold();
         this.inventory = CreateInventory();
+        this.keys = CreateKeyRing();
         this.weapons = setup.weapons;
     }
 
@@ -84,8 +86,23 @@ export class Player {
         return this.inventory;
     }
 
+    /** The keys they're carrying - each opens the locked doors whose lock matches its id (see `Keys`). */
+    get Keys(): KeyRing {
+        return this.keys;
+    }
+
     get EquippedWeapon(): WeaponDef {
         return this.weapons[this.equippedIndex];
+    }
+
+    /** Whether a door with this lock id opens for them: it's unlocked, or they carry its key. */
+    HasKeyFor(lockId: number): boolean {
+        return CanOpen(this.keys, lockId);
+    }
+
+    /** Whether the cell is a closed, locked door they've no key for - a wall to them, which their collider is given (see `DungeonMain`). */
+    IsLockedOut(tileX: number, tileY: number): boolean {
+        return this.level.IsDoorLocked(tileX, tileY, lock => this.HasKeyFor(lock));
     }
 
     /** Stops the player's animation, which would otherwise keep ticking on the shared ticker for good. */
@@ -116,6 +133,7 @@ export class Player {
         this.health = CreateHealth(this.setup.hitPoints);
         this.gold = CreateGold();
         this.inventory = CreateInventory();
+        this.keys = CreateKeyRing();
         this.equippedIndex = 0;
         this.fireCooldown = 0;
         this.shot = null;
@@ -128,7 +146,7 @@ export class Player {
         this.Move(dt);
         const tile = this.Tile;
         this.MoveCamera(tile);
-        this.level.UpdateDoors(tile.x, tile.y);
+        this.level.UpdateDoors(tile.x, tile.y, lock => this.HasKeyFor(lock));
         this.level.UpdateVisibleRegions(tile.x, tile.y);
         this.level.CollectPickupsAt(tile.x, tile.y).forEach(value => this.ApplyPickup(value));
     }
@@ -175,19 +193,34 @@ export class Player {
         }
     }
 
-    /** Gold adds to the count; a weapon is added to the loadout and equipped immediately; an item goes to the first free inventory slot (dropped if it's full). */
-    private ApplyPickup(value: PickupValue): void {
+    /**
+     * Gold adds to the count; health restores hit points, up to the maximum; a key joins the ones carried
+     * (shown as the tile it was); a weapon is added to the loadout and equipped immediately; an item goes to
+     * the first free inventory slot (dropped if it's full) - as its own sprite, or as the tile it was.
+     */
+    private ApplyPickup(pickup: CollectedPickup): void {
+        const value = pickup.value;
         switch (value.kind) {
             case "gold":
                 AddGold(this.gold, value.amount);
+                break;
+            case "health":
+                HealHealth(this.health, value.amount);
+                break;
+            case "key":
+                AddKey(this.keys, value.id, pickup.sprite);
                 break;
             case "weapon":
                 this.weapons.push(value.weapon);
                 this.equippedIndex = this.weapons.length - 1;
                 break;
-            case "item":
-                AddItem(this.inventory, value.sprite);
+            case "item": {
+                const sprite = value.sprite || pickup.sprite;
+                if (sprite) {
+                    AddItem(this.inventory, sprite);
+                }
                 break;
+            }
         }
     }
 

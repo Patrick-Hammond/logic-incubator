@@ -34,11 +34,12 @@ export function OpenDataBrushDialog(name: string, value: DataBrushValue, context
     if (!editor || IsFormDialogOpen()) {
         return Promise.resolve(null);
     }
+    const images = { monster: MonsterImage, hasSprite: (sprite: string) => AssetFactory.inst.Has(sprite) };
     return OpenFormDialog({
         title: editor.title,
         subtitle: context ? context + " " + editor.subtitle : editor.subtitle,
-        fields: editor.fields({ monster: MonsterImage }),
+        fields: editor.fields(images),
         values: editor.toForm(value),
-        validate: editor.validate
+        validate: editor.validate ? form => editor.validate(form, images) : undefined
     }).then(form => (form ? editor.fromForm(form) : null));
 }

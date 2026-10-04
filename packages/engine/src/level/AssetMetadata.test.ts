@@ -137,3 +137,45 @@ describe("asset categories", () => {
         expect(store.CategoryOf("torch")).toBe("dungeon");
     });
 });
+
+describe("AssetMetadataStore pickup validation", () => {
+    it("drops a malformed pickup with a warning naming the asset - the real key_gold: true - keeping the rest of the entry", () => {
+        const store = new AssetMetadataStore();
+        const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+        store.Load({ key_gold: { category: "items", pickup: true as never } });
+        expect(store.Get("key_gold").pickup).toBeUndefined();
+        expect(store.Get("key_gold").category).toBe("items");
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining('"key_gold"'), true);
+        warn.mockRestore();
+    });
+
+    it("drops one with an unknown kind or a missing amount", () => {
+        const store = new AssetMetadataStore();
+        const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+        store.Load({ a: { pickup: { kind: "chest" } as never }, b: { pickup: { kind: "gold" } as never } });
+        expect(store.Get("a").pickup).toBeUndefined();
+        expect(store.Get("b").pickup).toBeUndefined();
+        expect(warn).toHaveBeenCalledTimes(2);
+        warn.mockRestore();
+    });
+
+    it("keeps a well-formed pickup of every kind, and an item with no sprite, silently", () => {
+        const store = new AssetMetadataStore();
+        const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+        const weapon = { icon: "weapon_axe", shot: { sprite: "weapon_throwing_axe", speed: 5, damage: 2, cooldown: 0.4, range: 8 } };
+        store.Load({
+            coin: { pickup: { kind: "gold", amount: 1 } },
+            heart: { pickup: { kind: "health", amount: 2 } },
+            key: { pickup: { kind: "key", id: 4 } },
+            axe: { pickup: { kind: "weapon", weapon } },
+            potion: { pickup: { kind: "item" } }
+        });
+        expect(store.Get("coin").pickup).toEqual({ kind: "gold", amount: 1 });
+        expect(store.Get("heart").pickup).toEqual({ kind: "health", amount: 2 });
+        expect(store.Get("key").pickup).toEqual({ kind: "key", id: 4 });
+        expect(store.Get("axe").pickup).toEqual({ kind: "weapon", weapon });
+        expect(store.Get("potion").pickup).toEqual({ kind: "item" });
+        expect(warn).not.toHaveBeenCalled();
+        warn.mockRestore();
+    });
+});

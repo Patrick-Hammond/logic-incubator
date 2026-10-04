@@ -6,6 +6,7 @@ import type {PlayerSetup} from "../DungeonMain";
 import {Gold} from "../level/entities/Gold";
 import {Health} from "../level/entities/Health";
 import {Inventory, InventorySize} from "../level/entities/Inventory";
+import {KeyRing} from "../level/entities/Keys";
 
 const HeartScale = 3;
 const Margin = 16;
@@ -22,12 +23,17 @@ const SlotSize = 36;
 const SlotGap = 8;
 const SlotColumns = 4;
 
+const KeysY = 330;
+/** Keys the panel has room to show - one id each, so a level would need more than this many locks to run out. */
+const KeySlots = 8;
+
 const TextStyle = { fontFamily: "Arial", fontSize: 14, fill: 0xffffff, stroke: 0x000000, strokeThickness: 3 };
+const KeyIdStyle = { fontFamily: "Arial", fontSize: 11, fill: 0xffffff, stroke: 0x000000, strokeThickness: 3 };
 const LabelStyle = { fontFamily: "Arial", fontSize: 12, fill: 0xcccccc, stroke: 0x000000, strokeThickness: 2 };
 
 /**
  * The right-hand HUD panel: hearts (top-right, unchanged position), gold,
- * the equipped weapon and the inventory grid. `Camera` reserves `PlayWidth`
+ * the equipped weapon, the inventory grid and the keys carried. `Camera` reserves `PlayWidth`
  * of the canvas so gameplay never renders under this panel.
  */
 export default class Hud extends GameComponent {
@@ -44,6 +50,8 @@ export default class Hud extends GameComponent {
     private shownWeaponIcon = "";
 
     private slotIcons: Sprite[] = [];
+    private keyIcons: Sprite[] = [];
+    private keyLabels: Text[] = [];
 
     constructor(private sprites: PlayerSetup["hearts"]) {
         super();
@@ -70,13 +78,27 @@ export default class Hud extends GameComponent {
             this.CreateBox(x, y, SlotSize);
             this.slotIcons.push(this.CreateIcon(x, y, SlotSize));
         }
+        this.CreateLabel("Keys", PlayWidth + Margin, KeysY - 18);
+        for (let i = 0; i < KeySlots; i++) {
+            const x = PlayWidth + Margin + (i % SlotColumns) * (SlotSize + SlotGap);
+            const y = KeysY + Math.floor(i / SlotColumns) * (SlotSize + SlotGap);
+            this.CreateBox(x, y, SlotSize);
+            this.keyIcons.push(this.CreateIcon(x, y, SlotSize));
+            // The id a door's lock has to match, so the player can tell their keys apart.
+            const label = new Text("", KeyIdStyle);
+            label.anchor.set(1, 1);
+            label.position.set(x + SlotSize - 3, y + SlotSize - 2);
+            this.root.addChild(label);
+            this.keyLabels.push(label);
+        }
     }
 
-    Render(health: Health, gold: Gold, weaponIcon: string, inventory: Inventory): void {
+    Render(health: Health, gold: Gold, weaponIcon: string, inventory: Inventory, keys: KeyRing): void {
         this.RenderHearts(health);
         this.RenderGold(gold);
         this.RenderWeapon(weaponIcon);
         this.RenderInventory(inventory);
+        this.RenderKeys(keys);
     }
 
     private DrawPanel(): void {
@@ -175,5 +197,16 @@ export default class Hud extends GameComponent {
 
     private RenderInventory(inventory: Inventory): void {
         inventory.slots.forEach((item, i) => this.SetIcon(this.slotIcons[i], item, SlotSize));
+    }
+
+    private RenderKeys(keys: KeyRing): void {
+        for (let i = 0; i < KeySlots; i++) {
+            const key = keys.keys[i];
+            this.SetIcon(this.keyIcons[i], key ? key.sprite : null, SlotSize);
+            const label = key ? String(key.id) : "";
+            if (this.keyLabels[i].text !== label) {
+                this.keyLabels[i].text = label;
+            }
+        }
     }
 }

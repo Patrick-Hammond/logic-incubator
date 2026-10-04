@@ -1,8 +1,10 @@
 import { Key } from "@logic-incubator/lib/io/Keyboard";
 import { AnimationSpeed } from "@logic-incubator/engine/Constants";
+import { IsPickupValue } from "@logic-incubator/engine/level/entities/Pickups";
 import { IsSpawnerValue } from "@logic-incubator/engine/level/entities/Spawners";
 import { IsLightValue } from "@logic-incubator/engine/level/Lighting";
 import { DataBrushValue } from "@logic-incubator/engine/level/LevelFormat";
+import { DescribePickup } from "../DataLabels";
 import { OpenDataBrushDialog } from "../DataBrushDialog";
 import { DataBrushEditorFor } from "../DataBrushEditors";
 import EditorComponent from "../EditorComponent";
@@ -134,6 +136,9 @@ export default class SelectedBrush extends EditorComponent {
     }
 
     private DescribeValue(value: DataBrushValue): { text: string; colour?: number } {
+        if (IsPickupValue(value)) {
+            return { text: DescribePickup(value) };
+        }
         if (IsLightValue(value)) {
             return { text: `${value.brightness} bright · ${value.range} tiles`, colour: value.tint };
         }

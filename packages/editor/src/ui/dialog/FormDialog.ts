@@ -1,7 +1,7 @@
 /**
  * A modal form popup for editing structured values - text, numbers (slider +
- * exact box), colours, toggles and multi-select chip grids - described by a
- * list of `FieldSpec`s rather than hand-built per use.
+ * exact box), colours, toggles, a single choice and multi-select chip grids -
+ * described by a list of `FieldSpec`s rather than hand-built per use.
  *
  * Plain DOM layered over the Pixi canvas rather than Pixi widgets: the browser
  * already gives us focus, text entry, IME, native colour pickers and range
@@ -24,7 +24,17 @@ export type ChoiceOption = {
     image?: { src: string; width: number; height: number };
 };
 
-type FieldBase = { key: string; label: string; hint?: string };
+type FieldBase = {
+    key: string;
+    label: string;
+    hint?: string;
+    /**
+     * Offers the field only while this is true of the form's current values - for the fields that belong to
+     * one choice among several (a pickup's amount, its key id...). Re-asked on every change. A hidden field
+     * keeps its value, which is still in the saved values: the editor that reads them just ignores it.
+     */
+    visibleWhen?: (values: FormValues) => boolean;
+};
 
 export type NumberField = FieldBase & {
     type: "number";
@@ -44,8 +54,10 @@ export type TextField = FieldBase & { type: "text"; placeholder?: string };
 export type ColourField = FieldBase & { type: "colour" };
 export type ToggleField = FieldBase & { type: "toggle" };
 export type MultiChoiceField = FieldBase & { type: "multi-choice"; options: ChoiceOption[] };
+/** Exactly one of `options` - the value is its `value`. */
+export type ChoiceField = FieldBase & { type: "choice"; options: ChoiceOption[] };
 
-export type FieldSpec = NumberField | TextField | ColourField | ToggleField | MultiChoiceField;
+export type FieldSpec = NumberField | TextField | ColourField | ToggleField | MultiChoiceField | ChoiceField;
 
 export type FormValue = number | string | boolean | string[];
 export type FormValues = { [key: string]: FormValue };
@@ -58,6 +70,11 @@ export type FormDialogOptions = {
     /** Return an error message to disable Save (shown in the footer), or null when the values are acceptable. Re-run on every change. */
     validate?: (values: FormValues) => string | null;
 };
+
+/** Whether the field is offered for these values (see `FieldBase.visibleWhen`). */
+export function IsFieldVisible(field: FieldSpec, values: FormValues): boolean {
+    return !field.visibleWhen || field.visibleWhen(values);
+}
 
 let openDialog: HTMLElement | null = null;
 
@@ -106,11 +123,18 @@ export function OpenFormDialog(options: FormDialogOptions): Promise<FormValues |
             error.textContent = message || "";
             saveButton.disabled = message != null;
         };
+        const rows: { field: FieldSpec; row: HTMLElement }[] = [];
+        const showFields = () => rows.forEach(({ field, row }) => (row.hidden = !IsFieldVisible(field, values)));
         const onChange = (key: string, value: FormValue) => {
             values[key] = value;
+            showFields();
             revalidate();
         };
-        options.fields.forEach(field => body.appendChild(BuildField(field, values[field.key], onChange)));
+        options.fields.forEach(field => {
+            const row = body.appendChild(BuildField(field, values[field.key], onChange));
+            rows.push({ field, row });
+        });
+        showFields();
 
         const close = (result: FormValues | null) => {
             overlay.remove();
@@ -254,6 +278,28 @@ function BuildField(field: FieldSpec, value: FormValue, onChange: (key: string, 
             control.appendChild(box);
             break;
         }
+        case "choice": {
+            const grid = El("div", "fd-chips fd-choices");
+            grid.id = id;
+            grid.setAttribute("role", "group");
+            grid.setAttribute("aria-label", field.label);
+            const chips = field.options.map(option => {
+                const chip = El("button", "fd-chip fd-choice");
+                chip.type = "button";
+                chip.title = option.label;
+                chip.appendChild(El("span", "fd-chip-label", option.label));
+                chip.addEventListener("click", () => {
+                    show(option.value);
+                    onChange(field.key, option.value);
+                });
+                grid.appendChild(chip);
+                return { option, chip };
+            });
+            const show = (chosen: FormValue) => chips.forEach(({ option, chip }) => chip.setAttribute("aria-pressed", String(option.value === chosen)));
+            show(value);
+            control.appendChild(grid);
+            break;
+        }
         case "multi-choice": {
             const selected = new Set(Array.isArray(value) ? value : []);
             const emit = () => onChange(field.key, field.options.map(o => o.value).filter(v => selected.has(v)));
@@ -389,6 +435,8 @@ const STYLES = `
     background: var(--ed-well); color: var(--ed-chip-text); border: 1px solid var(--ed-divider); border-radius: 5px;
     font: inherit; font-size: 11px; cursor: pointer;
 }
+.fd-choices { grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); }
+.fd-choice { min-height: 0; justify-content: center; padding: 8px 6px; font-size: 12px; }
 .fd-chip:hover { border-color: var(--ed-hover-border); }
 .fd-chip[aria-pressed=true] { background: var(--ed-accent-bg); border-color: var(--ed-accent); color: var(--ed-text-strong); }
 .fd-chip[aria-pressed=false] img { opacity: 0.45; filter: grayscale(0.7); }

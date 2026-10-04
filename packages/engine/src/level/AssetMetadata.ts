@@ -16,7 +16,7 @@
  * the level data changing.
  */
 
-import { PickupValue } from "./entities/Pickups";
+import { IsPickupValue, PickupValue } from "./entities/Pickups";
 import { SpawnerValue } from "./entities/Spawners";
 import { IsCompleteLightValue, LightValue } from "./Lighting";
 
@@ -86,7 +86,9 @@ export default class AssetMetadataStore {
      * type for one) would otherwise flow silently into `BakeLighting` as `NaN`/`undefined` and bake to a
      * black tint instead of failing loudly. Drop just the bad `light` (keeping `collidable`/`door` on the
      * same entry) and warn with the asset name, rather than reject the whole file over one typo.
-     * An unrecognised `category` is dropped the same way, so the sprite is just listed under `misc`.
+     * An unrecognised `category` is dropped the same way, so the sprite is just listed under `misc`, and so is a
+     * malformed `pickup` (an unknown kind, a missing amount) - the tile is then no pickup, rather than one
+     * that hands the player `undefined`.
      */
     Add(bundle: string, map: AssetMetadataMap): void {
         const clean: AssetMetadataMap = {};
@@ -99,6 +101,13 @@ export default class AssetMetadataStore {
                     meta.light
                 );
                 meta = { ...meta, light: undefined };
+            }
+            if (meta.pickup !== undefined && !IsPickupValue(meta.pickup)) {
+                console.warn(
+                    `assets-meta.json: "${name}" has an invalid pickup (needs a kind - gold or health with an amount, key with an id, weapon with its icon and shot, or item - and numbers that are finite) - ignoring it until fixed:`,
+                    meta.pickup
+                );
+                meta = { ...meta, pickup: undefined };
             }
             if (meta.category !== undefined && !IsAssetCategory(meta.category)) {
                 console.warn(
