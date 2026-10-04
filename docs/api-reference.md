@@ -868,10 +868,14 @@ type DungeonMainOptions = {
     player: PlayerSetup;
     level: () => LevelFile | undefined;                   // asked on every start and restart
     levelBundle?: () => string | undefined;               // the asset bundle the level plays in
+    playerSprite?: () => string | undefined;              // the animation to draw the player with, in place of player.sprite
 };
 
 new DungeonMain(options: DungeonMainOptions)
 ```
+
+`playerSprite` is asked for each time a level starts (on `LEVEL_CREATED`, before the player is reset): when it returns an animation
+name the player is drawn with that (`Player.SetSprite`), otherwise with `player.sprite`. It is how a game lets the player pick a character.
 
 Lifecycle: `OnInitialise` builds the `Level`, attaches `Camera`, `TileMapView` and `Hud`, creates `Player`, `EntityRenderer` and
 `Encounter`, binds asset metadata (`BindAssetMetadata`) and listens for `LEVEL_CREATED` / `PLAYER_DIED`. `OnShow` and each restart
@@ -1193,7 +1197,7 @@ Constants `MaxMonsters = 150`, `HitFlashTime = 0.15`. `EncounterLevel` and `Enco
 | --- | --- | --- |
 | `Camera extends GameComponent` | `view/Camera` | `ViewRect`, `Scale`, `ScaledTileSize`, `Zoom`, `BaseViewWidth/Height`, `CurrentZ`, `EffectiveZoom`; `Move(x, y)`, `CenterOn(x, y)`, `Follow(pixelX, pixelY, amount)`, `SetZ(z)`, `UpdateZoom(dt)`. Emits `CAMERA_MOVED`. `new Camera(cameraControl?)`. |
 | `TileMapView extends GameComponent` | `view/TileMap` | `new TileMapView(level, camera)`. Builds the tile layers, lit and banded by height, plus the `EntitiesLayer` (`"entities"`) and `ProjectilesLayer` (`"projectiles"`) containers; `LightTint(light)`, `TileGD8Rotation(rotation, scaleX, scaleY)`. Emits `LEVEL_CREATED`. |
-| `Player` | `view/Player` | `new Player(camera, collision, level, setup)`; `Position`, `Centre`, `Tile`, `Texture`, `FacingX`, `Health`, `Gold`, `Inventory`, `EquippedWeapon`; `Reset(startPosition)` (throws if the level has no player start), `Update(dt, seconds)` (input, movement, camera, doors, regions, pickups), `TakeShot(): Vec2Like \| null`, `Damage(n): boolean`, `Destroy()`. |
+| `Player` | `view/Player` | `new Player(camera, collision, level, setup)`; `Position`, `Centre`, `Tile`, `Texture`, `FacingX`, `Health`, `Gold`, `Inventory`, `EquippedWeapon`; `Reset(startPosition)` (throws if the level has no player start), `SetSprite(animation)` (draw the player with another animation, keeping their position; a no-op for the one already in use), `Update(dt, seconds)` (input, movement, camera, doors, regions, pickups), `TakeShot(): Vec2Like \| null`, `Damage(n): boolean`, `Destroy()`. |
 | `Hud extends GameComponent` | `view/Hud` | `new Hud(setup.hearts)`; `Render(health, gold, weaponIcon, inventory)`. Warns once per missing heart sprite. |
 | `EntityRenderer` | `view/EntityRenderer` | `new EntityRenderer(camera, level)`; `Reset()` (call on `LEVEL_CREATED`), `Render(player, encounter)`. |
 

@@ -1322,6 +1322,7 @@ export function Dungeon(): () => void {
 | `player` | `PlayerSetup`: the player's look, hit points, hearts and weapons ([9.3](#93-the-player)). |
 | `level` | `() => LevelFile \| undefined`. Called on every start/restart. In a dev build return the editor's latest save first (`editor.savedLevel() \|\| shipped`). |
 | `levelBundle?` | `() => string \| undefined`. The asset bundle the level plays in. Loaded (with its dependencies) *before* the level is built; the previous one is released after. |
+| `playerSprite?` | `() => string \| undefined`. Called on every start/restart; the animation it returns is what the player is drawn with, in place of `player.sprite`. Return `undefined` for the default. This is how a character select screen's pick reaches the game: keep the chosen character in your boot code (listen for the event your screen emits) and return their run animation. |
 
 The engine uses a fixed coordinate system from `@logic-incubator/engine/Constants`: a 1280x720 canvas, 16 px tiles, a
 320 px HUD column on the right (`PlayWidth` = 960 px of play area). Use these constants for your `Game` size.
@@ -1694,12 +1695,12 @@ assets through the same scan the build uses. in-dungeons-we-dwell's `src/testing
 ```ts
 const { ScanRoot } = nodeRequire(path.join(pipeline, "scan.js"));
 const { ClassifyBundle } = nodeRequire(path.join(pipeline, "classify.js"));
-// ... Meta(), SpriteNames(), FramesOf(name), HasFrame(frame), FrameSize(frame)
+// ... Meta(), SpriteNames(), FramesOf(name), HasFrame(frame), FrameBounds(frame)
 ```
 
 ```ts
-it("draws every portrait from a frame in the sprite sheet", () => {
-    Characters.forEach(c => expect(HasFrame(c.portrait), c.name).toBe(true));
+it("runs every character from an animation in the sprite sheet, with frames to play", () => {
+    Characters.forEach(c => expect(FramesOf(c.run)?.length, c.name).toBeGreaterThan(1));
 });
 ```
 
