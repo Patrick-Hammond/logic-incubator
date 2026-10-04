@@ -10,7 +10,7 @@ import { RectangleLike, Vec2, Vec2Like } from "@logic-incubator/lib/math/Geometr
 import { PlayerSpeed, TileSize } from "./Constants";
 import { MONSTER_KILLED, PLAYER_DAMAGED, PLAYER_DIED, SPAWNER_DESTROYED } from "./Events";
 import { IsHeightGap } from "./level/Depth";
-import { IMonsterBehaviour, Separation } from "./level/entities/Behaviours";
+import { IMonsterBehaviour, Separation, Toward } from "./level/entities/Behaviours";
 import FlowField, { UNREACHABLE } from "./level/entities/FlowField";
 import { Health, IsDead } from "./level/entities/Health";
 import MonsterRoster, { MonsterDef, MonsterType } from "./level/entities/MonsterRoster";
@@ -32,6 +32,10 @@ export interface EncounterLevel {
     collisionData: boolean[][];
     boundRect: { width: number; height: number };
     IsSolid(tileX: number, tileY: number): boolean;
+    /** Whether the cell is part of a door that's closed - which monsters can't enter, though it isn't `IsSolid` (the player walks onto one to open it). */
+    IsDoorClosed(tileX: number, tileY: number): boolean;
+    /** Goes up each time a door opens or closes - how the encounter knows the walkable cells have changed under it. */
+    readonly doorVersion: number;
     IsCellVisible(tileX: number, tileY: number): boolean;
     HeightAt(tileX: number, tileY: number): number;
     RemoveSpawner(spawner: Spawner): void;
@@ -88,12 +92,18 @@ export default class Encounter {
 
     private flow: FlowField;
     private collision: TileCollision;
+    /** What a monster caught in a closed door moves with on its way out: the same, but the door's own cells don't block it. */
+    private escapeCollision: TileCollision;
     private random: () => number;
     private positions: Vec2Like[] = [];
+    /** The level's `doorVersion` the flow field was last worked out at. */
+    private doorVersion = 0;
 
     constructor(private level: EncounterLevel, private options: EncounterOptions) {
         this.random = options.random || Math.random;
-        this.collision = new TileCollision(level);
+        // Closed doors are solid to monsters - not to the player, whose own collider (see DungeonMain) leaves them out.
+        this.collision = new TileCollision(level, (x, y) => level.IsDoorClosed(x, y));
+        this.escapeCollision = new TileCollision(level);
     }
 
     /** Starts over from the level's spawners, as just loaded. Call on every `LEVEL_CREATED` - there's nothing to fight until the first. */
@@ -102,12 +112,68 @@ export default class Encounter {
         this.projectiles = [];
         this.spawners = this.level.spawners.map(CreateSpawnerState);
         this.spawnerFlash.clear();
+        this.doorVersion = this.level.doorVersion;
         this.flow = new FlowField(
             this.level.boundRect.width,
             this.level.boundRect.height,
-            (x, y) => this.level.IsSolid(x, y),
+            (x, y) => this.IsImpassable(x, y),
             (x1, y1, x2, y2) => IsHeightGap(this.level.HeightAt(x1, y1), this.level.HeightAt(x2, y2))
         );
+    }
+
+    /** Whether a monster can't be in the cell: a wall, a spawner, off the map - or a door that's closed (see `Level.IsDoorClosed`). */
+    private IsImpassable(x: number, y: number): boolean {
+        return this.level.IsSolid(x, y) || this.level.IsDoorClosed(x, y);
+    }
+
+    /** The closed-door cells a one-tile box at `position` overlaps - none unless a door has shut on it, as nothing can walk into one. */
+    private ClosedDoorsUnder(position: Vec2Like): Vec2Like[] {
+        const cells: Vec2Like[] = [];
+        const x1 = Math.floor((position.x + TileSize - 1) / TileSize);
+        const y1 = Math.floor((position.y + TileSize - 1) / TileSize);
+        for (let x = Math.floor(position.x / TileSize); x <= x1; x++) {
+            for (let y = Math.floor(position.y / TileSize); y <= y1; y++) {
+                if (this.level.IsDoorClosed(x, y)) {
+                    cells.push({ x, y });
+                }
+            }
+        }
+        return cells;
+    }
+
+    /**
+     * The way out for a monster a door has shut on: the free cell nearest it that borders the door (the
+     * closed cells reached from `inside`, 4-way). Not the way the flow field points - the door is shut, so
+     * there is none - and not either side in particular: it's pushed out whichever side it's nearer, so it
+     * can neither be trapped in the door nor slip through to the player. Null if the door is walled in.
+     */
+    private DoorExit(inside: ReadonlyArray<Vec2Like>, centre: Vec2Like): Vec2Like | null {
+        const seen = new Set<string>(inside.map(cell => cell.x + "," + cell.y));
+        const queue = inside.slice();
+        let best: Vec2Like | null = null;
+        let bestDistance = Number.MAX_VALUE;
+        for (let i = 0; i < queue.length; i++) {
+            const cell = queue[i];
+            [{ x: 1, y: 0 }, { x: -1, y: 0 }, { x: 0, y: 1 }, { x: 0, y: -1 }].forEach(step => {
+                const next = { x: cell.x + step.x, y: cell.y + step.y };
+                const key = next.x + "," + next.y;
+                if (seen.has(key)) {
+                    return;
+                }
+                seen.add(key);
+                if (this.level.IsDoorClosed(next.x, next.y)) {
+                    queue.push(next);
+                } else if (!this.level.IsSolid(next.x, next.y)) {
+                    const dx = (next.x + 0.5) * TileSize - centre.x;
+                    const dy = (next.y + 0.5) * TileSize - centre.y;
+                    if (dx * dx + dy * dy < bestDistance) {
+                        bestDistance = dx * dx + dy * dy;
+                        best = next;
+                    }
+                }
+            });
+        }
+        return best;
     }
 
     /** Walking distances to the player, as of the last `Update`. */
@@ -123,6 +189,11 @@ export default class Encounter {
     /** One frame: `dt` in frames (the ticker's delta, which movement is tuned to), `seconds` of real time for timers. */
     Update(dt: number, seconds: number, player: EncounterPlayer): void {
         const tile = player.Tile;
+        if (this.level.doorVersion !== this.doorVersion) {
+            // A door opened or closed: which cells monsters can cross changed, even if the player hasn't left their cell.
+            this.doorVersion = this.level.doorVersion;
+            this.flow.MarkDirty();
+        }
         this.flow.Update(tile.x, tile.y);
 
         this.StepSpawners(seconds);
@@ -145,7 +216,7 @@ export default class Encounter {
     }
 
     private StepSpawners(seconds: number): void {
-        const isOpen = (x: number, y: number) => !this.level.IsSolid(x, y);
+        const isOpen = (x: number, y: number) => !this.IsImpassable(x, y);
         const distanceAt = (x: number, y: number) => this.flow.DistanceAt(x, y);
         this.spawners.forEach(state => {
             if (state.destroyed) {
@@ -193,15 +264,20 @@ export default class Encounter {
 
         this.monsters.forEach((m, index) => {
             const tile = CentreTile(m.position);
-            const steer = m.behaviour.Steer({
-                position: m.position,
-                tile,
-                player: playerPosition,
-                flow: this.flow,
-                tileSize: TileSize,
-                dt: seconds,
-                random: this.random
-            });
+            // A door that has shut on it overrides whatever it was after: out of the door first.
+            const caught = this.ClosedDoorsUnder(m.position);
+            const exit = caught.length ? this.DoorExit(caught, BoxCentre(m.position)) : null;
+            const steer = exit
+                ? Toward(m.position, { x: exit.x * TileSize, y: exit.y * TileSize })
+                : m.behaviour.Steer({
+                    position: m.position,
+                    tile,
+                    player: playerPosition,
+                    flow: this.flow,
+                    tileSize: TileSize,
+                    dt: seconds,
+                    random: this.random
+                });
             const push = Separation(index, positions, SeparationRadius);
             let x = steer.x + push.x;
             let y = steer.y + push.y;
@@ -211,7 +287,7 @@ export default class Encounter {
                 y /= length;
             }
             m.velocity.Offset(x, y);
-            ResolveMove(m.position, m.velocity, dt, this.collision, PlayerSpeed * m.def.speed);
+            ResolveMove(m.position, m.velocity, dt, exit ? this.escapeCollision : this.collision, PlayerSpeed * m.def.speed);
 
             // Faces where it means to go - or at the player while it holds still.
             const faceX = Math.abs(steer.x) > 0.1 ? steer.x : playerPosition.x - m.position.x;

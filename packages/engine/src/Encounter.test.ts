@@ -4,6 +4,7 @@ import { TileSize } from "./Constants";
 import Encounter, { EncounterLevel, EncounterPlayer } from "./Encounter";
 import { MONSTER_KILLED, PLAYER_DAMAGED, PLAYER_DIED, SPAWNER_DESTROYED } from "./Events";
 import { Chase, KeepDistance } from "./level/entities/Behaviours";
+import { UNREACHABLE } from "./level/entities/FlowField";
 import { CreateHealth, DamageHealth, Health, TickHealth } from "./level/entities/Health";
 import MonsterRoster, { MonsterDef } from "./level/entities/MonsterRoster";
 import { ShotSetup } from "./level/entities/Projectiles";
@@ -23,6 +24,9 @@ const Shooter: MonsterDef = {
     ranged: { sprite: "bolt", speed: 4, damage: 1, cooldown: 1, range: 8 }
 };
 
+/** Marches straight right whatever the flow field says - what a wanderer's random heading, or a crowd's shove, can do to a monster. */
+const Pusher: MonsterDef = { ...Walker, behaviour: () => ({ Steer: () => ({ x: 1, y: 0 }) }) };
+
 const ARROW: ShotSetup = { sprite: "arrow", speed: 6, damage: 1, range: 20 };
 const FRAME = 1 / 60;
 
@@ -40,10 +44,23 @@ class TestPlayer implements EncounterPlayer {
     }
 }
 
-function TestLevel(rows: string[], spawners: Spawner[], visible: (x: number, y: number) => boolean = () => true): EncounterLevel {
+/** An `EncounterLevel` that can open and close its doors - every `D` on the map is a cell of the one door, closed until `SetDoorsOpen(true)`. */
+type TestLevelWithDoors = EncounterLevel & { SetDoorsOpen(open: boolean): void };
+
+function TestLevel(rows: string[], spawners: Spawner[], visible: (x: number, y: number) => boolean = () => true): TestLevelWithDoors {
     const collisionData: boolean[][] = [];
     const mark = (x: number, y: number, solid: boolean) => ((collisionData[x] = collisionData[x] || [])[y] = solid);
-    rows.forEach((row, y) => row.split("").forEach((c, x) => c === "#" && mark(x, y, true)));
+    // Like the real Level's doors: not solid (the player walks onto one to open it), but `IsDoorClosed` while shut.
+    const doorCells: boolean[][] = [];
+    let doorsOpen = false;
+    let doorVersion = 0;
+    rows.forEach((row, y) => row.split("").forEach((c, x) => {
+        if (c === "#") {
+            mark(x, y, true);
+        } else if (c === "D") {
+            (doorCells[x] = doorCells[x] || [])[y] = true;
+        }
+    }));
     spawners.forEach(s => s.cells.forEach(c => mark(c.x, c.y, true)));
     const width = rows[0].length;
     const height = rows.length;
@@ -52,6 +69,16 @@ function TestLevel(rows: string[], spawners: Spawner[], visible: (x: number, y: 
         collisionData,
         boundRect: { width, height },
         IsSolid: (x, y) => x < 0 || y < 0 || x >= width || y >= height || !!(collisionData[x] && collisionData[x][y]),
+        IsDoorClosed: (x, y) => !doorsOpen && !!(doorCells[x] && doorCells[x][y]),
+        get doorVersion() {
+            return doorVersion;
+        },
+        SetDoorsOpen(open: boolean) {
+            if (open !== doorsOpen) {
+                doorsOpen = open;
+                doorVersion++;
+            }
+        },
         IsCellVisible: visible,
         HeightAt: () => 0,
         RemoveSpawner(spawner) {
@@ -98,6 +125,28 @@ const WALLED = [
     "####################"
 ];
 
+// The same room split down the middle by a wall of door cells (D): shut until the test opens them.
+const DOORED = [
+    "####################",
+    "#.......D..........#",
+    "#.......D..........#",
+    "#.......D..........#",
+    "#.......D..........#",
+    "#.......D..........#",
+    "####################"
+];
+
+// A door two cells thick (the real ones are 2x2): columns 8 and 9 of door cells split the room.
+const THICK = [
+    "####################",
+    "#.......DD.........#",
+    "#.......DD.........#",
+    "#.......DD.........#",
+    "#.......DD.........#",
+    "#.......DD.........#",
+    "####################"
+];
+
 type Emitted = { event: string; args: unknown[] }[];
 
 function Setup(rows: string[], spawners: Spawner[], player: TestPlayer, visible?: (x: number, y: number) => boolean) {
@@ -120,7 +169,7 @@ function Setup(rows: string[], spawners: Spawner[], player: TestPlayer, visible?
 }
 
 beforeEach(() => {
-    MonsterRoster.inst.Load({ types: ["walker", "shooter"], defs: { walker: Walker, shooter: Shooter } });
+    MonsterRoster.inst.Load({ types: ["walker", "shooter", "pusher"], defs: { walker: Walker, shooter: Shooter, pusher: Pusher } });
 });
 
 describe("Encounter spawning", () => {
@@ -203,6 +252,113 @@ describe("Encounter monsters", () => {
         const { run, fired } = Setup(ROOM, [TestSpawner(11, 3, {})], player);
         run(600);
         expect(fired(PLAYER_DIED)).toHaveLength(1);
+    });
+});
+
+describe("Encounter doors", () => {
+    it("don't let monsters path through a closed door to the player", () => {
+        const player = new TestPlayer(At(12, 3));
+        const { encounter, run, fired } = Setup(DOORED, [TestSpawner(3, 2, { maxAlive: 3 })], player);
+        run(900);
+
+        expect(encounter.monsters.length).toBeGreaterThan(0);
+        // The player's side is walkable; the far side of the door isn't, as far as the monsters can tell.
+        expect(encounter.Flow.DistanceAt(12, 4)).toBeGreaterThan(0);
+        expect(encounter.Flow.DistanceAt(2, 4)).toBe(UNREACHABLE);
+        expect(encounter.monsters.every(m => CentreTile(m.position).x < 8)).toBe(true);
+        expect(fired(PLAYER_DAMAGED)).toHaveLength(0);
+    });
+
+    it("find their way through once it opens - the player needn't move - and are cut off again when it closes", () => {
+        const player = new TestPlayer(At(12, 3));
+        const { level, encounter, run, fired } = Setup(DOORED, [TestSpawner(3, 2, { maxAlive: 1 })], player);
+        run(60);
+        expect(encounter.Flow.DistanceAt(2, 4)).toBe(UNREACHABLE);
+
+        level.SetDoorsOpen(true);
+        run(1);
+        expect(encounter.Flow.DistanceAt(2, 4)).toBeGreaterThan(0);
+        run(1500, () => fired(PLAYER_DAMAGED).length > 0);
+        expect(fired(PLAYER_DAMAGED)).toHaveLength(1);
+
+        level.SetDoorsOpen(false);
+        run(1);
+        expect(encounter.Flow.DistanceAt(2, 4)).toBe(UNREACHABLE);
+    });
+
+    it("keep them out physically too: one marching at a closed door stops against it, and walks through once it opens", () => {
+        const player = new TestPlayer(At(15, 3));
+        const { level, encounter, run } = Setup(DOORED, [TestSpawner(3, 2, { monsters: ["pusher"], maxAlive: 1 })], player);
+        run(600);
+
+        expect(encounter.monsters).toHaveLength(1);
+        const monster = encounter.monsters[0];
+        // Against the door's near face: its one-tile box ends before column 8 begins.
+        expect(CentreTile(monster.position).x).toBe(7);
+        expect(monster.position.x + TileSize - 1).toBeLessThan(8 * TileSize);
+
+        level.SetDoorsOpen(true);
+        run(120);
+        expect(CentreTile(monster.position).x).toBeGreaterThan(8);
+    });
+
+    it("never put a new monster in a closed door's cell", () => {
+        const player = new TestPlayer(At(3, 3));
+        // Right up against the door, whose cells are the nearest open ones to the player on the spawner's side.
+        const { encounter, run } = Setup(DOORED, [TestSpawner(9, 1, { maxAlive: 1 })], player);
+        run(120);
+
+        expect(encounter.monsters).toHaveLength(1);
+        expect(CentreTile(encounter.monsters[0].position).x).toBeGreaterThan(8);
+    });
+});
+
+describe("Encounter monsters caught in a door that shuts", () => {
+    /** A monster on the left of an open thick door, the player on the right - put into door cell (cellX, 3), and then the door shuts on it. */
+    function ShutOn(cellX: number) {
+        const player = new TestPlayer(At(15, 3));
+        const setup = Setup(THICK, [TestSpawner(3, 2, { maxAlive: 1, interval: 0 })], player);
+        setup.level.SetDoorsOpen(true);
+        setup.run(1);
+        const monster = setup.encounter.monsters[0];
+        monster.position.Set(cellX * TileSize, 3 * TileSize);
+        // Sitting still in the doorway, as it would be after waiting on the player: no momentum to carry it out by accident.
+        monster.velocity.Set(0, 0);
+        setup.level.SetDoorsOpen(false);
+        return { ...setup, monster };
+    }
+    const BoxOutsideDoor = (x: number) => x + TileSize - 1 < 8 * TileSize || x >= 10 * TileSize;
+
+    it("are pushed out of the door by the way they're nearer to, rather than left stuck in it - the far half, back the way it came", () => {
+        const { monster, run, fired } = ShutOn(8);
+        run(240);
+        expect(BoxOutsideDoor(monster.position.x)).toBe(true);
+        expect(monster.position.x + TileSize - 1).toBeLessThan(8 * TileSize);
+
+        // ...and stays out: the door's shut, so there's no way through to the player.
+        run(600);
+        expect(monster.position.x + TileSize - 1).toBeLessThan(8 * TileSize);
+        expect(fired(PLAYER_DAMAGED)).toHaveLength(0);
+    });
+
+    it("are pushed out the other way from the near half - and carry on after the player from there", () => {
+        const { monster, run, fired } = ShutOn(9);
+        run(240, () => monster.position.x >= 10 * TileSize);
+        expect(monster.position.x).toBeGreaterThanOrEqual(10 * TileSize);
+        expect(fired(PLAYER_DAMAGED)).toHaveLength(0);
+
+        run(1500, () => fired(PLAYER_DAMAGED).length > 0);
+        expect(fired(PLAYER_DAMAGED)).toHaveLength(1);
+    });
+
+    it("go on to behave as usual once they're out - a door that opens again lets them through", () => {
+        const { level, monster, run } = ShutOn(8);
+        run(240);
+        expect(monster.position.x + TileSize - 1).toBeLessThan(8 * TileSize);
+
+        level.SetDoorsOpen(true);
+        run(300);
+        expect(monster.position.x).toBeGreaterThan(10 * TileSize);
     });
 });
 
