@@ -26,8 +26,8 @@ export function GroupByCategory(names: ReadonlyArray<string>, categoryOf: (name:
 }
 
 /**
- * What an empty tab says - the User tab, which starts empty, says how to fill it. `canCreate`: the sprite editor is available (the dev
- * server's running), so the tab ends in a "+" that draws a new one.
+ * What an empty tab says - the User tab, which starts empty, says how to fill it. `canCreate`: the tab ends in a "+" that draws a new sprite
+ * in the sprite editor.
  */
 export function EmptyTabHint(id: AssetCategory, canCreate = false): string {
     if (id === "user") {

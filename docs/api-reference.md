@@ -257,6 +257,7 @@ interface BundleHandle {
 | `IsDestroyed` | `boolean` | |
 | `IsDev` | `boolean` | The manifest was built without `--production`. |
 | `ManifestUrl` | `string` | Where `Init` read the manifest from (`""` if it was given one directly). |
+| `Catalogue()` | `{ name, atlases, ids }[]` | What the manifest holds, for tools: per bundle, its atlas names (`~atlas.<bundle>.<sheet>.<page>`) and every asset id. Empty before `Init`. |
 | `Scope` | `string[]` | Bundles a bare sprite name resolves in, nearest first, `global` last. A copy. |
 
 ### Initialisation
@@ -1339,7 +1340,7 @@ Layout constants (`@logic-incubator/editor/Layout`): `EditorWidth` (1280), `Edit
 ## EditorComponent
 
 `@logic-incubator/editor/EditorComponent` - `abstract class EditorComponent extends GameComponent`: gives `editorStore` and `levelDataStore` (shared, lazily created)
-to its subclasses; `static DestroyStores()` forgets them; `protected OpenSpriteEditor(request): Promise<boolean>` opens the [sprite editor](#sprite-editor) with a context built from the
+to its subclasses; `static DestroyStores()` forgets them; `protected OpenSpriteEditor(request): Promise<boolean>` opens the [sprite editor](#sprite-editor) with a host built from the
 stores. Its setup goes in `OnInitialise` like any component.
 
 ## UI helpers
@@ -1374,12 +1375,16 @@ Used by the editor's own views; available for editor extensions.
 | `Playback` | Frame timing for the preview: `Playback(frameCount)`, `Advance(ms)`, `Play` / `Pause` / `Stop` / `Seek`, `SetFps`, `SetMode("loop" \| "pingpong" \| "once")`; `DefaultFps` (12). |
 | `SpriteNames` | The naming rules, matching `ids.js`: `ValidateSpriteName`, `SuggestSpriteName`, `NormalizeSpriteName`, `FrameFileNames`, `ParseFrameFile`. |
 | `SpriteApi` | The client of the [sprite API](#sprite-api): `new SpriteApi(fetch?)` with `Available()`, `List()`, `Describe`, `ReadSprite`, `Save`; `SharedSpriteApi`; `SpriteApiError`; `ToBase64`. |
+| `SpriteStore` | Where the editor gets sprites and puts them, behind one interface (`Kind`, `List`, `Read`, `Save`): `DiskStore` (the sprite API - on localhost under `npm start`) and `DownloadStore` (anywhere else: reads the page's loaded art, and a save hands the browser a `Download`); `ChooseStore(api, hosted, deliver)` asks the service once. Download helpers: `PackDownload(bundle, name, sheet, pngs)` (a PNG for one frame, a zip for several), `ObsoleteFiles`, `MetaSnippet`, `DescribeDownload` (the status line and the steps left to do by hand), `PngSize`. |
+| `HostedSprites` | `CreateHostedSprites(deps)` - download mode's reader: bundles, sheets and names from `Assets.Catalogue()`, and a sprite's frames from the atlas its textures were loaded from (fetched, decoded, cut out). |
+| `AtlasFrames` | `ComposeAtlasFrame(atlas, texture)` - one frame at its full size, trim put back, from the decoded atlas; `AtlasUrl`, `SheetOfAtlasUrl`; `AtlasTextureLike` (the few `Texture` fields it uses). |
+| `Zip` | `CreateZip(entries, now?)` - a zip of `{ name, data }` files, stored (PNGs are compressed already), UTF-8 names, checked against real unzippers; `ZipNameProblem`. |
 | `ManifestWatch` | `ReadBundleHash(manifestUrl, bundle)` and `WaitForBundleChange(...)` - how the editor knows a save's rebuild has landed. |
 | `Resume` | The note left in session storage when the window closes after a save: `WriteResumeNote`, `TakeResumeNote`, `PeekResumeNote`. |
 | `Recovery` | The snapshot taken as the page unloads under an open window, so a reload doesn't lose the sprite: `SpriteOrigin`, `Recovery`, `WriteRecovery`, `TakeRecovery`, `PeekRecovery`, `ClearRecovery`, `SerializeRecovery` / `ParseRecovery` (validates everything; stale ones, older than ten minutes, are ignored). |
 | `Viewport` | Zoom and pan maths: `ScreenToImage`, `ImageCell`, `ZoomAt`, `StepZoom`, `FitView`, `PanBy`. |
-| `OpenSpriteEditor` | `OpenSpriteEditor(context, request, defaults): Promise<boolean>` - `request` is `{ kind: "edit", bundle, name, category? }` or `{ kind: "new", category }`; resolves when the window closes. `RecoverSpriteEditor(context, recovery)` puts the window back after a reload. |
-| `SpriteEditor` | `default class SpriteEditor` - the window itself (`SpriteEditor.Active`); `SpriteEditorContext` is what it needs of the page (`api`, `manifestUrl`, `categories`, `persistLevel()`, `reload()`, storages). |
+| `OpenSpriteEditor` | `OpenSpriteEditor(context, request, defaults): Promise<boolean>` - `request` is `{ kind: "edit", bundle, name, category? }` or `{ kind: "new", category }`; resolves when the window closes. `host` is a `SpriteEditorHost`: the context's fields plus the dev server's `api` and the page's `hosted` reader - it picks the store. `RecoverSpriteEditor(host, recovery)` puts the window back after a reload. |
+| `SpriteEditor` | `default class SpriteEditor` - the window itself (`SpriteEditor.Active`); `SpriteEditorContext` is what it needs of the page (`store`, `deliver(download)`, `metaOf(name)`, `manifestUrl`, `categories`, `persistLevel()`, `reload()`, storages). |
 | `ui/*` | The window's parts: `CanvasView`, `Toolbox`, `PalettePanel`, `MixerPanel`, `Timeline`, `Menu`, `Dialogs` (the `FormDialog` descriptions and their checks), `FileIo`, `Icons`, `Styles`. |
 
 Views open it with `EditorComponent`'s protected `OpenSpriteEditor(request)`, which builds the context from the editor's stores. `DungeonEditor` exports

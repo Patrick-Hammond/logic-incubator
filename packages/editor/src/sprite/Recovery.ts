@@ -26,6 +26,8 @@ export type SpriteOrigin = {
     applied: boolean;
     /** The bundle's hash in the served manifest from before the last save that changed files: the rebuild is done when it's different. */
     buildFrom?: string;
+    /** How many frames the sprite has as far as the assets go (what it was opened with, or what was last saved) - a download needs it to say which files it makes obsolete. */
+    savedFrames?: number;
 };
 
 export type Recovery = {
@@ -123,7 +125,8 @@ export function ParseRecovery(text: string, now: number = Date.now()): Recovery 
             category: o.category,
             copyMetaFrom: IsText(o.copyMetaFrom) ? o.copyMetaFrom : undefined,
             applied: o.applied === true,
-            buildFrom: IsText(o.buildFrom) ? o.buildFrom : undefined
+            buildFrom: IsText(o.buildFrom) ? o.buildFrom : undefined,
+            savedFrames: typeof o.savedFrames === "number" && Number.isInteger(o.savedFrames) && o.savedFrames >= 0 && o.savedFrames <= MaxFrames ? o.savedFrames : undefined
         },
         state: { width, height, palette, frames },
         frameIndex,

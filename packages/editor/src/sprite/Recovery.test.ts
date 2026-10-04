@@ -70,6 +70,14 @@ describe("a snapshot", () => {
         expect(back.origin.buildFrom).toBeUndefined();
     });
 
+    it("keeps how many frames the sprite has in the assets, and drops a nonsense count", () => {
+        expect(ParseRecovery(SerializeRecovery(Make({ origin: origin({ savedFrames: 4 }) }), 1), 2).origin.savedFrames).toBe(4);
+        expect(ParseRecovery(SerializeRecovery(Make({ origin: origin({ savedFrames: 0 }) }), 1), 2).origin.savedFrames).toBe(0);
+        expect(ParseRecovery(SerializeRecovery(Make(), 1), 2).origin.savedFrames).toBeUndefined();
+        expect(ParseRecovery(SerializeRecovery(Make({ origin: origin({ savedFrames: 9999 }) }), 1), 2).origin.savedFrames).toBeUndefined();
+        expect(ParseRecovery(SerializeRecovery(Make({ origin: origin({ savedFrames: -1 }) }), 1), 2).origin.savedFrames).toBeUndefined();
+    });
+
     it("keeps the hash the pending rebuild is waited against", () => {
         const back = ParseRecovery(SerializeRecovery(Make({ origin: origin({ applied: true, buildFrom: "abc123" }) }), 1), 2);
         expect(back.origin).toMatchObject({ applied: true, buildFrom: "abc123" });

@@ -1697,10 +1697,11 @@ at a cell. See `in-dungeons-we-dwell/src/editor/Style0x7.ts` for a complete one.
 
 Select a tile and press **Edit** (or `E`) on the selected-brush card, or click the **+** at the end of a palette tab, to draw in the
 **sprite editor**: a full-window pixel editor for the sprite's source PNGs. **+** starts a *new* tile under that tab - it asks for a
-name, a bundle, a size and a frame count, and the tile is listed under that tab once saved. Both buttons appear only while the dev
-server is running ([how saving works](#how-saving-works)).
+name, a bundle, a size and a frame count, and the tile is listed under that tab once saved. Both buttons are there in any build that
+includes the editor; what **Save** does depends on where the page is running - it writes the files itself under the dev server on
+`localhost`, and anywhere else it downloads them ([how saving works](#how-saving-works)).
 
-**Layout.** Menus along the top (File, Edit, Sprite, View, Palette, Help) with **Save** and **Close**; the **tools** and their options
+**Layout.** Menus along the top (File, Edit, Sprite, View, Palette, Help) with **Save** (**Download**, away from the dev server) and **Close**; the **tools** and their options
 on the left; the canvas in the middle (wheel or `+` / `-` zooms, Space-drag or middle-drag pans, `0` fits it to the window); the
 **palette**, colour editor and **channel mixer** on the right; the **frames** with playback along the bottom. **Help > Keyboard
 shortcuts** lists every key.
@@ -1751,11 +1752,15 @@ while you carry on editing; `,` and `.` step through the frames.
 
 **Save, Save as, Revert, Close.** `Ctrl+S` saves; `Ctrl+Shift+S` saves a copy under a new name (optionally copying the original's
 tile properties) and carries on editing the copy; *Revert to saved* reloads the files; `Esc` or *Close* asks first if there are
-unsaved changes.
+unsaved changes. Away from the dev server these become *Download*, *Download as...* and *Revert to the page's art*.
 
 #### How saving works
 
-Saving writes **source PNGs** into the game's asset folders and lets the watching build pack them like any other art change:
+The editor picks one of two ways when it opens, by asking the dev server's sprite service whether it answers: on `localhost` under
+`npm start` it does, and saving **writes the files**; anywhere else - another machine, the network address, a hosted build - it doesn't, and
+saving **downloads them** ([below](#away-from-the-dev-server-downloads)).
+
+On the dev server, saving writes **source PNGs** into the game's asset folders and lets the watching build pack them like any other art change:
 
 - An existing sprite is saved where it is. A new one goes in `assets/<bundle>/sprites/<sheet>/` - the bundle you chose, and the
   sheet (a folder; `user` by default).
@@ -1776,16 +1781,36 @@ Saving writes **source PNGs** into the game's asset folders and lets the watchin
   the level to session storage, and the next load puts the window back, with a note, on the level editor. Undo history is the one thing
   that doesn't come back. With unsaved edits the browser may also ask "Leave site?" first.
 
-**Limits.** 1x1 to 512x512 pixels, up to 100 frames, every frame the same size. A sprite in a pre-packed sheet (`<sheet>.json` +
-`<sheet>.png`) has no source frames, and the editor's own bundle is dev-only, so neither can be edited. A sprite's name is lowercase
+#### Away from the dev server: downloads
+
+Open the game from another machine, from the network address, or from any build that has the editor but isn't served by `npm start`,
+and the sprite editor still works - it just can't reach the disk. Nothing is written anywhere; the browser is handed files instead.
+
+- **Opening** reads the sprite back from the art the page has already loaded: the editor fetches the atlas image the sprite's textures
+  came from (the browser has it cached), decodes it exactly, and cuts each frame out with its trimmed border put back, so every pixel
+  is the source PNG's. What an atlas doesn't keep is the source file's palette, so the editor extracts a new one and says so. The
+  bundles, sheets and names it checks a new sprite against come from the asset manifest.
+- **Download** (the Save button, `Ctrl+S`) gives one frame as `name.png`, and several as `name.zip`, laid out from the assets folder
+  down (`global/sprites/user/name_f0.png`...) so extracting it there puts every frame in place. The zip is written by the editor
+  itself - PNGs are compressed already, so it stores them as they are and there's no library to add. The sprite then counts as saved,
+  and closing never reloads the page, since nothing changed on the server.
+- The editor can't change your files, so it **tells you what's left to do** in a dialog after the download: the files the new ones make
+  obsolete, to delete (a sprite going from one frame to several or back, or losing frames), and, for a new tile, the line to add to the
+  bundle's `data/assets-meta.json` - with the original's properties if it came from *Save as* with "Copy tile properties".
+- It can't tell a sprite that lives in a sub-folder of its sheet, or in a pre-packed sheet, from a plain one: the files are laid out
+  for `sprites/<sheet>/` - put them where the sprite's own are.
+- The File menu has **Download a copy (PNG or zip)** on the dev server too, for a copy to keep or send without saving.
+
+**Limits.** 1x1 to 512x512 pixels, up to 100 frames, every frame the same size. On the dev server a sprite in a pre-packed sheet (`<sheet>.json` +
+`<sheet>.png`) has no source frames to write over, and the editor's own bundle is dev-only, so neither can be edited there. A sprite's name is lowercase
 letters, digits and `_` (at most 48), cannot end in `_f` and a number (that marks an animation frame), and must not already be used -
 by *anything* - in its bundle.
 
 **The dev-server service.** `AssetsWebpackPlugin` mounts the sprite service at `/__sprite-api` on the webpack dev server, in
 development mode only (`new AssetsWebpackPlugin({ configPath, spriteApi: false })` leaves it out); there is nothing of it in a
-production build, and no Edit or **+** buttons either. Because it writes files on your disk it answers only requests from this
-machine, addressed to `localhost`, from the page's own origin, carrying an `X-Sprite-Editor` header - so open the game on
-`http://localhost:...`, not the LAN address, to edit sprites. It never takes a path: the editor names a bundle and a sprite, and a
+production build. Because it writes files on your disk it answers only requests from this machine, addressed to `localhost`, from the
+page's own origin, carrying an `X-Sprite-Editor` header; from anywhere else the editor falls back to downloads (above), so it's
+`http://localhost:...` you open to have saves written for you. It never takes a path: the editor names a bundle and a sprite, and a
 save is planned in full first (the bundle is re-classified as it would be afterwards, and a save that would add an error - a name
 clash, a gap in an animation - writes nothing). See the [API reference](api-reference.md#sprite-api).
 
@@ -1907,10 +1932,15 @@ different case/extension (`Enter.png`, `enter.ogg`): ids ignore both.
 **The webpack dev server rebuilds in a loop.** Two builds are writing the same `.assets/` folder, or something else writes
 inside a watched assets root. Run one build at a time.
 
-**There is no Edit button, or no + on the palette tabs.** The sprite editor needs the dev server's sprite service: it exists only under
-`npm start` (webpack mode `development`, with `AssetsWebpackPlugin`'s `spriteApi` not switched off), and answers only to `localhost` - open the game
-at `http://localhost:<port>/`, not the machine's network address. `GET /__sprite-api/list` (with an `X-Sprite-Editor: 1` header) should answer.
-The Edit button is also absent for a data brush and for a texture made at run time, which are not from a bundle.
+**Save says "Download" and nothing is written to my assets.** The editor couldn't reach the dev server's sprite service, so it works in download
+mode ([10.6](#away-from-the-dev-server-downloads)). The service exists only under `npm start` (webpack mode `development`, with
+`AssetsWebpackPlugin`'s `spriteApi` not switched off) and answers only to `localhost` - open the game at `http://localhost:<port>/`, not the
+machine's network address. `GET /__sprite-api/list` (with an `X-Sprite-Editor: 1` header) should answer.
+
+**There is no Edit button.** It is absent for a data brush and for a texture made at run time, which are not from a bundle.
+
+**Opening a sprite says it "isn't loaded in this page" or can't tell which atlas it came from.** In download mode a sprite is read back from the atlas the
+page loaded, so its bundle must be loaded (a level's own sprites only while that level's bundle is). A sprite whose atlas stores it rotated can't be read back.
 
 **Saving a sprite says "That would leave the bundle with errors".** The service re-classifies the bundle as it would be after the save and refuses one
 that would add an error - usually a name another asset already has (ids ignore the extension and the folder), or a name ending in `_f<number>`.

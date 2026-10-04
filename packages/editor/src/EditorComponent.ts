@@ -1,9 +1,13 @@
 import GameComponent from "@logic-incubator/lib/game/GameComponent";
+import AssetFactory from "@logic-incubator/lib/loading/AssetFactory";
 import { TileSize } from "@logic-incubator/engine/Constants";
-import { AssetCategories } from "@logic-incubator/engine/level/AssetMetadata";
+import AssetMetadataStore, { AssetCategories } from "@logic-incubator/engine/level/AssetMetadata";
+import { EditorBundle } from "./EditorAssets";
 import { MakeEditorSave, SaveLevel } from "./SavedLevel";
-import { BrowserStorage, SpriteEditorContext } from "./sprite/SpriteEditor";
-import { OpenSpriteEditor, RecoverSpriteEditor, SpriteEditorRequest } from "./sprite/OpenSpriteEditor";
+import { BrowserStorage } from "./sprite/SpriteEditor";
+import { AtlasTextureLike } from "./sprite/AtlasFrames";
+import { CreateHostedSprites } from "./sprite/HostedSprites";
+import { OpenSpriteEditor, RecoverSpriteEditor, SpriteEditorHost, SpriteEditorRequest } from "./sprite/OpenSpriteEditor";
 import { Recovery } from "./sprite/Recovery";
 import { SharedSpriteApi } from "./sprite/SpriteApi";
 import EditorStore from "./stores/EditorStore";
@@ -41,17 +45,34 @@ export default abstract class EditorComponent extends GameComponent {
     protected OpenSpriteEditor(request: SpriteEditorRequest): Promise<boolean> {
         const scope = this.game.assets.Scope;
         // New sprites go in the bundle every level shares, unless the game has no such thing.
-        return OpenSpriteEditor(this.SpriteEditorContext(), request, { tileSize: TileSize, bundle: scope.length ? scope[scope.length - 1] : "global" });
+        return OpenSpriteEditor(this.SpriteEditorHost(), request, { tileSize: TileSize, bundle: scope.length ? scope[scope.length - 1] : "global" });
     }
 
     /** Puts the sprite editor back after the page reloaded under it (the snapshot comes from `TakeRecovery`). */
     protected RecoverSpriteEditor(recovery: Recovery): Promise<boolean> {
-        return RecoverSpriteEditor(this.SpriteEditorContext(), recovery);
+        return RecoverSpriteEditor(this.SpriteEditorHost(), recovery);
     }
 
-    private SpriteEditorContext(): SpriteEditorContext {
+    /** What the sprite editor needs of this page: the dev server's service if there is one, and otherwise the art the page has loaded. */
+    private SpriteEditorHost(): SpriteEditorHost {
         return {
             api: SharedSpriteApi,
+            hosted: CreateHostedSprites({
+                catalogue: () => this.game.assets.Catalogue(),
+                textures: (bundle, name) => {
+                    const id = bundle + "." + name;
+                    return AssetFactory.inst.Has(id) ? (AssetFactory.inst.CreateTextures(id) as unknown as AtlasTextureLike[]) : null;
+                },
+                fetchBytes: async url => {
+                    const response = await fetch(url);
+                    if (!response.ok) {
+                        throw new Error(`Couldn't read ${url} (${response.status}).`);
+                    }
+                    return new Uint8Array(await response.arrayBuffer());
+                },
+                exclude: [EditorBundle]
+            }),
+            metaOf: name => AssetMetadataStore.inst.Get(name),
             manifestUrl: this.game.assets.ManifestUrl,
             categories: AssetCategories,
             persistLevel: () => SaveLevel(MakeEditorSave(this.editorStore.state, this.levelDataStore.state)),
