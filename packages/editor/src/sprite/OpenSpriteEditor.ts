@@ -6,11 +6,25 @@
 
 import { OpenFormDialog } from "../ui/dialog/FormDialog";
 import { CreateBitmap } from "./Bitmap";
-import { DecodePng } from "./Png";
 import { Recovery } from "./Recovery";
+import { SpriteApi } from "./SpriteApi";
 import { BlankState, SpriteState, StateFromImages } from "./SpriteDocument";
 import SpriteEditor, { SpriteEditorContext, SpriteOrigin } from "./SpriteEditor";
+import { ChooseStore, Download, HostedSprites } from "./SpriteStore";
 import { Category, NewSpriteDialog, ReadNewSprite } from "./ui/Dialogs";
+import { DownloadBytes } from "./ui/FileIo";
+
+/**
+ * What a page supplies to open the editor: the context, except that it brings both ways of reaching sprites - the dev server's service
+ * (used when it answers) and the page's own loaded art (used otherwise, with saves as downloads) - and the editor picks.
+ */
+export type SpriteEditorHost = Omit<SpriteEditorContext, "store" | "deliver"> & { api: SpriteApi; hosted: HostedSprites };
+
+async function Resolve(host: SpriteEditorHost): Promise<SpriteEditorContext> {
+    const deliver = (download: Download) => DownloadBytes(download.fileName, download.bytes, download.mime);
+    const { api, hosted, ...rest } = host;
+    return { ...rest, store: await ChooseStore(api, hosted, deliver), deliver };
+}
 
 export type SpriteEditorRequest =
     | { kind: "edit"; bundle: string; name: string; category?: string }
@@ -37,9 +51,16 @@ export function IsSpriteEditorOpen(): boolean {
 }
 
 /** Puts the editor back after the page reloaded under it (see Recovery.ts); resolves when it's closed, like `OpenSpriteEditor`. */
-export function RecoverSpriteEditor(ctx: SpriteEditorContext, recovery: Recovery): Promise<boolean> {
+export async function RecoverSpriteEditor(host: SpriteEditorHost, recovery: Recovery): Promise<boolean> {
     if (IsSpriteEditorOpen()) {
-        return Promise.resolve(false);
+        return false;
+    }
+    opening = true;
+    let ctx: SpriteEditorContext;
+    try {
+        ctx = await Resolve(host);
+    } finally {
+        opening = false;
     }
     return new Promise<boolean>(resolve => {
         const editor = new SpriteEditor(ctx, recovery.state, recovery.origin, applied => resolve(applied));
@@ -48,25 +69,29 @@ export function RecoverSpriteEditor(ctx: SpriteEditorContext, recovery: Recovery
 }
 
 /** Opens the editor; resolves when it's closed (true if it saved anything), or straight away with false if it couldn't open. */
-export async function OpenSpriteEditor(ctx: SpriteEditorContext, request: SpriteEditorRequest, defaults: SpriteEditorDefaults): Promise<boolean> {
+export async function OpenSpriteEditor(host: SpriteEditorHost, request: SpriteEditorRequest, defaults: SpriteEditorDefaults): Promise<boolean> {
     if (IsSpriteEditorOpen()) {
         return false;
     }
     opening = true;
+    let ctx: SpriteEditorContext;
     let state: SpriteState;
     let origin: SpriteOrigin;
     let notice = "";
     try {
+        ctx = await Resolve(host);
         if (request.kind === "edit") {
-            const { info, frames } = await ctx.api.ReadSprite(request.bundle, request.name);
-            const imported = StateFromImages(await Promise.all(frames.map(f => DecodePng(f))));
+            const { info, images } = await ctx.store.Read(request.bundle, request.name);
+            const imported = StateFromImages(images);
             state = imported.state;
-            origin = { bundle: request.bundle, name: request.name, mode: "overwrite", sheet: info.sheet || "user", category: request.category || ctx.categories[0].id, applied: false };
+            origin = { bundle: request.bundle, name: request.name, mode: "overwrite", sheet: info.sheet || "user", category: request.category || ctx.categories[0].id, applied: false, savedFrames: info.frames };
             if (imported.reduced) {
                 notice = "That sprite used more than 256 colours, so similar ones were merged to fit the palette.";
+            } else if (ctx.store.Kind === "download") {
+                notice = "Read from the art this page has loaded, so its palette was extracted again. Download saves it as a file to put in your game's assets folder.";
             }
         } else {
-            const bundles = await ctx.api.List();
+            const bundles = await ctx.store.List();
             if (!bundles.length) {
                 throw new Error("The dev server has no bundles to save a sprite into.");
             }
@@ -78,7 +103,7 @@ export async function OpenSpriteEditor(ctx: SpriteEditorContext, request: Sprite
             const choice = ReadNewSprite(values);
             const blank = BlankState(choice.width, choice.height);
             state = { ...blank, frames: Array.from({ length: choice.frames }, () => CreateBitmap(choice.width, choice.height, 0)) };
-            origin = { bundle: choice.bundle, name: choice.name, mode: "create", sheet: choice.sheet, category: choice.category, applied: false };
+            origin = { bundle: choice.bundle, name: choice.name, mode: "create", sheet: choice.sheet, category: choice.category, applied: false, savedFrames: 0 };
         }
     } catch (error) {
         await Problem(request.kind === "edit" ? "Can't edit that sprite" : "Can't start a new sprite", error);

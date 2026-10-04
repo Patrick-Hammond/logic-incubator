@@ -16,13 +16,14 @@ import { ColourHex, Rgba } from "./Colour";
 import { DefaultToolSettings, ToolController } from "./ToolController";
 import { ExtractPalette, MaxPaletteSize, FormatPalette, ParsePalette, PaletteSort, TransparentIndex } from "./Palette";
 import { PaletteLibrary, StorageLike as LibraryStorage, WithTransparentFirst } from "./PaletteLibrary";
-import { EncodeIndexedPng, DecodePng } from "./Png";
+import { EncodeIndexedPng } from "./Png";
 import { Playback } from "./Playback";
 import { ClearRecovery, SpriteOrigin, WriteRecovery } from "./Recovery";
 import { ReadBundleHash, WaitForBundleChange } from "./ManifestWatch";
 import { StorageLike, WriteResumeNote } from "./Resume";
-import { SpriteApi, SpriteApiError } from "./SpriteApi";
+import { SpriteApiError } from "./SpriteApi";
 import { SpriteDocument, SpriteState, StateFromImages } from "./SpriteDocument";
+import { DescribeDownload, Download, MetaSnippet, ObsoleteFiles, PackDownload, SpriteStore } from "./SpriteStore";
 import { SuggestSpriteName } from "./SpriteNames";
 import { View } from "./Viewport";
 import CanvasView, { BackdropKind } from "./ui/CanvasView";
@@ -39,7 +40,12 @@ import Toolbox, { ToolDefs } from "./ui/Toolbox";
 
 /** What the editor window needs from the page it's on. */
 export type SpriteEditorContext = {
-    api: SpriteApi;
+    /** Where sprites come from and go: the dev server's disk, or - anywhere else - the page's own art and downloads. */
+    store: SpriteStore;
+    /** Hands a file to the browser as a download. */
+    deliver(download: Download): void;
+    /** The tile properties (collision, light...) a sprite has in the game's assets-meta.json - for a download to carry over to a copy. */
+    metaOf?(name: string): object | undefined;
     /** Where the served asset manifest is, to tell when a save's rebuild has landed. "" if unknown. */
     manifestUrl: string;
     /** The palette tabs, for a new sprite's category. */
@@ -151,7 +157,13 @@ export default class SpriteEditor {
         this.titleText = top.appendChild(El("div", "se-title"));
         this.metaText = top.appendChild(El("div", "se-meta"));
         top.appendChild(El("div", "se-spacer"));
-        this.saveButton = top.appendChild(ButtonEl("ed-button se-primary", "Save", "Save the sprite into the game's assets (Ctrl+S)"));
+        this.saveButton = top.appendChild(
+            ButtonEl(
+                "ed-button se-primary",
+                this.Downloads ? "Download" : "Save",
+                this.Downloads ? "Download the sprite - a PNG, or a zip of PNGs - to put in your game's assets folder (Ctrl+S)" : "Save the sprite into the game's assets (Ctrl+S)"
+            )
+        );
         this.saveButton.addEventListener("click", () => this.Save());
         const closeButton = top.appendChild(ButtonEl("ed-button", "Close", "Close the editor (Esc)"));
         closeButton.addEventListener("click", () => this.RequestClose());
@@ -193,6 +205,11 @@ export default class SpriteEditor {
 
     private Focus(): void {
         this.root.focus({ preventScroll: true });
+    }
+
+    /** Saving hands over a download instead of writing the dev server's disk. */
+    private get Downloads(): boolean {
+        return this.ctx.store.Kind === "download";
     }
 
     private get DisplayName(): string {
@@ -503,9 +520,10 @@ export default class SpriteEditor {
             {
                 label: "File",
                 items: () => [
-                    { label: "Save", shortcut: "Ctrl+S", action: () => this.Save() },
-                    { label: "Save as…", shortcut: "Ctrl+Shift+S", action: () => this.SaveAs() },
-                    { label: "Revert to saved", disabled: this.origin.mode !== "overwrite", action: () => this.Revert() },
+                    { label: this.Downloads ? "Download" : "Save", shortcut: "Ctrl+S", action: () => this.Save() },
+                    { label: this.Downloads ? "Download as…" : "Save as…", shortcut: "Ctrl+Shift+S", action: () => this.SaveAs() },
+                    ...(this.Downloads ? [] : [{ label: "Download a copy (PNG or zip)", action: () => this.DownloadCopy() }]),
+                    { label: this.Downloads ? "Revert to the page's art" : "Revert to saved", disabled: this.origin.mode !== "overwrite", action: () => this.Revert() },
                     sep,
                     { label: "Close", shortcut: "Esc", action: () => this.RequestClose() }
                 ]
@@ -814,7 +832,41 @@ export default class SpriteEditor {
 
     // ------------------------------------------------------------------------------------------ save and close
 
-    /** Writes the sprite into the game's assets. True if it saved. */
+    /** Every frame as an indexed PNG, palette and alpha kept. */
+    private EncodeFrames(state: SpriteState): Promise<Uint8Array[]> {
+        return Promise.all(state.frames.map(f => EncodeIndexedPng(state.width, state.height, f.data, state.palette)));
+    }
+
+    /** Hands over the sprite as a download without saving it (the dev server's disk is where Save goes). */
+    private async DownloadCopy(): Promise<void> {
+        this.tool.Flush();
+        try {
+            const frames = await this.EncodeFrames(this.doc.State);
+            const download = PackDownload(this.origin.bundle, this.origin.name, this.origin.sheet || "user", frames);
+            this.ctx.deliver(download);
+            this.Say(DescribeDownload({ download, obsolete: [], metaFile: null, metaSnippet: null }).short);
+        } catch (error) {
+            await this.Fail(error, "Couldn't download");
+        }
+    }
+
+    /** What's left to do by hand after a download: the message for the status bar, and - when there's more than putting the files in place - the steps, in a dialog. */
+    private async FinishDownload(download: Download, was: { isNew: boolean; copyFrom: string | undefined; category: string; savedFrames: number }): Promise<void> {
+        const { bundle, name, sheet } = this.origin;
+        const obsolete = ObsoleteFiles(bundle, sheet || "user", name, was.savedFrames, this.doc.FrameCount);
+        let entry: object | null = null;
+        if (was.isNew) {
+            const copied = was.copyFrom && this.ctx.metaOf ? this.ctx.metaOf(was.copyFrom) : undefined;
+            entry = { ...copied, category: was.category };
+        }
+        const { short, long } = DescribeDownload({ download, obsolete, metaFile: was.isNew ? `${bundle}/data/assets-meta.json` : null, metaSnippet: entry ? MetaSnippet(name, entry) : null });
+        this.Say(short);
+        if (long) {
+            await this.Alert("Finish the save", long);
+        }
+    }
+
+    /** Writes the sprite into the game's assets - or, away from the dev server, downloads it. True if it saved. */
     async Save(): Promise<boolean> {
         if (this.saving || this.closing) {
             return false;
@@ -822,12 +874,13 @@ export default class SpriteEditor {
         this.tool.Flush();
         this.saving = true;
         this.saveButton.disabled = true;
-        this.Say("Saving…");
+        this.Say(this.Downloads ? "Preparing the download…" : "Saving…");
         try {
             const state = this.doc.State;
-            const frames = await Promise.all(state.frames.map(f => EncodeIndexedPng(state.width, state.height, f.data, state.palette)));
-            const before = await ReadBundleHash(this.ctx.manifestUrl, this.origin.bundle);
-            const result = await this.ctx.api.Save({
+            const frames = await this.EncodeFrames(state);
+            const before = this.Downloads ? null : await ReadBundleHash(this.ctx.manifestUrl, this.origin.bundle);
+            const was = { isNew: this.origin.mode === "create", copyFrom: this.origin.copyMetaFrom, category: this.origin.category, savedFrames: this.origin.savedFrames || 0 };
+            const result = await this.ctx.store.Save({
                 bundle: this.origin.bundle,
                 name: this.origin.name,
                 mode: this.origin.mode,
@@ -838,11 +891,14 @@ export default class SpriteEditor {
             });
             this.origin.mode = "overwrite";
             this.origin.copyMetaFrom = undefined;
+            this.origin.savedFrames = frames.length;
             if (this.doc.State === state) {
                 this.doc.MarkSaved();
             }
             this.DocumentChanged();
-            if (result.changed) {
+            if (result.download) {
+                await this.FinishDownload(result.download, was);
+            } else if (result.changed) {
                 this.origin.applied = true;
                 this.origin.buildFrom = before === null ? undefined : before;
                 this.Say(`Saved ${this.DisplayName} - the dev build is packing it…`);
@@ -875,7 +931,7 @@ export default class SpriteEditor {
         this.tool.Flush();
         let bundles;
         try {
-            bundles = await this.ctx.api.List();
+            bundles = await this.ctx.store.List();
         } catch (error) {
             await this.Fail(error, "Couldn't save");
             return;
@@ -893,7 +949,8 @@ export default class SpriteEditor {
                 bundle: this.origin.bundle,
                 sheet: this.origin.sheet || "user",
                 category: this.origin.category || this.ctx.categories[0].id,
-                canCopyProperties: this.origin.mode === "overwrite"
+                // A download can't write the copy's entry, but it can tell you the line to add - with the original's properties if `metaOf` knows them.
+                canCopyProperties: this.origin.mode === "overwrite" && (!this.Downloads || !!this.ctx.metaOf)
             })
         );
         if (!values) {
@@ -908,7 +965,8 @@ export default class SpriteEditor {
             sheet: choice.sheet,
             category: choice.category,
             mode: "create",
-            copyMetaFrom: choice.copyProperties ? previous.name : undefined
+            copyMetaFrom: choice.copyProperties ? previous.name : undefined,
+            savedFrames: 0
         };
         if (!(await this.Save())) {
             this.origin = previous;
@@ -921,16 +979,15 @@ export default class SpriteEditor {
         if (this.origin.mode !== "overwrite") {
             return;
         }
-        if (this.doc.Dirty && !(await this.Confirm("Revert to saved?", `Throw away your changes to ${this.DisplayName} and load it as it was saved?`, "Revert", "Keep editing"))) {
+        if (this.doc.Dirty && !(await this.Confirm("Revert?", `Throw away your changes to ${this.DisplayName} and load it as ${this.Downloads ? "this page has it" : "it was saved"}?`, "Revert", "Keep editing"))) {
             return;
         }
         try {
-            const { frames } = await this.ctx.api.ReadSprite(this.origin.bundle, this.origin.name);
-            const images = await Promise.all(frames.map(f => DecodePng(f)));
+            const { images } = await this.ctx.store.Read(this.origin.bundle, this.origin.name);
             this.tool.Cancel();
             this.doc.Reset(StateFromImages(images).state);
             this.canvas.Fit();
-            this.Say("Reverted to the saved sprite.");
+            this.Say(this.Downloads ? "Reverted to the art this page loaded." : "Reverted to the saved sprite.");
         } catch (error) {
             await this.Fail(error, "Couldn't revert");
         }

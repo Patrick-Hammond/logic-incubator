@@ -396,6 +396,16 @@ describe("accessors", () => {
         expect(fetched.ManifestUrl).toBe("assets/manifest.json");
     });
 
+    it("lists what the manifest holds, bundle by bundle", () => {
+        const catalogue = assets.Catalogue();
+        expect(catalogue.map(b => b.name)).toEqual(["global", "level1", "level2"]);
+        expect(catalogue[0].atlases).toEqual(["~atlas.global.dungeon.0"]);
+        expect(catalogue[0].ids).toContain("global.crate");
+        expect(catalogue[0].ids).toContain("global.bomb");
+        expect(catalogue[1]).toEqual({ name: "level1", atlases: [], ids: ["level1.level", "level1.music"] });
+        expect(new Assets({ loader }).Catalogue()).toEqual([]);
+    });
+
     it("throws for asking before Init", () => {
         const fresh = new Assets({ loader });
         expect(() => fresh.Texture("global.title")).toThrow("haven't been initialised");

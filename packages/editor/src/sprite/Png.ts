@@ -38,7 +38,8 @@ const ADAM7 = [
 
 let crcTable: Uint32Array | null = null;
 
-function Crc32(bytes: Uint8Array): number {
+/** The CRC-32 PNG and zip both use. */
+export function Crc32(bytes: Uint8Array): number {
     if (!crcTable) {
         crcTable = new Uint32Array(256);
         for (let n = 0; n < 256; n++) {

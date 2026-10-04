@@ -61,7 +61,16 @@ export async function ImageFileToRgba(file: Blob): Promise<RgbaImage> {
 
 /** Offers `text` to the user as a downloaded file. */
 export function DownloadText(fileName: string, text: string): void {
-    const url = URL.createObjectURL(new Blob([text], { type: "text/plain" }));
+    Deliver(new Blob([text], { type: "text/plain" }), fileName);
+}
+
+/** Offers bytes (a PNG, a zip) to the user as a downloaded file. */
+export function DownloadBytes(fileName: string, bytes: Uint8Array, mime: string): void {
+    Deliver(new Blob([bytes as unknown as BlobPart], { type: mime }), fileName);
+}
+
+function Deliver(blob: Blob, fileName: string): void {
+    const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
     link.download = fileName;

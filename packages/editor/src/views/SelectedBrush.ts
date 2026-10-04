@@ -10,7 +10,6 @@ import { DescribePickup } from "../DataLabels";
 import { OpenDataBrushDialog } from "../DataBrushDialog";
 import { DataBrushEditorFor } from "../DataBrushEditors";
 import EditorComponent from "../EditorComponent";
-import { SharedSpriteApi } from "../sprite/SpriteApi";
 import { DataBrushIcon, DataBrushIcons, EditorActions, IEditorState } from "../stores/EditorStore";
 import { ButtonEl, El, InjectStyles } from "../ui/dom/Dom";
 import EditorOverlay from "../ui/dom/EditorOverlay";
@@ -21,8 +20,7 @@ const PREVIEW_SIZE = 64;
 /**
  * The card under the brush picker: a preview of the brush being hovered (or
  * else the one picked), what it is, and an Edit button (also E): for a data
- * brush with a popup editor, its value; for a tile - while the dev server's
- * sprite service is there - the sprite editor.
+ * brush with a popup editor, its value; for a tile, the sprite editor.
  */
 export default class SelectedBrush extends EditorComponent {
     private preview = new SpriteCanvas();
@@ -35,8 +33,6 @@ export default class SelectedBrush extends EditorComponent {
     /** The brush on the card, or null before the first `ShowBrush`. */
     private shownName: string = null;
     private animTime = 0;
-    /** Whether the dev server's sprite service answered - a tile has an Edit button only if so. */
-    private spriteEditable = false;
 
     /** `icons`: the game's sprite over each data brush's colour - see `DataBrushIcons`. */
     constructor(private readonly icons: DataBrushIcons = {}) {
@@ -70,12 +66,6 @@ export default class SelectedBrush extends EditorComponent {
                 // Otherwise this same keypress types an "e" into the dialog field that just took focus.
                 e.preventDefault();
                 this.OpenEditor();
-            }
-        });
-        SharedSpriteApi.Available().then(available => {
-            if (available && this.spriteEditable === false && this.editButton.isConnected) {
-                this.spriteEditable = true;
-                this.ShowValue();
             }
         });
 
@@ -170,9 +160,9 @@ export default class SelectedBrush extends EditorComponent {
         }
     }
 
-    /** A tile (not a data brush) the sprite editor can open - it's in a bundle, and the dev server's sprite service is there. */
+    /** A tile (not a data brush) the sprite editor can open - one from a bundle, not a texture made at run time. */
     private IsEditableTile(name: string): boolean {
-        return this.spriteEditable && !!name && !this.editorStore.state.dataBrushes.some(db => db.name === name) && this.SpriteBundle(name) !== null;
+        return !!name && !this.editorStore.state.dataBrushes.some(db => db.name === name) && this.SpriteBundle(name) !== null;
     }
 
     /** The bundle a tile's art is in, or null for one that isn't from a bundle (a runtime-made texture). */

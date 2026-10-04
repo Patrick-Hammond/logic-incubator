@@ -128,6 +128,12 @@ export default class Assets extends EventEmitter {
         return this.manifestUrl;
     }
 
+    /** What the manifest holds, for tools: each bundle's atlas names (`~atlas.<bundle>.<sheet>.<page>`) and the id of every asset in it. Empty before `Init`. */
+    Catalogue(): { name: string; atlases: string[]; ids: string[] }[] {
+        const bundles = this.manifest ? this.manifest.bundles : {};
+        return Object.keys(bundles).map(name => ({ name, atlases: bundles[name].atlases.map(atlas => atlas.name), ids: Object.keys(bundles[name].assets) }));
+    }
+
     /** Bundles a bare name is looked up in, nearest first. */
     get Scope(): string[] {
         return this.scope.slice();
