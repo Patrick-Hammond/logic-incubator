@@ -23,7 +23,32 @@ import { IsCompleteLightValue, LightValue } from "./Lighting";
 /** `id` pairs a door's two sprites (e.g. a wooden door's closed/open leaf) so multiple door types can coexist - `open` says which half of the pair this particular asset is. */
 export type DoorValue = { id: number; open: boolean };
 
+/**
+ * The level editor's palette tabs, in order. A sprite's `category` in assets-meta.json picks its tab;
+ * one without a category is listed under `misc`. `user` is for content the game's own users add -
+ * nothing is in it until a sprite is tagged so.
+ */
+export const AssetCategories = [
+    { id: "dungeon", name: "Dungeon" },
+    { id: "entities", name: "Entities" },
+    { id: "weapons", name: "Weapons" },
+    { id: "items", name: "Items" },
+    { id: "misc", name: "Misc" },
+    { id: "user", name: "User" }
+] as const;
+
+export type AssetCategory = (typeof AssetCategories)[number]["id"];
+
+/** Where an asset with no (or an unrecognised) `category` is listed. */
+export const DefaultAssetCategory: AssetCategory = "misc";
+
+export function IsAssetCategory(value: unknown): value is AssetCategory {
+    return AssetCategories.some(category => category.id === value);
+}
+
 export type AssetMetadata = {
+    /** Which palette tab lists this sprite in the level editor - see `AssetCategories`. Doesn't affect play. */
+    category?: AssetCategory;
     collidable?: boolean;
     door?: DoorValue;
     light?: LightValue;
@@ -61,21 +86,27 @@ export default class AssetMetadataStore {
      * type for one) would otherwise flow silently into `BakeLighting` as `NaN`/`undefined` and bake to a
      * black tint instead of failing loudly. Drop just the bad `light` (keeping `collidable`/`door` on the
      * same entry) and warn with the asset name, rather than reject the whole file over one typo.
+     * An unrecognised `category` is dropped the same way, so the sprite is just listed under `misc`.
      */
     Add(bundle: string, map: AssetMetadataMap): void {
         const clean: AssetMetadataMap = {};
         const source = map || {};
         for (const name in source) {
-            const meta = source[name];
+            let meta = source[name];
             if (meta.light && !IsCompleteLightValue(meta.light)) {
                 console.warn(
                     `assets-meta.json: "${name}" has an incomplete light value (needs brightness, tint and range, all numbers) - ignoring it until fixed:`,
                     meta.light
                 );
-                clean[name] = { ...meta, light: undefined };
-            } else {
-                clean[name] = meta;
+                meta = { ...meta, light: undefined };
             }
+            if (meta.category !== undefined && !IsAssetCategory(meta.category)) {
+                console.warn(
+                    `assets-meta.json: "${name}" has an unknown category ${JSON.stringify(meta.category)} (one of ${AssetCategories.map(c => c.id).join(", ")}) - listing it under "${DefaultAssetCategory}" until fixed.`
+                );
+                meta = { ...meta, category: undefined };
+            }
+            clean[name] = meta;
         }
         this.bundles.set(bundle, clean);
     }
@@ -99,6 +130,12 @@ export default class AssetMetadataStore {
     Get(assetName: string): AssetMetadata | undefined {
         const found = this.Find(assetName);
         return found ? found.meta : undefined;
+    }
+
+    /** The palette tab an asset is listed under: its `category`, else `misc`. */
+    CategoryOf(assetName: string): AssetCategory {
+        const found = this.Find(assetName);
+        return (found && found.meta.category) || DefaultAssetCategory;
     }
 
     /** Given one sprite of a door pair (open or closed), finds the asset name of the other half - same `door.id`, opposite `open` - or `undefined` if it's not a door or its pair isn't defined. The pair is looked for in the bundle that defines this half first. */

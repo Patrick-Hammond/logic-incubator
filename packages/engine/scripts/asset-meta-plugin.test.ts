@@ -3,8 +3,9 @@ import * as os from "os";
 import * as path from "path";
 import { createRequire } from "module";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { AssetCategories } from "../src/level/AssetMetadata";
 
-const { afterScan } = createRequire(import.meta.url)("./asset-meta-plugin.js");
+const { afterScan, CATEGORIES } = createRequire(import.meta.url)("./asset-meta-plugin.js");
 
 type Report = { level: string; message: string; bundle?: string };
 let dir: string;
@@ -86,5 +87,25 @@ describe("asset-meta plugin", () => {
             Report: (level: string, message: string) => reports.push({ level, message }),
         });
         expect(reports[0].level).toBe("error");
+    });
+
+    it("keeps the categories it accepts in step with the editor's", () => {
+        expect(CATEGORIES).toEqual(AssetCategories.map(category => category.id));
+    });
+
+    it("leaves a known category alone, and reports an unknown one as an error naming the sprite", () => {
+        expect(run(["a"], [], { a: { category: "weapons" } })).toEqual([]);
+        const reports = run(["a", "b"], [], { a: { category: "weapons" }, b: { category: "Weapon" } });
+        const errors = reports.filter(r => r.level === "error");
+        expect(errors).toHaveLength(1);
+        expect(errors[0].message).toContain('"b"');
+        expect(errors[0].message).toContain('"Weapon"');
+        expect(read().a).toEqual({ category: "weapons" });
+    });
+
+    it("keeps a category through a sync that adds and removes other entries", () => {
+        run(["a", "new_one"], [], { a: { category: "items", pickup: { kind: "gold", amount: 1 } }, gone: {} });
+        expect(read().a).toEqual({ category: "items", pickup: { kind: "gold", amount: 1 } });
+        expect(read().new_one).toEqual({});
     });
 });

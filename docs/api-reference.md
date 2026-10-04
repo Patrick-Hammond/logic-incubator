@@ -953,7 +953,16 @@ type LevelFile = {
 
 ```ts
 type DoorValue = { id: number; open: boolean };
+const AssetCategories: readonly [
+    { id: "dungeon"; name: "Dungeon" }, { id: "entities"; name: "Entities" }, { id: "weapons"; name: "Weapons" },
+    { id: "items"; name: "Items" }, { id: "misc"; name: "Misc" }, { id: "user"; name: "User" },
+];                                                  // the editor palette's tabs, in order
+type AssetCategory = "dungeon" | "entities" | "weapons" | "items" | "misc" | "user";
+const DefaultAssetCategory: AssetCategory = "misc";   // where a sprite with no category is listed
+IsAssetCategory(value: unknown): value is AssetCategory
+
 type AssetMetadata = {
+    category?: AssetCategory;   // which editor palette tab lists this sprite; no effect in play
     collidable?: boolean;
     door?: DoorValue;
     light?: LightValue;
@@ -967,11 +976,12 @@ type AssetMetadataMap = { [assetName: string]: AssetMetadata };
 
 | Method | Description |
 | --- | --- |
-| `Add(bundle, map)` | Adds or replaces a bundle's metadata. A `light` that isn't complete (`brightness`, `tint`, `range`, all finite numbers) is dropped with a console warning naming the asset; the entry's other fields are kept. |
+| `Add(bundle, map)` | Adds or replaces a bundle's metadata. A `light` that isn't complete (`brightness`, `tint`, `range`, all finite numbers) or a `category` that isn't one of `AssetCategories` is dropped with a console warning naming the asset; the entry's other fields are kept. |
 | `Remove(bundle)` | |
 | `SetScope(chain: string[])` | The bundles searched, nearest first (then the unscoped bucket). |
 | `Load(map)` | Replaces everything with one unscoped map - for a game or test with metadata but no bundles. |
 | `Get(assetName): AssetMetadata \| undefined` | First hit through the chain. |
+| `CategoryOf(assetName): AssetCategory` | The asset's `category` through the chain, else `misc`. |
 | `GetDoorPartner(assetName): string \| undefined` | The other half of a door pair (same `door.id`, opposite `open`), searched first in the bundle that defines this half. |
 
 `@logic-incubator/engine/level/AssetMetadataBinding`:
@@ -1293,4 +1303,5 @@ Used by the editor's own views; available for editor extensions.
 | `ui/dom/SpriteCanvas` | `default class SpriteCanvas` (draws textures to a 2D canvas); `FitIcon`, `VisibleBounds`, `DrawTexture`, `DrawDataBrushSwatch` |
 | `ui/dialog/FormDialog` | `OpenFormDialog(options: FormDialogOptions): Promise<FormValues \| null>`, `IsFormDialogOpen()`; field specs `NumberField`, `TextField`, `ColourField`, `ToggleField`, `MultiChoiceField` (`FieldSpec`), `ChoiceOption` |
 | `DataBrushEditors` | `DataBrushEditorFor(name): DataBrushEditor \| undefined` - the dialog definitions for editing a light's or spawner's value |
+| `views/PaletteCategories` | `type TileSet = { id: AssetCategory; name; brushes: string[] }`; `GroupByCategory(names, categoryOf): TileSet[]` (one set per category, in `AssetCategories` order, empty ones included, each sorted by name); `EmptyTabHint(id): string` (pure) |
 | `tools/ToolGeometry` | `SpanRect(a, b)`, `RectCells(rect, border?)`, `InRect(rect, x, y)`, `FloodFill(start, bounds, keyAt)`, `TopmostBrushAt(...)`, `type CellRect` |
