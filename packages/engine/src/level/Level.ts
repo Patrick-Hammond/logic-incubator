@@ -54,10 +54,14 @@ export default class Level {
     public heightData: number[][] = [];
     /** Per-cell lighting baked from point lights - both the `LIGHT` data brush and any placed tile with `light` in its `AssetMetadata` (see `LightAt`, `Lighting.BakeLighting`). */
     public lightData: BakedLight[][] = [];
-    /** Per-cell flag: `true` if the cell is covered by the sprite footprint (see `DoorFootprint`) of a tile with a `door` id in its `AssetMetadata`. Purely a lookup for building `doors` - not consulted for movement collision, since a door must be walkable to trigger open. */
+    /** Per-cell flag: `true` if the cell is covered by the sprite footprint (see `DoorFootprint`) of a tile with a `door` id in its `AssetMetadata`. Purely a lookup for building `doors` - not consulted for movement collision, since a door must be walkable to trigger open (see `IsDoorClosed` for what keeps monsters out). */
     public doorData: boolean[][] = [];
     /** One entry per connected island of `doorData` cells that has a matching door sprite tile (see `FindDoorTile`). */
     public doors: Door[] = [];
+    /** [x][y] -> the door covering that cell - `doors`, by cell, for `IsDoorClosed`. */
+    private doorAt: Door[][] = [];
+    /** Goes up each time a door opens or closes, so anything worked out from which doors are closed (the monsters' flow field) can tell it's gone stale. */
+    public doorVersion = 0;
     /** [x][y] -> region id for a walkable (non-collision, non-door) cell. See `Regions.ts`. */
     public regionData: number[][] = [];
     /** [x][y] -> distinct region ids touching a wall/door cell's 4-neighbours. See `Regions.ts`. */
@@ -87,6 +91,19 @@ export default class Level {
         }
         const column = this.collisionData[tileX];
         return !!(column && column[tileY]);
+    }
+
+    /**
+     * Whether the cell belongs to a door that's closed right now. Not part of `IsSolid`, as the player
+     * has to be able to walk onto a closed door - that's what opens it - but monsters can't enter one
+     * (their path and their movement both stop at it, see `Encounter`), so nothing gets through a door
+     * the player isn't standing in. A cell of a door that has no sprite pair to swap (so never opens) isn't
+     * in `doors`, and doesn't count: there'd be no way to ever open it.
+     */
+    IsDoorClosed(tileX: number, tileY: number): boolean {
+        const column = this.doorAt[tileX];
+        const door = column && column[tileY];
+        return !!door && !door.isOpen;
     }
 
     /**
@@ -157,6 +174,7 @@ export default class Level {
             if (overlapping !== door.isOpen) {
                 door.isOpen = overlapping;
                 door.tile.texture = AssetFactory.inst.CreateTexture(overlapping ? door.openSprite : door.closedSprite);
+                this.doorVersion++;
             }
         });
     }
@@ -270,6 +288,7 @@ export default class Level {
         this.collisionData = [];
         this.heightData = [];
         this.doorData = [];
+        this.doorAt = [];
         this.spawners = [];
         this.pickups = [];
         const spawnerSprite = MonsterRoster.inst.SpawnerSprite;
@@ -478,6 +497,12 @@ export default class Level {
                 return {cells, tile, isOpen: doorValue.open, regionIds, openSprite, closedSprite};
             })
             .filter((door): door is Door => door != null);
+        this.doors.forEach(door => door.cells.forEach(cell => {
+            if (this.doorAt[ cell.x ] == null) {
+                this.doorAt[ cell.x ] = [];
+            }
+            this.doorAt[ cell.x ][ cell.y ] = door;
+        }));
 
         // No PLAYER_START brush painted - land the player in the middle of the map rather than fail
         // the whole level over one missing marker. Center of `boundRect`, not of the painted extent's

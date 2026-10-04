@@ -6,7 +6,15 @@ import Level from "./Level";
 export default class TileCollision {
     private playerBounds = new Rectangle(0, 0, TileSize - 1, TileSize - 1);
 
-    constructor(private level: Pick<Level, "collisionData" | "HeightAt">) {}
+    /**
+     * `blocked` names cells that count as solid for this collider on top of `collisionData` - how monsters
+     * are kept out of closed doors (see `Level.IsDoorClosed`), which the player's own collider leaves off.
+     * It's asked live, so a cell that stops being blocked (a door opening) needs nothing done here.
+     */
+    constructor(
+        private level: Pick<Level, "collisionData" | "HeightAt">,
+        private blocked?: (tileX: number, tileY: number) => boolean
+    ) {}
 
     TestX(from: Vec2Like, dir: number): number | null{
         this.playerBounds.x = from.x + dir;
@@ -127,6 +135,6 @@ export default class TileCollision {
     }
 
     private IsSolidTile(tx: number, ty: number): boolean {
-        return this.level.collisionData[tx] && this.level.collisionData[tx][ty];
+        return !!(this.level.collisionData[tx] && this.level.collisionData[tx][ty]) || (!!this.blocked && this.blocked(tx, ty));
     }
 }

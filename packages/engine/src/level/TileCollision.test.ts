@@ -333,3 +333,68 @@ describe("IsHeightBlocked", () => {
         expect(c.IsHeightBlocked({ x: 5, y: 5 }, { x: 5, y: 6 })).toBe(true);
     });
 });
+
+/**
+ * A wall down tile column 5 with a one-tile doorway at row 4. The doorway is no part of collisionData (like a
+ * door in the real level: the player walks onto it to open it) - it blocks only a collider given `blocked`
+ * for it, and only while `door.closed`. Tile 5 spans pixels 80..95; a player in tile 4 starts at x = 64.
+ */
+function doorwayCollider(door: { closed: boolean }, rule = true): TileCollision {
+    const data: boolean[][] = [];
+    for (let x = 0; x < 8; x++) {
+        data[x] = [];
+        for (let y = 0; y < 9; y++) {
+            data[x][y] = x === 5 && y !== 4;
+        }
+    }
+    return new TileCollision(
+        { collisionData: data, HeightAt: () => 0 } as unknown as Level,
+        rule ? (x, y) => door.closed && x === 5 && y === 4 : undefined
+    );
+}
+
+describe("blocked cells - a closed door, to a monster", () => {
+    const walkIn = { x: 64, y: 64 };
+
+    it("stop a collider that was given them, like a wall", () => {
+        const door = { closed: true };
+        expect(doorwayCollider(door).TestX(walkIn, 6)).toBe(64);
+    });
+
+    it("let the player's own collider through - it isn't given them", () => {
+        const door = { closed: true };
+        expect(doorwayCollider(door, false).TestX(walkIn, 6)).toBeNull();
+    });
+
+    it("are asked each time, so an opened door lets a collider through and a closed one stops it again", () => {
+        const door = { closed: false };
+        const collider = doorwayCollider(door);
+        expect(collider.TestX(walkIn, 6)).toBeNull();
+        door.closed = true;
+        expect(collider.TestX(walkIn, 6)).toBe(64);
+        door.closed = false;
+        expect(collider.TestX(walkIn, 6)).toBeNull();
+    });
+
+    it("make a closed door read as wall - not a doorway to line up with - and an open one as the gap it is", () => {
+        const door = { closed: true };
+        const collider = doorwayCollider(door);
+        const lined = { x: 64, y: 66 }; // straddling rows 4 and 5, its centre over the doorway's row
+        expect(collider.GapAlignY(lined, 6)).toBeNull();
+        door.closed = false;
+        expect(collider.GapAlignY(lined, 6)).toBe(64);
+    });
+
+    it("also stop a vertical step", () => {
+        const door = { closed: true };
+        // Over the doorway's row from above, in column 5 (x = 80): the cell below is the closed door.
+        const above = { x: 80, y: 52 };
+        const horizontalWall = new TileCollision(
+            { collisionData: [], HeightAt: () => 0 } as unknown as Level,
+            (x, y) => door.closed && x === 5 && y === 4
+        );
+        expect(horizontalWall.TestY(above, 4)).not.toBeNull();
+        door.closed = false;
+        expect(horizontalWall.TestY(above, 4)).toBeNull();
+    });
+});

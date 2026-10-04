@@ -903,6 +903,7 @@ type Pickup = Vec2Like & { tile: Tile; value: PickupValue };
 | `heightData` | `number[][]` | From the `z-index` brush. |
 | `lightData` | `BakedLight[][]` | Baked from lights. |
 | `doorData`, `doors` | | Door footprints and the doors found. |
+| `doorVersion` | `number` | Goes up each time a door opens or closes - how anything worked out from which doors are closed (the monsters' flow field) knows it's stale. |
 | `regionData`, `boundaryRegionData`, `regions`, `visibleRegions` | | Region analysis; see below. |
 | `boundRect` | `Rectangle` | The map's bounds in cells. |
 | `playerStartPosition` | `Vec2Like \| undefined` | |
@@ -913,11 +914,12 @@ type Pickup = Vec2Like & { tile: Tile; value: PickupValue };
 | `LoadLevel(file: LevelFile): void` | Builds everything from a level file (and the metadata store). Unknown sprite names drop just their tiles, with a one-off warning. Emits `LEVEL_LOADED`. |
 | `Dispose(): void` | Stops animated tiles' sprites. |
 | `HeightAt(x, y): number` | |
-| `IsSolid(x, y): boolean` | A wall, a spawner, or anywhere off the map. |
+| `IsSolid(x, y): boolean` | A wall, a spawner, or anywhere off the map. Not a closed door - the player walks onto one to open it. |
+| `IsDoorClosed(x, y): boolean` | Whether the cell belongs to a door that is closed right now. Monsters can't enter one (their path and their movement both stop at it); the player can. A door with no sprite pair to swap never opens, so isn't in `doors` and doesn't count. |
 | `RemoveSpawner(spawner)` | Opens a destroyed spawner's cells. |
 | `CollectPickupsAt(x, y): PickupValue[]` | Collects and hides every pickup at the cell; the caller applies them. |
 | `LightAt(x, y): BakedLight` | |
-| `UpdateDoors(x, y)` | Opens/closes doors by the player's tile (call each frame). |
+| `UpdateDoors(x, y)` | Opens/closes doors by the player's tile (call each frame); bumps `doorVersion` for each that changes. |
 | `UpdateVisibleRegions(x, y)` | Recomputes which regions are reachable through open doors (call after `UpdateDoors`). |
 | `IsCellVisible(x, y): boolean` | |
 
@@ -1048,7 +1050,7 @@ Pure helpers behind `Level`; exported for tests and tooling.
 | `level/Regions` | `type Region = { id; cells }`, `type RegionMap`, `FindRegions(...)` (connected walkable components), `RegionIdsTouching(...)` |
 | `level/ImplicitData` | `EffectiveLight(brush, meta)`, `EffectiveSpawner(brush, meta)` (a placement's override else the sprite's default), `FindImplicitPlacements(...)`, `OrphanedExplicitData(...)` |
 | `level/MapBounds` | `type MapBounds`, `FindMapBounds(brushes)` |
-| `level/TileCollision` | `default class TileCollision` - `TestX(from, dir)`, `TestY(from, dir)`: the corrected position on a collision, else `null` |
+| `level/TileCollision` | `default class TileCollision` - `new TileCollision(level, blocked?)`; `TestX(from, dir)`, `TestY(from, dir)`: the corrected position on a collision, else `null`. `blocked(x, y)` names extra cells that count as solid for that collider (asked live) - `Encounter` gives its monsters' collider the closed doors, while the player's has none |
 | `view/helpers/PlayerMovement` | `MoveDamping`, `CentreTile(position)`, `BoxCentre(position)`, `ResolveMove(...)`, `interface MoveCollider` |
 | `view/helpers/CameraWindow` | `ViewOrigin(centre, baseWidth, baseHeight, zScale)` |
 | `view/helpers/SpriteDrawOffset` | `SpriteDrawPosition(position, viewOffsetTiles, texture)` (feet on the bottom of a monster's one-tile box, centred across it) |
@@ -1188,6 +1190,8 @@ type EncounterOptions = {
 | `Update(dt, seconds, player: EncounterPlayer)` | One frame: `dt` in frames (movement), `seconds` for timers. |
 
 Constants `MaxMonsters = 150`, `HitFlashTime = 0.15`. `EncounterLevel` and `EncounterPlayer` are the narrow interfaces it needs of `Level` and `Player`.
+
+**Closed doors.** A monster can't enter a closed door (`Level.IsDoorClosed`). The flow field treats those cells as blocked, so a monster behind one has no path to the player (`DistanceAt` is `UNREACHABLE`: chasers hold still, wanderers keep wandering, and a spawner with an `activationRange` stays inactive); and the monsters' collider treats them as solid, so one steered at a door by a wander heading or another monster's push is stopped too. The field is recomputed when `Level.doorVersion` changes, not just when the player changes cell. Spawn cells are never closed-door cells. A monster a door shuts on (its box overlaps a closed-door cell) is walked out of it, whichever side it's nearer, using a collider that doesn't count the door's cells as solid - it can neither be trapped in the door nor slip through to the player. The player is unaffected - standing in a door is what opens it, and while they do the monsters can come through.
 
 ---
 
