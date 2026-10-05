@@ -1,0 +1,704 @@
+{
+	"bar_fill_amber": {
+		"width": 2,
+		"height": 7
+	},
+	"bar_fill_blue": {
+		"width": 2,
+		"height": 7
+	},
+	"bar_fill_green": {
+		"width": 2,
+		"height": 7
+	},
+	"bar_fill_red": {
+		"width": 2,
+		"height": 7
+	},
+	"bar_track": {
+		"width": 8,
+		"height": 8,
+		"insets": {
+			"left": 3,
+			"top": 3,
+			"right": 3,
+			"bottom": 3
+		}
+	},
+	"border_chain_cap_l": {
+		"width": 12,
+		"height": 15
+	},
+	"border_chain_cap_r": {
+		"width": 12,
+		"height": 15
+	},
+	"border_chain_centre": {
+		"width": 18,
+		"height": 15
+	},
+	"border_chain_mid": {
+		"width": 8,
+		"height": 15
+	},
+	"border_dotted_cap_l": {
+		"width": 8,
+		"height": 13
+	},
+	"border_dotted_cap_r": {
+		"width": 8,
+		"height": 13
+	},
+	"border_dotted_centre": {
+		"width": 26,
+		"height": 13
+	},
+	"border_dotted_mid": {
+		"width": 1,
+		"height": 13
+	},
+	"border_double_cap_l": {
+		"width": 6,
+		"height": 15
+	},
+	"border_double_cap_r": {
+		"width": 6,
+		"height": 15
+	},
+	"border_double_centre": {
+		"width": 27,
+		"height": 15
+	},
+	"border_double_mid": {
+		"width": 15,
+		"height": 15
+	},
+	"border_thin_cap_l": {
+		"width": 6,
+		"height": 8
+	},
+	"border_thin_cap_r": {
+		"width": 6,
+		"height": 8
+	},
+	"border_thin_centre": {
+		"width": 9,
+		"height": 8
+	},
+	"border_thin_mid": {
+		"width": 1,
+		"height": 8
+	},
+	"btn_confirm_disabled": {
+		"width": 14,
+		"height": 14,
+		"insets": {
+			"left": 6,
+			"top": 6,
+			"right": 6,
+			"bottom": 6
+		}
+	},
+	"btn_confirm_hover": {
+		"width": 14,
+		"height": 14,
+		"insets": {
+			"left": 6,
+			"top": 6,
+			"right": 6,
+			"bottom": 6
+		}
+	},
+	"btn_confirm_normal": {
+		"width": 14,
+		"height": 14,
+		"insets": {
+			"left": 6,
+			"top": 6,
+			"right": 6,
+			"bottom": 6
+		}
+	},
+	"btn_confirm_pressed": {
+		"width": 14,
+		"height": 14,
+		"insets": {
+			"left": 6,
+			"top": 6,
+			"right": 6,
+			"bottom": 6
+		}
+	},
+	"btn_danger_disabled": {
+		"width": 14,
+		"height": 14,
+		"insets": {
+			"left": 6,
+			"top": 6,
+			"right": 6,
+			"bottom": 6
+		}
+	},
+	"btn_danger_hover": {
+		"width": 14,
+		"height": 14,
+		"insets": {
+			"left": 6,
+			"top": 6,
+			"right": 6,
+			"bottom": 6
+		}
+	},
+	"btn_danger_normal": {
+		"width": 14,
+		"height": 14,
+		"insets": {
+			"left": 6,
+			"top": 6,
+			"right": 6,
+			"bottom": 6
+		}
+	},
+	"btn_danger_pressed": {
+		"width": 14,
+		"height": 14,
+		"insets": {
+			"left": 6,
+			"top": 6,
+			"right": 6,
+			"bottom": 6
+		}
+	},
+	"btn_icon_disabled": {
+		"width": 14,
+		"height": 14,
+		"insets": {
+			"left": 6,
+			"top": 6,
+			"right": 6,
+			"bottom": 6
+		}
+	},
+	"btn_icon_hover": {
+		"width": 14,
+		"height": 14,
+		"insets": {
+			"left": 6,
+			"top": 6,
+			"right": 6,
+			"bottom": 6
+		}
+	},
+	"btn_icon_normal": {
+		"width": 14,
+		"height": 14,
+		"insets": {
+			"left": 6,
+			"top": 6,
+			"right": 6,
+			"bottom": 6
+		}
+	},
+	"btn_icon_pressed": {
+		"width": 14,
+		"height": 14,
+		"insets": {
+			"left": 6,
+			"top": 6,
+			"right": 6,
+			"bottom": 6
+		}
+	},
+	"btn_primary_disabled": {
+		"width": 14,
+		"height": 14,
+		"insets": {
+			"left": 6,
+			"top": 6,
+			"right": 6,
+			"bottom": 6
+		}
+	},
+	"btn_primary_hover": {
+		"width": 14,
+		"height": 14,
+		"insets": {
+			"left": 6,
+			"top": 6,
+			"right": 6,
+			"bottom": 6
+		}
+	},
+	"btn_primary_normal": {
+		"width": 14,
+		"height": 14,
+		"insets": {
+			"left": 6,
+			"top": 6,
+			"right": 6,
+			"bottom": 6
+		}
+	},
+	"btn_primary_pressed": {
+		"width": 14,
+		"height": 14,
+		"insets": {
+			"left": 6,
+			"top": 6,
+			"right": 6,
+			"bottom": 6
+		}
+	},
+	"btn_secondary_disabled": {
+		"width": 14,
+		"height": 12,
+		"insets": {
+			"left": 6,
+			"top": 5,
+			"right": 6,
+			"bottom": 5
+		}
+	},
+	"btn_secondary_hover": {
+		"width": 14,
+		"height": 12,
+		"insets": {
+			"left": 6,
+			"top": 5,
+			"right": 6,
+			"bottom": 5
+		}
+	},
+	"btn_secondary_normal": {
+		"width": 14,
+		"height": 12,
+		"insets": {
+			"left": 6,
+			"top": 5,
+			"right": 6,
+			"bottom": 5
+		}
+	},
+	"btn_secondary_pressed": {
+		"width": 14,
+		"height": 12,
+		"insets": {
+			"left": 6,
+			"top": 5,
+			"right": 6,
+			"bottom": 5
+		}
+	},
+	"btn_small_disabled": {
+		"width": 12,
+		"height": 12,
+		"insets": {
+			"left": 5,
+			"top": 5,
+			"right": 5,
+			"bottom": 5
+		}
+	},
+	"btn_small_hover": {
+		"width": 12,
+		"height": 12,
+		"insets": {
+			"left": 5,
+			"top": 5,
+			"right": 5,
+			"bottom": 5
+		}
+	},
+	"btn_small_normal": {
+		"width": 12,
+		"height": 12,
+		"insets": {
+			"left": 5,
+			"top": 5,
+			"right": 5,
+			"bottom": 5
+		}
+	},
+	"btn_small_pressed": {
+		"width": 12,
+		"height": 12,
+		"insets": {
+			"left": 5,
+			"top": 5,
+			"right": 5,
+			"bottom": 5
+		}
+	},
+	"checkbox_off": {
+		"width": 14,
+		"height": 15
+	},
+	"checkbox_off_disabled": {
+		"width": 14,
+		"height": 15
+	},
+	"checkbox_off_hover": {
+		"width": 14,
+		"height": 15
+	},
+	"checkbox_on": {
+		"width": 14,
+		"height": 14
+	},
+	"checkbox_on_disabled": {
+		"width": 15,
+		"height": 13
+	},
+	"checkbox_on_hover": {
+		"width": 14,
+		"height": 14
+	},
+	"dialogue": {
+		"width": 18,
+		"height": 18,
+		"insets": {
+			"left": 8,
+			"top": 8,
+			"right": 8,
+			"bottom": 8
+		}
+	},
+	"dialogue_arrow": {
+		"width": 10,
+		"height": 7
+	},
+	"field_disabled": {
+		"width": 14,
+		"height": 14,
+		"insets": {
+			"left": 6,
+			"top": 6,
+			"right": 6,
+			"bottom": 6
+		}
+	},
+	"field_focused": {
+		"width": 14,
+		"height": 14,
+		"insets": {
+			"left": 6,
+			"top": 6,
+			"right": 6,
+			"bottom": 6
+		}
+	},
+	"field_normal": {
+		"width": 14,
+		"height": 14,
+		"insets": {
+			"left": 6,
+			"top": 6,
+			"right": 6,
+			"bottom": 6
+		}
+	},
+	"icon_arrow_down": {
+		"width": 16,
+		"height": 17
+	},
+	"icon_arrow_left": {
+		"width": 17,
+		"height": 16
+	},
+	"icon_arrow_right": {
+		"width": 17,
+		"height": 16
+	},
+	"icon_arrow_up": {
+		"width": 16,
+		"height": 17
+	},
+	"icon_close": {
+		"width": 14,
+		"height": 16
+	},
+	"icon_gear": {
+		"width": 17,
+		"height": 15
+	},
+	"icon_heart_empty": {
+		"width": 13,
+		"height": 13
+	},
+	"icon_heart_full": {
+		"width": 13,
+		"height": 12
+	},
+	"icon_heart_half": {
+		"width": 13,
+		"height": 13
+	},
+	"icon_music": {
+		"width": 14,
+		"height": 16
+	},
+	"icon_orb_empty": {
+		"width": 14,
+		"height": 12
+	},
+	"icon_orb_full": {
+		"width": 12,
+		"height": 12
+	},
+	"icon_pause": {
+		"width": 14,
+		"height": 14
+	},
+	"icon_speaker": {
+		"width": 16,
+		"height": 16
+	},
+	"panel_plain": {
+		"width": 18,
+		"height": 18,
+		"insets": {
+			"left": 8,
+			"top": 8,
+			"right": 8,
+			"bottom": 8
+		}
+	},
+	"portrait_frame": {
+		"width": 10,
+		"height": 10,
+		"insets": {
+			"left": 4,
+			"top": 4,
+			"right": 4,
+			"bottom": 4
+		}
+	},
+	"radio_off": {
+		"width": 12,
+		"height": 15
+	},
+	"radio_off_disabled": {
+		"width": 12,
+		"height": 15
+	},
+	"radio_off_hover": {
+		"width": 12,
+		"height": 15
+	},
+	"radio_on": {
+		"width": 12,
+		"height": 15
+	},
+	"radio_on_disabled": {
+		"width": 12,
+		"height": 12
+	},
+	"radio_on_hover": {
+		"width": 12,
+		"height": 15
+	},
+	"scroll_thumb_disabled": {
+		"width": 12,
+		"height": 12,
+		"insets": {
+			"left": 5,
+			"top": 5,
+			"right": 5,
+			"bottom": 5
+		}
+	},
+	"scroll_thumb_hover": {
+		"width": 12,
+		"height": 12,
+		"insets": {
+			"left": 5,
+			"top": 5,
+			"right": 5,
+			"bottom": 5
+		}
+	},
+	"scroll_thumb_normal": {
+		"width": 12,
+		"height": 12,
+		"insets": {
+			"left": 5,
+			"top": 5,
+			"right": 5,
+			"bottom": 5
+		}
+	},
+	"scroll_thumb_pressed": {
+		"width": 12,
+		"height": 12,
+		"insets": {
+			"left": 5,
+			"top": 5,
+			"right": 5,
+			"bottom": 5
+		}
+	},
+	"scroll_track": {
+		"width": 8,
+		"height": 8,
+		"insets": {
+			"left": 3,
+			"top": 3,
+			"right": 3,
+			"bottom": 3
+		}
+	},
+	"slider_thumb_disabled": {
+		"width": 12,
+		"height": 16
+	},
+	"slider_thumb_hover": {
+		"width": 12,
+		"height": 16
+	},
+	"slider_thumb_normal": {
+		"width": 12,
+		"height": 16
+	},
+	"slider_thumb_pressed": {
+		"width": 12,
+		"height": 16
+	},
+	"slider_track": {
+		"width": 8,
+		"height": 8,
+		"insets": {
+			"left": 3,
+			"top": 3,
+			"right": 3,
+			"bottom": 3
+		}
+	},
+	"slot_disabled": {
+		"width": 10,
+		"height": 10,
+		"insets": {
+			"left": 4,
+			"top": 4,
+			"right": 4,
+			"bottom": 4
+		}
+	},
+	"slot_empty": {
+		"width": 10,
+		"height": 10,
+		"insets": {
+			"left": 4,
+			"top": 4,
+			"right": 4,
+			"bottom": 4
+		}
+	},
+	"slot_hover": {
+		"width": 10,
+		"height": 10,
+		"insets": {
+			"left": 4,
+			"top": 4,
+			"right": 4,
+			"bottom": 4
+		}
+	},
+	"slot_selected": {
+		"width": 10,
+		"height": 10,
+		"insets": {
+			"left": 4,
+			"top": 4,
+			"right": 4,
+			"bottom": 4
+		}
+	},
+	"tab_active": {
+		"width": 14,
+		"height": 14,
+		"insets": {
+			"left": 6,
+			"top": 6,
+			"right": 6,
+			"bottom": 6
+		}
+	},
+	"tab_disabled": {
+		"width": 12,
+		"height": 12,
+		"insets": {
+			"left": 5,
+			"top": 5,
+			"right": 5,
+			"bottom": 5
+		}
+	},
+	"tab_hover": {
+		"width": 12,
+		"height": 12,
+		"insets": {
+			"left": 5,
+			"top": 5,
+			"right": 5,
+			"bottom": 5
+		}
+	},
+	"tab_inactive": {
+		"width": 12,
+		"height": 12,
+		"insets": {
+			"left": 5,
+			"top": 5,
+			"right": 5,
+			"bottom": 5
+		}
+	},
+	"toast_bad": {
+		"width": 18,
+		"height": 18,
+		"insets": {
+			"left": 8,
+			"top": 8,
+			"right": 8,
+			"bottom": 8
+		}
+	},
+	"toast_good": {
+		"width": 18,
+		"height": 18,
+		"insets": {
+			"left": 8,
+			"top": 8,
+			"right": 8,
+			"bottom": 8
+		}
+	},
+	"tooltip": {
+		"width": 18,
+		"height": 18,
+		"insets": {
+			"left": 8,
+			"top": 8,
+			"right": 8,
+			"bottom": 8
+		}
+	},
+	"tooltip_tail_down": {
+		"width": 11,
+		"height": 6
+	},
+	"tooltip_tail_up": {
+		"width": 11,
+		"height": 6
+	},
+	"window_title": {
+		"width": 14,
+		"height": 14,
+		"insets": {
+			"left": 6,
+			"top": 6,
+			"right": 6,
+			"bottom": 6
+		}
+	}
+}
