@@ -37,7 +37,10 @@ vi.mock("pixi.js", () => {
     }
     return { Container };
 });
-vi.mock("./Game", () => ({ default: { inst: { ticker } } }));
+// What `game.assets` says about the build: no manifest loaded, as in a game that doesn't use one.
+const assets = vi.hoisted(() => ({ IsReady: false, IsDev: false }));
+
+vi.mock("./Game", () => ({ default: { inst: { ticker, assets } } }));
 vi.mock("../loading/AssetFactory", () => ({ default: { inst: {} } }));
 
 /** Records every hook into a shared log, tagged with its own name. */
@@ -73,12 +76,17 @@ class Probe extends GameComponent {
     attach<T extends GameComponent>(child: T) {
         return this.Attach(child);
     }
+    getDebug() {
+        return this.debug;
+    }
 }
 
 let log: string[];
 beforeEach(() => {
     log = [];
     ticker.listeners.clear();
+    assets.IsReady = false;
+    assets.IsDev = false;
 });
 
 describe("hooks", () => {
@@ -260,5 +268,77 @@ describe("ListenWhileShown", () => {
         emitter.emit("ping");
         expect(log.filter(entry => entry === "ping")).toHaveLength(2);
         expect(emitter.listenerCount("ping")).toBe(0);
+    });
+});
+
+describe("debug", () => {
+    /** The least of a display object that `DebugTools.Drag` touches. */
+    function FakeObject() {
+        return Object.assign(new EventEmitter(), { interactive: false, cursor: "", name: "", x: 0, y: 0, parent: null as unknown });
+    }
+
+    it("is one helper per component, made on first use", () => {
+        const c = new Probe("c", log);
+
+        expect(c.getDebug()).toBe(c.getDebug());
+        expect(c.getDebug()).not.toBe(new Probe("other", log).getDebug());
+    });
+
+    it("stops what it started when the component is destroyed", () => {
+        const c = new Probe("c", log);
+        const object = FakeObject();
+
+        c.getDebug().Drag(object as never);
+        expect(object.interactive).toBe(true);
+        expect(object.listenerCount("pointerdown")).toBe(1);
+
+        c.Destroy();
+
+        expect(object.interactive).toBe(false);
+        expect(object.listenerCount("pointerdown")).toBe(0);
+    });
+
+    it("works in a development build, and in a game that loaded no manifest", () => {
+        const c = new Probe("c", log);
+        const dev = FakeObject();
+        const noManifest = FakeObject();
+
+        assets.IsReady = true;
+        assets.IsDev = true;
+        c.getDebug().Drag(dev as never);
+        assets.IsReady = false;
+        assets.IsDev = false;
+        c.getDebug().Drag(noManifest as never);
+
+        expect(dev.interactive).toBe(true);
+        expect(noManifest.interactive).toBe(true);
+    });
+
+    it("does nothing in a production build - a manifest built with --production - and says so once", () => {
+        const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+        const c = new Probe("c", log);
+        const object = FakeObject();
+        assets.IsReady = true;
+        assets.IsDev = false;
+
+        c.getDebug().Drag(object as never);
+        c.getDebug().Drag(object as never);
+
+        expect(object.interactive).toBe(false);
+        expect(object.listenerCount("pointerdown")).toBe(0);
+        expect(warn).toHaveBeenCalledTimes(1);
+        warn.mockRestore();
+    });
+
+    it("lets a drag be stopped before the component goes, and then leaves it stopped", () => {
+        const c = new Probe("c", log);
+        const object = FakeObject();
+
+        const stop = c.getDebug().Drag(object as never);
+        stop();
+        expect(object.listenerCount("pointerdown")).toBe(0);
+
+        expect(() => c.Destroy()).not.toThrow(); // stopping again at destroy is harmless
+        expect(object.interactive).toBe(false);
     });
 });

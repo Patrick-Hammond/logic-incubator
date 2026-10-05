@@ -165,6 +165,7 @@ export interface IEmitter {
 | `Listen(emitter: IEmitter, event: string, fn): void` | Subscribes `fn` (with `this` as context) now and, through `Own`, unsubscribes when destroyed. |
 | `ListenWhileShown(emitter: IEmitter, event: string, fn): void` | Subscribes at every `Show`, unsubscribes at every `Hide` (through `WhileShown`). |
 | `Tick(fn: (dt: number) => void): void` | Calls `fn` each frame of `game.ticker`, only while shown (through `WhileShown`). |
+| `debug: DebugTools` *(getter)* | Development helpers for this component (development builds only), made on first use; what they start stops when it is destroyed. See [DebugTools](#debugtools). |
 | `AddToScene(id: string): void` | **Deprecated.** Use `owner.Attach(child)`. |
 
 **`Own` or `WhileShown`?** They tie something to the component's life over two different spans: `Own` once, at the end (destroy);
@@ -175,6 +176,45 @@ const sparks = new Emitter(this.root, textures, config);
 this.Own(() => sparks.destroy());                       // when destroyed: the same as sparks.destroy() in OnDestroy, but next to the line that made it
 this.WhileShown(() => sparks.emit = true, () => sparks.emit = false);   // on every show / every hide
 ```
+
+### DebugTools
+
+`@logic-incubator/lib/game/DebugTools` - `default class DebugTools`, reached as `this.debug` in any `GameComponent`. Development aids. Each helper
+registers its own cleanup with the component (`Own`), so it stops when the component is destroyed.
+
+**Development builds only.** `DebugEnabled(assets)` (exported beside the class) is `!assets.IsReady || assets.IsDev`: on when the asset manifest was
+built without `--production`, and in a game that never loaded a manifest (it can't say which build it is); off in a production build. When off, every
+call does nothing - the object is left alone, and the returned function is a no-op - and the component logs one warning, so a call left in by mistake
+is noticed and harmless. Take the calls out before shipping anyway.
+
+| Method | Description |
+| --- | --- |
+| `Drag(target: DisplayObject, options?: DragOptions): Cancel` | Makes any display object draggable, for positioning it by eye: press, drag, let go, and its position in its parent's space is logged (`label: (x, y)`), ready to paste. Returns a function that stops it sooner. |
+
+```ts
+this.debug.Drag(this._title);                                  // logs "Sprite: (640, 360)" - or the object's `name` - on every drop
+this.debug.Drag(this._title, { label: "title", snap: 0 });     // a name for the log line; free movement
+```
+
+`DragOptions` (from `@logic-incubator/lib/utils/DragObject`, which also exports the standalone `DragObject(target, options): Cancel`):
+
+| Option | Default | |
+| --- | --- | --- |
+| `snap` | `1` | Round the position to a multiple of this while dragging, in the parent's units. `0` moves freely. |
+| `log` | `true` | Log the position when the object is dropped. |
+| `label` | the object's `name`, else its class | Name used in that log line. |
+
+**What is logged** is the object's own `position`, so drag the thing you are placing. A container that sits at (0, 0) with its contents laid out
+inside it (an emitter spawning at `ownerPos`, say) reports only how far it was dragged: position the container, and give its contents (0, 0).
+
+How it behaves: the object moves in its **parent's space**, so a scaled, rotated or offset parent is fine, and it keeps the point you grabbed
+under the pointer. A drag is followed wherever the pointer goes (off the object, off the canvas) and ends when it is released anywhere. Works with
+the mouse, a finger or a pen; only the main button starts a drag. While on, the object is `interactive` with a `move` cursor (both put back by the
+returned function). Pressing stops the press reaching the object's ancestors, so a drag-enabled parent doesn't move as well.
+
+The object has to be reachable by pixi's interaction: shown, with no ancestor that has `interactiveChildren = false` (a scene that is not showing, and
+the engine's tile, entity and shot layers, have), and not covered by another interactive object, which takes the press instead. A plain `Container`
+works when something inside it is under the pointer.
 
 ---
 
@@ -839,7 +879,8 @@ Notification iterates a copy of the subscribers, so unsubscribing during a notif
 | --- | --- |
 | `utils/Types` | `type Direction = "up" \| "down" \| "left" \| "right" \| "none"`; `type RGB = { r, g, b }`; `type Dictionary<T> = { [id: string]: T }` |
 | `utils/StatsTicker` | `class StatsTicker extends Ticker` - a ticker that shows a stats.js panel (removed on `destroy`) |
-| `utils/Debug` | `MakeDraggable(displayObject)`, `MoveWithArrowKeys(displayObject)` (log positions to the console; dev aids) |
+| `utils/DragObject` | `DragObject(target, options?: DragOptions): Cancel` - drag any display object to position it by eye; what `this.debug.Drag` uses. See [DebugTools](#debugtools). |
+| `utils/Debug` | `MoveWithArrowKeys(displayObject)` (logs the position; dev aid); `MakeDraggable(displayObject)` - **deprecated**, now `DragObject` with its defaults. |
 | `filters/OverlayBlendFilter` | `class OverlayBlendFilter extends Filter`; `new OverlayBlendFilter(backdrop: Sprite)` - blends the filtered layer against the backdrop sprite's texture with a real overlay blend; only the backdrop's own texture is read |
 
 ---

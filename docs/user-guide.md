@@ -470,6 +470,7 @@ Helpers (all `protected`):
 | `this.ListenWhileShown(emitter, event, fn)` | Subscribes at every Show and unsubscribes at every Hide - no "am I visible" guard needed. |
 | `this.Tick(fn)` | Calls `fn(dt)` every frame, only while shown. |
 | `this.WhileShown(on, off)` | `on()` now if shown and on every Show; `off()` on every Hide. |
+| `this.debug` | Development helpers (development builds only), such as `this.debug.Drag(displayObject)`. See "Positioning things by dragging" below. |
 
 #### `Own` and `WhileShown`
 
@@ -529,6 +530,43 @@ export class GameScene extends GameComponent {
 ```
 
 Components get `this.game` (the `Game`) and `this.assetFactory` for free.
+
+#### Positioning things by dragging
+
+Working out where something goes - a title, an emitter, a HUD element - is quicker by eye than by editing numbers and reloading.
+`this.debug.Drag(displayObject)` makes **any** pixi display object draggable; when you let go it logs the position, ready to paste:
+
+```ts
+protected OnInitialise(): void {
+    this._title = this.game.assets.Sprite("global.enter_screen");
+    this.root.addChild(this._title);
+
+    this.debug.Drag(this._title);                                      // drag it; the console shows "Sprite: (640, 360)"
+    this.debug.Drag(this._title, { label: "title", snap: 0 });         // a name for the log line; free movement instead of whole pixels
+}
+```
+
+- It moves the object in its **parent's** coordinates, so it works inside a scaled or offset container, and the logged numbers are the ones to
+  put in `position.set(...)`. Whole pixels by default (`snap: 0` for free movement, `snap: 8` for a grid).
+- **The log is the object's own `position`**, so drag the thing you are placing. A container that sits at (0, 0) with its contents laid out
+  inside it - say a `Container` holding an emitter that spawns at `ownerPos` (97, 368) - reports only how far you dragged it, not where the flame
+  is. Position the container instead and give the emitter (0, 0):
+
+  ```ts
+  const fireContainer = this.root.addChild(new Container());
+  fireContainer.position.set(x, y);                        // place the container...
+  const fire = new Emitter(fireContainer, textures, config);
+  fire.updateOwnerPos(0, 0);                               // ...not the emitter inside it
+  this.debug.Drag(fireContainer);                          // logs "Container: (x, y)" - paste that back
+  ```
+- The drag keeps following the pointer when it leaves the object or the canvas, and ends when you let go anywhere.
+- It stops by itself when the component is destroyed (it goes through `Own`); `Drag` also returns a function that stops it sooner.
+- **Development builds only.** When the asset manifest was built with `--production` (`game.assets.IsDev` is false), `this.debug` does nothing
+  and the component logs one warning, so a call left in by mistake is harmless. (A game that never loaded a manifest can't tell, and gets the
+  helpers.) Take the calls out before shipping anyway.
+- It can only grab what pixi's interaction can reach: not an object covered by another interactive object (a full-screen button, say), and
+  not one inside a container with `interactiveChildren = false`, such as the engine's tile, entity and shot layers. A scene's root is only
+  interactive while it is showing, so calling `Drag` from `OnInitialise` is fine - it works once the scene is shown.
 
 ### 4.3 `SceneManager`
 
@@ -1270,7 +1308,8 @@ stops it (use `this.Own(...)` in a component).
 | `patterns/EnumerateTypes` | `AddTypes(a, b)`, `SubtractTypes`, `MultiplyTypes` over objects of numbers. |
 | `patterns/FunctionUtils` | `Memoize(fn)` (single-argument), `NullFunction`. |
 | `filters/OverlayBlendFilter` | A true "overlay" blend for the WebGL renderer: `top.filters = [new OverlayBlendFilter(backdropSprite)]`. |
-| `utils/Debug` | Dev conveniences: `MakeDraggable(displayObject)`, `MoveWithArrowKeys(displayObject)` - log positions to the console. |
+| `utils/DragObject` | `DragObject(displayObject, options?)` - drag any display object to position it by eye (what `this.debug.Drag` uses; see 4.2). |
+| `utils/Debug` | Dev conveniences: `MoveWithArrowKeys(displayObject)` logs positions to the console. `MakeDraggable` is deprecated - use `this.debug.Drag` or `DragObject`. |
 | `utils/Types` | `Direction`, `RGB`, `Dictionary<T>`. |
 
 ### The tilemap

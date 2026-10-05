@@ -1,5 +1,6 @@
 import {Container} from "pixi.js";
 import AssetFactory from "../loading/AssetFactory";
+import DebugTools, { DebugEnabled } from "./DebugTools";
 import Game from "./Game";
 
 /** What `Listen` needs of an event source: eventemitter3's `on`/`off` - `game.dispatcher`, `game.keyboard`, a Pixi display object. */
@@ -42,6 +43,7 @@ export default abstract class GameComponent {
     private children: GameComponent[] = [];
     private disposers: (() => void)[] = [];
     private shownBindings: {on: () => void; off: () => void}[] = [];
+    private debugTools: DebugTools | undefined;
 
     constructor() {
         this.game = Game.inst;
@@ -180,6 +182,16 @@ export default abstract class GameComponent {
     /** Calls `fn` (with this component as `this`) every frame, only while this component is shown. */
     protected Tick(fn: (dt: number) => void): void {
         this.WhileShown(() => this.game.ticker.add(fn, this), () => this.game.ticker.remove(fn, this));
+    }
+
+    /**
+     * Development helpers for this component, such as `this.debug.Drag(sprite)` to position something by dragging it
+     * (see `DebugTools`). Made on first use; whatever a helper starts stops when this component is destroyed. They work
+     * in development builds only (`assets.IsDev`) - in a production build they do nothing - so take the calls out
+     * before shipping.
+     */
+    protected get debug(): DebugTools {
+        return this.debugTools || (this.debugTools = new DebugTools(dispose => this.Own(dispose), () => DebugEnabled(this.game.assets)));
     }
 
     /** @deprecated Attach the child to its owner instead (`owner.Attach(child)`), which doesn't need to know the scene's name. */
