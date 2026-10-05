@@ -10,6 +10,7 @@ import Level from "./level/Level";
 import {LevelFile} from "./level/LevelFormat";
 import TileCollision from "./level/TileCollision";
 import {Camera} from "./view/Camera";
+import Effects from "./view/Effects";
 import EntityRenderer from "./view/EntityRenderer";
 import Hud from "./view/Hud";
 import {Player} from "./view/Player";
@@ -57,6 +58,7 @@ export class DungeonMain extends GameComponent {
     private encounter: Encounter | undefined;
     private renderer: EntityRenderer | undefined;
     private hud: Hud | undefined;
+    private effects: Effects | undefined;
     private levelAssets: LevelAssets | undefined;
     /** Seconds until the level restarts after the player died - 0 while they're alive. */
     private restartIn = 0;
@@ -68,12 +70,19 @@ export class DungeonMain extends GameComponent {
         super();
     }
 
+    /** Where a game plays particle effects (`Effects.Play`) - undefined until the scene has been initialised. */
+    get Effects(): Effects | undefined {
+        return this.effects;
+    }
+
     protected OnInitialise(): void {
         const level = this.level = new Level();
 
         // Attached in drawing order: the world, then the HUD over it.
         const camera = this.Attach(new Camera());
         this.Attach(new TileMapView(level, camera));
+        // Inside the camera, so effects scroll and zoom with the world, and over its layers; under the HUD.
+        this.effects = this.Attach(new Effects(camera), camera.root);
         this.hud = this.Attach(new Hud(this.options.player.hearts));
 
         // A door the player has no key for is a wall to them; one they have the key for isn't - they walk onto it to open it.
@@ -106,7 +115,7 @@ export class DungeonMain extends GameComponent {
             this.game.assets.UseLevelBundle().catch(() => undefined);
         }
         // Drops anything a `Reload` still waiting on its assets would otherwise carry on with.
-        this.level = this.player = this.encounter = this.renderer = this.hud = this.levelAssets = undefined;
+        this.level = this.player = this.encounter = this.renderer = this.hud = this.effects = this.levelAssets = undefined;
     }
 
     /** A level has just been built (see `TileMapView`): start it over - the player, monsters and drawing, and the restart timer. */

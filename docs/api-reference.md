@@ -39,7 +39,8 @@ configuration files and plugin interface. For explanations, examples and workflo
 [Store](#store) ·
 [Patterns, algorithms, data structures](#patterns-algorithms-data-structures) ·
 [Utils and filters](#utils-and-filters) ·
-[Tilemap](#tilemap)
+[Tilemap](#tilemap) ·
+[Particles](#particles)
 
 **[engine](#engine)**
 [Constants and events](#constants-and-events) ·
@@ -859,6 +860,33 @@ Do not change after the renderer has initialised.
 
 ---
 
+## Particles
+
+`@logic-incubator/lib/particles` - vendored `pixi-particles` 4.3.1 for pixi 5.2.1; see `packages/lib/src/particles/README.md` for the changes
+and examples. Configs are what the [pixi-particles editor](https://pixijs.github.io/pixi-particles-editor/) exports.
+
+Exports: `Emitter`, `EmitterConfig`, `OldEmitterConfig`, `Particle`, `AnimatedParticle`, `PathParticle`, `ParticleUtils`, `PolygonalChain`,
+`PropertyList`, `PropertyNode`, `LinkedListContainer`.
+
+`Emitter`:
+
+| Member | |
+| --- | --- |
+| `new Emitter(parent: Container, art, config: EmitterConfig \| OldEmitterConfig, ticker = Ticker.shared)` | `art`: a texture or an array of them (each particle takes one at random). Particles are added to `parent`, in its space. Emits at once unless `config.emit` is false. `ticker` is only used by `autoUpdate`. |
+| `update(seconds: number)` | Advance the particles and spawn new ones. Call once a frame unless `autoUpdate` is on. |
+| `autoUpdate: boolean` | Run `update` from `ticker` (default false; the config's `autoUpdate`). |
+| `emit: boolean` | Spawn new particles. Setting false lets the live ones finish. |
+| `playOnce(callback?)` | Start emitting; `callback` runs when the last particle has died. |
+| `playOnceAndDestroy(callback?)` | The same, then `destroy()`s itself. Turns `autoUpdate` on. |
+| `updateOwnerPos(x, y)`, `updateSpawnPos(x, y)`, `rotate(rotation)`, `resetPositionTracking()` | Move the spawn point (`ownerPos + spawnPos`) / turn the emitter / stop interpolating the spawn position across the next jump. |
+| `particleCount`, `parent` | Live particles; the container they are added to (null once destroyed). |
+| `cleanup()`, `destroy()` | Kill the live particles now; release everything, including the ticker listener. |
+
+`LinkedListContainer extends Container` keeps its children as a linked list instead of an array, so adding and removing particles is cheap; it
+does not fill `children`. Use it as an emitter's `parent` when there are many.
+
+---
+
 # engine
 
 ## Constants and events
@@ -909,12 +937,14 @@ type DungeonMainOptions = {
 };
 
 new DungeonMain(options: DungeonMainOptions)
+
+main.Effects: Effects | undefined       // where a game plays particle effects; undefined until the scene is initialised
 ```
 
 `playerSprite` is asked for each time a level starts (on `LEVEL_CREATED`, before the player is reset): when it returns an animation
 name the player is drawn with that (`Player.SetSprite`), otherwise with `player.sprite`. It is how a game lets the player pick a character.
 
-Lifecycle: `OnInitialise` builds the `Level`, attaches `Camera`, `TileMapView` and `Hud`, creates `Player`, `EntityRenderer` and
+Lifecycle: `OnInitialise` builds the `Level`, attaches `Camera`, `TileMapView`, `Effects` (into the camera) and `Hud`, creates `Player`, `EntityRenderer` and
 `Encounter`, binds asset metadata (`BindAssetMetadata`) and listens for `LEVEL_CREATED` / `PLAYER_DIED`. `OnShow` and each restart
 (1.5 s after `PLAYER_DIED`) call `Reload`: prepare the assets (`LevelAssets.Prepare` - refresh dev metadata, then
 `UseLevelBundle(levelBundle())`), then `Level.LoadLevel(level())` unless the scene was destroyed meanwhile. `OnDestroy` destroys the
@@ -1242,6 +1272,7 @@ Constants `MaxMonsters = 150`, `HitFlashTime = 0.15`. `EncounterLevel` and `Enco
 | `Camera extends GameComponent` | `view/Camera` | `ViewRect`, `Scale`, `ScaledTileSize`, `Zoom`, `BaseViewWidth/Height`, `CurrentZ`, `EffectiveZoom`; `Move(x, y)`, `CenterOn(x, y)`, `Follow(pixelX, pixelY, amount)`, `SetZ(z)`, `UpdateZoom(dt)`. Emits `CAMERA_MOVED`. `new Camera(cameraControl?)`. |
 | `TileMapView extends GameComponent` | `view/TileMap` | `new TileMapView(level, camera)`. Builds the tile layers, lit and banded by height, plus the `EntitiesLayer` (`"entities"`) and `ProjectilesLayer` (`"projectiles"`) containers; `LightTint(light)`, `TileGD8Rotation(rotation, scaleX, scaleY)`. Emits `LEVEL_CREATED`. |
 | `Player` | `view/Player` | `new Player(camera, collision, level, setup)`; `Position`, `Centre`, `Tile`, `Texture`, `FacingX`, `Health`, `Gold`, `Inventory`, `Keys`, `EquippedWeapon`; `HasKeyFor(lockId)`, `IsLockedOut(x, y)` (a closed door they've no key for - what `DungeonMain` gives their collider); `Reset(startPosition)` (throws if the level has no player start), `SetSprite(animation)` (draw the player with another animation, keeping their position; a no-op for the one already in use), `Update(dt, seconds)` (input, movement, camera, doors, regions, pickups), `TakeShot(): Vec2Like \| null`, `Damage(n): boolean`, `Destroy()`. |
+| `Effects extends GameComponent` | `view/Effects` | `new Effects(camera)`; `Play(art, config, x, y): Emitter \| undefined` starts a particle effect at a position in world pixels (`art`: a sprite or animation name, `config`: an `EmitterConfig` or `OldEmitterConfig`; `undefined` after a one-off warning when `art` isn't loaded). Its layer sits in the camera root above the entities and shots, placed every frame like the entities layer (`view/helpers/EffectsPlacement`), and goes back on top on `LEVEL_CREATED`, which also drops the level's effects. Emitters update from `Tick` (only while shown); a finished one (not emitting, no particles) is destroyed, a continuous one runs until `emit = false`. `DungeonMain` attaches it - use `main.Effects`. |
 | `Hud extends GameComponent` | `view/Hud` | `new Hud(setup.hearts)`; `Render(health, gold, weaponIcon, inventory, keys)` - the keys panel shows each key's sprite and its id. Warns once per missing heart sprite. |
 | `EntityRenderer` | `view/EntityRenderer` | `new EntityRenderer(camera, level)`; `Reset()` (call on `LEVEL_CREATED`), `Render(player, encounter)`. |
 
