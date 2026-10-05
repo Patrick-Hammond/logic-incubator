@@ -10,10 +10,13 @@ export default defineConfig({
             "@logic-incubator/lib": src("lib"),
             "@logic-incubator/engine": src("engine"),
             "@logic-incubator/editor": src("editor"),
+            "@logic-incubator/ui": src("ui"),
         },
     },
     test: {
         environment: "node",
-        include: ["packages/*/src/**/*.{test,spec}.ts", "packages/*/scripts/**/*.{test,spec}.ts"],
+        // The type-level tests build a whole TypeScript program (about 3 s alone), which the default 5 s can't survive when the rest of the suite is running beside it.
+        testTimeout: 30000,
+        include: ["packages/*/src/**/*.{test,spec}.ts", "packages/*/scripts/**/*.{test,spec}.ts", "packages/*/tools/**/*.{test,spec}.mjs"],
     },
 });

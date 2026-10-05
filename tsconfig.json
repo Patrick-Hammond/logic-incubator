@@ -20,7 +20,8 @@
     "paths": {
       "@logic-incubator/lib/*": ["packages/lib/src/*"],
       "@logic-incubator/engine/*": ["packages/engine/src/*"],
-      "@logic-incubator/editor/*": ["packages/editor/src/*"]
+      "@logic-incubator/editor/*": ["packages/editor/src/*"],
+      "@logic-incubator/ui/*": ["packages/ui/src/*"]
     }
   },
   "include": ["packages/*/src"],

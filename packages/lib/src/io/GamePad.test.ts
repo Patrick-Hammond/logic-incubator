@@ -9,6 +9,7 @@ const Threshold = 0.3;
 
 afterEach(() => {
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
 });
 
 /** A GamePad with one controller (id 0) reporting `axes` - left x, left y, right x, right y, ... */
@@ -172,5 +173,78 @@ describe("GamePad.Destroy", () => {
             vi.advanceTimersByTime(5000);
             expect(getGamepads).toHaveBeenCalledTimes(1);
         });
+    });
+});
+
+describe("GamePad.GetButtonMinTime", () => {
+    it("is null - not a TypeError - when no controller is connected in that slot", () => {
+        expect(padWith([]).GetButtonMinTime(200, 1, 0)).toBeNull();
+    });
+});
+
+/**
+ * A browser's Gamepad object is a snapshot: the one from the connect event never changes, so a stick or button read from it stays where it was
+ * when the controller was plugged in. Reads go back to `navigator.getGamepads()`.
+ */
+describe("GamePad reading a live controller", () => {
+    const snapshot = (index: number, axes: number[], pressed = false) => ({ index, axes, buttons: [{ pressed, value: pressed ? 1 : 0 }] }) as unknown as Gamepad;
+
+    /** A pad that was connected with `connected`, in a browser whose current state is whatever `browser.pads` holds - read at `browser.now`. */
+    function liveBrowser(connected: Gamepad) {
+        const browser = { pads: [connected] as (Gamepad | null)[], now: 1000, reads: 0 };
+        vi.stubGlobal("window", { GamepadEvent: class {}, addEventListener: () => undefined });
+        vi.stubGlobal("navigator", { getGamepads: () => { browser.reads++; return browser.pads; } });
+        vi.stubGlobal("performance", { now: () => browser.now });
+        const pad = new GamePad();
+        pad.controllers[0] = connected;
+        return { browser, pad };
+    }
+
+    it("sees a stick moved after the controller connected", () => {
+        const { browser, pad } = liveBrowser(snapshot(0, [0, 0]));
+        expect(pad.GetStickDirection(0, 0, Threshold)).toBe("none");
+
+        browser.pads = [snapshot(0, [0.9, 0])];
+        browser.now += 16;
+        expect(pad.GetStickDirection(0, 0, Threshold)).toBe("right");
+    });
+
+    it("sees a button pressed after the controller connected", () => {
+        const { browser, pad } = liveBrowser(snapshot(0, [0, 0]));
+        expect(pad.GetButton(0, 0).pressed).toBe(false);
+
+        browser.pads = [snapshot(0, [0, 0], true)];
+        browser.now += 16;
+        expect(pad.GetButton(0, 0).pressed).toBe(true);
+    });
+
+    it("reads the browser once per frame, however many buttons and sticks are asked about", () => {
+        const { browser, pad } = liveBrowser(snapshot(0, [0, 0, 0, 0]));
+        for (let i = 0; i < 10; i++) {
+            pad.GetStick(0, 0, Threshold);
+            pad.GetStick(0, 1, Threshold);
+            pad.GetButton(0, 0);
+            pad.GetDPad(0);
+        }
+        expect(browser.reads).toBe(1);
+
+        browser.now += 16;
+        pad.GetStick(0, 0, Threshold);
+        expect(browser.reads).toBe(2);
+    });
+
+    it("leaves connecting and disconnecting to the events: an unknown or vanished controller isn't added or dropped by a read", () => {
+        const { browser, pad } = liveBrowser(snapshot(0, [0, 0]));
+        browser.pads = [null, snapshot(1, [0.9, 0.9])];
+        browser.now += 16;
+
+        expect(pad.GetStick(1, 0, Threshold)).toBeNull();
+        expect(pad.GetStick(0, 0, Threshold)).toMatchObject({ x: 0, y: 0 });
+    });
+
+    it("copes with a browser that has no Gamepad API to read", () => {
+        vi.stubGlobal("navigator", {});
+        const pad = padWith([0.9, 0]);
+        expect(pad.GetStickDirection(0, 0, Threshold)).toBe("right");
     });
 });

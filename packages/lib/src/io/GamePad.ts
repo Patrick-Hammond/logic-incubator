@@ -21,6 +21,8 @@ export default class GamePad extends EventEmitter {
     private debugLog: boolean = true;
     /** Undoes each window listener (or the polling timer) the constructor set up. */
     private stopListening: (() => void)[] = [];
+    /** When the controllers were last read back from the browser (ms, `performance.now`). */
+    private refreshedAt = -Infinity;
 
     constructor() {
         super();
@@ -68,7 +70,7 @@ export default class GamePad extends EventEmitter {
     }
 
     GetButton(controllerId: number, buttonId: number): GamepadButton {
-        const controller = this.controllers[controllerId];
+        const controller = this.Controller(controllerId);
 
         if (!controller) {
             return null;
@@ -89,7 +91,7 @@ export default class GamePad extends EventEmitter {
     GetButtonMinTime(ms: number, controllerId: number, buttonId: number): GamepadButton {
         const id = controllerId.toString() + buttonId.toString();
         const button = this.GetButton(controllerId, buttonId);
-        if(button.value === 1 && !this.timestampMap[id]) {
+        if(button && button.value === 1 && !this.timestampMap[id]) {
             this.timestampMap[id] = Wait(ms, () => this.timestampMap[id] = null);
             return button;
         }
@@ -98,7 +100,7 @@ export default class GamePad extends EventEmitter {
     }
 
     GetStick(controllerId: number, stickId: number, threshold: number): Vec2 {
-        const controller = this.controllers[controllerId];
+        const controller = this.Controller(controllerId);
 
         if (!controller) {
             return null;
@@ -115,7 +117,7 @@ export default class GamePad extends EventEmitter {
     }
 
     GetStickDirection(controllerId: number, stickId: number, threshold: number): Direction {
-        const controller = this.controllers[controllerId];
+        const controller = this.Controller(controllerId);
 
         if (!controller) {
             return null;
@@ -143,7 +145,7 @@ export default class GamePad extends EventEmitter {
 
         // my 2563-0526-HJD-X reports the dpad as axis 9
 
-        const controller = this.controllers[controllerId];
+        const controller = this.Controller(controllerId);
 
         if (!controller) {
             return null;
@@ -158,6 +160,38 @@ export default class GamePad extends EventEmitter {
             return axis === -1 ? "up" : "right";
         } else {
             return axis > 0.5 ? "left" : "down";
+        }
+    }
+
+    /** The controller in a slot as the browser reports it now, or null. */
+    private Controller(controllerId: number): Gamepad | null {
+        this.Refresh();
+        return this.controllers[controllerId] || null;
+    }
+
+    /**
+     * What a browser hands over for a controller - the `gamepadconnected` event's included - is a snapshot that never changes afterwards, so the
+     * state has to be asked for again (MDN: read `navigator.getGamepads()` each frame). Done here, at most once a frame however many buttons and
+     * sticks are read, and only for controllers already known: connecting and disconnecting stay with the events (or the polling scan).
+     */
+    private Refresh(): void {
+        if (typeof navigator === "undefined" || typeof performance === "undefined") {
+            return;
+        }
+        const now = performance.now();
+        if (now - this.refreshedAt < 8) {
+            return;
+        }
+        this.refreshedAt = now;
+        const current = navigator.getGamepads ? navigator.getGamepads() : navigator["webkitGetGamepads"] ? navigator["webkitGetGamepads"]() : null;
+        if (!current) {
+            return;
+        }
+        for (let i = 0; i < current.length; i++) {
+            const pad = current[i];
+            if (pad && this.controllers[pad.index]) {
+                this.controllers[pad.index] = pad;
+            }
         }
     }
 

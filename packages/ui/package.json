@@ -1,0 +1,12 @@
+{
+  "name": "@logic-incubator/ui",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Game UI kit: skinnable Pixi widgets (buttons, panels, bars, menus...), focus navigation for keyboard, gamepad and mouse, and the art bundle they draw from",
+  "peerDependencies": {
+    "pixi.js": "5.2.1"
+  },
+  "dependencies": {
+    "@logic-incubator/lib": "*"
+  }
+}

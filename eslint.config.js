@@ -5,7 +5,7 @@ const tseslint = require('typescript-eslint');
 // Node build scripts (CommonJS, run by plain `node`): the browser/TypeScript rules don't apply, and `require` etc. must be known.
 const NODE_GLOBALS = { require: 'readonly', module: 'writable', exports: 'writable', process: 'readonly', console: 'readonly', Buffer: 'readonly', URL: 'readonly', setTimeout: 'readonly', __dirname: 'readonly', __filename: 'readonly' };
 
-const BY_NAME = { regex: '^\\.{1,2}/(.*/)?(packages|lib/src|engine/src|editor/src)(/|$)', message: 'Import another package by its name (@logic-incubator/...), not a relative path.' };
+const BY_NAME = { regex: '^\\.{1,2}/(.*/)?(packages|lib/src|engine/src|editor/src|ui/src)(/|$)', message: 'Import another package by its name (@logic-incubator/...), not a relative path.' };
 
 module.exports = tseslint.config(
   {
@@ -22,6 +22,15 @@ module.exports = tseslint.config(
     }
   },
   {
+    // Dev tools (ES modules, run by plain node 20+, which has fetch and WebSocket built in).
+    files: ['packages/*/tools/**/*.mjs'],
+    languageOptions: {
+      sourceType: 'module',
+      globals: { ...NODE_GLOBALS, fetch: 'readonly', WebSocket: 'readonly', performance: 'readonly' }
+    },
+    rules: { '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }] }
+  },
+  {
     files: ['**/*.ts', '**/*.tsx'],
     rules: {
       // TypeScript's own checker handles undefined identifiers.
@@ -33,7 +42,7 @@ module.exports = tseslint.config(
       '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }]
     }
   },
-  // Dependencies only point down: editor -> engine -> lib.
+  // Dependencies only point down: editor -> engine -> ui -> lib (the editor may also use ui directly).
   {
     files: ['packages/editor/src/**/*.ts'],
     rules: {
@@ -50,10 +59,19 @@ module.exports = tseslint.config(
     }
   },
   {
+    // The UI kit is built on lib and used by the engine, the editor and the games - never the other way round.
+    files: ['packages/ui/src/**/*.ts'],
+    rules: {
+      'no-restricted-imports': ['error', {
+        patterns: [BY_NAME, { regex: '^@logic-incubator/(engine|editor)(/|$)', message: 'ui must not depend on the engine or editor - they use it.' }]
+      }]
+    }
+  },
+  {
     files: ['packages/lib/src/**/*.ts'],
     rules: {
       'no-restricted-imports': ['error', {
-        patterns: [BY_NAME, { regex: '^@logic-incubator/(engine|editor)(/|$)', message: 'lib must not depend on the engine or editor.' }]
+        patterns: [BY_NAME, { regex: '^@logic-incubator/(engine|editor|ui)(/|$)', message: 'lib must not depend on the engine, editor or ui.' }]
       }]
     }
   }

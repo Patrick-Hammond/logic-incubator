@@ -1,0 +1,7 @@
+{
+	"atlas": {
+		"sheets": {
+			"ui": { "trim": false, "scaleMode": "nearest" }
+		}
+	}
+}
