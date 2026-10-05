@@ -197,17 +197,17 @@ describe("logging", () => {
         target.emit("pointerup", Ev(1, move.x, move.y));
 
         expect(log).toHaveBeenCalledTimes(1);
-        expect(log).toHaveBeenCalledWith("title: (120, 70)");
+        expect(log).toHaveBeenCalledWith("title: {x:120, y:70}");
     });
 
     it("names the object by its `name`, else its class", () => {
         Enable(target);
         Drag(100, 50, 100, 50);
-        expect(log).toHaveBeenLastCalledWith("FakeTarget: (100, 50)");
+        expect(log).toHaveBeenLastCalledWith("FakeTarget: {x:100, y:50}");
 
         target.name = "hud";
         Drag(100, 50, 100, 50);
-        expect(log).toHaveBeenLastCalledWith("hud: (100, 50)");
+        expect(log).toHaveBeenLastCalledWith("hud: {x:100, y:50}");
     });
 
     it("tidies a free drag's position to two decimals", () => {
@@ -215,7 +215,7 @@ describe("logging", () => {
 
         Drag(100, 50, 120.123456, 70.5);
 
-        expect(log).toHaveBeenCalledWith("t: (120.12, 70.5)");
+        expect(log).toHaveBeenCalledWith("t: {x:120.12, y:70.5}");
     });
 
     it("stays quiet with log: false", () => {

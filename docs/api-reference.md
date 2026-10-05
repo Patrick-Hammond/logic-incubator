@@ -189,10 +189,10 @@ is noticed and harmless. Take the calls out before shipping anyway.
 
 | Method | Description |
 | --- | --- |
-| `Drag(target: DisplayObject, options?: DragOptions): Cancel` | Makes any display object draggable, for positioning it by eye: press, drag, let go, and its position in its parent's space is logged (`label: (x, y)`), ready to paste. Returns a function that stops it sooner. |
+| `Drag(target: DisplayObject, options?: DragOptions): Cancel` | Makes any display object draggable, for positioning it by eye: press, drag, let go, and its position in its parent's space is logged as an object literal (`label: {x:640, y:360}`), ready to paste. Returns a function that stops it sooner. |
 
 ```ts
-this.debug.Drag(this._title);                                  // logs "Sprite: (640, 360)" - or the object's `name` - on every drop
+this.debug.Drag(this._title);                                  // logs "Sprite: {x:640, y:360}" - or the object's `name` - on every drop
 this.debug.Drag(this._title, { label: "title", snap: 0 });     // a name for the log line; free movement
 ```
 
@@ -881,6 +881,7 @@ Notification iterates a copy of the subscribers, so unsubscribing during a notif
 | `utils/StatsTicker` | `class StatsTicker extends Ticker` - a ticker that shows a stats.js panel (removed on `destroy`) |
 | `utils/DragObject` | `DragObject(target, options?: DragOptions): Cancel` - drag any display object to position it by eye; what `this.debug.Drag` uses. See [DebugTools](#debugtools). |
 | `utils/Debug` | `MoveWithArrowKeys(displayObject)` (logs the position; dev aid); `MakeDraggable(displayObject)` - **deprecated**, now `DragObject` with its defaults. |
+| `colour/ColourTransform` | Colour changes on a packed `0xRRGGBB` number (the form pixi takes for a tint), returning a new colour; alpha bits are ignored. `Darken(colour, amount)` - `amount` 0..1 scales all channels down, 0 unchanged, 1 black (`Darken(0xFFFFFF, 0.5)` is `0x808080`). `ShiftHue(colour, degrees)` - turns the hue round the wheel (red + 120 is green; negative turns back, wraps past 360), keeping saturation and brightness; greys come back unchanged. |
 | `filters/OverlayBlendFilter` | `class OverlayBlendFilter extends Filter`; `new OverlayBlendFilter(backdrop: Sprite)` - blends the filtered layer against the backdrop sprite's texture with a real overlay blend; only the backdrop's own texture is read |
 
 ---

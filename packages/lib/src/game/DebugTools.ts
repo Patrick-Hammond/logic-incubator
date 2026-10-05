@@ -36,7 +36,8 @@ export default class DebugTools {
 
     /**
      * Makes any display object draggable, for positioning it by eye: press, drag, let go, and its position (in its
-     * parent's space) is logged, ready to paste into the code. Whole pixels by default.
+     * parent's space) is logged as an object literal - `title: {x:120, y:70}` - ready to paste into the code.
+     * Whole pixels by default.
      *
      *     this.debug.Drag(this._title);
      *     this.debug.Drag(this._title, { label: "title", snap: 0 });            // a name for the log line; free movement

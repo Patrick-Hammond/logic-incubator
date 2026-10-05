@@ -98,6 +98,7 @@ logic-incubator/
         tween/               Tween, Easing
         tilemap/             vendored @pixi/tilemap with per-tile tint and flicker
         particles/           vendored pixi-particles: the particle Emitter
+        colour/              colour transforms on 0xRRGGBB numbers: Darken, ShiftHue
         math/ patterns/ algorithms/ datastructures/ utils/ filters/
       scripts/               build-assets.js and its modules: the asset build (plain Node)
       html/                  index.template + index.styles.css the games are served in
@@ -541,13 +542,14 @@ protected OnInitialise(): void {
     this._title = this.game.assets.Sprite("global.enter_screen");
     this.root.addChild(this._title);
 
-    this.debug.Drag(this._title);                                      // drag it; the console shows "Sprite: (640, 360)"
+    this.debug.Drag(this._title);                                      // drag it; the console shows "Sprite: {x:640, y:360}"
     this.debug.Drag(this._title, { label: "title", snap: 0 });         // a name for the log line; free movement instead of whole pixels
 }
 ```
 
-- It moves the object in its **parent's** coordinates, so it works inside a scaled or offset container, and the logged numbers are the ones to
-  put in `position.set(...)`. Whole pixels by default (`snap: 0` for free movement, `snap: 8` for a grid).
+- It moves the object in its **parent's** coordinates, so it works inside a scaled or offset container, and the logged `{x:…, y:…}` is an
+  object literal to paste where a position is wanted - a `position.copyFrom(...)`, an entry in a list of positions. Whole pixels by default
+  (`snap: 0` for free movement, `snap: 8` for a grid).
 - **The log is the object's own `position`**, so drag the thing you are placing. A container that sits at (0, 0) with its contents laid out
   inside it - say a `Container` holding an emitter that spawns at `ownerPos` (97, 368) - reports only how far you dragged it, not where the flame
   is. Position the container instead and give the emitter (0, 0):
@@ -557,7 +559,7 @@ protected OnInitialise(): void {
   fireContainer.position.set(x, y);                        // place the container...
   const fire = new Emitter(fireContainer, textures, config);
   fire.updateOwnerPos(0, 0);                               // ...not the emitter inside it
-  this.debug.Drag(fireContainer);                          // logs "Container: (x, y)" - paste that back
+  this.debug.Drag(fireContainer);                          // logs "Container: {x:97, y:368}" - an object literal to paste back
   ```
 - The drag keeps following the pointer when it leaves the object or the canvas, and ends when you let go anywhere.
 - It stops by itself when the component is destroyed (it goes through `Own`); `Drag` also returns a function that stops it sooner.
@@ -1307,6 +1309,7 @@ stops it (use `this.Own(...)` in a component).
 | `datastructures/Queue` | A bounded queue: `Queue.Create<T>(capacity)`, `Queue(item)` (drops the oldest past capacity), `Dequeue()`, `Read()`. |
 | `patterns/EnumerateTypes` | `AddTypes(a, b)`, `SubtractTypes`, `MultiplyTypes` over objects of numbers. |
 | `patterns/FunctionUtils` | `Memoize(fn)` (single-argument), `NullFunction`. |
+| `colour/ColourTransform` | Colour changes on a packed `0xRRGGBB` number, as pixi takes for a tint: `Darken(0xFFFFFF, 0.5)` is `0x808080` (0 leaves it, 1 is black); `ShiftHue(0xFF0000, 120)` is `0x00FF00` (turns the hue, keeps saturation and brightness; negative turns back; greys are unchanged). `sprite.tint = Darken(0xFFFFFF, 0.3)`. |
 | `filters/OverlayBlendFilter` | A true "overlay" blend for the WebGL renderer: `top.filters = [new OverlayBlendFilter(backdropSprite)]`. |
 | `utils/DragObject` | `DragObject(displayObject, options?)` - drag any display object to position it by eye (what `this.debug.Drag` uses; see 4.2). |
 | `utils/Debug` | Dev conveniences: `MoveWithArrowKeys(displayObject)` logs positions to the console. `MakeDraggable` is deprecated - use `this.debug.Drag` or `DragObject`. |

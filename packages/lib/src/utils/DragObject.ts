@@ -4,7 +4,7 @@ import type { Cancel } from "../game/Timing";
 export interface DragOptions {
     /** Round the position to a multiple of this while dragging, in the parent's units. Default 1 (whole pixels); 0 moves freely. */
     snap?: number;
-    /** Log the position to the console when the object is dropped. Default true. */
+    /** Log the position to the console when the object is dropped, as `label: {x:120, y:70}`. Default true. */
     log?: boolean;
     /** Name for that log line. Default the object's `name`, else its class. */
     label?: string;
@@ -22,7 +22,8 @@ function Tidy(value: number): number {
 
 /**
  * Makes any display object draggable with the mouse, a finger or a pen, for positioning it by eye: press on it, drag, let go,
- * and its position (in its parent's space) is logged, ready to paste into the code. A development aid.
+ * and its position (in its parent's space) is logged as an object literal - `title: {x:120, y:70}` - ready to paste into the
+ * code. A development aid.
  *
  * The position logged is the object's own `position`, so drag the thing you are placing: a container that sits at (0, 0) with its
  * contents laid out inside it reports only how far it was dragged.
@@ -74,7 +75,7 @@ export function DragObject(target: DisplayObject, options: DragOptions = {}): Ca
         drag = null;
         if (log) {
             const label = options.label || target.name || target.constructor.name;
-            console.log(`${label}: (${Tidy(target.x)}, ${Tidy(target.y)})`);
+            console.log(`${label}: {x:${Tidy(target.x)}, y:${Tidy(target.y)}}`);
         }
     };
 
