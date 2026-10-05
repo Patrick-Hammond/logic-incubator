@@ -97,6 +97,7 @@ logic-incubator/
         io/                  Keyboard, GamePad, VirtualJoystick, Storage, Url
         tween/               Tween, Easing
         tilemap/             vendored @pixi/tilemap with per-tile tint and flicker
+        particles/           vendored pixi-particles: the particle Emitter
         math/ patterns/ algorithms/ datastructures/ utils/ filters/
       scripts/               build-assets.js and its modules: the asset build (plain Node)
       html/                  index.template + index.styles.css the games are served in
@@ -1261,6 +1262,23 @@ map.tile(torchTexture, tx * 16, ty * 16, { flicker: 0.3, flickerSeed: tx * 31 + 
 `TileOptions`: `tint`, `flicker`, `flickerSeed`, `alpha`, `rotate`, `animX`/`animY`/`animCountX`/`animCountY`/
 `animDivisor`, `u`/`v`/`tileWidth`/`tileHeight`. A container's `alpha` reaches the shader too.
 
+### Particles
+
+`lib/src/particles` is a vendored copy of `pixi-particles` 4.3.1 (see its README for what changed). Design an effect in the
+[pixi-particles editor](https://pixijs.github.io/pixi-particles-editor/), paste its JSON in as the config, and give the emitter a
+container, the textures to use and the time in seconds:
+
+```ts
+import { Emitter, OldEmitterConfig } from "@logic-incubator/lib/particles";
+
+const emitter = new Emitter(this.root, this.assetFactory.CreateTextures("spark"), config);   // config: OldEmitterConfig
+emitter.updateOwnerPos(x, y);
+this.Tick(() => emitter.update(this.game.ticker.deltaMS / 1000));
+```
+
+Stop it with `emitter.emit = false` (the live particles finish) and release it with `emitter.destroy()`. In the dungeon engine you rarely
+build emitters yourself - see [Particle effects](#98-events-and-hooks) under the engine's events.
+
 ---
 
 ## 9. The dungeon engine
@@ -1274,6 +1292,7 @@ art, a monster roster, the player's setup, levels - and the engine runs it.
 DungeonMain (a scene)
  ├─ Camera            follows the player; handles height zoom
  ├─ TileMapView       draws the level's tile layers, lit and banded by height
+ ├─ Effects           particle effects over the world (`main.Effects.Play`)
  ├─ Hud               hearts, gold, equipped weapon, inventory
  ├─ Player            input, movement, shooting, taking hits
  ├─ Encounter         spawners, monsters, projectiles (pure logic, no pixi)
@@ -1524,6 +1543,18 @@ All on `game.dispatcher`; the constants are in `@logic-incubator/engine/Events`:
 
 ```ts
 this.Listen(this.game.dispatcher, MONSTER_KILLED, (type: string, x: number, y: number) => this.SpawnLoot(x, y));
+```
+
+**Particle effects.** `DungeonMain` has an `Effects` layer over the world, under the HUD; `main.Effects.Play(art, config, x, y)` starts an
+effect at a position in world pixels - the space these events and `Monster.position` use - with `art` a sprite or animation name and
+`config` an emitter config from the particle editor. A one-off burst cleans itself up; a continuous effect runs until you set
+`emitter.emit = false` on what `Play` returns. Effects pause with the scene and are dropped when a level (re)starts.
+
+```ts
+// a puff where a monster died (Puff is an editor config with spawnType "burst")
+this.Listen(this.game.dispatcher, MONSTER_KILLED, (_type: string, x: number, y: number) => {
+    main.Effects?.Play("dust", Puff, x + TileSize / 2, y + TileSize / 2);   // x, y are the monster's top-left
+});
 ```
 
 ### 9.9 One bundle per level
