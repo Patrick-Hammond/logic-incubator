@@ -22,6 +22,13 @@ export interface IEmitter {
  *
  * Initialise and Show run owner first, then children in attach order; Hide and Destroy run
  * children first, in reverse, then the owner.
+ *
+ * Two helpers tie something to the component's life, for two different lifetimes:
+ *
+ * - `Own(dispose)` - cleanup for something that lives as long as the component: `dispose` is
+ *   stored now and called once, when the component is destroyed. (`Listen` is built on it.)
+ * - `WhileShown(on, off)` - something that runs only while the component is on the stage: `on`
+ *   at every Show, `off` at every Hide. (`Tick` and `ListenWhileShown` are built on it.)
  */
 export default abstract class GameComponent {
     public root = new Container();
@@ -128,12 +135,30 @@ export default abstract class GameComponent {
         // override: release what isn't covered by Own/Listen/Attach
     }
 
-    /** Runs `dispose` when this component is destroyed - last registered first. */
+    /**
+     * Says "this component owns this thing - let go of it when the component is destroyed".
+     * Nothing is released now: `dispose` is only stored, and called once from `Destroy`, after
+     * `OnDestroy`, last registered first - whether or not the component was ever initialised.
+     * It takes any `() => void`: unsubscribe, cancel a timer or tween, destroy an emitter,
+     * release a bundle handle...
+     *
+     *     const sparks = new Emitter(this.root, textures, config);
+     *     this.Own(() => sparks.destroy());   // runs when this component is destroyed, not here
+     *
+     * It does what the same line in `OnDestroy` would, but sits beside the code that creates the
+     * thing, so the two can't drift apart. For something that should stop and start with each
+     * Hide and Show rather than once at the end, use `WhileShown`.
+     */
     protected Own(dispose: () => void): void {
         this.disposers.push(dispose);
     }
 
-    /** `on` now if this component is shown, and on every Show from here; `off` on every Hide. */
+    /**
+     * For something that should run only while this component is on the stage: `on` now if it is
+     * shown, and again at every Show from here; `off` at every Hide. `Destroy` hides first, so
+     * `off` runs then too. (`Tick` and `ListenWhileShown` are this, for a ticker callback and a
+     * subscription.) For something that lasts as long as the component, use `Own`.
+     */
     protected WhileShown(on: () => void, off: () => void): void {
         this.shownBindings.push({on, off});
         if (this.shown) {

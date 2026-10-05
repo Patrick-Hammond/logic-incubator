@@ -457,19 +457,50 @@ events.
 | destroy | `OnDestroy()` | Once: when the scene is removed. | Release what isn't covered below. |
 
 Initialise and Show run **owner first**, then children in attach order. Hide and Destroy run children first, in
-reverse, then the owner. After `OnDestroy`, everything registered through `Own`, `Listen` and `Attach` is released and
-`root` is destroyed.
+reverse, then the owner. `Destroy` does, in order: `Hide`; destroy the attached children (reverse); `OnDestroy`; every
+cleanup registered with `Own` (and so every `Listen`), last registered first; then destroy `root`.
 
 Helpers (all `protected`):
 
 | Helper | Does |
 | --- | --- |
 | `this.Attach(child, into = this.root)` | Makes `child` part of this component: its root goes in `into`, and it is initialised/shown/hidden/destroyed with this one. Returns the child. |
-| `this.Own(dispose)` | Runs `dispose` when this component is destroyed (last registered first). |
-| `this.Listen(emitter, event, fn)` | Subscribes `fn` (called with `this` bound) until destroyed. Works with `game.dispatcher`, `game.keyboard`, `game.assets`, a pixi display object. |
-| `this.ListenWhileShown(emitter, event, fn)` | Subscribes only while shown - no "am I visible" guard needed. |
+| `this.Own(dispose)` | **Registers** `dispose` to run when this component is destroyed - it does not release anything now. Takes any `() => void`. See "`Own` and `WhileShown`" below. |
+| `this.Listen(emitter, event, fn)` | Subscribes `fn` (called with `this` bound) now, and unsubscribes when this component is destroyed. Works with `game.dispatcher`, `game.keyboard`, `game.assets`, a pixi display object. |
+| `this.ListenWhileShown(emitter, event, fn)` | Subscribes at every Show and unsubscribes at every Hide - no "am I visible" guard needed. |
 | `this.Tick(fn)` | Calls `fn(dt)` every frame, only while shown. |
 | `this.WhileShown(on, off)` | `on()` now if shown and on every Show; `off()` on every Hide. |
+
+#### `Own` and `WhileShown`
+
+Both tie something to the component's life, over two different spans:
+
+| | Span | Use it for |
+| --- | --- | --- |
+| `Own(dispose)` | **Once**, at the end: when the component is destroyed. | Cleaning up something the component creates and keeps: an emitter, a timer or tween, a loaded-bundle handle, a subscription. |
+| `WhileShown(on, off)` | **Repeatedly**: `on` at every Show, `off` at every Hide. | Something that should only run while the component is on the stage. |
+
+The name `Own` can mislead: it reads as if it *does* something, but calling it only **stores** the function you give it
+("this component owns this thing - let go of it when the component goes"). `Destroy` calls the stored functions later,
+after `OnDestroy`, last registered first, and does so even if the component was never initialised. It is not limited to
+subscriptions - any `() => void` works, and `Listen` is simply `Own` plus a subscription:
+
+```ts
+protected OnInitialise(): void {
+    const sparks = new Emitter(this.root, this.assetFactory.CreateTextures("spark"), config);
+    this.Own(() => sparks.destroy());      // runs at destroy - not now. Same as sparks.destroy() in OnDestroy,
+                                           // but written beside the line that creates it, so they can't drift apart.
+
+    const cancel = Tween(this.root, { alpha: 1 }, 1000, Easing.Linear);
+    this.Own(cancel);                      // any cleanup, not only unsubscribing: a tween, cancelled if destroyed mid-way
+
+    this.Tick(() => sparks.update(this.game.ticker.deltaMS / 1000));   // every frame, only while shown
+}
+```
+
+`Tick` and `ListenWhileShown` are built on `WhileShown`, and `Listen` on `Own`. Rule of thumb: if it should stop when the
+component is *hidden* and start again when it is shown, use `WhileShown` (or `Tick` / `ListenWhileShown`); if it should
+only be released when the component is *gone*, use `Own` (or `Listen`).
 
 ```ts
 export class GameScene extends GameComponent {
@@ -484,7 +515,7 @@ export class GameScene extends GameComponent {
         this.Listen(this.game.dispatcher, "enemyKilled", this.OnEnemyKilled);   // until destroyed
         this.ListenWhileShown(this.game.keyboard, "keydown", this.OnKey);       // only while visible
         this.Tick(this.Update);                                                 // only while visible
-        this.Own(() => Analytics.Flush());                                      // custom cleanup
+        this.Own(() => Analytics.Flush());                                      // custom cleanup: runs when destroyed, not now
     }
 
     protected OnShow(): void {

@@ -160,12 +160,21 @@ export interface IEmitter {
 
 | Method | Description |
 | --- | --- |
-| `Own(dispose: () => void): void` | Runs `dispose` on destroy, last registered first. |
-| `WhileShown(on: () => void, off: () => void): void` | `on()` now if shown and at every `Show`; `off()` at every `Hide`. |
-| `Listen(emitter: IEmitter, event: string, fn): void` | Subscribes `fn` (with `this` as context) until destroyed. |
-| `ListenWhileShown(emitter: IEmitter, event: string, fn): void` | Subscribes only while shown. |
-| `Tick(fn: (dt: number) => void): void` | Calls `fn` each frame of `game.ticker`, only while shown. |
+| `Own(dispose: () => void): void` | Registers `dispose` to run once when this component is destroyed. It releases nothing now - the function is only stored. Takes any `() => void`. Runs after `OnDestroy`, last registered first. |
+| `WhileShown(on: () => void, off: () => void): void` | `on()` now if shown and at every `Show`; `off()` at every `Hide` (`Destroy` hides first, so also then). |
+| `Listen(emitter: IEmitter, event: string, fn): void` | Subscribes `fn` (with `this` as context) now and, through `Own`, unsubscribes when destroyed. |
+| `ListenWhileShown(emitter: IEmitter, event: string, fn): void` | Subscribes at every `Show`, unsubscribes at every `Hide` (through `WhileShown`). |
+| `Tick(fn: (dt: number) => void): void` | Calls `fn` each frame of `game.ticker`, only while shown (through `WhileShown`). |
 | `AddToScene(id: string): void` | **Deprecated.** Use `owner.Attach(child)`. |
+
+**`Own` or `WhileShown`?** They tie something to the component's life over two different spans: `Own` once, at the end (destroy);
+`WhileShown` repeatedly, at every show and hide. `Own` is not limited to subscriptions - any cleanup goes in it:
+
+```ts
+const sparks = new Emitter(this.root, textures, config);
+this.Own(() => sparks.destroy());                       // when destroyed: the same as sparks.destroy() in OnDestroy, but next to the line that made it
+this.WhileShown(() => sparks.emit = true, () => sparks.emit = false);   // on every show / every hide
+```
 
 ---
 
