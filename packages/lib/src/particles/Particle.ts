@@ -2,6 +2,7 @@ import { Emitter } from './Emitter';
 import { ParticleUtils, SimpleEase, Color, GetTextureFromString } from './ParticleUtils';
 import { PropertyList } from './PropertyList';
 import { LinkedListChild } from './LinkedListContainer';
+import { CurveProgress } from './KillZone';
 import { Sprite, Point, Texture } from 'pixi.js';
 
 /**
@@ -260,16 +261,17 @@ export class Particle extends Sprite implements LinkedListChild
     {
         // increase age
         this.age += delta;
-        // recycle particle if it is too old
-        if (this.age >= this.maxLife || this.age < 0)
+        // recycle particle if it is too old - unless the emitter has an area that it lives until it leaves (killRect), when its
+        // age only ends the curves, below
+        if ((this.age >= this.maxLife && !this.emitter.killRect) || this.age < 0)
         {
             this.kill();
 
             return -1;
         }
 
-        // determine our interpolation value
-        let lerp = this.age * this._oneOverLife;// lifetime / maxLife;
+        // determine our interpolation value: held at 1 once the particle is older than its lifetime
+        let lerp = CurveProgress(this.age, this._oneOverLife);// lifetime / maxLife;
 
         if (this.ease)
         {

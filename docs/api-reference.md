@@ -148,9 +148,9 @@ export interface IEmitter {
 | --- | --- | --- |
 | `Initialise()` | `OnInitialise` once, then children's `Initialise` | owner, then children |
 | `Show()` | `Initialise`, then bindings from `WhileShown`, `OnShow`, then children's `Show` | owner, then children |
-| `Hide()` | children's `Hide` (reverse), `OnHide`, then bindings' `off` (reverse) | children, then owner |
-| `Destroy()` | `Hide`, children's `Destroy` (reverse), `OnDestroy` (if initialised), disposers (reverse), `root.destroy({ children: true })` | children, then owner |
-| `Attach<T extends GameComponent>(child: T, into: Container = this.root): T` | Adds `child.root` to `into`; initialises/shows it at once if this one already is | |
+| `Hide()` | children's `Hide` (reverse), `OnHide`, what `Track` holds is cancelled (reverse), then bindings' `off` (reverse) | children, then owner |
+| `Destroy()` | `Hide`, anything `Track` still holds is cancelled, children's `Destroy` (reverse), `OnDestroy` (if initialised), disposers (reverse), `root.destroy({ children: true })` | children, then owner |
+| `Attach<T extends GameComponent>(child: T, into: Container = this.root): T` | Adds `child.root` to `into`; initialises/shows it at once if this one already is. For **components**, not display objects (add those with `this.root.addChild`); a child can't be detached, so it lives until this one is destroyed | |
 
 ### Hooks (protected, override)
 
@@ -162,19 +162,24 @@ export interface IEmitter {
 | --- | --- |
 | `Own(dispose: () => void): void` | Registers `dispose` to run once when this component is destroyed. It releases nothing now - the function is only stored. Takes any `() => void`. Runs after `OnDestroy`, last registered first. |
 | `WhileShown(on: () => void, off: () => void): void` | `on()` now if shown and at every `Show`; `off()` at every `Hide` (`Destroy` hides first, so also then). |
+| `Track(cancel: Cancel): Cancel` | Holds something started during a visit - a `Tween`, `Wait` or `GetInterval` - and calls `cancel` once if the component is hidden (just after `OnHide`) or destroyed before it finishes; the next visit starts clean. Returns a function that cancels it now and stops tracking (at most one cancel, however often it is called) - call it first to replace the thing with a new one. Tracking on a destroyed component cancels at once. |
 | `Listen(emitter: IEmitter, event: string, fn): void` | Subscribes `fn` (with `this` as context) now and, through `Own`, unsubscribes when destroyed. |
 | `ListenWhileShown(emitter: IEmitter, event: string, fn): void` | Subscribes at every `Show`, unsubscribes at every `Hide` (through `WhileShown`). |
 | `Tick(fn: (dt: number) => void): void` | Calls `fn` each frame of `game.ticker`, only while shown (through `WhileShown`). |
 | `debug: DebugTools` *(getter)* | Development helpers for this component (development builds only), made on first use; what they start stops when it is destroyed. See [DebugTools](#debugtools). |
 | `AddToScene(id: string): void` | **Deprecated.** Use `owner.Attach(child)`. |
 
-**`Own` or `WhileShown`?** They tie something to the component's life over two different spans: `Own` once, at the end (destroy);
-`WhileShown` repeatedly, at every show and hide. `Own` is not limited to subscriptions - any cleanup goes in it:
+**`Own`, `WhileShown` or `Track`?** They tie something to the component's life over three different spans: `Own` once, at the end (destroy);
+`WhileShown` repeatedly, starting and stopping at every show and hide; `Track` for something you start *during* a visit, which is cancelled at the
+next hide (or destroy). `Own` is not limited to subscriptions - any cleanup goes in it:
 
 ```ts
 const sparks = new Emitter(this.root, textures, config);
 this.Own(() => sparks.destroy());                       // when destroyed: the same as sparks.destroy() in OnDestroy, but next to the line that made it
 this.WhileShown(() => sparks.emit = true, () => sparks.emit = false);   // on every show / every hide
+
+// in a click handler: a fade that is cancelled if the scene is hidden first - so its onComplete never fires on a scene that has gone
+this.Track(Tween(this.title, { alpha: 0 }, 1000, Easing.Quad.In, () => this.game.sceneManager.ShowScene("next")));
 ```
 
 ### DebugTools
@@ -190,6 +195,7 @@ is noticed and harmless. Take the calls out before shipping anyway.
 | Method | Description |
 | --- | --- |
 | `Drag(target: DisplayObject, options?: DragOptions): Cancel` | Makes any display object draggable, for positioning it by eye: press, drag, let go, and its position in its parent's space is logged as an object literal (`label: {x:640, y:360}`), ready to paste. Returns a function that stops it sooner. |
+| `Emitter(target: Emitter \| Emitter[], options?: EmitterPanelOptions): Cancel` | Opens a side panel for tuning a particle emitter while the game runs: its settings as controls, a picker for the particle image, and the config as JSON to copy out. See [Emitter panel](#emitter-panel). Returns a function that takes it out of the panel (the last one out closes it). |
 
 ```ts
 this.debug.Drag(this._title);                                  // logs "Sprite: {x:640, y:360}" - or the object's `name` - on every drop
@@ -215,6 +221,59 @@ returned function). Pressing stops the press reaching the object's ancestors, so
 The object has to be reachable by pixi's interaction: shown, with no ancestor that has `interactiveChildren = false` (a scene that is not showing, and
 the engine's tile, entity and shot layers, have), and not covered by another interactive object, which takes the press instead. A plain `Container`
 works when something inside it is under the pointer.
+
+#### Emitter panel
+
+`this.debug.Emitter(emitter)` (or an array of emitters made from one config) opens a DOM panel over the right of the page - so it stays visible in
+fullscreen, which covers the whole document - modelled on the [pixi-particles editor](https://pixijs.github.io/pixi-particles-editor/). Code in
+`@logic-incubator/lib/debug/`: `OpenEmitterPanel(target, options)` (the panel, which `Emitter` calls), `EmitterConfigModel` (the working copy and the
+list of fields, no DOM), `ApplyEmitterConfig(emitters, config, art?)`, `EmitterOverlay` (draws the outlines over the game) and `BuildSpawnOutline(config,
+ownerX, ownerY, rotation)` (the lines it draws, no pixi).
+
+```ts
+this.debug.Emitter(fire);                                  // one emitter
+this.debug.Emitter(torches, { label: "torches" });         // several made from one config: one set of controls drives them all
+```
+
+`EmitterPanelOptions`: `label` - the name in the panel's list (default `Emitter 1`...); `config` - a config to start from instead of the emitter's own
+(`emitter.originalConfig`). The emitter has to have been set up with a config. One panel serves the page: a second call adds a group to its list
+(a drop-down in the header when there is more than one). `-` collapses the panel, `x` closes it. It opens 460 px wide (at most 94% of the window); drag its
+left edge to resize, down to 340 px. Rows with several inputs (the rectangle's x, y, w, h) wrap rather than squash. A box left empty - or not a number -
+goes back to the value the emitter is using when you leave it.
+
+- **Controls**, as the editor has them: alpha, scale (and its minimum multiplier), colour, speed (and its minimum multiplier), acceleration, max
+  speed, start rotation, no particle rotation, rotation speed and acceleration, lifetime, blend mode (the four that work in WebGL); the spawn
+  frequency, emitter lifetime (`-1` is for ever), max particles, particles per wave, spawn chance, spawn type (`point`, `rect`, `circle`, `ring`,
+  `burst`) with that shape's own settings, spawn position and add at back; and **Live until outside area**, which adds a `killRect` (starting as the
+  game's screen plus 100 px on every side) with its x, y, w, h to edit. The `{ start, end }` and `{ list: [...] }` shapes of a property are both
+  read; for a list, start and end are its first and last values and the steps between are left alone. What has no control (`ease`, `extraData`, the
+  particle class, `spawnPolygon`) is carried through untouched. Choosing a spawn type adds the shape it needs to the config, so the emitter can
+  always be set up. A note shows when one setting overrides another (end speed is ignored while there is an acceleration).
+- **Changes apply at once** (a moment after the last one, so dragging a slider doesn't thrash the emitter): the config is applied with the emitter's
+  `init`, which also ends its live particles. What `init` would reset is put back - the owner position (`updateOwnerPos`), the rotation, `emit`
+  and `autoUpdate` - so tuning a torch doesn't move it or stop it updating. If a config can't be applied, the emitter goes back to what it had and
+  the panel says why; the other emitters in the group are not touched.
+- **The panel edits a copy.** The config you loaded (a data file's parsed JSON, which several emitters may share) is never changed: take the result
+  out with **Copy JSON** (the editor's format, ready to paste into the data file), **Download**, or **Load** a `.json` file in. **Reset** goes back to
+  what the panel opened with. A loaded file that isn't a config - or can't be applied - is refused with the reason, and what was there stays.
+- **Particle image.** Type a loaded sprite or animation name (a type-ahead lists them) and it becomes the particles' art for the whole group - an
+  animation's frames are picked from at random, one per particle - or **Upload an image** from your computer for this session. The thumbnail shows
+  the first frame. The art is not part of the config, so Copy JSON gives the settings only: the sprite name is for the code that makes the emitter.
+- **Emitting** stops and starts new particles on the whole group; **Restart** sets the emitters up again from the panel.
+- **Outlines** (on by default; the **Outlines** tick box switches them) are drawn on the game's stage, over everything, for every emitter in the
+  group, in the colours of the legend beside the tick box:
+  - **spawn shape** (cyan): the rectangle, circle, ring (outer and inner), the rays of a burst (one per particle of a wave; a ring round the point when
+    the spacing is 0, since each goes in a random direction) or the polygon chain;
+  - **spawn point** (yellow cross): where particles are emitted from - the owner's position plus `pos`;
+  - **kill area** (red): the `killRect`, if there is one.
+
+  They follow the controls at once, before the emitters are set up again, and follow the emitters: a shape is in its container's space and is carried to
+  the stage through that container's `worldTransform`, so it moves, scales and turns with the container; the owner position (`updateOwnerPos`) and the
+  rotation (`rotate`) are the emitter's own. The kill area is already in stage coordinates. They match where particles really appear: `rotate` turns
+  `pos` about the owner as well as the shapes, and the outline does too. Drawn as one `Graphics` on the stage's root, taken off when the panel closes.
+- Typing in the panel does not reach the game's keyboard handler (key events stop at the panel), so editing a number can't move the player.
+
+Development builds only, like the rest of `this.debug`.
 
 ---
 
@@ -930,6 +989,7 @@ Exports: `Emitter`, `EmitterConfig`, `OldEmitterConfig`, `Particle`, `AnimatedPa
 | `playOnce(callback?)` | Start emitting; `callback` runs when the last particle has died. |
 | `playOnceAndDestroy(callback?)` | The same, then `destroy()`s itself. Turns `autoUpdate` on. |
 | `updateOwnerPos(x, y)`, `updateSpawnPos(x, y)`, `rotate(rotation)`, `resetPositionTracking()` | Move the spawn point (`ownerPos + spawnPos`) / turn the emitter / stop interpolating the spawn position across the next jump. |
+| `killRect: Rectangle \| null` | If set (from `config.killRect: { x, y, w, h }` by `init`), particles live until their centre leaves it instead of dying of age. In the **stage's (global) coordinates** - so one rect serves emitters in containers placed or scaled differently, and it can be bigger than the screen to let particles drift in. `lifetime` then only sets how long alpha, scale, colour and speed take to reach their end values, which the particle holds from then on. A particle that never leaves the area never dies: mind `maxParticles`. |
 | `particleCount`, `parent` | Live particles; the container they are added to (null once destroyed). |
 | `cleanup()`, `destroy()` | Kill the live particles now; release everything, including the ticker listener. |
 

@@ -3,6 +3,7 @@ import { Particle } from './Particle';
 import { PropertyNode } from './PropertyNode';
 import { PolygonalChain } from './PolygonalChain';
 import { EmitterConfig, OldEmitterConfig } from './EmitterConfig';
+import { IsOutside } from './KillZone';
 import { Point, Circle, Rectangle, Container, Ticker, settings } from 'pixi.js';
 
 export interface ParticleConstructor
@@ -140,6 +141,16 @@ export class Emitter
      */
     public maxParticles: number;
     /**
+     * If set, particles live until they leave this area instead of dying of age. The area is in the stage's (global) coordinates,
+     * so one area serves emitters in containers that are placed or scaled differently, and it can be made bigger than the screen
+     * to let particles drift in from outside it.
+     *
+     * A particle is destroyed once its centre is outside it. The lifetime then only sets how long alpha, scale, colour and speed
+     * take to reach their end values - which the particle holds from then on. Set from `config.killRect` by `init`.
+     * A particle that never leaves the area (it has no speed, say) never dies, so mind `maxParticles`.
+     */
+    public killRect: Rectangle | null;
+    /**
      * The amount of time in seconds to emit for before setting emit to false.
      * A value of -1 is an unlimited amount of time.
      */
@@ -190,12 +201,12 @@ export class Emitter
      * the calculated spawn angle.
      * To change this, use rotate().
      */
-    protected rotation: number;
+    public rotation: number;
     /**
      * The world position of the emitter's owner, to add spawnPos to when
      * spawning particles. To change this, use updateOwnerPos().
      */
-    protected ownerPos: Point;
+    public ownerPos: Point;
     /**
      * The origin + spawnPos in the previous update, so that the spawn position
      * can be interpolated to space out particles better.
@@ -324,6 +335,7 @@ export class Emitter
         this._frequency = 1;
         this.spawnChance = 1;
         this.maxParticles = 1000;
+        this.killRect = null;
         this.emitterLifetime = -1;
         this.spawnPos = null;
         this.spawnType = null;
@@ -439,6 +451,16 @@ export class Emitter
         this.cleanup();
         this._parent = value;
     }
+
+    /**
+     * The config this emitter was last set up with (`init`), as it was given - not a copy.
+     */
+    public get originalConfig(): EmitterConfig|OldEmitterConfig { return this._origConfig; }
+
+    /**
+     * The art this emitter was last set up with (`init`), as it was given: a texture or an array of textures.
+     */
+    public get originalArt(): any { return this._origArt; }
 
     /**
      * Sets up the emitter based on the config settings.
@@ -600,6 +622,8 @@ export class Emitter
         this.emitterLifetime = config.emitterLifetime || -1;
         // set the max particles
         this.maxParticles = config.maxParticles > 0 ? config.maxParticles : 1000;
+        // particles live until they leave this area, rather than dying of age
+        this.killRect = config.killRect ? new Rectangle(config.killRect.x, config.killRect.y, config.killRect.w, config.killRect.h) : null;
         // determine if we should add the particle at the back of the list or not
         this.addAtBack = !!config.addAtBack;
         // reset the emitter position and rotation variables
@@ -849,6 +873,12 @@ export class Emitter
         {
             next = particle.next;
             particle.update(delta);
+            // Checked here, after the particle has finished moving (a path particle sets its position late in its update).
+            // A particle that died in its update has been taken out of its parent, so it is not checked.
+            if (this.killRect && particle.parent && IsOutside(particle.parent.worldTransform, particle.position.x, particle.position.y, this.killRect))
+            {
+                particle.kill();
+            }
         }
         let prevX;
         let prevY;

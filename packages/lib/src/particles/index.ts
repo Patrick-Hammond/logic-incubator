@@ -8,3 +8,4 @@ export * from './PolygonalChain';
 export * from './PropertyList';
 export * from './PropertyNode';
 export * from './LinkedListContainer';
+export * from './KillZone';

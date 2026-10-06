@@ -1,6 +1,6 @@
 # particles
 
-Fork of [`pixi-particles`](https://github.com/pixijs/pixi-particles) 4.3.1 (commit `6008d8d` of `pixijs-userland/particle-emitter`; MIT, see `LICENSE`). Changed from upstream: the pixi v4 and canvas-renderer code is removed (pixi.js 5.2.1, WebGL only); `Emitter` takes its ticker as an optional fourth constructor argument instead of always using `Ticker.shared`; `index.ts` also exports the config types; the rest are lint fixes. The config format is unchanged, so JSON exported by the [pixi-particles editor](https://pixijs.github.io/pixi-particles-editor/) loads as is.
+Fork of [`pixi-particles`](https://github.com/pixijs/pixi-particles) 4.3.1 (commit `6008d8d` of `pixijs-userland/particle-emitter`; MIT, see `LICENSE`). Changed from upstream: the pixi v4 and canvas-renderer code is removed (pixi.js 5.2.1, WebGL only); `Emitter` takes its ticker as an optional fourth constructor argument instead of always using `Ticker.shared`, has `originalConfig` and `originalArt` getters, and `ownerPos` and `rotation` are public (the in-game debug panel, `this.debug.Emitter`, reads them); `index.ts` also exports the config types; the rest are lint fixes. The config format is unchanged, so JSON exported by the [pixi-particles editor](https://pixijs.github.io/pixi-particles-editor/) loads as is.
 
 ## Usage
 
@@ -36,6 +36,19 @@ emitter.destroy();              // release everything, including the ticker list
 ```
 
 A one-off burst is `spawnType: "burst"` with `particlesPerWave`, and an `emitterLifetime` between `frequency` and twice it, which gives exactly one wave. The particles of a wave share one lifetime.
+
+### Living until they leave an area
+
+Give the config a `killRect` and its particles no longer die of age: each lives until its centre leaves the rectangle, then is destroyed. The rectangle is in the stage's (global) coordinates, so make it bigger than the screen and particles can start outside it and drift in, and one config serves emitters in containers placed or scaled differently.
+
+```ts
+const rain = { ...config, killRect: { x: -100, y: -100, w: 1480, h: 920 } };   // the 1280 x 720 screen, and 100 px beyond it on every side
+const emitter = new Emitter(layer, textures, rain);
+
+emitter.killRect = new Rectangle(0, 0, 640, 480);   // or set (or clear, with null) in code: the next init() takes it from the config again
+```
+
+`lifetime` still matters: it is how long alpha, scale, colour and speed take to reach their end values, which the particle then holds - a snowflake that fades in over a second, then stays - while it keeps moving. A particle that never leaves the area (no speed, say) never dies, so mind `maxParticles`.
 
 ## In the engine
 

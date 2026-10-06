@@ -2,6 +2,10 @@ import { EventEmitter } from "eventemitter3";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import DebugTools, { DebugEnabled } from "./DebugTools";
 
+// DebugTools reaches the emitter panel, which needs a browser's pixi and the asset factory; neither is used here.
+vi.mock("pixi.js", () => ({ Texture: class {} }));
+vi.mock("../loading/AssetFactory", () => ({ default: { inst: {} } }));
+
 /** The least of a display object that `Drag` touches. */
 function FakeObject() {
     return Object.assign(new EventEmitter(), { interactive: false, cursor: null as string | null, name: "", x: 0, y: 0, parent: null as unknown });
@@ -89,5 +93,58 @@ describe("Drag when disabled", () => {
 
         expect(early.interactive).toBe(false);
         expect(late.interactive).toBe(true);
+    });
+});
+
+describe("Emitter", () => {
+    const emitter = { name: "an emitter" } as never;
+
+    it("opens the panel for the emitter, and registers closing it with the component", () => {
+        const close = vi.fn();
+        const open = vi.fn(() => close);
+        const own = vi.fn();
+
+        const returned = new DebugTools(own, () => true, open).Emitter(emitter, { label: "fire" });
+
+        expect(open).toHaveBeenCalledTimes(1);
+        expect(open).toHaveBeenCalledWith(emitter, { label: "fire" });
+        expect(returned).toBe(close);
+        expect(own).toHaveBeenCalledWith(close);
+    });
+
+    it("tells the panel how big the game's screen is, unless the caller says otherwise", () => {
+        const open = vi.fn(() => () => undefined);
+        const tools = new DebugTools(() => undefined, () => true, open, () => ({ width: 800, height: 600 }));
+
+        tools.Emitter(emitter);
+        tools.Emitter(emitter, { label: "x" });
+        tools.Emitter(emitter, { screen: { width: 1, height: 2 } });
+
+        expect(open).toHaveBeenNthCalledWith(1, emitter, { screen: { width: 800, height: 600 } });
+        expect(open).toHaveBeenNthCalledWith(2, emitter, { screen: { width: 800, height: 600 }, label: "x" });
+        expect(open).toHaveBeenNthCalledWith(3, emitter, { screen: { width: 1, height: 2 } });
+    });
+
+    it("takes several emitters made from one config", () => {
+        const open = vi.fn(() => () => undefined);
+        const torches = [emitter, emitter, emitter];
+
+        new DebugTools(() => undefined, () => true, open).Emitter(torches, { label: "torches" });
+
+        expect(open).toHaveBeenCalledWith(torches, { label: "torches" });
+    });
+
+    it("does nothing in a production build: no panel, nothing to clean up, and one warning", () => {
+        const open = vi.fn(() => () => undefined);
+        const own = vi.fn();
+        const tools = new DebugTools(own, () => false, open);
+
+        const close = tools.Emitter(emitter);
+        tools.Emitter(emitter);
+
+        expect(open).not.toHaveBeenCalled();
+        expect(own).not.toHaveBeenCalled();
+        expect(() => close()).not.toThrow();
+        expect(warn).toHaveBeenCalledTimes(1);
     });
 });

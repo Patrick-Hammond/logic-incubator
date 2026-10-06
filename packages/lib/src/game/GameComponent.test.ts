@@ -79,6 +79,9 @@ class Probe extends GameComponent {
     getDebug() {
         return this.debug;
     }
+    track(cancel: () => void) {
+        return this.Track(cancel);
+    }
 }
 
 let log: string[];
@@ -340,5 +343,145 @@ describe("debug", () => {
 
         expect(() => c.Destroy()).not.toThrow(); // stopping again at destroy is harmless
         expect(object.interactive).toBe(false);
+    });
+});
+
+describe("Track", () => {
+    it("cancels what it holds when the component is hidden, just after OnHide", () => {
+        const c = new Probe("c", log);
+        c.Show();
+        c.track(() => log.push("cancelled"));
+        expect(log).not.toContain("cancelled");
+
+        c.Hide();
+
+        expect(log).toEqual(["c.init", "c.show", "c.hide", "cancelled"]);
+    });
+
+    it("cancels each thing once, and the next visit starts clean", () => {
+        const c = new Probe("c", log);
+        const first = vi.fn();
+        const second = vi.fn();
+        c.Show();
+        c.track(first);
+        c.Hide();
+
+        c.Show();
+        c.track(second);
+        c.Hide();
+        c.Show();
+        c.Hide();
+
+        expect(first).toHaveBeenCalledTimes(1);
+        expect(second).toHaveBeenCalledTimes(1);
+    });
+
+    it("does nothing at Show", () => {
+        const c = new Probe("c", log);
+        const cancel = vi.fn();
+        c.track(cancel); // tracked before it was ever shown
+
+        c.Show();
+
+        expect(cancel).not.toHaveBeenCalled();
+    });
+
+    it("cancels last-tracked first", () => {
+        const c = new Probe("c", log);
+        c.Show();
+        c.track(() => log.push("one"));
+        c.track(() => log.push("two"));
+        c.track(() => log.push("three"));
+
+        c.Hide();
+
+        expect(log.slice(-3)).toEqual(["three", "two", "one"]);
+    });
+
+    it("cancels what is still held when the component is destroyed", () => {
+        const c = new Probe("c", log);
+        const cancel = vi.fn();
+        c.Show();
+        c.track(cancel);
+
+        c.Destroy();
+
+        expect(cancel).toHaveBeenCalledTimes(1); // once, by the Hide that Destroy starts with - not again
+    });
+
+    it("cancels what was tracked while the component wasn't shown, at destroy", () => {
+        const c = new Probe("c", log);
+        const cancel = vi.fn();
+        c.Initialise();
+        c.track(cancel);
+
+        c.Destroy();
+
+        expect(cancel).toHaveBeenCalledTimes(1);
+    });
+
+    it("cancels at once for a component that is already destroyed", () => {
+        const c = new Probe("c", log);
+        c.Destroy();
+        const cancel = vi.fn();
+
+        const stop = c.track(cancel);
+
+        expect(cancel).toHaveBeenCalledTimes(1);
+        expect(() => stop()).not.toThrow();
+        expect(cancel).toHaveBeenCalledTimes(1);
+    });
+
+    describe("the function it returns", () => {
+        it("cancels now", () => {
+            const c = new Probe("c", log);
+            const cancel = vi.fn();
+            c.Show();
+
+            c.track(cancel)();
+
+            expect(cancel).toHaveBeenCalledTimes(1);
+        });
+
+        it("stops tracking, so Hide doesn't cancel it a second time", () => {
+            const c = new Probe("c", log);
+            const cancel = vi.fn();
+            c.Show();
+
+            c.track(cancel)();
+            c.Hide();
+
+            expect(cancel).toHaveBeenCalledTimes(1);
+        });
+
+        it("cancels at most once, however often it is called - before or after Hide", () => {
+            const c = new Probe("c", log);
+            const cancel = vi.fn();
+            c.Show();
+            const stop = c.track(cancel);
+
+            c.Hide(); // cancels it
+            stop();
+            stop();
+
+            expect(cancel).toHaveBeenCalledTimes(1);
+        });
+
+        it("lets one thing replace another without piling up: the old one is cancelled now, only the new one at Hide", () => {
+            const c = new Probe("c", log);
+            const oldFade = vi.fn();
+            const newFade = vi.fn();
+            c.Show();
+
+            const stopOld = c.track(oldFade);
+            stopOld();
+            c.track(newFade);
+            expect(oldFade).toHaveBeenCalledTimes(1);
+            expect(newFade).not.toHaveBeenCalled();
+            c.Hide();
+
+            expect(oldFade).toHaveBeenCalledTimes(1);
+            expect(newFade).toHaveBeenCalledTimes(1);
+        });
     });
 });

@@ -2,7 +2,24 @@ import { EaseSegment, SimpleEase } from './ParticleUtils';
 import { ValueList } from './PropertyNode';
 import { BasicPoint } from './PolygonalChain';
 
+/**
+ * An area in the stage's (global) coordinates: particles that have one live until they leave it instead of dying of age - see
+ * `Emitter.killRect`.
+ */
+export interface KillRectConfig {
+	x: number;
+	y: number;
+	w: number;
+	h: number;
+}
+
 export interface EmitterConfig {
+	/**
+	 * If set, particles no longer die of age: `lifetime` only says how long their alpha, scale, colour and speed take to reach their
+	 * end values, which they then hold, and each particle lives until its centre leaves this area, in the stage's (global) coordinates.
+	 * Make it bigger than the screen to let particles drift in from outside it.
+	 */
+	killRect?: KillRectConfig;
 	alpha?: ValueList<number>;
 	speed?: ValueList<number>;
 	minimumSpeedMultiplier?: number;
@@ -52,6 +69,8 @@ export interface BasicTweenable<T> {
 }
 
 export interface OldEmitterConfig {
+	/** See `EmitterConfig.killRect`. */
+	killRect?: KillRectConfig;
 	alpha?: BasicTweenable<number>;
 	speed?: BasicTweenable<number> & {minimumSpeedMultiplier?: number};
 	maxSpeed?: number;

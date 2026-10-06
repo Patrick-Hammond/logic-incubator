@@ -458,29 +458,32 @@ events.
 | destroy | `OnDestroy()` | Once: when the scene is removed. | Release what isn't covered below. |
 
 Initialise and Show run **owner first**, then children in attach order. Hide and Destroy run children first, in
-reverse, then the owner. `Destroy` does, in order: `Hide`; destroy the attached children (reverse); `OnDestroy`; every
-cleanup registered with `Own` (and so every `Listen`), last registered first; then destroy `root`.
+reverse, then the owner. `Hide` runs `OnHide`, then cancels whatever `Track` is holding, then stops the `WhileShown` bindings.
+`Destroy` does, in order: `Hide`; destroy the attached children (reverse); `OnDestroy`; every cleanup registered with
+`Own` (and so every `Listen`), last registered first; then destroy `root`.
 
 Helpers (all `protected`):
 
 | Helper | Does |
 | --- | --- |
-| `this.Attach(child, into = this.root)` | Makes `child` part of this component: its root goes in `into`, and it is initialised/shown/hidden/destroyed with this one. Returns the child. |
-| `this.Own(dispose)` | **Registers** `dispose` to run when this component is destroyed - it does not release anything now. Takes any `() => void`. See "`Own` and `WhileShown`" below. |
+| `this.Attach(child, into = this.root)` | Makes the **component** `child` part of this one: its root goes in `into`, and it is initialised/shown/hidden/destroyed with this one. Returns the child. For sprites, containers and text use `this.root.addChild(...)` - see "What `Attach` is for" below. |
+| `this.Own(dispose)` | **Registers** `dispose` to run when this component is destroyed - it does not release anything now. Takes any `() => void`. See "`Own`, `WhileShown` and `Track`" below. |
+| `this.Track(cancel)` | Holds a tween or timer you started during a visit, and cancels it if the component is hidden (or destroyed) first. Returns a function that cancels it now. |
 | `this.Listen(emitter, event, fn)` | Subscribes `fn` (called with `this` bound) now, and unsubscribes when this component is destroyed. Works with `game.dispatcher`, `game.keyboard`, `game.assets`, a pixi display object. |
 | `this.ListenWhileShown(emitter, event, fn)` | Subscribes at every Show and unsubscribes at every Hide - no "am I visible" guard needed. |
 | `this.Tick(fn)` | Calls `fn(dt)` every frame, only while shown. |
 | `this.WhileShown(on, off)` | `on()` now if shown and on every Show; `off()` on every Hide. |
-| `this.debug` | Development helpers (development builds only), such as `this.debug.Drag(displayObject)`. See "Positioning things by dragging" below. |
+| `this.debug` | Development helpers (development builds only): `this.debug.Drag(displayObject)` to position something by dragging it, `this.debug.Emitter(emitter)` to tune a particle emitter in-game. See "Positioning things by dragging" and "Tuning a particle emitter in-game" below. |
 
-#### `Own` and `WhileShown`
+#### `Own`, `WhileShown` and `Track`
 
-Both tie something to the component's life, over two different spans:
+These tie something to the component's life, over three different spans:
 
 | | Span | Use it for |
 | --- | --- | --- |
-| `Own(dispose)` | **Once**, at the end: when the component is destroyed. | Cleaning up something the component creates and keeps: an emitter, a timer or tween, a loaded-bundle handle, a subscription. |
+| `Own(dispose)` | **Once**, at the end: when the component is destroyed. | Cleaning up something the component creates and keeps: an emitter, a long-lived timer, a loaded-bundle handle, a subscription. |
 | `WhileShown(on, off)` | **Repeatedly**: `on` at every Show, `off` at every Hide. | Something that should only run while the component is on the stage. |
+| `Track(cancel)` | **Once per thing**: cancelled at the next Hide (or Destroy), whichever comes first. | Something you start *during* a visit, usually from an event: a tween, a `Wait`. |
 
 The name `Own` can mislead: it reads as if it *does* something, but calling it only **stores** the function you give it
 ("this component owns this thing - let go of it when the component goes"). `Destroy` calls the stored functions later,
@@ -493,16 +496,57 @@ protected OnInitialise(): void {
     this.Own(() => sparks.destroy());      // runs at destroy - not now. Same as sparks.destroy() in OnDestroy,
                                            // but written beside the line that creates it, so they can't drift apart.
 
-    const cancel = Tween(this.root, { alpha: 1 }, 1000, Easing.Linear);
-    this.Own(cancel);                      // any cleanup, not only unsubscribing: a tween, cancelled if destroyed mid-way
+    this.Own(GetInterval(30000, this.Autosave, this));   // any cleanup, not only unsubscribing: a timer that lives as long as the component
 
     this.Tick(() => sparks.update(this.game.ticker.deltaMS / 1000));   // every frame, only while shown
 }
 ```
 
+`Track` is for what happens in response to something. A tween or timer started from a click is no use to a scene that has since
+left the stage - and its `onComplete` could do something to the wrong scene - so it is cancelled when the scene is hidden. `Own`
+would leave it running until the scene is *destroyed*, which for a scene that is shown and hidden many times is never:
+
+```ts
+private OnEnterClicked(): void {
+    this.game.assets.PlaySound("global.enter");
+    this.Track(Tween(this.title, { alpha: 0 }, 1000, Easing.Quad.In,
+        () => this.game.sceneManager.ShowScene(FrontEndScenes.CHARACTER_SELECT)));   // nothing to store or clean up
+}
+```
+
+When the same thing is started again and should replace the one running - a new fade over the old - call the function `Track`
+returns before starting the new one. It cancels now and stops tracking, so they don't pile up until the next Hide:
+
+```ts
+private stopFade?: Cancel;
+
+private FadeTo(alpha: number, ms: number, onComplete?: () => void): void {
+    this.stopFade?.();                                                  // the fade that was running, if any
+    this.stopFade = this.Track(Tween(this.title, { alpha }, ms, Easing.Linear, onComplete));
+}
+```
+
 `Tick` and `ListenWhileShown` are built on `WhileShown`, and `Listen` on `Own`. Rule of thumb: if it should stop when the
-component is *hidden* and start again when it is shown, use `WhileShown` (or `Tick` / `ListenWhileShown`); if it should
-only be released when the component is *gone*, use `Own` (or `Listen`).
+component is *hidden* and start again when it is shown, use `WhileShown` (or `Tick` / `ListenWhileShown`); if it is started
+during a visit and should stop when the visit ends, use `Track`; if it should only be released when the component is *gone*,
+use `Own` (or `Listen`).
+
+#### What `Attach` is for
+
+`Attach` takes a **component** (a `GameComponent`), not a display object. A sprite, a container, a text or an emitter's container
+goes in with `this.root.addChild(...)` and is destroyed with `root` - there is nothing more to do, and `Attach` would not
+compile for it. Attach a piece of the scene that has logic and a life of its own - a HUD, a world view, a character ring,
+a torch with its own emitter and `Tick` - because then:
+
+- its `OnInitialise` / `OnShow` / `OnHide` / `OnDestroy` run with this component's (initialise and show after it, hide and destroy
+  before it), and its `Tick`, `Listen` and `Own` follow its own life, so it needs no wiring from the owner;
+- its root is added to `into` (this root by default), and children draw in the order they were attached, interleaved with any
+  `addChild` calls;
+- `Attach` returns the child, so the owner keeps a typed reference to call it.
+
+And the consequence to keep in mind: **there is no `Detach`.** An attached child lives until the owner is destroyed, so attaching
+short-lived things (a shot, a popup) again and again makes the list grow and keeps their `Tick`s running. For those, create and
+destroy the display object yourself, or keep a pool.
 
 ```ts
 export class GameScene extends GameComponent {
@@ -569,6 +613,35 @@ protected OnInitialise(): void {
 - It can only grab what pixi's interaction can reach: not an object covered by another interactive object (a full-screen button, say), and
   not one inside a container with `interactiveChildren = false`, such as the engine's tile, entity and shot layers. A scene's root is only
   interactive while it is showing, so calling `Drag` from `OnInitialise` is fine - it works once the scene is shown.
+
+#### Tuning a particle emitter in-game
+
+`this.debug.Emitter(emitter)` opens a side panel on the running game, like the [pixi-particles editor](https://pixijs.github.io/pixi-particles-editor/)
+but on your real scene, with your art, lighting and scale. Change a setting and the emitter shows it at once; when it looks right, **Copy JSON** and paste
+it into the emitter's data file (`assets/.../data/fire_particles.json`).
+
+```ts
+// where the emitters are made - the torches in TitleScreen share one config
+const torches = positions.map(pos => this.makeTorch(pos.x, pos.y, pos.scale));   // makeTorch returns its Emitter
+this.debug.Emitter(torches, { label: "torches" });      // one set of controls drives all of them
+```
+
+- Every setting of the editor is there (alpha, scale, colour, speed, acceleration, rotation, lifetime, blend mode, frequency, max particles, the spawn
+  shape and its size...), and **Live until outside area** (particles live until they leave a rectangle, rather than dying of age - see "Particles"
+  in section 8). To change the **particle image**, type a loaded sprite or animation name - a list drops down - or upload a picture; it
+  swaps for all the emitters in the group.
+- The panel opens 460 px wide; drag its left edge to resize it, and it remembers the width you chose for the rest of the session.
+- **Outlines** are drawn over the game so you can set the geometry by eye: the **spawn shape** (the rectangle, circle, ring, burst rays or polygon chain,
+  in cyan), the **spawn point** (a yellow cross) and the **kill area** (red). They follow your edits as you type and follow the emitters - a torch
+  in a scaled or moved container gets an outline to match - so you can drag the kill area's numbers until it is just bigger than the screen, or size a
+  spawn rectangle against the sprite you are lighting. The **Outlines** tick box switches them off.
+- It edits a **copy** of the config: the data your game loaded is not touched until you paste the JSON in. **Reset** goes back to how it opened;
+  **Load** reads a `.json` file in (refused, with the reason, if it isn't a config the emitters can take).
+- Each change sets the emitter up again, which ends its live particles - so you see the new look from the next puff. Its position, rotation, `emit`
+  and `autoUpdate` are kept, so it stays where it is.
+- Give it emitters that share a config as an **array** to tune them together; call it again for an unrelated emitter and the panel lists both.
+- It is a panel over the page, not part of the canvas: it stays visible in fullscreen, and what you type in it never reaches the game's keyboard.
+- Development builds only, like `Drag` (see above); take the call out before shipping.
 
 ### 4.3 `SceneManager`
 
@@ -1351,6 +1424,19 @@ this.Tick(() => emitter.update(this.game.ticker.deltaMS / 1000));
 
 Stop it with `emitter.emit = false` (the live particles finish) and release it with `emitter.destroy()`. In the dungeon engine you rarely
 build emitters yourself - see [Particle effects](#98-events-and-hooks) under the engine's events.
+
+**Particles that live until they leave the screen.** Particles normally die when they reach the end of their `lifetime`. Add a
+`killRect` to the config and they live on instead, until their centre leaves that rectangle:
+
+```json
+"lifetime": { "min": 1, "max": 1 },
+"killRect": { "x": -100, "y": -100, "w": 1480, "h": 920 }
+```
+
+The rectangle is in stage (global) coordinates - the canvas's - so make it bigger than the screen (here a 1280 x 720 screen plus 100 px on
+every side) and particles can be spawned just outside it and drift in; one config also suits emitters in containers placed or scaled
+differently. `lifetime` still sets how long alpha, scale, colour and speed take to reach their end values, which a particle then holds while it
+carries on moving. Tick **Live until outside area** in `this.debug.Emitter` to try it: the rectangle starts around your screen.
 
 ---
 
