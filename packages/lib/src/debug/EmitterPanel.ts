@@ -28,6 +28,8 @@ interface Group {
 const NoOp: Cancel = () => undefined;
 const ApplyDelayMs = 120;
 const MinWidth = 340;
+/** How see-through the panel is while it is minimised - until the pointer is over it. */
+const CollapsedAlpha = 0.3;
 
 /** How wide the panel is, kept for the next time it opens in this session. */
 let panelWidth = 460;
@@ -355,7 +357,9 @@ class EmitterPanel {
 
     private BuildRow(group: Group, row: Row): HTMLElement {
         const element = El("div", "emdbg-row");
-        element.appendChild(El("div", "emdbg-label", row.label));
+        const label = El("div", "emdbg-label", row.label);
+        label.title = row.help; // what it does, on hover
+        element.appendChild(label);
 
         const controls = El("div", "emdbg-controls");
         row.fields.forEach(field => controls.appendChild(this.BuildControl(group, field)));
@@ -665,7 +669,9 @@ class EmitterPanel {
 const Styles = `
 .emdbg { position: fixed; top: 0; right: 0; bottom: 0; width: 460px; max-width: 94vw; z-index: 100000; box-sizing: border-box; display: flex; flex-direction: column;
     background: rgba(30, 30, 34, 0.96); color: #e6e6e6; font: 12px/1.4 Arial, Helvetica, sans-serif; border-left: 1px solid #4a4a50; }
-.emdbg.collapsed { bottom: auto; width: auto; border-bottom: 1px solid #4a4a50; }
+.emdbg { transition: opacity 0.15s; }
+.emdbg.collapsed { bottom: auto; width: auto !important; opacity: ${CollapsedAlpha}; border-bottom: 1px solid #4a4a50; }
+.emdbg.collapsed:hover { opacity: 1; }
 .emdbg.collapsed .emdbg-body, .emdbg.collapsed .emdbg-status { display: none; }
 .emdbg * { box-sizing: border-box; }
 .emdbg-head { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-bottom: 1px solid #3a3a40; }
@@ -683,7 +689,7 @@ const Styles = `
 .emdbg-key { display: inline-flex; align-items: center; gap: 4px; }
 .emdbg-swatch { display: inline-block; width: 10px; height: 10px; border: 1px solid #000; }
 .emdbg-row { display: grid; grid-template-columns: 128px 1fr; column-gap: 8px; align-items: center; padding: 3px 0; }
-.emdbg-label { color: #d0d0d6; }
+.emdbg-label { color: #d0d0d6; cursor: help; }
 .emdbg-controls { display: flex; flex-wrap: wrap; gap: 4px 8px; min-width: 0; }
 .emdbg-cell { display: flex; flex: 1 1 120px; align-items: center; gap: 4px; min-width: 0; }
 .emdbg-sub { flex: 0 0 auto; min-width: 16px; color: #8c8c94; font-size: 11px; }

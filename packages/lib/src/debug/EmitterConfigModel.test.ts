@@ -326,6 +326,35 @@ describe("notes", () => {
     });
 });
 
+describe("the rows' help", () => {
+    const rows = () => EmitterSections().reduce((all, section) => all.concat(section.rows), [] as ReturnType<typeof EmitterSections>[0]["rows"]);
+
+    it("says what every row does, in a sentence of its own: not empty, not just the label again", () => {
+        rows().forEach(r => {
+            expect(r.help.trim().length, r.label).toBeGreaterThan(30);
+            expect(r.help.trim().toLowerCase(), r.label).not.toBe(r.label.toLowerCase());
+            expect(/[.!?]$/.test(r.help.trim()), `${r.label} ends as a sentence`).toBe(true);
+        });
+    });
+
+    it("is not shared: no two rows have the same description", () => {
+        const helps = rows().map(r => r.help);
+
+        expect(new Set(helps).size).toBe(helps.length);
+    });
+
+    it("stays short enough to read in a tooltip", () => {
+        rows().forEach(r => expect(r.help.length, r.label).toBeLessThan(420));
+    });
+
+    it("has a unique label for every row", () => {
+        const labels = rows().map(r => r.label);
+
+        expect(new Set(labels).size).toBe(labels.length);
+    });
+
+});
+
 describe("the fields", () => {
     it("have unique ids", () => {
         const ids = AllFields().map(f => f.id);

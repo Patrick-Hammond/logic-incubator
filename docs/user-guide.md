@@ -631,6 +631,8 @@ this.debug.Emitter(torches, { label: "torches" });      // one set of controls d
   in section 8). To change the **particle image**, type a loaded sprite or animation name - a list drops down - or upload a picture; it
   swaps for all the emitters in the group.
 - The panel opens 460 px wide; drag its left edge to resize it, and it remembers the width you chose for the rest of the session.
+- **Hover a setting's name** to see what it does - every one has a short description, with the units (pixels per second, degrees...) and what each
+  end of a range means.
 - **Outlines** are drawn over the game so you can set the geometry by eye: the **spawn shape** (the rectangle, circle, ring, burst rays or polygon chain,
   in cyan), the **spawn point** (a yellow cross) and the **kill area** (red). They follow your edits as you type and follow the emitters - a torch
   in a scaled or moved container gets an outline to match - so you can drag the kill area's numbers until it is just bigger than the screen, or size a

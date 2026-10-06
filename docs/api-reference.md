@@ -237,10 +237,12 @@ this.debug.Emitter(torches, { label: "torches" });         // several made from 
 
 `EmitterPanelOptions`: `label` - the name in the panel's list (default `Emitter 1`...); `config` - a config to start from instead of the emitter's own
 (`emitter.originalConfig`). The emitter has to have been set up with a config. One panel serves the page: a second call adds a group to its list
-(a drop-down in the header when there is more than one). `-` collapses the panel, `x` closes it. It opens 460 px wide (at most 94% of the window); drag its
+(a drop-down in the header when there is more than one). `-` minimises the panel to its title bar, at 30% opacity so the game shows through (full opacity while the pointer is over it; `-` again restores it), `x` closes it. The outlines stay. It opens 460 px wide (at most 94% of the window); drag its
 left edge to resize, down to 340 px. Rows with several inputs (the rectangle's x, y, w, h) wrap rather than squash. A box left empty - or not a number -
 goes back to the value the emitter is using when you leave it.
 
+- **Hover a parameter's name** for what it does (a tooltip on every label - including the spawn shape's own rows). Each `Row` in the schema has a
+  required `help` string, so a new setting can't be added without one.
 - **Controls**, as the editor has them: alpha, scale (and its minimum multiplier), colour, speed (and its minimum multiplier), acceleration, max
   speed, start rotation, no particle rotation, rotation speed and acceleration, lifetime, blend mode (the four that work in WebGL); the spawn
   frequency, emitter lifetime (`-1` is for ever), max particles, particles per wave, spawn chance, spawn type (`point`, `rect`, `circle`, `ring`,

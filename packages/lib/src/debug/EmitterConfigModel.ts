@@ -54,6 +54,8 @@ export function DefaultKillRect(screen?: { width: number; height: number }, marg
 /** A line of the panel: a name and the one to four controls beside it. */
 export interface Row {
     label: string;
+    /** What the setting does, in a sentence or two - the panel shows it as a tooltip on the label. Required, so no row goes without one. */
+    help: string;
     fields: Field[];
     /** Explains the row's effect in the current config, when something else overrides it. */
     note?(config: EmitterConfigData): string | undefined;
@@ -264,31 +266,82 @@ export function EmitterSections(): Section[] {
             title: "Particle",
             rows: [
                 // A property the config leaves out is a constant: 1 for alpha and scale, 0 for speed, white - so both ends default to that.
-                { label: "Alpha", fields: [EndNum("alpha", "start", 1, 0, 1, 0.01, "slider"), EndNum("alpha", "end", 1, 0, 1, 0.01, "slider")] },
-                { label: "Scale", fields: [EndNum("scale", "start", 1, 0, undefined, 0.05), EndNum("scale", "end", 1, 0, undefined, 0.05)] },
-                { label: "Min scale multiplier", fields: [Multiplier("scale", "minimumScaleMultiplier")] },
-                { label: "Colour", fields: [EndColour("start"), EndColour("end")] },
+                {
+                    label: "Alpha",
+                    help: "How opaque each particle is, from 0 (invisible) to 1 (solid). It starts at the first value and eases to the second over the particle's lifetime - 1 then 0 fades it out.",
+                    fields: [EndNum("alpha", "start", 1, 0, 1, 0.01, "slider"), EndNum("alpha", "end", 1, 0, 1, 0.01, "slider")],
+                },
+                {
+                    label: "Scale",
+                    help: "How big each particle is, as a multiple of its image's own size (1 = as drawn). It starts at the first value and eases to the second over its lifetime - a large start and a small end shrinks it.",
+                    fields: [EndNum("scale", "start", 1, 0, undefined, 0.05), EndNum("scale", "end", 1, 0, undefined, 0.05)],
+                },
+                {
+                    label: "Min scale multiplier",
+                    help: "Makes particles differ in size: each one's scale is multiplied by a random number between this and 1. 1 = every particle the same size; 0.5 = anywhere from half size to full.",
+                    fields: [Multiplier("scale", "minimumScaleMultiplier")],
+                },
+                {
+                    label: "Colour",
+                    help: "The tint of each particle. It is multiplied into the image's own colours (white leaves the image unchanged) and eases from the first colour to the second over the particle's lifetime.",
+                    fields: [EndColour("start"), EndColour("end")],
+                },
                 {
                     label: "Speed",
+                    help: "How fast each particle moves, in pixels per second in its container's space, in the direction it was launched (see Start rotation). It starts at the first value and eases to the second over its lifetime.",
                     fields: [EndNum("speed", "start", 0, 0, undefined, 5), EndNum("speed", "end", 0, 0, undefined, 5)],
                     note: config => (GetPath(config, "acceleration.x", 0) || GetPath(config, "acceleration.y", 0)
                         ? "End speed is ignored while there is an acceleration - particles speed up from the start speed." : undefined),
                 },
-                { label: "Min speed multiplier", fields: [Multiplier("speed", "minimumSpeedMultiplier")] },
-                { label: "Acceleration", fields: [Num("acceleration.x", "x", 0, undefined, undefined, 5), Num("acceleration.y", "y", 0, undefined, undefined, 5)] },
-                { label: "Max speed", fields: [Num("maxSpeed", "", 0, 0, undefined, 5)] },
-                { label: "Start rotation", fields: [Num("startRotation.min", "min", 0, undefined, undefined, 5), Num("startRotation.max", "max", 0, undefined, undefined, 5)] },
-                { label: "No particle rotation", fields: [Check("noRotation", false)] },
-                { label: "Rotation speed", fields: [Num("rotationSpeed.min", "min", 0, undefined, undefined, 5), Num("rotationSpeed.max", "max", 0, undefined, undefined, 5)] },
-                { label: "Rotation acceleration", fields: [Num("rotationAcceleration", "", 0, undefined, undefined, 1)] },
+                {
+                    label: "Min speed multiplier",
+                    help: "Makes particles differ in speed: each one's speed is multiplied by a random number between this and 1. 1 = every particle the same speed; 0.5 = anywhere from half speed to full.",
+                    fields: [Multiplier("speed", "minimumSpeedMultiplier")],
+                },
+                {
+                    label: "Acceleration",
+                    help: "A push added to every particle's velocity, in pixels per second per second, as x (sideways) and y (down is positive): gravity, wind, buoyancy. A negative y makes smoke or flames rise. While it is set, speed no longer eases to its end value.",
+                    fields: [Num("acceleration.x", "x", 0, undefined, undefined, 5), Num("acceleration.y", "y", 0, undefined, undefined, 5)],
+                },
+                {
+                    label: "Max speed",
+                    help: "The most speed an accelerating particle can reach, in pixels per second. 0 = no limit. It only matters while there is an acceleration.",
+                    fields: [Num("maxSpeed", "", 0, 0, undefined, 5)],
+                },
+                {
+                    label: "Start rotation",
+                    help: "The direction each particle is launched in, in degrees: 0 = right, 90 = down, 180 = left, 270 = up. Each particle gets a random angle between min and max, so a wide range sprays them out in a fan. The image is turned to match, unless No particle rotation is ticked.",
+                    fields: [Num("startRotation.min", "min", 0, undefined, undefined, 5), Num("startRotation.max", "max", 0, undefined, undefined, 5)],
+                },
+                {
+                    label: "No particle rotation",
+                    help: "Keeps each particle's image upright instead of turning it to face its direction of travel. The particle still moves in its launch direction; only the picture does not turn.",
+                    fields: [Check("noRotation", false)],
+                },
+                {
+                    label: "Rotation speed",
+                    help: "How fast each particle's image spins, in degrees per second - a random speed between min and max for each particle (negative spins the other way).",
+                    fields: [Num("rotationSpeed.min", "min", 0, undefined, undefined, 5), Num("rotationSpeed.max", "max", 0, undefined, undefined, 5)],
+                },
+                {
+                    label: "Rotation acceleration",
+                    help: "How quickly the spin speeds up, in degrees per second per second (negative slows it, or reverses it). 0 = the spin stays as set by Rotation speed.",
+                    fields: [Num("rotationAcceleration", "", 0, undefined, undefined, 1)],
+                },
                 {
                     label: "Lifetime",
+                    help: "How long each particle lives, in seconds - a random time between min and max. It is also how long alpha, scale, colour and speed take to get from their start to their end values.",
                     fields: [Num("lifetime.min", "min", 1, 0, undefined, 0.05), Num("lifetime.max", "max", 1, 0, undefined, 0.05)],
                     note: config => (config.killRect ? "With an area below, lifetime only sets how long alpha, scale, colour and speed take to reach their end values; they then hold." : undefined),
                 },
-                { label: "Live until outside area", fields: [KillRectOn] },
+                {
+                    label: "Live until outside area",
+                    help: "Particles no longer die when their lifetime ends: each lives until its centre leaves the area below, then is destroyed. Lifetime then only sets how long the curves take, after which the end values hold. Use it for rain, snow or sparks that should run until they are off screen.",
+                    fields: [KillRectOn],
+                },
                 {
                     label: "Area",
+                    help: "The kill area: its top-left corner (x, y) and its size (w, h), in stage coordinates - the canvas's. A particle is destroyed when its centre leaves it. Make it bigger than the screen so particles can start outside it and drift in. Drawn in red on the game.",
                     visible: config => !!config.killRect,
                     fields: [Num("killRect.x", "x", 0, undefined, undefined, 10), Num("killRect.y", "y", 0, undefined, undefined, 10),
                         Num("killRect.w", "w", 0, 0, undefined, 10), Num("killRect.h", "h", 0, 0, undefined, 10)],
@@ -296,6 +349,7 @@ export function EmitterSections(): Section[] {
                 },
                 {
                     label: "Blend mode",
+                    help: "How particles are combined with what is behind them. normal: drawn over it. add: brightens, so overlapping particles glow (fire, sparks, magic). multiply: darkens (smoke, shadow). screen: a softer brightening.",
                     fields: [{
                         id: "blendMode", label: "", kind: "select", options: BlendModes,
                         read: config => String(GetPath(config, "blendMode", "normal")).toLowerCase(),
@@ -307,30 +361,80 @@ export function EmitterSections(): Section[] {
         {
             title: "Emitter",
             rows: [
-                { label: "Spawn frequency (s)", fields: [Num("frequency", "", 0.1, 0.001, undefined, 0.01)] },
-                { label: "Emitter lifetime (s)", fields: [Num("emitterLifetime", "", -1, -1, undefined, 0.5)], note: () => "-1 emits for ever." },
-                { label: "Max particles", fields: [Num("maxParticles", "", 1000, 1, undefined, 10)] },
-                { label: "Particles per wave", fields: [Num("particlesPerWave", "", 1, 1, undefined, 1)] },
-                { label: "Spawn chance", fields: [Num("spawnChance", "", 1, 0, 1, 0.05, "slider")] },
-                { label: "Spawn type", fields: [SpawnTypeField] },
+                {
+                    label: "Spawn frequency (s)",
+                    help: "Seconds between spawns - how often the emitter makes a new particle (or a new wave of them). Smaller = a denser, faster stream: 0.05 is twenty a second.",
+                    fields: [Num("frequency", "", 0.1, 0.001, undefined, 0.01)],
+                },
+                {
+                    label: "Emitter lifetime (s)",
+                    help: "How long the emitter keeps spawning before it stops, in seconds. -1 = for ever. Particles already alive finish their lives; it starts again when Emitting is switched off and on.",
+                    fields: [Num("emitterLifetime", "", -1, -1, undefined, 0.5)],
+                    note: () => "-1 emits for ever.",
+                },
+                {
+                    label: "Max particles",
+                    help: "The most particles that can be alive at once. When it is reached no more spawn until some die. With Live until outside area, particles that never leave the area count against it for ever.",
+                    fields: [Num("maxParticles", "", 1000, 1, undefined, 10)],
+                },
+                {
+                    label: "Particles per wave",
+                    help: "How many particles are made each time the emitter spawns. 1 = a steady trickle; more makes puffs or bursts. With a burst spawn type it is how many fly out at once.",
+                    fields: [Num("particlesPerWave", "", 1, 1, undefined, 1)],
+                },
+                {
+                    label: "Spawn chance",
+                    help: "The chance, from 0 to 1, that each particle of a wave is actually made. 1 = always; 0.5 = about half of them, giving a sparser, more random stream.",
+                    fields: [Num("spawnChance", "", 1, 0, 1, 0.05, "slider")],
+                },
+                {
+                    label: "Spawn type",
+                    help: "The shape particles appear in. point: one spot. rect: anywhere in a rectangle. circle: anywhere in a disc. ring: in a circle with a hole in the middle. burst: from one spot, outwards in set directions. Drawn in cyan on the game.",
+                    fields: [SpawnTypeField],
+                },
                 {
                     label: "Rectangle",
+                    help: "The spawn rectangle: x and y of its top-left corner, and its width w and height h, measured from the spawn position and turned with the emitter.",
                     visible: config => SpawnTypeOf(config) === "rect",
                     fields: [Num("spawnRect.x", "x", 0, undefined, undefined, 5), Num("spawnRect.y", "y", 0, undefined, undefined, 5),
                         Num("spawnRect.w", "w", 100, 0, undefined, 5), Num("spawnRect.h", "h", 100, 0, undefined, 5)],
                 },
                 {
                     label: "Circle",
+                    help: "The spawn circle: x and y of its centre, measured from the spawn position, and its radius. For a ring this is the outer edge.",
                     visible: config => SpawnTypeOf(config) === "circle" || SpawnTypeOf(config) === "ring",
                     fields: [Num("spawnCircle.x", "x", 0, undefined, undefined, 5), Num("spawnCircle.y", "y", 0, undefined, undefined, 5),
                         Num("spawnCircle.r", "radius", 50, 0, undefined, 5)],
                 },
-                { label: "Ring inner radius", visible: config => SpawnTypeOf(config) === "ring", fields: [Num("spawnCircle.minR", "", 25, 0, undefined, 5)] },
-                { label: "Particle spacing", visible: config => SpawnTypeOf(config) === "burst", fields: [Num("particleSpacing", "", 0, 0, 360, 5)],
-                    note: () => "0 sends each particle in a random direction." },
-                { label: "Start angle", visible: config => SpawnTypeOf(config) === "burst", fields: [Num("angleStart", "", 0, undefined, undefined, 5)] },
-                { label: "Spawn position", fields: [Num("pos.x", "x", 0, undefined, undefined, 5), Num("pos.y", "y", 0, undefined, undefined, 5)] },
-                { label: "Add at back", fields: [Check("addAtBack", false)] },
+                {
+                    label: "Ring inner radius",
+                    help: "The radius of the hole in the ring: particles appear between this and the circle's radius. 0 fills it in like a circle.",
+                    visible: config => SpawnTypeOf(config) === "ring",
+                    fields: [Num("spawnCircle.minR", "", 25, 0, undefined, 5)],
+                },
+                {
+                    label: "Particle spacing",
+                    help: "Burst only: the angle in degrees between one particle of a wave and the next, going round from the start angle. With 8 particles per wave, 45 spreads them right round; a small angle makes a narrow fan. 0 sends each in a random direction.",
+                    visible: config => SpawnTypeOf(config) === "burst",
+                    fields: [Num("particleSpacing", "", 0, 0, 360, 5)],
+                    note: () => "0 sends each particle in a random direction.",
+                },
+                {
+                    label: "Start angle",
+                    help: "Burst only: the direction, in degrees, of the first particle of each wave: 0 = right, 90 = down, 180 = left, 270 = up. The others follow at the Particle spacing.",
+                    visible: config => SpawnTypeOf(config) === "burst",
+                    fields: [Num("angleStart", "", 0, undefined, undefined, 5)],
+                },
+                {
+                    label: "Spawn position",
+                    help: "Where particles are emitted from: x and y measured from the emitter's owner position (the point the game places it at). Every spawn shape is measured from here. Drawn as the yellow cross on the game.",
+                    fields: [Num("pos.x", "x", 0, undefined, undefined, 5), Num("pos.y", "y", 0, undefined, undefined, 5)],
+                },
+                {
+                    label: "Add at back",
+                    help: "Draws each new particle behind the particles already there, instead of in front of them. It changes which particles overlap which.",
+                    fields: [Check("addAtBack", false)],
+                },
             ],
         },
     ];
