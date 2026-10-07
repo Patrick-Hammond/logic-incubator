@@ -32,7 +32,7 @@ Four npm workspaces under `packages/`, importing each other by name (`@logic-inc
 editor -> engine -> ui -> lib        (the editor also uses ui directly)
 ```
 
-`eslint.config.js` enforces this with `no-restricted-imports` per package (and bans relative imports into another package), so **that file is the source of truth**. The README, `docs/README.md` and the user guide still describe three packages (`editor -> engine -> lib`) and don't cover `ui` in their overviews.
+`eslint.config.js` enforces this with `no-restricted-imports` per package (and bans relative imports into another package), so **that file is the source of truth**. The README, `docs/README.md` and the user guide describe all four (the user guide's chapter 14 is the UI kit).
 
 - `lib` - game framework: `Game`, `GameComponent`, `SceneManager`, the asset system (`src/assets`) and its Node build (`scripts/`), input (`io/`), tweening, vendored tilemap and particles, debug tools (`debug/`), small utilities. Also `html/`, the page the games are served in.
 - `ui` - skinnable widget kit (buttons, panels, menus, sliders...) plus keyboard/gamepad/mouse focus navigation, with its own `ui` asset bundle (`assets/ui`). Pure rules (`ButtonLook`, `SliderMath`, `FocusManager`...) are kept apart from the pixi widgets.

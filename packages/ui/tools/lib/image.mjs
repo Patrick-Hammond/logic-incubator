@@ -523,6 +523,24 @@ export function BuildNineSlice(art, insets, band = 2, samples = {}, centreBox = 
 }
 
 /**
+ * A nine-slice source drawn at a given size, whole pixels, nearest: the corners as they are, the edges and the middle repeating (not stretched) what is between the corners.
+ * The inverse of `BuildNineSlice` - what turns the small source back into a full-size frame to draw on (or to build another frame, a slider's thumb, from).
+ */
+export function RenderNineSlice(source, insets, width, height) {
+    const { left: l, top: t, right: r, bottom: b } = insets;
+    const out = CreateImage(width, height);
+    const xs = x => (x < l ? x : x >= width - r ? source.width - (width - x) : l + ((x - l) % Math.max(1, source.width - l - r)));
+    const ys = y => (y < t ? y : y >= height - b ? source.height - (height - y) : t + ((y - t) % Math.max(1, source.height - t - b)));
+    for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+            const sx = Math.min(source.width - 1, xs(x)), sy = Math.min(source.height - 1, ys(y));
+            out.data.set(source.data.subarray((sy * source.width + sx) * 4, (sy * source.width + sx) * 4 + 4), (y * width + x) * 4);
+        }
+    }
+    return out;
+}
+
+/**
  * The shortest repeat length (in columns, up to `maxPeriod`) of the picture between columns `from` and `to`: the p for which each column looks like the one p
  * further on, to within a little slack for noise - how long a tile must be to repeat a chain, a dotted line, a run of studs. 1 for a plain line.
  */
@@ -538,16 +556,15 @@ export function TilePeriod(img, from, to, maxPeriod = 16) {
         }
         return n ? sum / n : Infinity;
     };
-    let best = 1, bestError = error(1);
-    for (let p = 2; p <= maxPeriod; p++) {
-        const e = error(p);
-        // A longer period has to be clearly better: multiples of the true period score as well as it does.
-        if (e < bestError * 0.7) {
-            best = p;
-            bestError = e;
-        }
-    }
-    return best;
+    const errors = [];
+    for (let p = 1; p <= maxPeriod; p++) errors.push(error(p));
+    const finite = errors.filter(Number.isFinite);
+    if (!finite.length) return 1;
+    const lowest = Math.min(...finite);
+    const mean = finite.reduce((a, b) => a + b, 0) / finite.length;
+    // The shortest repeat that is about as good as the best: multiples of the true period score as well as it does, and sampling a pattern at a fractional scale leaves a little noise.
+    const slack = lowest + Math.max(lowest * 0.15, mean * 0.08);
+    return errors.findIndex(e => e <= slack) + 1;
 }
 
 /**

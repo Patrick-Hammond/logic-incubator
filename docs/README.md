@@ -1,12 +1,12 @@
 # logic-incubator documentation
 
 logic-incubator is the shared code that small browser games are built on: a game framework (`lib`), a top-down dungeon
-engine (`engine`) and a level editor (`editor`). Games check this repository out beside their own and compile it from source.
+engine (`engine`), a UI kit (`ui`) and a level editor (`editor`). Games check this repository out beside their own and compile it from source.
 
 | Document | Read it when |
 | --- | --- |
 | [User guide](user-guide.md) | You are building (or maintaining) a game on logic-incubator. It explains the concepts, walks through a first game, and covers scenes and components, the asset system, input, tweening, the dungeon engine, the level editor and testing - with working code. |
-| [API reference](api-reference.md) | You need an exact signature, option, event or file format: every public class, function and type in the three packages, plus the asset build tool's command line, configuration files and plugin interface. |
+| [API reference](api-reference.md) | You need an exact signature, option, event or file format: every public class, function and type in the four packages, plus the asset build tool's command line, configuration files and plugin interface. |
 
 ## Where to start
 
@@ -14,6 +14,7 @@ engine (`engine`) and a level editor (`editor`). Games check this repository out
 - **Loading art, sound and data**: [User guide, chapter 5](user-guide.md#5-assets) - bundles, typed ids, the build, loading and unloading.
 - **Writing a scene**: [User guide, chapter 4](user-guide.md#4-games-scenes-and-components) - the component lifecycle.
 - **Making a dungeon game**: [chapters 9 and 10](user-guide.md#9-the-dungeon-engine) - monsters, levels, `assets-meta.json`, the editor.
+- **Building menus and a HUD**: [the UI kit](user-guide.md#14-the-ui-kit) - widgets, focus and gamepad navigation, skins and the art workflow.
 - **Drawing the art**: [the sprite editor](user-guide.md#106-the-sprite-editor) - pixel editing, 256-colour palettes with alpha, a channel mixer and animation frames, inside the level editor.
 - **Something is broken**: [Troubleshooting](user-guide.md#13-troubleshooting) and the [asset diagnostics table](user-guide.md#513-diagnostics).
 

@@ -3,10 +3,10 @@
 code microbes.. microdes
 
 **Documentation: [`docs/`](docs/README.md)** - a [user guide](docs/user-guide.md) (setup, a first game, scenes, assets,
-input, the dungeon engine, the level editor, testing) and an [API reference](docs/api-reference.md).
+input, the dungeon engine, the UI kit, the level editor, testing) and an [API reference](docs/api-reference.md).
 
-The shared code the games build on - there's nothing to run here. An npm workspace of three
-packages, whose dependencies only point down (editor -> engine -> lib):
+The shared code the games build on - there's nothing to run here. An npm workspace of four
+packages, whose dependencies only point down (editor -> engine -> ui -> lib; the editor may use `ui` too):
 
 - `packages/lib` - `@logic-incubator/lib`: game framework, asset bundles and their build
   (`src/assets/`, `scripts/`), input, tweening, tilemap rendering, filters; plus the HTML page the
@@ -14,6 +14,9 @@ packages, whose dependencies only point down (editor -> engine -> lib):
 - `packages/engine` - `@logic-incubator/engine`: the top-down tile engine - level format and
   loading, lighting and depth, player, monsters and combat; plus the build plugin that keeps a
   game's `assets-meta.json` in step with its sprites (`scripts/`)
+- `packages/ui` - `@logic-incubator/ui`: a skinnable Pixi UI kit - widgets, keyboard / gamepad /
+  pointer focus, and its own art, bitmap fonts and skin (the `ui` asset bundle, in `assets/ui/`); the
+  engine's HUD is built from it
 - `packages/editor` - `@logic-incubator/editor`: the level editor, and its own icons and font
   (the `editor` asset bundle, in `assets/editor/`)
 

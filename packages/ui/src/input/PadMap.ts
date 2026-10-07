@@ -1,6 +1,6 @@
 /**
  * Which gamepad controls do what in a UI, for the standard layout lib's `GamePad` reads: the d-pad (as buttons 12 to 15, or as the single axis some pads
- * report it on), the left stick past its dead zone, A to accept, B to cancel and the shoulder buttons for tabs. `PadSample` is a snapshot of whatever pad
+ * report it on), the left stick past its dead zone, A to accept, B (and Start) to cancel and the shoulder buttons for tabs. `PadSample` is a snapshot of whatever pad
  * there is; `ActionsFromPad` says which actions it is holding. Pure.
  */
 
@@ -15,7 +15,7 @@ export type PadSample = {
     dpad: Direction | "none";
 };
 
-export const PadButton = { accept: 0, cancel: 1, tabPrev: 4, tabNext: 5, up: 12, down: 13, left: 14, right: 15 } as const;
+export const PadButton = { accept: 0, cancel: 1, tabPrev: 4, tabNext: 5, start: 9, up: 12, down: 13, left: 14, right: 15 } as const;
 
 /** The actions the pad is holding right now (a stick held diagonally counts as its stronger axis, so it doesn't fire two directions at once). */
 export function ActionsFromPad(pad: PadSample, deadZone = 0.5): UiAction[] {
@@ -34,5 +34,7 @@ export function ActionsFromPad(pad: PadSample, deadZone = 0.5): UiAction[] {
     }
 
     (["accept", "cancel", "tabPrev", "tabNext"] as const).forEach(action => pad.button(PadButton[action]) && add(action));
+    // Start is the pad's menu button: it opens a pause menu and (like B) closes one.
+    if (pad.button(PadButton.start)) add("cancel");
     return held;
 }

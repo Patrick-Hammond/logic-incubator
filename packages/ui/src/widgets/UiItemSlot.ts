@@ -11,6 +11,8 @@ export type SlotItem = {
     texture: Texture;
     /** How many; shown in the corner when more than one. */
     count?: number;
+    /** Text always shown in the corner (a key's id), instead of a count. */
+    label?: string;
 };
 
 /**
@@ -87,15 +89,16 @@ export default class UiItemSlot extends UiControl {
         if (this.item) {
             this.icon.texture = this.item.texture;
             this.icon.visible = true;
-            // Whole-number reduction only, so the item stays crisp; most are the size of the box already.
-            const fit = Math.max(this.icon.texture.width, this.icon.texture.height) > box ? 1 / Math.ceil(Math.max(this.icon.texture.width, this.icon.texture.height) / box) : 1;
+            // Whole-number scaling only, so the item stays crisp: small art is enlarged to fill the box as far as it can be, art too big for it is reduced to fit.
+            const longest = Math.max(this.icon.texture.width, this.icon.texture.height);
+            const fit = longest > box ? 1 / Math.ceil(longest / box) : Math.max(1, Math.floor(box / longest));
             this.icon.scale.set(fit);
             this.icon.position.set(Math.floor((this.skin.size - this.icon.width) / 2), Math.floor((this.skin.size - this.icon.height) / 2));
             this.icon.alpha = raw === "disabled" ? 0.5 : 1;
         } else {
             this.icon.visible = false;
         }
-        const count = this.item && this.item.count !== undefined && this.item.count > 1 ? String(this.item.count) : "";
+        const count = this.item && this.item.label ? this.item.label : this.item && this.item.count !== undefined && this.item.count > 1 ? String(this.item.count) : "";
         this.badge.text = count;
         this.badge.visible = !!count;
         this.badge.position.set(this.skin.size - Math.ceil(this.badge.textWidth) - 2, this.skin.size - Math.ceil(this.badge.textHeight) - 1);

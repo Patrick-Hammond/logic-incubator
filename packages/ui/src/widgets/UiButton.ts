@@ -14,9 +14,6 @@ export type UiButtonOptions = {
     icon?: string;
 };
 
-/** Between an icon and the label beside it. */
-const ICON_GAP = 3;
-
 /**
  * A button in one of the skin's variants: a framed label (and/or icon) that looks different hovered, pressed and disabled, and emits `activate` when a press and release both
  * land on it, or when accept is pressed on it (see `UiControl`). The content is centred and drops by the skin's `pressedOffset` while pressed.
@@ -68,7 +65,7 @@ export default class UiButton extends UiControl {
     private ContentSize(): { width: number; height: number } {
         const label = this.label ? { width: this.label.textWidth, height: this.label.textHeight } : { width: 0, height: 0 };
         const icon = this.icon ? { width: this.icon.width, height: this.icon.height } : { width: 0, height: 0 };
-        return { width: icon.width + (icon.width && label.width ? ICON_GAP : 0) + label.width, height: Math.max(icon.height, label.height) };
+        return { width: icon.width + (icon.width && label.width ? this.theme.Metric("iconGap", 6) : 0) + label.width, height: Math.max(icon.height, label.height) };
     }
 
     protected Redraw(): void {
@@ -97,7 +94,7 @@ export default class UiButton extends UiControl {
         if (this.icon) {
             this.icon.tint = colour;
             this.icon.position.set(x, y(this.icon.height));
-            x += this.icon.width + ICON_GAP;
+            x += this.icon.width + this.theme.Metric("iconGap", 6);
         }
         if (this.label) {
             this.label.tint = colour;

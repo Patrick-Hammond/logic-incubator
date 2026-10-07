@@ -83,6 +83,12 @@ export default class UiTheme {
         return this.Font(key).size;
     }
 
+    /** A spacing the skin sets (see `Skin.metrics`), in UI pixels; `fallback` when it doesn't say. */
+    Metric(name: string, fallback: number): number {
+        const value = this.skin.metrics && this.skin.metrics[name];
+        return value === undefined ? fallback : value;
+    }
+
     Colour(name: string): number {
         const colour = this.skin.colours[name];
         if (colour === undefined) {

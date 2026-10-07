@@ -1,7 +1,7 @@
 import GameComponent from "@logic-incubator/lib/game/GameComponent";
 import AssetFactory from "@logic-incubator/lib/loading/AssetFactory";
 import Encounter from "./Encounter";
-import {LEVEL_CREATED, PLAYER_DIED} from "./Events";
+import {GAME_PAUSED, GAME_RESUMED, LEVEL_CREATED, PLAYER_DIED} from "./Events";
 import AssetMetadataStore from "./level/AssetMetadata";
 import { AssetMetadataBinding, BindAssetMetadata } from "./level/AssetMetadataBinding";
 import LevelAssets from "./level/LevelAssets";
@@ -22,8 +22,8 @@ export type PlayerSetup = {
     sprite: string;
     /** In half-hearts - see `Hud`. */
     hitPoints: number;
-    /** Sprite names for a full, half and empty heart. */
-    hearts: {full: string; half: string; empty: string};
+    /** Sprite names for a full, half and empty heart; without them the HUD draws the UI skin's hearts. */
+    hearts?: {full: string; half: string; empty: string};
     /** Starting loadout - the first is equipped. Fired while a fire direction is held (see `PlayerControl`). */
     weapons: WeaponDef[];
 };
@@ -46,6 +46,15 @@ export type DungeonMainOptions = {
      * returns one it is used in place of `player.sprite` - how a game lets the player pick a character.
      */
     playerSprite?: () => string | undefined;
+    /**
+     * Something drawn over the HUD and kept with the scene - a pause menu, a death screen: made when the scene is, given the scene so it can `Pause`, `Resume` and `Restart` it, and
+     * listening to the engine's events (`PLAYER_DIED`) for what else it needs.
+     */
+    overlay?: (main: DungeonMain) => GameComponent;
+    /**
+     * Whether a death waits to be told to start over (`Restart`) instead of the level restarting by itself a moment after - for a game whose `overlay` offers a choice. Off by default.
+     */
+    manualRestart?: boolean;
 };
 
 /** Seconds between the player dying and the level starting over. */
@@ -65,6 +74,9 @@ export class DungeonMain extends GameComponent {
     private restarting = false;
     /** Whether a level has been created yet - there's nothing to play until the first one has loaded. */
     private started = false;
+    private paused = false;
+    /** Dead, in a game whose death waits for `Restart`: everything holds still until it comes. */
+    private waitingForRestart = false;
 
     constructor(private options: DungeonMainOptions) {
         super();
@@ -73,6 +85,47 @@ export class DungeonMain extends GameComponent {
     /** Where a game plays particle effects (`Effects.Play`) - undefined until the scene has been initialised. */
     get Effects(): Effects | undefined {
         return this.effects;
+    }
+
+    /** Whether play is stopped by `Pause`. */
+    get Paused(): boolean {
+        return this.paused;
+    }
+
+    /** Whether the player is dead and the level is waiting to be restarted (see `manualRestart`). */
+    get WaitingForRestart(): boolean {
+        return this.waitingForRestart;
+    }
+
+    /** Stops play - nothing moves, shoots or spawns - until `Resume`. Does nothing before a level has started, or while the player is dead. */
+    Pause(): void {
+        if (this.paused || !this.started || this.waitingForRestart || this.restarting || this.restartIn > 0) {
+            return;
+        }
+        this.paused = true;
+        this.game.dispatcher.emit(GAME_PAUSED);
+    }
+
+    Resume(): void {
+        if (!this.paused) {
+            return;
+        }
+        this.paused = false;
+        this.game.dispatcher.emit(GAME_RESUMED);
+    }
+
+    /** Starts the level over now - the player, the monsters, everything - as it does a moment after a death. */
+    Restart(): void {
+        if (!this.started || this.restarting || !this.level) {
+            return;
+        }
+        if (this.paused) {
+            this.paused = false;
+            this.game.dispatcher.emit(GAME_RESUMED);
+        }
+        this.restarting = true;
+        this.waitingForRestart = false;
+        this.Reload();
     }
 
     protected OnInitialise(): void {
@@ -84,6 +137,9 @@ export class DungeonMain extends GameComponent {
         // Inside the camera, so effects scroll and zoom with the world, and over its layers; under the HUD.
         this.effects = this.Attach(new Effects(camera), camera.root);
         this.hud = this.Attach(new Hud(this.options.player.hearts));
+        if (this.options.overlay) {
+            this.Attach(this.options.overlay(this));
+        }
 
         // A door the player has no key for is a wall to them; one they have the key for isn't - they walk onto it to open it.
         this.player = new Player(camera, new TileCollision(level, (x, y) => !!this.player && this.player.IsLockedOut(x, y)), level, this.options.player);
@@ -99,11 +155,20 @@ export class DungeonMain extends GameComponent {
         this.levelAssets = new LevelAssets(this.game.assets, metadata);
 
         this.Listen(this.game.dispatcher, LEVEL_CREATED, this.OnLevelCreated);
-        this.Listen(this.game.dispatcher, PLAYER_DIED, () => (this.restartIn = RestartDelay));
+        this.Listen(this.game.dispatcher, PLAYER_DIED, () => {
+            if (this.options.manualRestart) {
+                this.waitingForRestart = true;
+            } else {
+                this.restartIn = RestartDelay;
+            }
+        });
         this.Tick(this.OnUpdate);
     }
 
     protected OnShow(): void {
+        // A visit starts from the beginning, whatever the last one ended in.
+        this.paused = false;
+        this.waitingForRestart = false;
         this.Reload();
     }
 
@@ -126,6 +191,7 @@ export class DungeonMain extends GameComponent {
         this.renderer.Reset();
         this.restartIn = 0;
         this.restarting = false;
+        this.waitingForRestart = false;
         this.started = true;
     }
 
@@ -135,7 +201,7 @@ export class DungeonMain extends GameComponent {
      * timers run on real seconds.
      */
     private OnUpdate(dt: number): void {
-        if (!this.started) {
+        if (!this.started || this.paused || this.waitingForRestart) {
             return;
         }
         const seconds = this.game.ticker.deltaMS / 1000;

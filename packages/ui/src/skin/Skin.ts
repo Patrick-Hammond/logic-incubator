@@ -233,6 +233,12 @@ export type Skin = {
     bundle: string;
     /** Whole screen pixels per UI pixel. */
     scale: number;
+    /**
+     * Spacings the widgets use that no frame or font says (a gap between a title and its text, the focus ring's thickness, a slide distance), in UI pixels. A widget asks for one
+     * by name with `UiTheme.Metric` and has a default for a skin that leaves it out: iconGap, lineGap, slotGap, scrollGap, scrollMargin, scrollStep, caretWidth, caretMargin,
+     * tailMargin, tailOverlap, slide, bob, ringGap, ringThickness.
+     */
+    metrics?: Record<string, number>;
     fonts: Record<string, FontSkin>;
     /** Named colours for text and tints (0xRRGGBB). */
     colours: Record<string, number>;

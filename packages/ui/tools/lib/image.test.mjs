@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BorderColour, BoxDownsample, Composite, CreateImage, Crop, Dim, DownsampleMode, DownsampleNearest, Quantise, RemoveBackground, UpscaleNearest } from "./image.mjs";
+import { BorderColour, BoxDownsample, BuildNineSlice, Composite, CreateImage, Crop, Dim, DownsampleMode, DownsampleNearest, Quantise, RemoveBackground, RenderNineSlice, TilePeriod, UpscaleNearest } from "./image.mjs";
 
 const px = (img, x, y) => Array.from(img.data.subarray((y * img.width + x) * 4, (y * img.width + x) * 4 + 4));
 const set = (img, x, y, rgba) => img.data.set(rgba, (y * img.width + x) * 4);
@@ -181,5 +181,63 @@ describe("DownsampleMode", () => {
         expect(px(out, 0, 0)[3]).toBe(255); // exactly half
         expect(px(out, 1, 0)).toEqual([50, 60, 70, 255]);
         expect(px(DownsampleMode(solid(2, 2, [9, 9, 9, 0]), 2), 0, 0)[3]).toBe(0);
+    });
+});
+
+describe("RenderNineSlice", () => {
+    it("keeps the corners, repeats the edge strips and fills the middle with the flat colour", () => {
+        // A 3x3 source: four distinct corners, a one-pixel strip on each edge, a flat middle.
+        const src = solid(3, 3, [50, 50, 50, 255]);
+        set(src, 0, 0, [1, 0, 0, 255]);
+        set(src, 2, 0, [2, 0, 0, 255]);
+        set(src, 0, 2, [3, 0, 0, 255]);
+        set(src, 2, 2, [4, 0, 0, 255]);
+        set(src, 1, 0, [10, 0, 0, 255]);
+        const out = RenderNineSlice(src, { left: 1, top: 1, right: 1, bottom: 1 }, 6, 5);
+        expect([out.width, out.height]).toEqual([6, 5]);
+        expect(px(out, 0, 0)[0]).toBe(1);
+        expect(px(out, 5, 0)[0]).toBe(2);
+        expect(px(out, 0, 4)[0]).toBe(3);
+        expect(px(out, 5, 4)[0]).toBe(4);
+        [1, 2, 3, 4].forEach(x => expect(px(out, x, 0)[0]).toBe(10));
+        expect(px(out, 3, 2)).toEqual([50, 50, 50, 255]);
+    });
+
+    it("round-trips what BuildNineSlice reduces a frame to, at the frame's own size", () => {
+        const art = solid(12, 10, [20, 20, 40, 255]);
+        for (let x = 0; x < 12; x++) [0, 9].forEach(y => set(art, x, y, [200, 200, 255, 255]));
+        for (let y = 0; y < 10; y++) [0, 11].forEach(x => set(art, x, y, [200, 200, 255, 255]));
+        // A label in the middle that must not survive.
+        set(art, 6, 5, [255, 255, 255, 255]);
+        const insets = { left: 2, top: 2, right: 2, bottom: 2 };
+        const full = RenderNineSlice(BuildNineSlice(art, insets), insets, 12, 10);
+        expect([full.width, full.height]).toEqual([12, 10]);
+        expect(px(full, 6, 5)).toEqual([20, 20, 40, 255]);
+        expect(px(full, 0, 0)).toEqual(px(art, 0, 0));
+        expect(px(full, 11, 9)).toEqual(px(art, 11, 9));
+    });
+});
+
+describe("TilePeriod", () => {
+    const strip = (width, colourAt) => {
+        const img = CreateImage(width, 3);
+        for (let x = 0; x < width; x++) for (let y = 0; y < 3; y++) set(img, x, y, colourAt(x, y));
+        return img;
+    };
+
+    it("is 1 for a plain line", () => {
+        expect(TilePeriod(strip(80, () => [40, 40, 90, 255]), 10, 70)).toBe(1);
+    });
+
+    it("finds the length a pattern repeats at, however long", () => {
+        [4, 8, 16, 30].forEach(period => {
+            const links = strip(120, x => (x % period < period / 2 ? [200, 200, 255, 255] : [20, 20, 40, 255]));
+            expect(TilePeriod(links, 10, 110, 32)).toBe(period);
+        });
+    });
+
+    it("takes the shortest repeat, not a multiple of it", () => {
+        const links = strip(120, x => (x % 6 < 2 ? [255, 255, 255, 255] : [0, 0, 0, 255]));
+        expect(TilePeriod(links, 0, 120, 32)).toBe(6);
     });
 });

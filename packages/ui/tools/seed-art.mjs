@@ -8,7 +8,7 @@ import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { FrameEntry, ReadFrames, WriteFrames } from "./lib/frames.mjs";
-import { Composite, CreateImage, DominantColour, FlipVertical, JoinColumns, Rotate90, Tint } from "./lib/image.mjs";
+import { Composite, CreateImage, DominantColour, FlipVertical, JoinColumns, RenderNineSlice, Rotate90, Tint } from "./lib/image.mjs";
 
 const require = createRequire(import.meta.url);
 const { PNG } = require("pngjs");
@@ -34,6 +34,7 @@ const STATES = {
     disabled: { brightness: 0.55, saturation: 0.45 }
 };
 const FOCUS_COLOUR = [255, 216, 102];
+// The sizes below (a slider's thumb, a tooltip's pointer) are in art pixels, which are screen pixels at the 1x skin.
 
 const written = [];
 function Write(name, image, insets = null) {
@@ -43,21 +44,6 @@ function Write(name, image, insets = null) {
     writeFileSync(fileOf(name), PNG.sync.write({ width: image.width, height: image.height, data: Buffer.from(image.data) }));
     frames[name] = FrameEntry(image, insets);
     written.push(name);
-}
-
-/** A nine-slice source drawn at a given size, for building a frame (a slider's thumb) from another's corners and edges; whole pixels, nearest. */
-function RenderNineSlice(source, insets, width, height) {
-    const { left: l, top: t, right: r, bottom: b } = insets;
-    const out = CreateImage(width, height);
-    const xs = x => (x < l ? x : x >= width - r ? source.width - (width - x) : l + ((x - l) % Math.max(1, source.width - l - r)));
-    const ys = y => (y < t ? y : y >= height - b ? source.height - (height - y) : t + ((y - t) % Math.max(1, source.height - t - b)));
-    for (let y = 0; y < height; y++) {
-        for (let x = 0; x < width; x++) {
-            const sx = Math.min(source.width - 1, xs(x)), sy = Math.min(source.height - 1, ys(y));
-            out.data.set(source.data.subarray((sy * source.width + sx) * 4, (sy * source.width + sx) * 4 + 4), (y * width + x) * 4);
-        }
-    }
-    return out;
 }
 
 /** The image on a bigger transparent canvas, top-left at (ox, oy). */
@@ -85,7 +71,7 @@ Write("radio_off_disabled", Tint(read("radio_off"), STATES.disabled));
 const track = read("bar_track");
 Write("slider_track", track, insetsOf("bar_track"));
 Write("scroll_track", Rotate90(track), insetsOf("bar_track"));
-const thumb = RenderNineSlice(read("btn_icon_normal"), insetsOf("btn_icon_normal"), 12, 16);
+const thumb = RenderNineSlice(read("btn_icon_normal"), insetsOf("btn_icon_normal"), 24, 32);
 Write("slider_thumb_normal", thumb);
 Object.keys(STATES).forEach(state => Write(`slider_thumb_${state}`, Tint(thumb, STATES[state])));
 const grip = read("btn_small_normal");
@@ -95,13 +81,15 @@ Object.keys(STATES).forEach(state => Write(`scroll_thumb_${state}`, Tint(grip, S
 // ---- a tooltip's pointer: a triangle in the tooltip's edge and fill colours -----------------------------------------------
 {
     const tip = read("tooltip");
-    const edge = DominantColour(tip, 8, 2, 2, 2) || [200, 200, 255], fill = DominantColour(tip, 10, 10, 8, 8) || [20, 20, 40];
-    const down = CreateImage(11, 6);
-    for (let row = 0; row < 6; row++) {
-        const half = 5 - row;
-        for (let x = 5 - half; x <= 5 + half; x++) {
-            const onEdge = x === 5 - half || x === 5 + half || row === 5;
-            down.data.set([...(onEdge ? edge : fill), 255], (row * 11 + x) * 4);
+    const edge = DominantColour(tip, 16, 4, 4, 4) || [200, 200, 255], fill = DominantColour(tip, 20, 20, 16, 16) || [20, 20, 40];
+    // 23 wide and 12 tall: the sides slope one pixel a row, the outline is two pixels thick.
+    const W = 23, H = 12, MID = 11;
+    const down = CreateImage(W, H);
+    for (let row = 0; row < H; row++) {
+        const half = MID - row;
+        for (let x = MID - half; x <= MID + half; x++) {
+            const onEdge = x <= MID - half + 1 || x >= MID + half - 1 || row >= H - 2;
+            down.data.set([...(onEdge ? edge : fill), 255], (row * W + x) * 4);
         }
     }
     Write("tooltip_tail_down", down);
@@ -112,15 +100,16 @@ Object.keys(STATES).forEach(state => Write(`scroll_thumb_${state}`, Tint(grip, S
 Write("icon_arrow_up", Rotate90(read("icon_arrow_right"), false));
 Write("icon_arrow_down", Rotate90(read("icon_arrow_right"), true));
 {
-    const full = Place(read("icon_heart_full"), 13, 13), empty = Place(read("icon_heart_empty"), 13, 13);
-    Write("icon_heart_half", JoinColumns(full, empty, 7));
+    const heartFull = read("icon_heart_full"), heartEmpty = read("icon_heart_empty");
+    const width = Math.max(heartFull.width, heartEmpty.width), height = Math.max(heartFull.height, heartEmpty.height);
+    Write("icon_heart_half", JoinColumns(Place(heartFull, width, height), Place(heartEmpty, width, height), Math.floor(width / 2) + 1));
 }
 Write("portrait_frame", read("slot_empty"), insetsOf("slot_empty"));
 {
     // An amber fill in the shape of the red one: a bright top row, a flat body, a dark bottom row.
-    const rows = [[246, 210, 106], [232, 160, 32], [232, 160, 32], [232, 160, 32], [232, 160, 32], [232, 160, 32], [122, 74, 16]];
-    const amber = CreateImage(2, 7);
-    rows.forEach((colour, y) => [0, 1].forEach(x => amber.data.set([...colour, 255], (y * 2 + x) * 4)));
+    const rows = [[246, 210, 106], [246, 210, 106], [232, 160, 32], [232, 160, 32], [232, 160, 32], [232, 160, 32], [232, 160, 32], [232, 160, 32], [232, 160, 32], [232, 160, 32], [232, 160, 32], [232, 160, 32], [122, 74, 16], [122, 74, 16]];
+    const amber = CreateImage(4, rows.length);
+    rows.forEach((colour, y) => [0, 1, 2, 3].forEach(x => amber.data.set([...colour, 255], (y * 4 + x) * 4)));
     Write("bar_fill_amber", amber);
 }
 

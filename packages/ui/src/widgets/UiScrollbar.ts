@@ -106,6 +106,7 @@ export default class UiScrollbar extends Container {
             throw new Error(`The "${theme.skin.name}" skin has no scrollbar "${variant}".`);
         }
         this.skin = skin;
+        this.StepSize = theme.Metric("scrollStep", 24);
         this.horizontal = !!options.horizontal;
         this.addChild(this.inner);
         if (this.horizontal) {
@@ -180,8 +181,8 @@ export default class UiScrollbar extends Container {
         return this.content > this.viewport;
     }
 
-    /** One step of scrolling when an arrow is pressed or held, in content units. */
-    StepSize = 12;
+    /** One step of scrolling when an arrow is pressed or held, in content units (the skin's `scrollStep`). */
+    StepSize = 24;
 
     private SetFromPlayer(scroll: number): void {
         const clamped = ClampScroll(scroll, this.content, this.viewport);
