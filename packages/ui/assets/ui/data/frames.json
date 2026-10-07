@@ -27,11 +27,11 @@
 	},
 	"border_chain_cap_l": {
 		"width": 24,
-		"height": 29
+		"height": 30
 	},
 	"border_chain_cap_r": {
 		"width": 24,
-		"height": 29
+		"height": 30
 	},
 	"border_chain_centre": {
 		"width": 36,
@@ -39,7 +39,7 @@
 	},
 	"border_chain_mid": {
 		"width": 15,
-		"height": 29
+		"height": 30
 	},
 	"border_dotted_cap_l": {
 		"width": 16,
