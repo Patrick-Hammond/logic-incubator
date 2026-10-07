@@ -34,6 +34,11 @@ describe("ActionsFromPad", () => {
         expect(ActionsFromPad(pad())).toEqual([]);
     });
 
+    it("reads Start as cancel, once with B", () => {
+        expect(ActionsFromPad(pad([9]))).toEqual(["cancel"]);
+        expect(ActionsFromPad(pad([1, 9]))).toEqual(["cancel"]);
+    });
+
     it("reads a d-pad that reports itself as an axis", () => {
         expect(ActionsFromPad(pad([], { x: 0, y: 0 }, "left"))).toEqual(["left"]);
     });

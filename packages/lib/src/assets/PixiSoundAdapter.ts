@@ -91,6 +91,12 @@ export default class PixiSoundAdapter implements ISoundAdapter {
         }
     }
 
+    SetVolume(alias: string, volume: number): void {
+        if (sound.exists(alias)) {
+            sound.find(alias).volume = Math.max(0, Math.min(1, volume));
+        }
+    }
+
     /** `alias`'s decode finished (or failed): it's safe to destroy now if it was removed in the meantime. */
     private Settled(alias: string, instance: PixiSound | undefined): void {
         if (!instance) {

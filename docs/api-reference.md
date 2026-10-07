@@ -1,13 +1,13 @@
 # logic-incubator API reference
 
-Signatures and behaviour of the public surface of the three packages, plus the asset build tool's command line,
+Signatures and behaviour of the public surface of the four packages, plus the asset build tool's command line,
 configuration files and plugin interface. For explanations, examples and workflows see the
 [user guide](user-guide.md).
 
 **Conventions**
 
 - Import paths use the package prefixes `@logic-incubator/lib/...`, `@logic-incubator/engine/...`,
-  `@logic-incubator/editor/...`, which map to each package's `src/` folder. `default` below means the module's
+  `@logic-incubator/ui/...`, `@logic-incubator/editor/...`, which map to each package's `src/` folder. `default` below means the module's
   default export.
 - Methods are PascalCase (`LoadBundle`); properties and getters are camelCase or PascalCase as written.
 - "Pure" modules import no pixi and run under plain Node.
@@ -59,6 +59,13 @@ configuration files and plugin interface. For explanations, examples and workflo
 [Encounter](#encounter) ·
 [Views](#views) ·
 [Player input](#player-input)
+
+**[ui](#ui)**
+[UiLayer and ThemeFor](#uilayer-and-themefor) ·
+[UiSystem](#uisystem) ·
+[Skin and UiTheme](#skin-and-uitheme) ·
+[Widgets](#widgets) ·
+[Pure rules](#pure-rules)
 
 **[editor](#editor)**
 [DungeonEditor](#dungeoneditor) ·
@@ -346,6 +353,7 @@ in that window cancels the unload. Its dependencies are released then and unload
 | `FontName(id: FontId): string` | The font's `face` - what `BitmapText` is given as `font.name`. |
 | `PlaySound(id: SoundId, options?: SoundPlayOptions): Promise<void>` | Plays at once if loaded; otherwise loads, then plays unless `StopSound(id)` was called meanwhile. Rejects if loading fails; throws if no sound adapter was given. |
 | `StopSound(id: SoundId): void` | Stops playing instances and cancels a pending play. |
+| `SetSoundVolume(id: SoundId, volume: number): void` | How loud a sound is, 0 to 1, for what is playing now and what plays later (on top of a play's own `volume`). Does nothing for a sound that isn't loaded. |
 | `Reload(id: DataId \| BinaryId): Promise<void>` | Re-fetches (bypassing cache), replaces the value, emits `asset:reloaded`. Other kinds throw. |
 | `Stats()` | `{ loadJobs: number; bundles: { [name]: { refs, loaded, pinned, bytes } } }`. For the dev console and tests. |
 | `Destroy(): void` | See below. |
@@ -493,6 +501,7 @@ interface ISoundAdapter {
     Remove(alias: string): void;                // safe if absent
     Play(alias: string, options?: SoundPlayOptions): void;
     Stop(alias: string): void;
+    SetVolume(alias: string, volume: number): void;   // 0 to 1, for what is playing now and what plays later
 }
 ```
 
@@ -963,6 +972,8 @@ does not fill `children`. Use it as an emitter's `parent` when there are many.
 | `CAMERA_MOVED` | `"cameraMoved"` | - |
 | `PLAYER_DAMAGED` | `"playerDamaged"` | `(damage, hitPointsLeft)` |
 | `PLAYER_DIED` | `"playerDied"` | - |
+| `GAME_PAUSED` | `"gamePaused"` | - (`DungeonMain.Pause()` stopped play) |
+| `GAME_RESUMED` | `"gameResumed"` | - (`DungeonMain.Resume()` set it going again) |
 | `MONSTER_KILLED` | `"monsterKilled"` | `(type, x, y)` |
 | `SPAWNER_DESTROYED` | `"spawnerDestroyed"` | `(spawner)` |
 
@@ -976,7 +987,7 @@ does not fill `children`. Use it as an emitter's `parent` when there are many.
 type PlayerSetup = {
     sprite: string;                                       // animation name
     hitPoints: number;                                    // half-hearts
-    hearts: { full: string; half: string; empty: string };// sprite names
+    hearts?: { full: string; half: string; empty: string };// sprite names; without them the HUD draws the UI skin's hearts
     weapons: WeaponDef[];                                 // the first is equipped; fired while a fire direction is held
 };
 
@@ -985,19 +996,30 @@ type DungeonMainOptions = {
     level: () => LevelFile | undefined;                   // asked on every start and restart
     levelBundle?: () => string | undefined;               // the asset bundle the level plays in
     playerSprite?: () => string | undefined;              // the animation to draw the player with, in place of player.sprite
+    overlay?: (main: DungeonMain) => GameComponent;       // drawn over the HUD and kept with the scene: a pause menu, a death screen
+    manualRestart?: boolean;                              // a death waits for Restart() instead of restarting by itself (default false)
 };
 
 new DungeonMain(options: DungeonMainOptions)
 
 main.Effects: Effects | undefined       // where a game plays particle effects; undefined until the scene is initialised
+main.Paused: boolean                    // play is stopped by Pause()
+main.WaitingForRestart: boolean         // dead, with manualRestart: everything holds still until Restart()
+main.Pause(): void                      // nothing moves, shoots or spawns until Resume(); emits GAME_PAUSED. Does nothing before a level has started or while dead
+main.Resume(): void                     // emits GAME_RESUMED
+main.Restart(): void                    // starts the level over now (what happens by itself a moment after a death, without manualRestart)
 ```
+
+`overlay` is how a game puts its own UI over the dungeon without the engine knowing what it is: it is called once, when the scene initialises, and what it
+returns is attached above the HUD (shown, hidden and destroyed with the scene). It gets the scene so it can `Pause`, `Resume` and `Restart` it, and listens to
+`PLAYER_DIED` and the other events for the rest. `in-dungeons-we-dwell`'s `GameOverlay` is a pause menu (cancel while playing) and a death screen.
 
 `playerSprite` is asked for each time a level starts (on `LEVEL_CREATED`, before the player is reset): when it returns an animation
 name the player is drawn with that (`Player.SetSprite`), otherwise with `player.sprite`. It is how a game lets the player pick a character.
 
 Lifecycle: `OnInitialise` builds the `Level`, attaches `Camera`, `TileMapView`, `Effects` (into the camera) and `Hud`, creates `Player`, `EntityRenderer` and
 `Encounter`, binds asset metadata (`BindAssetMetadata`) and listens for `LEVEL_CREATED` / `PLAYER_DIED`. `OnShow` and each restart
-(1.5 s after `PLAYER_DIED`) call `Reload`: prepare the assets (`LevelAssets.Prepare` - refresh dev metadata, then
+(1.5 s after `PLAYER_DIED`, or when told to with `manualRestart`) call `Reload`: prepare the assets (`LevelAssets.Prepare` - refresh dev metadata, then
 `UseLevelBundle(levelBundle())`), then `Level.LoadLevel(level())` unless the scene was destroyed meanwhile. `OnDestroy` destroys the
 player, disposes the level and releases the level bundle (when `levelBundle` was given).
 
@@ -1324,7 +1346,7 @@ Constants `MaxMonsters = 150`, `HitFlashTime = 0.15`. `EncounterLevel` and `Enco
 | `TileMapView extends GameComponent` | `view/TileMap` | `new TileMapView(level, camera)`. Builds the tile layers, lit and banded by height, plus the `EntitiesLayer` (`"entities"`) and `ProjectilesLayer` (`"projectiles"`) containers; `LightTint(light)`, `TileGD8Rotation(rotation, scaleX, scaleY)`. Emits `LEVEL_CREATED`. |
 | `Player` | `view/Player` | `new Player(camera, collision, level, setup)`; `Position`, `Centre`, `Tile`, `Texture`, `FacingX`, `Health`, `Gold`, `Inventory`, `Keys`, `EquippedWeapon`; `HasKeyFor(lockId)`, `IsLockedOut(x, y)` (a closed door they've no key for - what `DungeonMain` gives their collider); `Reset(startPosition)` (throws if the level has no player start), `SetSprite(animation)` (draw the player with another animation, keeping their position; a no-op for the one already in use), `Update(dt, seconds)` (input, movement, camera, doors, regions, pickups), `TakeShot(): Vec2Like \| null`, `Damage(n): boolean`, `Destroy()`. |
 | `Effects extends GameComponent` | `view/Effects` | `new Effects(camera)`; `Play(art, config, x, y): Emitter \| undefined` starts a particle effect at a position in world pixels (`art`: a sprite or animation name, `config`: an `EmitterConfig` or `OldEmitterConfig`; `undefined` after a one-off warning when `art` isn't loaded). Its layer sits in the camera root above the entities and shots, placed every frame like the entities layer (`view/helpers/EffectsPlacement`), and goes back on top on `LEVEL_CREATED`, which also drops the level's effects. Emitters update from `Tick` (only while shown); a finished one (not emitting, no particles) is destroyed, a continuous one runs until `emit = false`. `DungeonMain` attaches it - use `main.Effects`. |
-| `Hud extends GameComponent` | `view/Hud` | `new Hud(setup.hearts)`; `Render(health, gold, weaponIcon, inventory, keys)` - the keys panel shows each key's sprite and its id. Warns once per missing heart sprite. |
+| `Hud extends GameComponent` | `view/Hud` | `new Hud(setup.hearts?)`; `Render(health, gold, weaponIcon, inventory, keys)`. Built from the UI kit (a `UiPanel`, a `UiIconRow` of hearts, `UiItemSlot`s and `UiInventoryGrid`s, `UiText`) in the skin of the loaded `ui` bundle - the game must load it first. Hearts are the game's own pictures when `setup.hearts` gives them (enlarged 3x), else the skin's. The keys panel shows each key's sprite and its id. Warns once per missing sprite. |
 | `EntityRenderer` | `view/EntityRenderer` | `new EntityRenderer(camera, level)`; `Reset()` (call on `LEVEL_CREATED`), `Render(player, encounter)`. |
 
 ## Player input
@@ -1342,6 +1364,87 @@ new PlayerControl(playerId: number);   Get(): IPlayerInput        // a shared ob
 
 Keyboard: arrows or WASD, Space. Gamepad (only when no key is down): left stick moves, right stick fires/aims.
 `@logic-incubator/engine/input/StickInput`: `IsStickPushed(stick: Vec2Like | null): boolean` - a stick at rest is non-null but zero.
+
+---
+
+# ui
+
+`@logic-incubator/ui` - a skinnable Pixi UI kit: widgets, keyboard / gamepad / pointer focus navigation, and the asset bundle (art, bitmap fonts, a skin) they are drawn from. Depends on `lib` only
+(`engine` and `editor` may use it; it never imports them). Sizes are in UI pixels, which the skin makes `scale` screen pixels each (1 in the game skin). Methods are PascalCase like the rest.
+
+## UiLayer and ThemeFor
+
+`@logic-incubator/ui/UiLayer`.
+
+| Member | Meaning |
+| --- | --- |
+| `ThemeFor(game, bundle = "ui"): UiTheme` | The theme for the game's loaded UI bundle - its skin (checked against its art, problems logged) and the canvas as the host text fields sit over. Made once per game and kept. The bundle must be loaded. |
+| `default class UiLayer extends GameComponent` | `new UiLayer(options?)`; `Attach` it to a scene (or component) and put widgets in its `root`, which is scaled to the skin's `scale`. |
+| `UiLayerOptions` | `{ bundle?: string; wrap?: boolean; input?: boolean }`: the skin's bundle (`"ui"`); whether focus wraps round at the ends of the scope (on); whether the layer takes keys, pad and pointer focus (on - off makes a display-only layer like the HUD, whose widgets take no pointer either). |
+| `layer.Theme: UiTheme` | Available once the layer is initialised (attaching it to an initialised component does that). |
+| `layer.Ui: UiSystem` | The screen's focus and input; throws for a layer made with `input: false`. It listens only while the layer is shown. |
+
+## UiSystem
+
+`@logic-incubator/ui/input/UiSystem` - `new UiSystem(game, theme, layer: Container)`; a `UiLayer` makes one. Feeds the keyboard (via `game.keyboard` events), the first gamepad and the pointer into a
+`FocusManager`, keeps a focus ring on whatever has focus while the keyboard or pad is in use, and registers widgets.
+
+| Member | Meaning |
+| --- | --- |
+| `focus: FocusManager` | `Focused`, `FocusVisible`, `Focus(id \| null)`, `Move(direction)`, `PushScope/PopScope`, `ConfigureScope(options, id?)` (`{ wrap?, onCancel?, onTab?, initial? }` - `onCancel` of the root scope is what cancel does with nothing open: a game's pause), `Subscribe(listener)`. |
+| `Register(control, options?): () => void` | Makes a `UiControl` focusable: `{ id?, scope?, neighbours?, scroll? }`. Hovering focuses it (no ring), the arrows move to the nearest enabled one in that direction, accept presses it. `scroll` scrolls that `UiScrollView` to a control moved to. Returns what undoes it; destroying the control does too. |
+| `PushScope(id, options?)` / `PopScope(id)` | A modal takes over focus and cancel until it is popped; focus goes back to what had it. Register a modal's controls first (with `scope: id`), then push, so the first can be focused at once when the keyboard or pad is in use. |
+| `Track(widget: { Update(ms) }): () => void` | Calls `widget.Update(ms)` every frame while the system is active (dialogue typing, toasts, a text field's caret). |
+| `RegisterScroll(view): () => void` | The mouse wheel scrolls `view` while the pointer is over it. |
+| `BindTabs(tabs, scope?)` | The tab keys (Q and E, the pad's shoulder buttons) step through a `UiTabs`. |
+| `SetActive(active)` / `Destroy()` | Whether it listens (a scene's UI shouldn't answer keys while another scene is up); tear-down. |
+
+Keys: arrows and WASD move, Enter and Space accept, Escape and Backspace cancel, Q/E and Page Up/Down step tabs. Pad: d-pad and left stick move (past a dead zone of 0.5), A accepts, B and Start cancel, the
+shoulder buttons step tabs. Held directions repeat (350 ms, then every 120 ms).
+
+## Skin and UiTheme
+
+`@logic-incubator/ui/skin/Skin` (types), `skin/ParseSkin`, `skin/ValidateSkin`, `skin/ResolveFrames` (pure), `@logic-incubator/ui/UiTheme`.
+
+| Member | Meaning |
+| --- | --- |
+| `Skin` | `{ name, bundle, scale, metrics?, fonts, colours, buttons, panels, borderStyles, bars, checkboxes?, radios?, sliders?, scrollbars?, tabs?, fields?, slots?, tooltips?, dialogues?, toasts?, windows?, iconRows?, menus? }` - each a record of named variants. `assets/ui/data/skin.json` is the game skin; `ParseSkin` turns its `"#rrggbb"` colours into numbers. |
+| `Skin.metrics` | Spacings no frame or font sets, by name, in UI pixels: `iconGap`, `lineGap`, `slotGap`, `scrollGap`, `scrollMargin`, `scrollStep`, `caretWidth`, `caretMargin`, `tailMargin`, `tailOverlap`, `slide`, `bob`, `ringGap`, `ringThickness`. A skin may leave any out. |
+| `LoadSkin(assets, bundle = "ui"): Skin` | The data asset `<bundle>.skin`, parsed, with each nine-slice's insets taken from `<bundle>.frames` (the frame index the art tools write) unless the skin gives them. |
+| `GameUiAssets(assets, bundle): UiAssets` | The skin's frames and fonts as the game's loaded bundle has them. |
+| `ValidateLoadedSkin(skin, assets): string[]` / `ValidateSkin` | What is wrong with a skin: a missing frame or font, an inset that leaves nothing of its frame. Empty when fine. |
+| `new UiTheme(skin, assets, host?)` | `Scale`, `Texture(frame)`, `FontName(key)`, `FontSize(key)`, `Colour(name)`, `Metric(name, fallback)`; `host` is `{ view: HTMLCanvasElement }` (only `UiTextInput` needs it). |
+
+## Widgets
+
+`@logic-incubator/ui/widgets/<Name>`. Every widget is built from a theme and a skin variant (`new UiSlider(theme, "default", 280, options)`) and sizes itself from the skin. A `UiControl` is a `Container` with
+hover / pressed / disabled / focused states (`Enabled`, `Focused`, `State`, `Activate()`); its events are Pixi events: `activate` (a press completed by pointer or accept - not `click`, which Pixi emits itself),
+`focuschange`, `destroyed`. Pixi 5.2.1 doesn't announce a destroyed object, so `UiControl` and `UiScrollView` emit `destroyed` themselves; destroying a panel, window, menu or grid destroys what is in it.
+
+| Widget | Constructor and members | Events |
+| --- | --- | --- |
+| `UiButton extends UiControl` | `(theme, variant, text, { width?, height?, icon? })`; `ButtonWidth`, `ButtonHeight`, `SetLabel(text)`. Variants: primary, secondary, small, danger, confirm, icon. | `activate` |
+| `UiMenu` | `(theme, variant, labels, width?)` - a column of buttons; `Buttons`, `MenuWidth`, `MenuHeight`. | `activate (index, button)` |
+| `UiCheckbox`, `UiRadio` (+ `UiRadioGroup`) | `(theme, variant, label, checked = false)`; `Checked`. A group makes exactly one radio chosen: `new UiRadioGroup(radios, selected)`, `Selected`, `Select(i)`. | `change (checked)`; group: `change (radio, index)` |
+| `UiSlider` | `(theme, variant, length, { min, max, step, value, vertical })`; `Value`. Takes the arrows along its axis when focused. | `change (value)` |
+| `UiTabs` | `(theme, variant, labels, selected = 0)`; `Tabs`, `Selected`, `Select(i, notify?)`, `Step(-1 \| 1)`, `OnChange(listener)`. The page each tab stands for is the screen's. | via `OnChange` |
+| `UiScrollbar`, `UiScrollView` | `UiScrollView(theme, scrollbarVariant \| null, width, height)`: add to `content`, then `MeasureContent()`; `Scroll`, `ScrollTo`, `ScrollBy`, `EnsureVisible(item)`, `ContentWidth`, `Scrollable`. The view clips to its size. | `scrolled` |
+| `UiTextInput extends UiControl` | `(theme, variant, width, { placeholder?, maxLength?, allowed?: RegExp, label?, value? })`; `Value`, `Editing`, `Edit(index?)`, `EndEdit()`; `Track` it. A transparent native `<input>` over the field does the editing (IME, undo, clipboard are the browser's) and keeps typed keys from `game.keyboard`. Enter submits, Escape cancels. | `change (value)`, `submit`, `cancel`, `blur` |
+| `UiItemSlot extends UiControl`, `UiInventoryGrid` | `UiItemSlot(theme, variant)`: `SetItem({ texture, count?, label? } \| null)`, `Selected`, `SlotSize`; small art is enlarged by whole numbers to fill the slot. `UiInventoryGrid(theme, variant, columns, rows, gap?)`: `Slots`, `SetItems(items)`, `Select(i)`, `Selected`. | grid: `select (index)` |
+| `UiIconRow` | `(theme, variant, count, { textures?, scale?, gap? })` - hearts, orbs; `SetValue(value, max)`, `RowWidth`, `RowHeight`. `textures` are the game's own pictures in place of the skin's. | |
+| `UiProgressBar` | `(theme, kind, width, value = 0)`; `Value` (0 to 1). Kinds: hp, mp, xp, gold. | |
+| `UiPanel`, `UiWindow`, `UiBorder` | `UiPanel(theme, variant, width, height)`: add to `content`, `InnerWidth`, `InnerHeight`, `Resize`. `UiWindow(theme, variant, width, height, title)`: a panel with a title pill and a close button (`CloseButton`), `content`, `InnerWidth`. `UiBorder(theme, style, width)`: an ornamental line (thin, double, chain, dotted); `LineHeight`, `Resize`. | window: `close` |
+| `UiTooltip` | `(theme, variant)`; put it in the topmost layer. `Attach(target, content \| () => content): () => void` shows it after the skin's `delay` of the pointer resting (at once on keyboard focus) and hides it on leave or press; `ShowFor(target, { title?, text? }, bounds?)`, `Hide()`. | |
+| `UiDialogue extends UiControl` | `(theme, variant, width, height)`; `Say({ speaker?, text, portrait? })`, `Done`, `Skip()`; `Track` it. A press while typing shows the rest, a press after that emits `advance`. | `advance` |
+| `UiToastHost` | `(theme, variant, max = 4)`; `Push({ title, text?, kind?, seconds? }): () => void` (dismisses it), `Count`, `HostWidth`; `Track` it. A press dismisses a toast; the rest wait their turn. | |
+| `NineSlice`, `UiText` | `NineSlice(texture, { insets, edges?, centre? }, width, height)`: whole-pixel nine-slice `Resize`. `CreateText(theme, text, { font?, colour?, align?, maxWidth? })`, `CreateMeasure(theme, font?)`: bitmap text drawn at the skin font's size. | |
+
+## Pure rules
+
+Plain-Node modules the widgets are built on, each with unit tests: `geometry/SliceRects`, `geometry/BorderRects`, `widgets/ButtonLook`, `BarMath`, `SliderMath`, `ScrollMath`, `TextInputModel`, `Typewriter`
+(`Typewriter`, `WrapText`), `TooltipPlacement`, `ToastQueue`, `IconStates`, and `input/` `UiAction`, `KeyMap`, `PadMap`, `InputRepeater`, `UiInputCore`, `FocusManager`.
+
+The package's art tools (`packages/ui/tools`, run by plain node) are described in its README: extracting the art from the mockups, seeding derived states, the Aseprite template and slicer.
 
 ---
 

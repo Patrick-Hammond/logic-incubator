@@ -201,7 +201,7 @@ export default class UiTextInput extends UiControl {
         if (on) {
             const x = CaretX({ value: this.state.value, start: this.caretIndex, end: this.caretIndex }, this.measure) - this.scrollX;
             const y = Math.floor((this.skin.height - this.lineHeight) / 2);
-            this.caret.beginFill(this.skin.caretColour).drawRect(x, y, 1, this.lineHeight).endFill();
+            this.caret.beginFill(this.skin.caretColour).drawRect(x, y, this.theme.Metric("caretWidth", 2), this.lineHeight).endFill();
         }
     }
 
@@ -213,7 +213,7 @@ export default class UiTextInput extends UiControl {
         }
         this.state = next;
         this.caretIndex = caret === undefined ? next.end : caret;
-        this.scrollX = CaretScroll(CaretX({ value: next.value, start: this.caretIndex, end: this.caretIndex }, this.measure), this.innerWidth, this.scrollX);
+        this.scrollX = CaretScroll(CaretX({ value: next.value, start: this.caretIndex, end: this.caretIndex }, this.measure), this.innerWidth, this.scrollX, this.theme.Metric("caretMargin", 4));
         this.clock = 0;
         if (toNative && this.native) {
             this.native.value = next.value;

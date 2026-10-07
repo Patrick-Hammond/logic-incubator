@@ -1,7 +1,7 @@
 // Rebuilds the mockups' components as native pixel art for the UI bundle (see ../../../../.claude plan / the user guide's UI chapter): crops each region in
 // mockup-regions.json, floods the page background away, keeps the piece itself, shrinks it with nearest-neighbour sampling to the grain of the chosen UI
 // scale (an art pixel = scale game pixels = scale / mockupToGame mockup pixels), puts every piece on one shared palette and, where the region says how to slice
-// it, reduces a frame to a small nine-slice source. The PNGs it writes are a starting point to tidy by hand in the sprite editor.
+// it, reduces a frame to a small nine-slice source and draws that back out at the piece's own size. The PNGs it writes are a starting point to tidy by hand in the sprite editor.
 //
 //   node packages/ui/tools/extract-components.mjs --review            contact sheets of the raw art with a pixel grid (to choose slice insets); writes nothing else
 //   node packages/ui/tools/extract-components.mjs                    writes assets/ui/sprites/ui/<name>.png
@@ -12,7 +12,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DecodeImages } from "./lib/edge.mjs";
 import { FrameEntry, ReadFrames, WriteFrames } from "./lib/frames.mjs";
-import { ApplyPalette, BorderColour, BuildNineSlice, BuildPalette, ContactSheet, Crop, DownsampleNearest, KeepLargestComponent, RemoveBackground, TilePeriod, TrimToOpaque } from "./lib/image.mjs";
+import { ApplyPalette, BorderColour, BuildNineSlice, BuildPalette, ContactSheet, Crop, DownsampleNearest, KeepLargestComponent, RemoveBackground, RenderNineSlice, TilePeriod, TrimToOpaque } from "./lib/image.mjs";
 
 const require = createRequire(import.meta.url);
 const { PNG } = require("pngjs");
@@ -69,7 +69,7 @@ if (flag("review")) {
         } else if (region.border) {
             // A divider: left cap, a repeating middle, the centre ornament, right cap.
             const { cap, centre, mid } = region.border;
-            const period = TilePeriod(art, mid[0], mid[1]);
+            const period = TilePeriod(art, mid[0], mid[1], 32);
             finals.push({ name: region.name + "_cap_l", image: Crop(art, 0, 0, cap, art.height) });
             finals.push({ name: region.name + "_mid", image: Crop(art, mid[0], 0, period, art.height) });
             finals.push({ name: region.name + "_centre", image: Crop(art, centre[0], 0, centre[1], art.height) });
@@ -77,7 +77,11 @@ if (flag("review")) {
             console.log(`  ${region.name}: caps ${cap}, centre ${centre[1]} wide at ${centre[0]}, middle repeats every ${period}`);
         } else if (region.slice) {
             const [left, top, right, bottom] = region.slice.insets;
-            finals.push({ name: region.name, image: BuildNineSlice(art, { left, top, right, bottom }, region.slice.band || 2, region.slice.samples || {}, region.slice.centreFrom || null), insets: { left, top, right, bottom } });
+            const insets = { left, top, right, bottom };
+            // Reduced to its corners, an edge strip and a flat middle (so the labels and ornaments the mockup has in the middle of a frame don't come along) and, unless the
+            // config says "smallSlices", drawn back out at the mockup's own size: a whole frame to draw on, which the game stretches by its insets like any nine-slice.
+            const small = BuildNineSlice(art, insets, region.slice.band || 2, region.slice.samples || {}, region.slice.centreFrom || null);
+            finals.push({ name: region.name, image: config.smallSlices ? small : RenderNineSlice(small, insets, art.width, art.height), insets });
         } else {
             finals.push({ name: region.name, image: art });
         }

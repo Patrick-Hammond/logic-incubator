@@ -11,9 +11,6 @@ export type TooltipContent = {
     text?: string;
 };
 
-/** How far a tail's art overlaps the frame's edge, so the two join with no seam. */
-const TAIL_OVERLAP = 1;
-
 /**
  * A tooltip: a small framed note with an optional title and wrapped text, and a tail pointing at the thing it describes. It sits above that thing if there is room, below it
  * otherwise, and stays inside the bounds. Put it in the topmost layer, then either `ShowFor` something yourself or `Attach` it to a control, which shows it after the pointer
@@ -62,7 +59,8 @@ export default class UiTooltip extends Container {
         this.tails.down.visible = !place.below;
         this.tails.up.visible = place.below;
         const tail = place.below ? this.tails.up : this.tails.down;
-        tail.position.set(place.tailX - Math.floor(tail.texture.width / 2), place.below ? -(tail.texture.height - TAIL_OVERLAP) : this.frame ? this.frame.SliceHeight - TAIL_OVERLAP : 0);
+        const overlap = this.theme.Metric("tailOverlap", 2);
+        tail.position.set(place.tailX - Math.floor(tail.texture.width / 2), place.below ? -(tail.texture.height - overlap) : this.frame ? this.frame.SliceHeight - overlap : 0);
         this.visible = true;
     }
 
@@ -116,7 +114,7 @@ export default class UiTooltip extends Container {
             const title = CreateText(this.theme, content.title, { font: this.skin.titleFont, colour: this.skin.titleColour });
             title.position.set(pad.left, y);
             this.body.addChild(title);
-            y += Math.ceil(title.textHeight) + 2;
+            y += Math.ceil(title.textHeight) + this.theme.Metric("lineGap", 4);
             width = Math.max(width, title.textWidth);
         }
         if (content.text) {
@@ -149,7 +147,8 @@ export default class UiTooltip extends Container {
             { width: frame.SliceWidth, height: frame.SliceHeight },
             room,
             this.skin.gap,
-            this.tails.down.texture.height - TAIL_OVERLAP
+            this.tails.down.texture.height - this.theme.Metric("tailOverlap", 2),
+            this.theme.Metric("tailMargin", 12)
         );
     }
 

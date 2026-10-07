@@ -12,19 +12,20 @@ export default class UiInventoryGrid extends Container {
     readonly GridWidth: number;
     readonly GridHeight: number;
 
-    constructor(theme: UiTheme, variant: string, readonly Columns: number, readonly Rows: number, gap = 2) {
+    constructor(theme: UiTheme, variant: string, readonly Columns: number, readonly Rows: number, gap?: number) {
         super();
+        const between = gap === undefined ? theme.Metric("slotGap", 4) : gap;
         for (let i = 0; i < Columns * Rows; i++) {
             const slot = new UiItemSlot(theme, variant);
             const size = slot.SlotSize;
-            slot.position.set((i % Columns) * (size + gap), Math.floor(i / Columns) * (size + gap));
+            slot.position.set((i % Columns) * (size + between), Math.floor(i / Columns) * (size + between));
             slot.on("activate", () => this.Choose(i, true));
             this.slots.push(slot);
             this.addChild(slot);
         }
         const size = this.slots.length ? this.slots[0].SlotSize : 0;
-        this.GridWidth = Columns * size + (Columns - 1) * gap;
-        this.GridHeight = Rows * size + (Rows - 1) * gap;
+        this.GridWidth = Columns * size + (Columns - 1) * between;
+        this.GridHeight = Rows * size + (Rows - 1) * between;
     }
 
     get Slots(): ReadonlyArray<UiItemSlot> {

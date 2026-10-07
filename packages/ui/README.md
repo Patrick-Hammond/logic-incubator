@@ -11,7 +11,7 @@ game, or the editor later, can dress the same widgets differently. Depends on `l
 | `src/widgets/` | The widgets: `NineSlice`, `UiText`, `UiBorder`, `UiPanel`, `UiWindow`, `UiButton`, `UiMenu`, `UiCheckbox`, `UiRadio` (+ group), `UiSlider`, `UiTabs`, `UiScrollbar`, `UiScrollView`, `UiTextInput`, `UiItemSlot`, `UiInventoryGrid`, `UiTooltip`, `UiDialogue`, `UiToastHost`, `UiProgressBar`, `UiIconRow`. `UiControl` is what every pressable one shares |
 | | The pure rules behind them: `ButtonLook`, `BarMath`, `SliderMath`, `ScrollMath`, `TextInputModel`, `Typewriter`, `TooltipPlacement`, `ToastQueue`, `IconStates` |
 | `src/input/` | `UiAction`, `KeyMap`, `PadMap`, `InputRepeater`, `UiInputCore` (the keyboard and pad as one stream of actions) and `FocusManager` (who has focus and where an arrow goes) - all pure; `FocusRing` and `UiSystem` are the Pixi / browser side |
-| `src/UiTheme.ts` | A skin plus the art it names - what widgets are given |
+| `src/UiTheme.ts`, `src/UiLayer.ts` | A skin plus the art it names - what widgets are given - and `UiLayer`, a component that makes a scene's UI layer (theme, scaled root, focus and input) |
 | `assets/ui/` | The `ui` asset bundle: `sprites/ui/*.png` (one atlas, untrimmed), `fonts/*.fnt`, `data/skin.json`, `data/frames.json` |
 | `art/` | The Aseprite template and how to use it (see "Art") |
 | `design/` | The mockups the art was first rebuilt from |
@@ -20,20 +20,21 @@ game, or the editor later, can dress the same widgets differently. Depends on `l
 ## Using it in a game
 
 Add `{ "dir": "../logic-incubator/packages/ui/assets" }` to the game's `assets.config.json` roots, a `@logic-incubator/ui/*` path to its `tsconfig.json` (and an alias to
-`vitest.config.mts`), load the `ui` bundle, then:
+`vitest.config.mts`), load the `ui` bundle (`await game.assets.LoadBundle("ui")`), then put a `UiLayer` over a scene:
 
 ```ts
-const assets = GameUiAssets(game.assets, "ui");
-// The host ({ view }) is only needed by UiTextInput.
-const theme = new UiTheme(LoadSkin(game.assets), assets, { view: game.view });
-const layer = new Container();
-// Sizes are in UI pixels; the layer is drawn at the skin's whole-number scale.
-layer.scale.set(theme.Scale);
-const button = new UiButton(theme, "primary", "NEW GAME", { width: 150 });
+// In a GameComponent's OnInitialise:
+const layer = this.Attach(new UiLayer());
+// Sizes are in UI pixels; layer.root is drawn at the skin's whole-number scale.
+const button = new UiButton(layer.Theme, "primary", "NEW GAME", { width: 300 });
 button.on("activate", () => { /* ... */ });
-layer.addChild(button);
+layer.root.addChild(button);
+layer.Ui.Register(button);      // keyboard, gamepad and pointer focus
 ```
 
+Without a component to attach to, `ThemeFor(game)` gives the theme and `new UiSystem(game, theme, container)` the focus and input.
+
+The skin also has `metrics` - the few spacings no frame or font sets (a gap between a title and its text, the focus ring's thickness) - which widgets read with `theme.Metric(name, fallback)`.
 Widgets are built by skin variant (`new UiSlider(theme, "default", 110, { min: 0, max: 100, step: 5 })`) and emit Pixi events: `activate` for a press, `change` for a value,
 `select`, `advance`, `close`, `submit`. The game's `UiGallery` scene (dev builds, `#ui` on the page address; Q and E change page) shows every widget and is the best
 reference for how each is used.
@@ -60,7 +61,7 @@ into a `FocusManager`. Held directions repeat (350 ms, then every 120 ms).
 ## Art
 
 The art is meant to be drawn by hand: the pieces extracted from the mockups are a starting point (some are rough), and a hand-drawn `ui.aseprite` is the real source. One
-pixel is one UI pixel (the UI is drawn at 2x).
+pixel is one screen pixel (the skin's `scale` is 1, so the UI is drawn at 1x on the 1280x720 canvas; a skin can ask for 2x or more). Nine-slice frames are stored full size - a whole button, a whole panel - with the corners marked by their insets in `data/frames.json`; they can be cut down to a corner, an edge strip and a flat middle later.
 
 Open `art/ui-template.png` in Aseprite, run `art/ui-template.lua` (it adds a named slice, with a nine-patch centre where the frame stretches, for each piece and saves
 `ui.aseprite`), draw inside the slices, then slice it back. `art/README.md` has the detail. The Lua script and the command-line export follow Aseprite's documented
@@ -78,7 +79,7 @@ The tools that produced the first art:
 | `node packages/ui/tools/extract-components.mjs --review` | Contact sheets of the raw art with a pixel grid, to choose slice insets |
 | `node packages/ui/tools/extract-components.mjs` | Writes `assets/ui/sprites/ui/*.png` from `tools/mockup-regions.json` (`--only=a,b` for just those) |
 | `node packages/ui/tools/seed-art.mjs` | Adds the frames the mockups don't show (hover / pressed / disabled looks, thumbs, arrows...) where there is no sprite yet |
-| `node packages/ui/tools/ui-scale-preview.mjs` | The 2x / 3x / 4x comparison previews (`tools/out/`) |
+| `node packages/ui/tools/ui-scale-preview.mjs` | The 2x / 3x / 4x comparison previews (`tools/out/`; from when the scale was being chosen) |
 | `node packages/ui/tools/convert-bmfont.mjs <font.fnt>` | A BMFont text export to the XML `.fnt` Pixi 5.2.1 reads, plus a white page (`assets/ui/fonts`) |
 
 `extract-components` crops each region, floods the page background away, keeps the piece, shrinks it with nearest-neighbour sampling, maps everything onto one shared palette
@@ -88,7 +89,7 @@ out of `mockup-regions.json`).
 
 ## Fonts
 
-The skin's fonts are the game's `wonky_small` / `wonky_medium` / `wonky_huge` (20, 60 and 120 px). A font is drawn at the skin's `size` in UI pixels - 10, 30 and 60, which is
-1:1 on a 1280x720 canvas at the 2x UI scale - so a font made for the full-size canvas needs no other change. Button labels are given at run time; none of the mockups'
+The skin's fonts are the game's `wonky_small` / `wonky_medium` / `wonky_huge` (20, 60 and 120 px). A font is drawn at the skin's `size` in UI pixels - 20, 60 and 120, which is
+1:1 on a 1280x720 canvas at the 1x UI scale - so a font made for the full-size canvas needs no other change. Button labels are given at run time; none of the mockups'
 baked-in text is used (frames are built from corners and edge strips only, and a frame's flat middle is sampled away from any label - see `centreFrom` in
 `mockup-regions.json`).

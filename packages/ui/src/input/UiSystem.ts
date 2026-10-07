@@ -46,7 +46,7 @@ export default class UiSystem {
         this.core = new UiInputCore((action, source) => this.OnAction(action, source));
 
         const colour = theme.skin.colours.focus;
-        this.ring = new FocusRing(layer, colour === undefined ? FALLBACK_FOCUS_COLOUR : colour);
+        this.ring = new FocusRing(layer, colour === undefined ? FALLBACK_FOCUS_COLOUR : colour, theme.Metric("ringGap", 2), theme.Metric("ringThickness", 2));
         layer.addChild(this.ring);
         this.cleanups.push(this.ring.Follow(this.focus));
 

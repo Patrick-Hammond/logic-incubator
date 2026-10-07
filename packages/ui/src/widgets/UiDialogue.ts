@@ -35,7 +35,7 @@ export default class UiDialogue extends UiControl {
     private clock = 0;
     private hasPortrait = false;
 
-    constructor(theme: UiTheme, variant: string, readonly BoxWidth: number, readonly BoxHeight: number) {
+    constructor(private readonly theme: UiTheme, variant: string, readonly BoxWidth: number, readonly BoxHeight: number) {
         super();
         const skin = theme.skin.dialogues && theme.skin.dialogues[variant];
         if (!skin) {
@@ -74,7 +74,7 @@ export default class UiDialogue extends UiControl {
         this.speakerName.visible = !!line.speaker;
         this.speakerName.position.set(left, top);
         if (line.speaker) {
-            top += Math.ceil(this.speakerName.textHeight) + 2;
+            top += Math.ceil(this.speakerName.textHeight) + this.theme.Metric("lineGap", 4);
         }
         this.wrapped = WrapText(line.text, width, this.measure);
         this.body.text = "";
@@ -107,7 +107,7 @@ export default class UiDialogue extends UiControl {
         this.clock += ms;
         if (this.arrow.visible) {
             const pad = this.skin.padding;
-            this.arrow.y = this.BoxHeight - pad.bottom - this.arrow.texture.height + (Math.floor(this.clock / ARROW_BOB_MS) % 2);
+            this.arrow.y = this.BoxHeight - pad.bottom - this.arrow.texture.height + (Math.floor(this.clock / ARROW_BOB_MS) % 2) * this.theme.Metric("bob", 2);
         }
     }
 

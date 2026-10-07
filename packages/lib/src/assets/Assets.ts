@@ -345,6 +345,13 @@ export default class Assets extends EventEmitter {
         adapter.Play(id, options);
     }
 
+    /** How loud a sound is, 0 to 1 - what a volume setting does to the sounds it covers. Nothing happens for one that isn't loaded. */
+    SetSoundVolume(id: SoundId, volume: number): void {
+        if (this.sound && !this.destroyed) {
+            this.sound.SetVolume(id, volume);
+        }
+    }
+
     StopSound(id: SoundId): void {
         this.playing.delete(id);
         if (this.sound && !this.destroyed) {

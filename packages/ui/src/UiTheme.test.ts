@@ -38,6 +38,13 @@ describe("UiTheme", () => {
         expect(theme.FontSize("heading")).toBe(14);
     });
 
+    it("gives a metric the skin sets, and the widget's own default for one it leaves out", () => {
+        const spaced = new UiTheme({ ...skin, metrics: { lineGap: 6 } }, assets({}, []));
+        expect(spaced.Metric("lineGap", 4)).toBe(6);
+        expect(spaced.Metric("slotGap", 4)).toBe(4);
+        expect(theme.Metric("lineGap", 4)).toBe(4);
+    });
+
     it("says which skin lacks a colour or font it was asked for", () => {
         expect(() => theme.Colour("nope")).toThrow('The "test" skin has no colour "nope".');
         expect(() => theme.FontName("fancy")).toThrow('The "test" skin has no font "fancy".');

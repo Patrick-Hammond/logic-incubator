@@ -18,7 +18,6 @@ export type ToastRequest = {
 type ToastView = { request: ToastRequest; view: Container; height: number };
 
 const FADE_MS = 220;
-const SLIDE_PIXELS = 12;
 
 /**
  * Where toast notifications appear: a column of small framed notes at its origin, newest at the bottom, each sliding in and fading out. `Push` adds one (the rest wait if
@@ -87,7 +86,7 @@ export default class UiToastHost extends Container {
             const shown = ToastOpacity(active.phase, active.progress);
             view.alpha = shown;
             // Slides in from the right as it appears and drifts back the way as it leaves.
-            view.position.set(Math.round((1 - shown) * SLIDE_PIXELS), y);
+            view.position.set(Math.round((1 - shown) * this.theme.Metric("slide", 24)), y);
             y += height + this.skin.gap;
         });
     }
@@ -107,8 +106,9 @@ export default class UiToastHost extends Container {
         const parts: Container[] = [title];
         if (request.text) {
             const text = CreateText(this.theme, WrapText(request.text, inner, this.measure), { font: this.skin.textFont, colour: this.skin.textColour });
-            text.position.set(pad.left, y + 2);
-            y += 2 + Math.ceil(text.textHeight);
+            const gap = this.theme.Metric("lineGap", 4);
+            text.position.set(pad.left, y + gap);
+            y += gap + Math.ceil(text.textHeight);
             parts.push(text);
         }
         const height = y + pad.bottom;

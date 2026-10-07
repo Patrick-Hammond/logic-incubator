@@ -56,4 +56,6 @@ export interface ISoundAdapter {
     Play(alias: string, options?: SoundPlayOptions): void;
     /** Stops every playing instance of `alias`. Safe if it isn't registered. */
     Stop(alias: string): void;
+    /** Sets how loud `alias` is, 0 to 1, for what is playing now and what plays later (on top of a play's own `volume`). Safe if it isn't registered. */
+    SetVolume(alias: string, volume: number): void;
 }

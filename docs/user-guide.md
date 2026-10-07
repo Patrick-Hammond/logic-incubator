@@ -19,25 +19,27 @@ input, tweening, the dungeon engine and the level editor, with worked examples. 
 11. [Testing](#11-testing)
 12. [Conventions and working on the workspace](#12-conventions-and-working-on-the-workspace)
 13. [Troubleshooting](#13-troubleshooting)
+14. [The UI kit](#14-the-ui-kit)
 
 ---
 
 ## 1. What logic-incubator is
 
 logic-incubator is the shared code that small browser games are built on. It is **not an application**: there is
-nothing to run in this repository. It is an npm workspace of three packages whose dependencies only point down:
+nothing to run in this repository. It is an npm workspace of four packages whose dependencies only point down:
 
 ```
-editor  ->  engine  ->  lib
+editor  ->  engine  ->  ui  ->  lib        (the editor may use ui too)
 ```
 
 | Package | Import prefix | What it is |
 | --- | --- | --- |
 | `packages/lib` | `@logic-incubator/lib/...` | The game framework: `Game`, scenes and components, the asset bundle system and its build, input, tweening, a tilemap renderer, small utilities. Knows nothing about any particular game. |
 | `packages/engine` | `@logic-incubator/engine/...` | A top-down tile dungeon engine: the level format, level loading, lighting, doors, regions, the player, monsters and combat, the HUD. |
+| `packages/ui` | `@logic-incubator/ui/...` | A skinnable Pixi UI kit: widgets (buttons, menus, windows, sliders, text fields, inventory, tooltips, dialogue, toasts...), keyboard / gamepad / pointer focus navigation, and its own art, bitmap fonts and skin. See [chapter 14](#14-the-ui-kit). |
 | `packages/editor` | `@logic-incubator/editor/...` | A browser level editor for the engine's level format, with its own icons and font. |
 
-A game that only needs the framework (a puzzle game, say) uses `lib`. A dungeon crawler uses all three.
+A game that only needs the framework (a puzzle game, say) uses `lib`. A dungeon crawler uses all four (the engine's HUD is drawn with the UI kit).
 
 ### How games consume it
 
@@ -105,6 +107,11 @@ logic-incubator/
     engine/
       src/                   DungeonMain, level/, view/, input/, Events, Constants
       scripts/               asset-meta-plugin.js (a build plugin)
+    ui/
+      src/                   skin/ (skin file, validation), widgets/, input/ (keys, pad, focus), UiLayer, UiTheme
+      assets/ui/             the kit's art, bitmap fonts and skin, as an asset bundle
+      art/                   the Aseprite template for the art
+      tools/                 the art tools (extract, seed, slice) - plain Node
     editor/
       src/                   DungeonEditor, stores, views, map generators
       assets/editor/         the editor's icons and bitmap font, as an asset bundle
@@ -1021,6 +1028,12 @@ game.assets.StopSound("global.theme");                           // also cancels
 `StopSound` before a sound has loaded cancels the pending play: a title screen that is hidden before its music arrived
 will not start the music behind the next scene.
 
+A volume setting is `SetSoundVolume`, which sets how loud a sound is for what is playing now and what plays later (0 to 1, on top of a play's own `volume`):
+
+```ts
+game.assets.SetSoundVolume("global.theme", settings.music / 100);   // the music slider
+```
+
 `pixi-sound` keeps one process-wide library, so aliases outlive a `Game`. The adapter removes the sounds a game
 registered when it is destroyed - and, if a sound is still being decoded at that moment, waits for the decode to finish
 before destroying it (pixi-sound throws from inside the browser's audio callback otherwise).
@@ -1366,7 +1379,8 @@ DungeonMain (a scene)
  ├─ Camera            follows the player; handles height zoom
  ├─ TileMapView       draws the level's tile layers, lit and banded by height
  ├─ Effects           particle effects over the world (`main.Effects.Play`)
- ├─ Hud               hearts, gold, equipped weapon, inventory
+ ├─ Hud               hearts, gold, equipped weapon, inventory (built from the UI kit)
+ ├─ overlay?          the game's own UI over everything: a pause menu, a death screen
  ├─ Player            input, movement, shooting, taking hits
  ├─ Encounter         spawners, monsters, projectiles (pure logic, no pixi)
  ├─ EntityRenderer    draws the player, monsters and shots
@@ -1374,7 +1388,8 @@ DungeonMain (a scene)
 ```
 
 `DungeonMain.OnShow` loads the level (asking `LevelAssets` to get its bundle ready first) and starts playing;
-`PLAYER_DIED` restarts it after 1.5 s. You rarely touch the parts directly - you configure `DungeonMain`.
+`PLAYER_DIED` restarts it after 1.5 s (or waits for you, with `manualRestart`). You rarely touch the parts directly - you configure `DungeonMain`.
+The HUD and any `overlay` are drawn with the [UI kit](#14-the-ui-kit), so a game loads the `ui` bundle before the dungeon is created.
 
 ### 9.2 Booting a dungeon game
 
@@ -1420,6 +1435,8 @@ export function Dungeon(): () => void {
 | `player` | `PlayerSetup`: the player's look, hit points, hearts and weapons ([9.3](#93-the-player)). |
 | `level` | `() => LevelFile \| undefined`. Called on every start/restart. In a dev build return the editor's latest save first (`editor.savedLevel() \|\| shipped`). |
 | `levelBundle?` | `() => string \| undefined`. The asset bundle the level plays in. Loaded (with its dependencies) *before* the level is built; the previous one is released after. |
+| `overlay?` | `(main: DungeonMain) => GameComponent`. Called once; what it returns is attached above the HUD and kept with the scene. It gets the scene so it can `Pause()`, `Resume()` and `Restart()` it, and listens to `PLAYER_DIED` and the other events. This is how a game adds a pause menu and a death screen without the engine knowing what they look like. |
+| `manualRestart?` | `boolean`. A death holds everything still until `main.Restart()` is called, instead of restarting by itself 1.5 s later - for a game whose `overlay` offers a choice (try again, quit). |
 | `playerSprite?` | `() => string \| undefined`. Called on every start/restart; the animation it returns is what the player is drawn with, in place of `player.sprite`. Return `undefined` for the default. This is how a character select screen's pick reaches the game: keep the chosen character in your boot code (listen for the event your screen emits) and return their run animation. |
 
 The engine uses a fixed coordinate system from `@logic-incubator/engine/Constants`: a 1280x720 canvas, 16 px tiles, a
@@ -2062,3 +2079,67 @@ the status bar never said the build had packed it, look at the dev server's cons
 
 **A bundle never unloads.** Something still holds a handle (`Acquire` without `Release`), another bundle depends on it, or
 it was loaded with `LoadBundle` (pinned). `game.assets.Stats()` shows each bundle's `refs` and `pinned`.
+
+---
+
+## 14. The UI kit
+
+`@logic-incubator/ui` is a skinnable Pixi UI kit: buttons, menus, windows, sliders, checkboxes, tabs, scroll views, text fields, inventory slots, tooltips, dialogue boxes, toasts, progress bars and icon rows, with
+keyboard, gamepad and mouse navigation that works the same on all of them. It depends on `lib` only; the engine's HUD is built from it. Signatures are in the [API reference](api-reference.md#ui).
+
+### 14.1 Setting a game up
+
+1. Add the kit's asset bundle as a root in `assets.config.json` and its path to `tsconfig.json` (and an alias to `vitest.config.mts`):
+
+   ```json
+   { "roots": [{ "dir": "assets" }, { "dir": "../logic-incubator/packages/ui/assets" }] }
+   ```
+
+2. Load the bundle at boot, next to `global`: `await game.assets.LoadBundle("ui")`.
+3. Put a `UiLayer` over a scene and build widgets from its theme:
+
+```ts
+class TitleScreen extends GameComponent {
+    protected OnInitialise(): void {
+        const layer = this.Attach(new UiLayer());          // owns this screen's keyboard / pad / pointer focus
+        const menu = new UiMenu(layer.Theme, "main", ["NEW GAME", "CONTINUE", "OPTIONS"], 360);
+        menu.Buttons[1].Enabled = false;
+        menu.on("activate", (index: number) => { /* 0 = new game ... */ });
+        layer.root.addChild(menu);                          // layer.root is laid out in UI pixels
+        menu.Buttons.forEach((button, i) => layer.Ui.Register(button, { id: "menu" + i }));
+    }
+}
+```
+
+A layer's input listens only while its scene is shown. A layer made with `new UiLayer({ input: false })` just shows things (the HUD).
+
+### 14.2 Focus, modals and the pause menu
+
+Registered controls form the focus order: the first arrow, d-pad or stick press focuses the first, then each moves to the nearest enabled one in that direction (wrapping at the ends), accept presses it,
+and a ring is drawn round the focused control while the keyboard or pad is in use (the pointer moving hides it; hovering still focuses). A slider takes left and right itself.
+
+A modal - an options window, a pause menu - registers its controls in a scope of its own and pushes it; only those can be reached, cancel (Escape, B) runs the scope's `onCancel`, and focus goes back when it is popped:
+
+```ts
+controls.forEach((control, i) => ui.Register(control, { scope: "options", id: "options" + i }));
+ui.PushScope("options", { onCancel: close });      // register first, so focus can land on the first control at once
+// ...
+ui.PopScope("options");
+```
+
+What cancel does with nothing open is the root scope's `onCancel` - `ui.focus.ConfigureScope({ onCancel: () => OpenPause() })` is how `in-dungeons-we-dwell` pauses (Escape, B or the pad's Start).
+Anything that animates (a dialogue typing, toasts, a text field's caret) is given to `ui.Track(widget)`; the mouse wheel is given to a scroll view with `ui.RegisterScroll(view)`.
+
+### 14.3 Skins, scale and the art
+
+Nothing in a widget fixes a size, colour, font or frame: it comes from the skin (`assets/ui/data/skin.json`): the `scale` (whole screen pixels per UI pixel - 1 for the game skin, so art pixels are screen pixels),
+the fonts (the game's `wonky_*` bitmap fonts, drawn at their native size), colours, each widget's frames and padding, and `metrics` for the few spacings no frame says. A different skin - 2x, or a compact one for tools -
+re-dresses the same widgets.
+
+The art is **full-size nine-slice frames**: a whole button, a whole panel, with each frame's corner insets recorded in `data/frames.json`; the game stretches the edges and middle to fit. (They can be cut down to a corner,
+an edge strip and a flat middle later to save space.) `packages/ui/art/` has an Aseprite template of every frame, laid out on one sheet with a slice per piece; draw there, then run
+`node packages/ui/tools/slice-sheet.mjs --aseprite=<Aseprite.exe> packages/ui/art/ui.aseprite` to write the sprites and `frames.json` back. Run `npm run assets` in the game after changing art so the atlas is rebuilt.
+
+### 14.4 The gallery
+
+`in-dungeons-we-dwell` has a `UiGallery` scene (`#ui` on the dev build's address; Q and E change page) that shows every widget in the current skin - the place to look at a skin or art change, and the best reference for how each widget is used.

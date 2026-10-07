@@ -106,6 +106,7 @@ class FakeSound implements ISoundAdapter {
     aliases = new Set<string>();
     played: { alias: string; options?: unknown }[] = [];
     stopped: string[] = [];
+    volumes = new Map<string, number>();
     removed: string[] = [];
     unsupported = new Set<string>();
     Pick(urls: string[]) {
@@ -126,6 +127,9 @@ class FakeSound implements ISoundAdapter {
     }
     Stop(alias: string) {
         this.stopped.push(alias);
+    }
+    SetVolume(alias: string, volume: number) {
+        this.volumes.set(alias, volume);
     }
 }
 
@@ -422,6 +426,11 @@ describe("sounds", () => {
     it("plays a loaded sound straight away", async () => {
         await assets.PlaySound("global.click", { loop: true });
         expect(sound.played).toEqual([{ alias: "global.click", options: { loop: true } }]);
+    });
+
+    it("sets how loud a sound is", async () => {
+        assets.SetSoundVolume("global.click", 0.4);
+        expect(sound.volumes.get("global.click")).toBe(0.4);
     });
 
     it("loads a lazy sound the first time it's played", async () => {

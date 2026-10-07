@@ -16,19 +16,21 @@ export default class UiScrollView extends Container {
     private contentHeight = 0;
     private scroll = 0;
     private readonly viewWidth: number;
+    private readonly margin: number;
 
     constructor(theme: UiTheme, scrollbar: string | null, readonly ViewWidth: number, readonly ViewHeight: number) {
         super();
         const skin = scrollbar && theme.skin.scrollbars ? theme.skin.scrollbars[scrollbar] : null;
         const thickness = skin ? skin.thickness : 0;
-        this.viewWidth = ViewWidth - (thickness ? thickness + 2 : 0);
+        this.viewWidth = ViewWidth - (thickness ? thickness + theme.Metric("scrollGap", 4) : 0);
+        this.margin = theme.Metric("scrollMargin", 8);
         this.clip.beginFill(0xffffff).drawRect(0, 0, this.viewWidth, ViewHeight).endFill();
         this.content.mask = this.clip;
         this.addChild(this.content, this.clip);
 
         this.bar = scrollbar ? new UiScrollbar(theme, scrollbar, ViewHeight) : null;
         if (this.bar) {
-            this.bar.position.set(this.viewWidth + 2, 0);
+            this.bar.position.set(ViewWidth - thickness, 0);
             this.bar.on("scroll", (scroll: number) => this.ApplyScroll(scroll, false));
             this.addChild(this.bar);
         }
@@ -81,7 +83,7 @@ export default class UiScrollView extends Container {
     }
 
     /** Scrolls the least that shows `item` (a child of the content), with a little room to spare: what moving focus onto an item that is out of view does. */
-    EnsureVisible(item: DisplayObject, margin = 4): void {
+    EnsureVisible(item: DisplayObject, margin = this.margin): void {
         // The item's top and bottom in the content's own coordinates (which don't move as it scrolls).
         const bounds = item.getBounds();
         const top = this.content.toLocal(new Point(bounds.x, bounds.y)).y;

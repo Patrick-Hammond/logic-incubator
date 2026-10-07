@@ -3,7 +3,7 @@ import FocusManager, { FocusRect } from "./FocusManager";
 
 /**
  * The outline drawn round whatever has focus, while the keyboard or pad is in use. It sits in the UI layer (so it is in UI pixels and scales with it) and is
- * drawn as four one-pixel bars on whole pixels - a stroked line would be half on and half off the pixel grid and blur. It follows the item every frame, since a
+ * drawn as four bars on whole pixels - a stroked line would be half on and half off the pixel grid and blur. It follows the item every frame, since a
  * widget can move or animate, and pulses a little so it can be found.
  */
 export default class FocusRing extends Graphics {
@@ -12,7 +12,7 @@ export default class FocusRing extends Graphics {
     private time = 0;
     private lastKey = "";
 
-    constructor(private readonly layer: Container, private readonly colour: number, private readonly gap = 1) {
+    constructor(private readonly layer: Container, private readonly colour: number, private readonly gap = 2, private readonly thickness = 2) {
         super();
         this.visible = false;
     }
@@ -55,10 +55,11 @@ export default class FocusRing extends Graphics {
         this.lastKey = key;
         this.clear();
         this.beginFill(this.colour);
-        this.drawRect(x0, y0, x1 - x0, 1);
-        this.drawRect(x0, y1 - 1, x1 - x0, 1);
-        this.drawRect(x0, y0 + 1, 1, y1 - y0 - 2);
-        this.drawRect(x1 - 1, y0 + 1, 1, y1 - y0 - 2);
+        const t = this.thickness;
+        this.drawRect(x0, y0, x1 - x0, t);
+        this.drawRect(x0, y1 - t, x1 - x0, t);
+        this.drawRect(x0, y0 + t, t, y1 - y0 - 2 * t);
+        this.drawRect(x1 - t, y0 + t, t, y1 - y0 - 2 * t);
         this.endFill();
     }
 }
