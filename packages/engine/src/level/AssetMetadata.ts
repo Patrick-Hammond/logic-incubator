@@ -26,9 +26,12 @@ export type DoorValue = { id: number; open: boolean };
 /**
  * The level editor's palette tabs, in order. A sprite's `category` in assets-meta.json picks its tab;
  * one without a category is listed under `misc`. `user` is for content the game's own users add -
- * nothing is in it until a sprite is tagged so.
+ * nothing is in it until a sprite is tagged so. `floor` and `walls` are the only tiles a floor or walls
+ * layer takes (see `TileLayerKind`); everything else of the dungeon's own is under `dungeon`.
  */
 export const AssetCategories = [
+    { id: "floor", name: "Floor" },
+    { id: "walls", name: "Walls" },
     { id: "dungeon", name: "Dungeon" },
     { id: "entities", name: "Entities" },
     { id: "weapons", name: "Weapons" },

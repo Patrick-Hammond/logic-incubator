@@ -1147,7 +1147,8 @@ type Brush = {
     data: DataBrushValue;    // null on a tile unless it overrides a light/spawner value
 };
 
-type LevelLayer = { id: number; name: string; isData: boolean };
+type TileLayerKind = "floor" | "walls";   // the editor's: a floor/walls layer takes only that category's tiles
+type LevelLayer = { id: number; name: string; isData: boolean; kind?: TileLayerKind };
 
 type LevelFile = {
     editorData: { layers: LevelLayer[] };
@@ -1167,7 +1168,7 @@ const AssetCategories: readonly [
     { id: "dungeon"; name: "Dungeon" }, { id: "entities"; name: "Entities" }, { id: "weapons"; name: "Weapons" },
     { id: "items"; name: "Items" }, { id: "misc"; name: "Misc" }, { id: "user"; name: "User" },
 ];                                                  // the editor palette's tabs, in order
-type AssetCategory = "dungeon" | "entities" | "weapons" | "items" | "misc" | "user";
+type AssetCategory = "floor" | "walls" | "dungeon" | "entities" | "weapons" | "items" | "misc" | "user";
 const DefaultAssetCategory: AssetCategory = "misc";   // where a sprite with no category is listed
 IsAssetCategory(value: unknown): value is AssetCategory
 
@@ -1576,7 +1577,7 @@ Both extend lib's `Store`.
 `DATA_BRUSH_INC`, `DATA_BRUSH_DEC`, `SET_DATA_BRUSH_VALUE`, `ZOOM_IN`, `ZOOM_OUT`, `MOUSE_BUTTON`, `CHANGE_SCENE`, `RESET`, `DUPLICATE_LAYER`, `REFRESH`, ...),
 `const enum EditorTool { BRUSH = "brush", ERASE = "erase", DATA_SELECT = "data-select", STAMP = "stamp", DROPPER = "dropper", FILL = "fill", MOVE = "move" }`,
 `const enum MouseButtonState { LEFT_DOWN, RIGHT_DOWN, UP, MIDDLE_DOWN }`, `IMPLICIT_LAYER_ID = -99999` (the always-present `attributes` data layer),
-`MaxEditableLayers = 16`, `EditableLayerCount(layers)`, `ToolFitsLayer(tool, layer)` (data-select is only usable with a data layer selected - the store switches back to the brush when it isn't, and the toolbar hides its button), `type DataBrush = { name; colour; value }`, `type DataBrushIcons = { readonly [K in DataBrushName]?: string }`,
+`MaxEditableLayers = 16`, `EditableLayerCount(layers)`, `DefaultTileLayerKinds` (`["floor", "walls"]`), `WithDefaultLayers(layers)` (adds "attributes" and a floor and a walls layer if missing, and selects the floor if nothing is; the store applies it on every action and load), `NextTileLayerId(layers)`, `IsRemovableLayer(layers, layer)` (not "attributes", nor the last floor or walls layer), `ADD_LAYER` takes an optional `kind`, `ToolFitsLayer(tool, layer)` (data-select is only usable with a data layer selected - the store switches back to the brush when it isn't, and the toolbar hides its button), `type DataBrush = { name; colour; value }`, `type DataBrushIcons = { readonly [K in DataBrushName]?: string }`,
 `DataBrushIcon(icons, name)`, `interface IEditorState`.
 
 `@logic-incubator/editor/stores/LevelDataStore` - `default class LevelDataStore` (the painted brushes): `type Layer = LevelLayer & { selected; visible }`,
@@ -1602,7 +1603,7 @@ Used by the editor's own views; available for editor extensions.
 | `ui/dialog/FormDialog` | `OpenFormDialog(options: FormDialogOptions): Promise<FormValues \| null>`, `IsFormDialogOpen()`; field specs `NumberField`, `TextField`, `ColourField`, `ToggleField`, `ChoiceField` (exactly one option), `MultiChoiceField` (`FieldSpec`), `ChoiceOption`; any field can have `visibleWhen(values)` to show only while it applies to the other values (a pickup's key id only for a key); `IsFieldVisible(field, values)`; options may set `saveLabel` and `cancelLabel` (`null` leaves Cancel out - a message with just an OK, which the sprite editor uses for alerts and confirms) |
 | `DataBrushEditors` | `DataBrushEditorFor(name): DataBrushEditor \| undefined` - the dialog definitions for editing a value: `"light"`, `"spawner"`, `"pickup"` (the `PICKUP` brush's name - the same popup for the brush and for a tile that gives one), `"door"` (a door tile's lock: a Locked checkbox that reveals its key id) and the height. `EditorImages` carries the lookups they need from the game's art (`monster`, `hasSprite`) |
 | `DataLabels` | `PickupLabel(pickup)`, `MapLabel(value)` (the short tag drawn over a value on the attributes overlay: `G10`, `H2`, `K3`, `W`, `I`, `L3` for a locked door - an unlocked one has no tag...; only characters the bitmap font has), `DescribePickup(pickup)`, `DescribeLock(lock)` (pure) |
-| `views/PaletteCategories` | `type TileSet = { id: AssetCategory; name; brushes: string[] }`; `GroupByCategory(names, categoryOf): TileSet[]` (one set per category, in `AssetCategories` order, empty ones included, each sorted by name); `EmptyTabHint(id, canCreate?): string` (pure); `EmptyTabHint(id, canCreate?)` mentions the tab's + when the sprite editor is available |
+| `views/PaletteCategories` | `type TileSet = { id: AssetCategory; name; brushes: string[] }`; `GroupByCategory(names, categoryOf): TileSet[]` (one set per category, in `AssetCategories` order, empty ones included, each sorted by name); `EmptyTabHint(id, canCreate?): string` (pure); `ShowsCategory(kind, category)` (a floor/walls layer shows only its own tab, any other tile layer all but those two); `TakesCategory(kind, category)` (a floor/walls layer paints only its own category, a generic one anything); `EmptyTabHint(id, canCreate?)` mentions the tab's + when the sprite editor is available |
 | `tools/ToolGeometry` | `SpanRect(a, b)`, `RectCells(rect, border?)`, `InRect(rect, x, y)`, `FloodFill(start, bounds, keyAt)`, `TopmostBrushAt(...)` (a brush is only at its anchor cell), `TopmostBrushCovering(brushes, layers, cell, footprintOf, accept?)` (a brush is on top at every cell of its footprint - what the data-select tool uses, so a 2x2 spawner or door is the target wherever it's clicked), `BoundsOfCells(cells)`, `type CellRect` |
 
 ## Sprite editor

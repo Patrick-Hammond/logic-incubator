@@ -3,7 +3,7 @@ import { Scenes } from "@logic-incubator/engine/Constants";
 import { TEST_MONSTERS } from "@logic-incubator/engine/level/__fixtures__/TestMonsters";
 import MonsterRoster from "@logic-incubator/engine/level/entities/MonsterRoster";
 import { DataBrushName } from "@logic-incubator/engine/level/LevelFormat";
-import EditorStore, { DataBrushIcon, EditableLayerCount, EditorActions, EditorTool, IMPLICIT_LAYER_ID, MouseButtonState, ToolFitsLayer } from "./EditorStore";
+import EditorStore, { DataBrushIcon, EditableLayerCount, EditorActions, EditorTool, IMPLICIT_LAYER_ID, IsRemovableLayer, MouseButtonState, ToolFitsLayer } from "./EditorStore";
 
 MonsterRoster.inst.Load(TEST_MONSTERS);
 
@@ -16,7 +16,8 @@ describe("EditorStore implicit layer", () => {
         const store = new EditorStore();
         expect(implicitLayers(store)).toHaveLength(1);
         expect(implicitLayers(store)[0].isData).toBe(true);
-        expect(EditableLayerCount(store.state.layers)).toBe(0);
+        // Just the default floor and walls layers.
+        expect(EditableLayerCount(store.state.layers)).toBe(2);
     });
 
     it("is added to a loaded map that was saved without it, exactly once", () => {
@@ -24,7 +25,8 @@ describe("EditorStore implicit layer", () => {
         const saved = { ...store.state, layers: [{ id: 0, name: "layer 0", selected: true, visible: true, isData: false }] };
         store.Load(saved);
         expect(implicitLayers(store)).toHaveLength(1);
-        expect(store.state.layers).toHaveLength(2);
+        // ...and the default floor and walls layers.
+        expect(store.state.layers).toHaveLength(4);
 
         // Re-loading state that already has it doesn't add a second.
         store.Load(store.state);
@@ -87,6 +89,87 @@ describe("EditorStore implicit layer", () => {
         const before = store.state.layers;
         store.Load(store.state);
         expect(store.state.layers).toBe(before);
+    });
+});
+
+describe("EditorStore default floor and walls layers", () => {
+    const kinds = (store: EditorStore) => store.state.layers.map(layer => (layer.id === IMPLICIT_LAYER_ID ? "attributes" : layer.kind || "generic"));
+
+    it("are what a new level starts with, after \"attributes\", with the floor selected", () => {
+        const store = new EditorStore();
+        expect(kinds(store)).toEqual(["attributes", "floor", "walls"]);
+        expect(store.state.layers.map(layer => layer.name)).toEqual(["attributes", "floor", "walls"]);
+        expect(store.SelectedLayer.kind).toBe("floor");
+    });
+
+    it("come back after a reset", () => {
+        const store = new EditorStore();
+        store.Dispatch({ type: EditorActions.ADD_LAYER });
+        store.Dispatch({ type: EditorActions.RESET, data: {} });
+        expect(kinds(store)).toEqual(["attributes", "floor", "walls"]);
+    });
+
+    it("are added to a level saved before layers had kinds, under its own layers, with fresh ids", () => {
+        const store = new EditorStore();
+        store.Load({ ...store.state, layers: [{ id: 3, name: "layer 3", selected: true, visible: true, isData: false }] });
+        expect(kinds(store)).toEqual(["attributes", "floor", "walls", "generic"]);
+        expect(store.state.layers.map(layer => layer.id)).toEqual([IMPLICIT_LAYER_ID, 4, 5, 3]);
+        expect(store.SelectedLayer.id).toBe(3);
+
+        // Loading it again adds nothing more.
+        const before = store.state.layers;
+        store.Load(store.state);
+        expect(store.state.layers).toBe(before);
+    });
+
+    it("only adds the kind that's missing, walls over floor", () => {
+        const store = new EditorStore();
+        store.Load({
+            ...store.state,
+            layers: [
+                { id: 0, name: "ground", selected: false, visible: true, isData: false, kind: "floor" },
+                { id: 1, name: "props", selected: true, visible: true, isData: false }
+            ]
+        });
+        expect(kinds(store)).toEqual(["attributes", "floor", "walls", "generic"]);
+        expect(store.state.layers[1].name).toBe("ground");
+    });
+
+    it("can't be removed while each is the last of its kind, nor can \"attributes\"", () => {
+        const store = new EditorStore();
+        const layers = store.state.layers;
+        layers.forEach(layer => expect(IsRemovableLayer(layers, layer), layer.name).toBe(false));
+
+        store.Dispatch({ type: EditorActions.ADD_LAYER, data: { kind: "walls" } });
+        const more = store.state.layers;
+        more.filter(layer => layer.kind === "walls").forEach(layer => expect(IsRemovableLayer(more, layer), layer.name).toBe(true));
+        expect(IsRemovableLayer(more, more.find(layer => layer.kind === "floor"))).toBe(false);
+    });
+
+    it("would come back if removed anyway", () => {
+        const store = new EditorStore();
+        store.Dispatch({ type: EditorActions.REMOVE_LAYER });
+        expect(kinds(store)).toEqual(["attributes", "floor", "walls"]);
+    });
+});
+
+describe("EditorStore adding layers", () => {
+    it("adds a generic layer by default, selected, and a floor or walls one when asked", () => {
+        const store = new EditorStore();
+        store.Dispatch({ type: EditorActions.ADD_LAYER });
+        expect(store.SelectedLayer).toMatchObject({ id: 2, name: "layer 2", isData: false });
+        expect(store.SelectedLayer.kind).toBeUndefined();
+
+        store.Dispatch({ type: EditorActions.ADD_LAYER, data: { kind: "walls" } });
+        expect(store.SelectedLayer).toMatchObject({ id: 3, name: "walls 3", kind: "walls" });
+        expect(store.state.layers.filter(layer => layer.selected)).toHaveLength(1);
+    });
+
+    it("duplicates a layer with its kind", () => {
+        const store = new EditorStore();
+        store.Dispatch({ type: EditorActions.DUPLICATE_LAYER });
+        const floors = store.state.layers.filter(layer => layer.kind === "floor");
+        expect(floors.map(layer => layer.id)).toEqual([0, 2]);
     });
 });
 

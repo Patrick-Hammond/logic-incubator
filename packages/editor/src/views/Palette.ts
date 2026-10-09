@@ -1,17 +1,18 @@
 import {Container, SCALE_MODES} from "pixi.js";
 import AssetFactory from "@logic-incubator/lib/loading/AssetFactory";
 import { AnimationSpeed } from "@logic-incubator/engine/Constants";
-import AssetMetadataStore from "@logic-incubator/engine/level/AssetMetadata";
+import AssetMetadataStore, { AssetCategory } from "@logic-incubator/engine/level/AssetMetadata";
+import { TileLayerKind } from "@logic-incubator/engine/level/LevelFormat";
 import EditorComponent from "../EditorComponent";
 import { EditorIcon } from "../EditorAssets";
 import { DataBrushIcon, DataBrushIcons, EditorActions, IEditorState } from "../stores/EditorStore";
 import { ButtonEl, El, InjectStyles } from "../ui/dom/Dom";
 import EditorOverlay from "../ui/dom/EditorOverlay";
 import SpriteCanvas from "../ui/dom/SpriteCanvas";
-import { EmptyTabHint, GroupByCategory } from "./PaletteCategories";
+import { EmptyTabHint, GroupByCategory, ShowsCategory } from "./PaletteCategories";
 
-/** A tab and its own scrolling page (so each keeps its scroll position). */
-type Page = { tab: HTMLButtonElement; body: HTMLElement; animated: SpriteCanvas[] };
+/** A tab and its own scrolling page (so each keeps its scroll position). `category`: a tile set's, not the data page's. */
+type Page = { tab: HTMLButtonElement; body: HTMLElement; animated: SpriteCanvas[]; category?: AssetCategory };
 
 /** What the selected layer can be painted with. */
 type Mode = "tiles" | "data";
@@ -22,9 +23,11 @@ const TILE_SCALE = 2;
 const SWATCH_SCALE = 4;
 
 /**
- * The brush picker: a tab per category (Dungeon, Entities, Weapons, Items, Misc, User) over a scrolling
- * grid of that category's tile brushes, or the data brushes when a data layer is selected. A sprite's
- * category is set in the game's assets-meta.json (see `AssetCategories`); one with none is under Misc.
+ * The brush picker: a tab per category (Floor, Walls, Dungeon, Entities, Weapons, Items, Misc, User) over a
+ * scrolling grid of that category's tile brushes, or the data brushes when a data layer is selected. Only
+ * the tabs the selected layer takes are shown: just Floor on a floor layer, just Walls on a walls layer, and
+ * all but those two on any other tile layer (see `ShowsCategory`). A sprite's category is set in the game's
+ * assets-meta.json (see `AssetCategories`); one with none is under Misc.
  * Hovering a brush previews it in `SelectedBrush`; clicking picks it.
  */
 export default class Palette extends EditorComponent {
@@ -33,6 +36,8 @@ export default class Palette extends EditorComponent {
     private dataPage: Page;
     private activeTileSet = 0;
     private mode: Mode = null;
+    /** The selected tile layer's kind, which picks the tile tabs shown (see `ShowsCategory`). */
+    private kind: TileLayerKind | undefined;
     private items: { [name: string]: HTMLElement } = {};
     private selectedItem: HTMLElement = null;
     private animTime = 0;
@@ -64,6 +69,7 @@ export default class Palette extends EditorComponent {
         );
         tileSets.forEach((tileSet, index) => {
             const page = this.AddPage(panel, tileSet.name, tileSet.brushes.length);
+            page.category = tileSet.id;
             page.tab.addEventListener("click", () => {
                 this.activeTileSet = index;
                 this.ShowPages();
@@ -107,10 +113,10 @@ export default class Palette extends EditorComponent {
         }
     }
 
-    /** Switches to the tab a picked brush is on, if it isn't showing. */
+    /** Switches to the tab a picked brush is on, if it isn't showing - and the selected layer has that tab. */
     private ShowTabOf(name: string): void {
         const tab = this.tabOf[name];
-        if (this.mode === "tiles" && tab !== undefined && tab !== this.activeTileSet) {
+        if (this.mode === "tiles" && tab !== undefined && tab !== this.activeTileSet && this.IsTabShown(this.tileSetPages[tab])) {
             this.activeTileSet = tab;
             this.ShowPages();
         }
@@ -122,16 +128,26 @@ export default class Palette extends EditorComponent {
             return;
         }
         const mode: Mode = layer.isData ? "data" : "tiles";
-        if (mode !== this.mode) {
+        const kind = layer.isData ? undefined : layer.kind;
+        if (mode !== this.mode || kind !== this.kind) {
             this.mode = mode;
+            this.kind = kind;
+            if (!this.IsTabShown(this.tileSetPages[this.activeTileSet])) {
+                this.activeTileSet = this.tileSetPages.findIndex(page => this.IsTabShown(page));
+            }
             this.ShowPages();
         }
+    }
+
+    /** Whether a tile set's tab is on offer for the selected tile layer. */
+    private IsTabShown(page: Page | undefined): boolean {
+        return page != null && ShowsCategory(this.kind, page.category);
     }
 
     /** Shows the tabs that apply to the selected layer, and the active one's page. */
     private ShowPages(): void {
         const active = this.ActivePage();
-        const inMode = this.mode === "tiles" ? this.tileSetPages : [this.dataPage];
+        const inMode = this.mode === "tiles" ? this.tileSetPages.filter(page => this.IsTabShown(page)) : [this.dataPage];
         this.tileSetPages.concat(this.dataPage).forEach(page => {
             page.tab.style.display = inMode.indexOf(page) > -1 ? "" : "none";
             page.tab.setAttribute("aria-selected", String(page === active));
@@ -142,7 +158,7 @@ export default class Palette extends EditorComponent {
     private ActivePage(): Page | null {
         switch (this.mode) {
             case "tiles":
-                return this.tileSetPages[this.activeTileSet];
+                return this.tileSetPages[this.activeTileSet] || null;
             case "data":
                 return this.dataPage;
             default:
@@ -244,7 +260,7 @@ export default class Palette extends EditorComponent {
 }
 
 const STYLES = `
-/* Six category tabs don't fit the sidebar's width in one row, so they wrap onto a second. */
+/* Six category tabs (a tile layer without a kind) don't fit the sidebar's width in one row, so they wrap onto a second. */
 .pl-tabs {
     display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0 2px; flex: 0 0 auto;
     padding: 4px 8px 0; border-bottom: 1px solid var(--ed-divider);

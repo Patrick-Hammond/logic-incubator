@@ -4,7 +4,7 @@ import Store, { IAction } from "@logic-incubator/lib/patterns/redux/Store";
 import { Scenes } from "@logic-incubator/engine/Constants";
 import { InitalScale } from "../Layout";
 import { DefaultPickupValue } from "@logic-incubator/engine/level/entities/Pickups";
-import { Brush, DataBrushName, DataBrushValue } from "@logic-incubator/engine/level/LevelFormat";
+import { Brush, DataBrushName, DataBrushValue, TileLayerKind } from "@logic-incubator/engine/level/LevelFormat";
 import { Layer } from "./LevelDataStore";
 
 export const enum EditorActions {
@@ -105,6 +105,52 @@ function WithImplicitLayer(layers: Layer[]): Layer[] {
     return layers;
 }
 
+/** The tile layers every level has, in the order they're added (floor under walls) - there's always at least one of each kind, so the palette always has somewhere to put floor and wall tiles. */
+export const DefaultTileLayerKinds: ReadonlyArray<TileLayerKind> = ["floor", "walls"];
+
+/**
+ * `layers` with "attributes" (see `WithImplicitLayer`) and at least one floor and one walls layer -
+ * a new level starts with just those three, and a level saved before layers had kinds gets an empty one
+ * of each, after "attributes" (so the tiles it already has stay drawn on top). Something is always
+ * selected: the first floor layer, if nothing was. Untouched (the same array) if there's nothing to add.
+ */
+export function WithDefaultLayers(layers: Layer[]): Layer[] {
+    let result = WithImplicitLayer(layers);
+    let nextId = NextTileLayerId(result);
+    DefaultTileLayerKinds.forEach((kind, index) => {
+        if (result.some(layer => layer.kind === kind)) {
+            return;
+        }
+        // After the last of the kinds before it (walls go over floor), else straight after "attributes".
+        let at = result.findIndex(layer => layer.id === IMPLICIT_LAYER_ID) + 1;
+        result.forEach((layer, i) => {
+            if (layer.kind && DefaultTileLayerKinds.indexOf(layer.kind) < index) {
+                at = Math.max(at, i + 1);
+            }
+        });
+        const layer: Layer = { id: nextId++, name: kind, selected: false, visible: true, isData: false, kind };
+        result = result.slice(0, at).concat(layer, result.slice(at));
+    });
+    if (!result.some(layer => layer.selected)) {
+        const floor = result.find(layer => layer.kind === "floor");
+        result = result.map(layer => (layer === floor ? { ...layer, selected: true } : layer));
+    }
+    return result;
+}
+
+/** One more than the highest tile layer id, or 0 for the first. ("attributes" has its own fixed id.) */
+export function NextTileLayerId(layers: Layer[]): number {
+    return layers.filter(layer => !layer.isData).reduce((next, layer) => Math.max(next, layer.id + 1), 0);
+}
+
+/** Whether `layer` can be removed: never "attributes", nor the last floor or walls layer. */
+export function IsRemovableLayer(layers: Layer[], layer: Layer | undefined): boolean {
+    if (!layer || layer.id === IMPLICIT_LAYER_ID) {
+        return false;
+    }
+    return !layer.kind || layers.some(other => other.kind === layer.kind && other.id !== layer.id);
+}
+
 export function EditableLayerCount(layers: Layer[]): number {
     return layers.filter(layer => layer.id !== IMPLICIT_LAYER_ID).length;
 }
@@ -138,6 +184,8 @@ interface IActionData {
     tool?: EditorTool;
     /** PICK_BRUSH: a brush placed on the map, to paint with next. */
     brush?: Brush;
+    /** ADD_LAYER: a floor or walls layer, rather than one that takes any other tile. */
+    kind?: TileLayerKind;
 }
 
 export interface IEditorState {
@@ -201,7 +249,7 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
      * otherwise switch scenes on load or disable the editor shortcuts again. Likewise the current `tool`.
      */
     Load(state: IEditorState): void {
-        const layers = WithImplicitLayer((state && state.layers) || []);
+        const layers = WithDefaultLayers((state && state.layers) || []);
         super.Load({
             ...state,
             currentScene: this.state.currentScene,
@@ -220,7 +268,7 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
     }
 
     protected Reduce(state: IEditorState, action: IAction<IActionData>): IEditorState {
-        const layers = WithImplicitLayer(this.UpdateLayers(state.layers, action));
+        const layers = WithDefaultLayers(this.UpdateLayers(state.layers, action));
         const newState = {
             dataBrushes: this.UpdateDataBrushes(state.dataBrushes, action),
             currentBrush: this.UpdateBrush(state.currentBrush, action),
@@ -393,10 +441,13 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
     private UpdateLayers(layers: Layer[], action: IAction<IActionData>): Layer[] {
         switch (action.type) {
             case EditorActions.ADD_LAYER: {
-                const nextId = this.NextLayerId();
-                layers.forEach(layer => (layer.selected = false));
-                const layer = { id: nextId, name: "layer " + nextId, selected: true, visible: true, isData: false };
-                return layers.concat(layer);
+                const nextId = NextTileLayerId(layers);
+                const kind = action.data && action.data.kind;
+                const layer: Layer = { id: nextId, name: (kind || "layer") + " " + nextId, selected: true, visible: true, isData: false };
+                if (kind) {
+                    layer.kind = kind;
+                }
+                return layers.map(other => (other.selected ? { ...other, selected: false } : other)).concat(layer);
             }
             case EditorActions.REMOVE_LAYER:
                 return layers.filter(layer => layer.selected === false);
@@ -464,7 +515,7 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
                 if (!selectedLayer || selectedLayer.id === IMPLICIT_LAYER_ID) {
                     return layers;
                 }
-                const newLayer = { ...selectedLayer, id: this.NextLayerId(), selected: false };
+                const newLayer = { ...selectedLayer, id: NextTileLayerId(layers), selected: false };
                 return layers.concat(newLayer);
             }
             case EditorActions.RESET:
@@ -548,12 +599,6 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
         }
         const inc = actionType === EditorActions.DATA_BRUSH_INC ? 1 : -1;
         return Math.max(Math.min(value + inc, 999), -999);
-    }
-
-    private NextLayerId(): number {
-        const spriteLayers = this.state.layers.filter(layer => layer.isData === false);
-        const nextId = spriteLayers.length ? spriteLayers.reduce((prev, curr) => (curr.id > prev.id ? curr : prev)).id + 1 : 0;
-        return nextId;
     }
 
     get SelectedDataBrush(): DataBrush {

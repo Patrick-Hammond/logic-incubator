@@ -45,8 +45,15 @@ export type Brush = {
     data: DataBrushValue;
 };
 
-/** A layer, as far as the engine reads one: tile layers draw in list order, data layers (`isData`) hold data brushes and aren't drawn. */
-export type LevelLayer = { id: number; name: string; isData: boolean };
+/**
+ * What a tile layer is for, in the editor: a `floor` layer takes only `floor` category tiles and a `walls`
+ * layer only `walls` ones (see `AssetCategories`); a layer without a kind takes any other tile.
+ * The engine draws them all the same.
+ */
+export type TileLayerKind = "floor" | "walls";
+
+/** A layer, as far as the engine reads one: tile layers draw in list order, data layers (`isData`) hold data brushes and aren't drawn. `kind` is the editor's (see `TileLayerKind`). */
+export type LevelLayer = { id: number; name: string; isData: boolean; kind?: TileLayerKind };
 
 /**
  * A saved level. The nesting is the editor's - `editorData` is its whole state and `levelData`

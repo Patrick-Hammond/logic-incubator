@@ -1,7 +1,8 @@
 import type Assets from "@logic-incubator/lib/assets/Assets";
 import EditorComponent from "../../EditorComponent";
 import { EditorIcon } from "../../EditorAssets";
-import {EditableLayerCount, EditorActions, IEditorState, IMPLICIT_LAYER_ID, MaxEditableLayers} from "../../stores/EditorStore";
+import { TileLayerKind } from "@logic-incubator/engine/level/LevelFormat";
+import {EditableLayerCount, EditorActions, IEditorState, IMPLICIT_LAYER_ID, IsRemovableLayer, MaxEditableLayers} from "../../stores/EditorStore";
 import {Layer, LevelDataActions} from "../../stores/LevelDataStore";
 import {IsFormDialogOpen, OpenFormDialog} from "../../ui/dialog/FormDialog";
 import {ButtonEl, El, InjectStyles} from "../../ui/dom/Dom";
@@ -19,7 +20,10 @@ function Icon(assets: Assets, name: string): HTMLImageElement {
 
 /**
  * The layer list and its toolbar: add tile layers, remove, rename, and
- * reorder. There's no "add data layer" - "attributes", the one data layer,
+ * reorder. A new tile layer is a floor layer, a walls layer, or a generic one
+ * (see `TileLayerKind`); every level keeps at least one floor and one walls
+ * layer (see `WithDefaultLayers`), so the last of each can't be removed.
+ * There's no "add data layer" - "attributes", the one data layer,
  * is always there, can be painted on like any other, and can't be removed,
  * duplicated or reordered (only renamed - double-click it, or the rename
  * button): it's always drawn on top of the tile stack (see `Canvas`), so
@@ -49,7 +53,7 @@ export default class Layers extends EditorComponent {
         this.countText.title = "Editable layers in use, of the most allowed";
         header.appendChild(El("span", "ly-spacer"));
 
-        this.addButton = this.ToolButton(header, "plus", "Add tile layer", () => this.AddLayer());
+        this.addButton = this.ToolButton(header, "plus", "Add layer", () => this.AddLayer());
         this.removeButton = this.ToolButton(header, "minus", "Remove layer", () => this.RemoveLayer());
         this.renameButton = this.ToolButton(header, "edit", "Rename layer (or double-click it)", () => this.RenameLayer());
         this.upButton = this.ToolButton(header, "arrow-up", "Move layer up", () => {
@@ -66,18 +70,14 @@ export default class Layers extends EditorComponent {
         EditorOverlay.inst.Slot("layers").appendChild(panel);
         this.Own(() => panel.remove());
 
-        // render initial
+        // render initial - the store starts with its layers in place, so Render may see no change to them
+        this.UpdateList(this.editorStore.state.layers);
         this.editorStore.Dispatch({ type: EditorActions.REFRESH });
     }
 
     private Render(prevState: IEditorState, state: IEditorState): void {
         if (prevState.layers !== state.layers) {
             this.UpdateList(state.layers);
-        }
-
-        // enforce at least 1 editable layer (the read-only implicit layer is always there, so doesn't count)
-        if (EditableLayerCount(state.layers) === 0) {
-            this.editorStore.Dispatch({ type: EditorActions.ADD_LAYER });
         }
     }
 
@@ -89,7 +89,7 @@ export default class Layers extends EditorComponent {
 
         layers.forEach((layer, index) => {
             const row = this.rows[index];
-            const kind = layer.id === IMPLICIT_LAYER_ID ? "auto" : layer.isData ? "data" : "tile";
+            const kind = layer.id === IMPLICIT_LAYER_ID ? "auto" : layer.isData ? "data" : layer.kind || "tile";
             row.name.textContent = layer.name;
             row.row.title = layer.name;
             row.row.setAttribute("aria-selected", String(layer.selected));
@@ -107,7 +107,8 @@ export default class Layers extends EditorComponent {
         const selected = layers[selectedIndex];
         const editable = selected != null && selected.id !== IMPLICIT_LAYER_ID;
         this.addButton.disabled = EditableLayerCount(layers) >= MaxEditableLayers;
-        this.removeButton.disabled = !this.CanRemove(layers, selected);
+        this.removeButton.disabled = !IsRemovableLayer(layers, selected);
+        this.removeButton.title = selected && selected.kind && this.removeButton.disabled ? `Every level keeps a ${selected.kind} layer` : "Remove layer";
         // Renamable even for "attributes" (reordering/duplicating/removing aren't - those stay gated on `editable`).
         this.renameButton.disabled = selected == null;
         this.upButton.disabled = !editable || selectedIndex <= 0;
@@ -157,21 +158,39 @@ export default class Layers extends EditorComponent {
         return button;
     }
 
+    /** Asks which kind of tile layer to add - one that takes any tile, or just floor, or just walls. */
     private AddLayer(): void {
-        if (EditableLayerCount(this.editorStore.state.layers) < MaxEditableLayers) {
-            this.editorStore.Dispatch({ type: EditorActions.ADD_LAYER });
+        if (EditableLayerCount(this.editorStore.state.layers) >= MaxEditableLayers || IsFormDialogOpen()) {
+            return;
         }
-    }
-
-    /** Never "attributes", nor the last tile layer. */
-    private CanRemove(layers: Layer[], selectedLayer: Layer | undefined): boolean {
-        const spriteLayers = layers.filter(layer => layer.isData === false);
-        return selectedLayer != null && selectedLayer.id !== IMPLICIT_LAYER_ID && (spriteLayers.length > 1 || selectedLayer.isData);
+        OpenFormDialog({
+            title: "Add layer",
+            fields: [
+                {
+                    type: "choice",
+                    key: "kind",
+                    label: "Kind",
+                    hint: "Floor and walls layers take only floor or wall tiles; a generic layer takes everything else.",
+                    options: [
+                        { value: "", label: "Generic" },
+                        { value: "floor", label: "Floor" },
+                        { value: "walls", label: "Walls" }
+                    ]
+                }
+            ],
+            values: { kind: "" },
+            saveLabel: "Add"
+        }).then(form => {
+            if (form && EditableLayerCount(this.editorStore.state.layers) < MaxEditableLayers) {
+                const kind = (form.kind as TileLayerKind) || undefined;
+                this.editorStore.Dispatch({ type: EditorActions.ADD_LAYER, data: { kind } });
+            }
+        });
     }
 
     private RemoveLayer(): void {
         const selectedLayer = this.editorStore.SelectedLayer;
-        if (!this.CanRemove(this.editorStore.state.layers, selectedLayer)) {
+        if (!IsRemovableLayer(this.editorStore.state.layers, selectedLayer)) {
             return;
         }
         this.editorStore.Dispatch({ type: EditorActions.REMOVE_LAYER });
@@ -224,4 +243,6 @@ const STYLES = `
 .ly-tile { color: #c9c9d1; background: #3a3a42; }
 .ly-data { color: #e2cffc; background: #4a3470; }
 .ly-auto { color: #b8ecf7; background: #24505c; }
+.ly-floor { color: #f3dfb8; background: #5c4526; }
+.ly-walls { color: #f7c6bd; background: #5c2f29; }
 `;
