@@ -173,6 +173,96 @@ describe("EditorStore adding layers", () => {
     });
 });
 
+describe("EditorStore per-layer tool and brush", () => {
+    const layerOf = (store: EditorStore, kind: string) => store.state.layers.find(layer => layer.kind === kind);
+    const select = (store: EditorStore, kind: string) => store.Dispatch({ type: EditorActions.SELECT_LAYER, data: { layer: layerOf(store, kind) } });
+    const pick = (store: EditorStore, name: string) => store.Dispatch({ type: EditorActions.BRUSH_CHANGED, data: { name } });
+    const setTool = (store: EditorStore, tool: EditorTool) => store.Dispatch({ type: EditorActions.SET_TOOL, data: { tool } });
+
+    it("gives a layer back the tile and tool it had when it's selected again", () => {
+        const store = new EditorStore();
+        pick(store, "floor_1");
+        setTool(store, EditorTool.FILL);
+        store.Dispatch({ type: EditorActions.ROTATE_BRUSH });
+
+        select(store, "walls");
+        expect(store.state.currentBrush.name).toBe("");
+        pick(store, "wall_mid");
+        setTool(store, EditorTool.STAMP);
+
+        select(store, "floor");
+        expect(store.state.currentBrush).toMatchObject({ name: "floor_1", layerId: layerOf(store, "floor").id, rotation: Math.PI / 2 });
+        expect(store.state.tool).toBe(EditorTool.FILL);
+
+        select(store, "walls");
+        expect(store.state.currentBrush).toMatchObject({ name: "wall_mid", layerId: layerOf(store, "walls").id });
+        expect(store.state.tool).toBe(EditorTool.STAMP);
+    });
+
+    it("keeps the cursor where it is", () => {
+        const store = new EditorStore();
+        pick(store, "floor_1");
+        select(store, "walls");
+        store.Dispatch({ type: EditorActions.BRUSH_MOVED, data: { position: { x: 7, y: 3 } } });
+        select(store, "floor");
+        expect(store.state.currentBrush.position).toEqual({ x: 7, y: 3 });
+    });
+
+    it("starts a new layer with no brush", () => {
+        const store = new EditorStore();
+        pick(store, "floor_1");
+        store.Dispatch({ type: EditorActions.ADD_LAYER });
+        expect(store.state.currentBrush.name).toBe("");
+        expect(store.state.currentBrush.layerId).toBe(store.SelectedLayer.id);
+    });
+
+    it("keeps the dropper's pick rather than the layer's remembered brush", () => {
+        const store = new EditorStore();
+        select(store, "walls");
+        pick(store, "wall_mid");
+        select(store, "floor");
+        const picked = { ...store.state.currentBrush, name: "wall_left", layerId: layerOf(store, "walls").id };
+        store.Dispatch({ type: EditorActions.PICK_BRUSH, data: { brush: picked } });
+        expect(store.SelectedLayer.kind).toBe("walls");
+        expect(store.state.currentBrush.name).toBe("wall_left");
+    });
+
+    it("forgets a removed layer, and everything on a reset", () => {
+        const store = new EditorStore();
+        store.Dispatch({ type: EditorActions.ADD_LAYER });
+        const added = store.SelectedLayer;
+        pick(store, "torch");
+        select(store, "floor");
+        expect(store.state.layerMemory[added.id]).toBeDefined();
+
+        store.Dispatch({ type: EditorActions.SELECT_LAYER, data: { layer: added } });
+        store.Dispatch({ type: EditorActions.REMOVE_LAYER });
+        expect(store.state.layerMemory[added.id]).toBeUndefined();
+
+        select(store, "walls");
+        expect(Object.keys(store.state.layerMemory)).not.toHaveLength(0);
+        store.Dispatch({ type: EditorActions.RESET, data: {} });
+        expect(store.state.layerMemory).toEqual({});
+    });
+
+    it("is kept by a save, and a save from before it starts with none", () => {
+        const store = new EditorStore();
+        pick(store, "floor_1");
+        select(store, "walls");
+        const saved = JSON.parse(JSON.stringify(store.state));
+
+        const loaded = new EditorStore();
+        loaded.Load(saved);
+        loaded.Dispatch({ type: EditorActions.SELECT_LAYER, data: { layer: layerOf(loaded, "floor") } });
+        expect(loaded.state.currentBrush.name).toBe("floor_1");
+
+        const old = { ...saved };
+        delete old.layerMemory;
+        loaded.Load(old);
+        expect(loaded.state.layerMemory).toEqual({});
+    });
+});
+
 describe("EditorStore layer rename", () => {
     it("renames the selected layer to the name it's given", () => {
         const store = new EditorStore();
@@ -385,24 +475,21 @@ describe("the data-select tool needs a data layer", () => {
         expect(store.state.tool).toBe(EditorTool.BRUSH);
     });
 
-    it("isn't brought back by going back to the attributes layer - it's picked again, from the toolbar", () => {
+    it("comes back with the attributes layer, which remembers it like any layer remembers its tool", () => {
         const store = new EditorStore();
-        store.Dispatch({ type: EditorActions.ADD_LAYER });
         selectAttributes(store);
         setTool(store, EditorTool.DATA_SELECT);
         store.Dispatch({ type: EditorActions.SELECT_LAYER, data: { layer: store.state.layers.find(layer => !layer.isData) } });
-        selectAttributes(store);
         expect(store.state.tool).toBe(EditorTool.BRUSH);
+        selectAttributes(store);
+        expect(store.state.tool).toBe(EditorTool.DATA_SELECT);
     });
 
-    it("leaves every other tool alone when the layer changes", () => {
-        const store = new EditorStore();
-        store.Dispatch({ type: EditorActions.ADD_LAYER });
+    it("leaves every other tool alone when the layer changes to one with nothing remembered", () => {
         [EditorTool.ERASE, EditorTool.STAMP, EditorTool.DROPPER, EditorTool.FILL, EditorTool.MOVE].forEach(tool => {
+            const store = new EditorStore();
             setTool(store, tool);
             selectAttributes(store);
-            expect(store.state.tool, tool).toBe(tool);
-            store.Dispatch({ type: EditorActions.SELECT_LAYER, data: { layer: store.state.layers.find(layer => !layer.isData) } });
             expect(store.state.tool, tool).toBe(tool);
         });
     });

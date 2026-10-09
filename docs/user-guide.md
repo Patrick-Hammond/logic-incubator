@@ -1870,6 +1870,8 @@ vertical **toolbar** of tools at the far right. Each palette tab ends in a **+**
   older level gets an empty one of each when opened). A floor layer shows only the **Floor** tab and paints only `floor`
   tiles; a walls layer likewise only **Walls**. Any other tile layer shows every tab but those two. The **+** in the layer
   panel asks whether the new layer is generic, floor or walls. The last floor layer and the last walls layer can't be removed.
+- Each layer remembers its own tool and tile: switch from the floor layer to the walls layer and back, and the floor tile and
+  tool you were using are picked again (saved with the level). A layer you haven't used yet starts with no brush.
 - The one **attributes** layer is always present. Player start, collision and z-index are painted on it, and it also
   draws a read-only overlay of what the game *derives* from tiles' metadata (collision, door footprints, lights,
   spawners) so a cell's whole picture - hand-placed and intrinsic - is in one place.

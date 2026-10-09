@@ -188,6 +188,9 @@ interface IActionData {
     kind?: TileLayerKind;
 }
 
+/** What a layer was last painted with: the tool and the brush picked on it, given back when it's selected again (see `IEditorState.layerMemory`). */
+export type LayerMemory = { tool: EditorTool; brush: Brush };
+
 export interface IEditorState {
     currentBrush: Brush;
     brushVisible: boolean;
@@ -200,6 +203,11 @@ export interface IEditorState {
     viewScale: number;
     currentScene: string;
     tool: EditorTool;
+    /**
+     * Each layer's tool and brush as they were when another layer was selected, keyed by layer id - so going
+     * back to a layer picks up where it was left, e.g. a floor tile on the floor layer and a wall on the walls one.
+     */
+    layerMemory: { [layerId: string]: LayerMemory };
 }
 
 export default class EditorStore extends Store<IEditorState, IActionData> {
@@ -230,7 +238,8 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
             // What the game shows at boot. Was null, which left every editor shortcut (gated on
             // `currentScene === EDITOR` in Keyboard) dead until the first Enter toggled it into place.
             currentScene: Scenes.EDITOR,
-            tool: EditorTool.BRUSH
+            tool: EditorTool.BRUSH,
+            layerMemory: {}
         };
     }
 
@@ -256,7 +265,9 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
             // Still the current tool - unless the loaded layers have a tile layer selected, which data-select can't be used on.
             tool: this.UsableTool(this.state.tool, layers),
             dataBrushes: this.ReconcileDataBrushes(state && state.dataBrushes),
-            layers
+            layers,
+            // A save from before layers were remembered has none.
+            layerMemory: (state && state.layerMemory) || {}
         });
     }
 
@@ -269,9 +280,10 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
 
     protected Reduce(state: IEditorState, action: IAction<IActionData>): IEditorState {
         const layers = WithDefaultLayers(this.UpdateLayers(state.layers, action));
+        const switched = this.SwitchLayer(state, layers, action, this.UpdateBrush(state.currentBrush, action), this.UpdateTool(state.tool, action));
         const newState = {
             dataBrushes: this.UpdateDataBrushes(state.dataBrushes, action),
-            currentBrush: this.UpdateBrush(state.currentBrush, action),
+            currentBrush: switched.brush,
             brushVisible: this.UpdateBrushVisible(state.brushVisible, action),
             hoveredBrushName: this.UpdateHoveredBrushName(state.hoveredBrushName, action),
             layers,
@@ -280,9 +292,44 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
             viewOffset: this.UpdateViewOffset(state.viewOffset, action),
             viewScale: this.UpdateViewScale(state.viewScale, action),
             currentScene: this.UpdateCurrentScene(state.currentScene, action),
-            tool: this.UsableTool(this.UpdateTool(state.tool, action), layers)
+            tool: this.UsableTool(switched.tool, layers),
+            layerMemory: switched.layerMemory
         };
         return newState as IEditorState;
+    }
+
+    /**
+     * When the selected layer changes - picked in the panel, or by adding, removing or the dropper - the layer
+     * being left remembers its tool and brush, and the one selected gets back its own (or, the first time, the
+     * empty brush and whatever tool was in use). The dropper's pick is the exception: it's the brush wanted next,
+     * so it's kept. `brush` and `tool` are what the action would otherwise leave. Memory of a layer that's gone is
+     * dropped.
+     */
+    private SwitchLayer(state: IEditorState, layers: Layer[], action: IAction<IActionData>, brush: Brush, tool: EditorTool): { brush: Brush; tool: EditorTool; layerMemory: { [layerId: string]: LayerMemory } } {
+        let layerMemory = state.layerMemory || this.DefaultState().layerMemory;
+        if (action.type === EditorActions.RESET) {
+            return { brush, tool, layerMemory: this.DefaultState().layerMemory };
+        }
+        const from = (state.layers || []).find(layer => layer.selected);
+        const to = layers.find(layer => layer.selected);
+        if (from && to && from.id !== to.id) {
+            layerMemory = { ...layerMemory, [from.id]: { tool: state.tool, brush: state.currentBrush } };
+            const remembered = layerMemory[to.id];
+            if (action.type !== EditorActions.PICK_BRUSH) {
+                brush = remembered
+                    ? { ...remembered.brush, layerId: to.id, position: state.currentBrush.position }
+                    : { ...this.DefaultState().currentBrush, layerId: to.id, position: state.currentBrush.position };
+                if (remembered) {
+                    tool = remembered.tool;
+                }
+            }
+        }
+        const gone = Object.keys(layerMemory).filter(id => !layers.some(layer => String(layer.id) === id));
+        if (gone.length) {
+            layerMemory = { ...layerMemory };
+            gone.forEach(id => delete layerMemory[id]);
+        }
+        return { brush, tool, layerMemory };
     }
 
     private UpdateBrush(currentBrush: Brush, action: IAction<IActionData>): Brush {

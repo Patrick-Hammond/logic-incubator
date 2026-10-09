@@ -1578,7 +1578,7 @@ Both extend lib's `Store`.
 `const enum EditorTool { BRUSH = "brush", ERASE = "erase", DATA_SELECT = "data-select", STAMP = "stamp", DROPPER = "dropper", FILL = "fill", MOVE = "move" }`,
 `const enum MouseButtonState { LEFT_DOWN, RIGHT_DOWN, UP, MIDDLE_DOWN }`, `IMPLICIT_LAYER_ID = -99999` (the always-present `attributes` data layer),
 `MaxEditableLayers = 16`, `EditableLayerCount(layers)`, `DefaultTileLayerKinds` (`["floor", "walls"]`), `WithDefaultLayers(layers)` (adds "attributes" and a floor and a walls layer if missing, and selects the floor if nothing is; the store applies it on every action and load), `NextTileLayerId(layers)`, `IsRemovableLayer(layers, layer)` (not "attributes", nor the last floor or walls layer), `ADD_LAYER` takes an optional `kind`, `ToolFitsLayer(tool, layer)` (data-select is only usable with a data layer selected - the store switches back to the brush when it isn't, and the toolbar hides its button), `type DataBrush = { name; colour; value }`, `type DataBrushIcons = { readonly [K in DataBrushName]?: string }`,
-`DataBrushIcon(icons, name)`, `interface IEditorState`.
+`DataBrushIcon(icons, name)`, `type LayerMemory = { tool; brush }`, `interface IEditorState` (its `layerMemory`, keyed by layer id, is each layer's tool and brush from when another layer was selected, restored when it is selected again, except when the dropper picked the brush; a layer with none gets the empty brush and keeps the current tool).
 
 `@logic-incubator/editor/stores/LevelDataStore` - `default class LevelDataStore` (the painted brushes): `type Layer = LevelLayer & { selected; visible }`,
 `type LevelDataState = { levelData: LevelData }`, `const enum LevelDataActions` (`COPY`, `RESET`, paint/erase actions, ...).
