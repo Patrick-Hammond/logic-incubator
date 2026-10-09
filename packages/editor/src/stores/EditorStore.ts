@@ -433,7 +433,8 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
                 ) {
                     return AddTypes(this.state.currentBrush.position, this.state.viewOffset);
                 }
-            break;
+                // A middle press or a release leaves it where it was.
+                return mouseDownPosition || this.DefaultState().mouseDownPosition;
             default:
                 return mouseDownPosition || this.DefaultState().mouseDownPosition;
         }
@@ -560,9 +561,8 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
             case EditorActions.ZOOM_OUT:
                 return scale * 0.909;
             case EditorActions.RESET:
-                if (!action.data.persistZoom) {
-                    return this.DefaultState().viewScale;
-                }
+                // Ctrl+Q keeps the zoom; a fresh start doesn't.
+                return action.data.persistZoom && scale ? scale : this.DefaultState().viewScale;
             default:
                 return scale ? scale : this.DefaultState().viewScale;
         }
