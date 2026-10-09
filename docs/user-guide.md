@@ -1658,7 +1658,7 @@ a deleted one is removed - with a warning if it had anything in it); you only fi
 
 ```jsonc
 {
-  "wall_mid":        { "category": "dungeon", "collidable": true },
+  "wall_mid":        { "category": "walls", "collidable": true },
   "torch_1_anim":    { "category": "dungeon", "light": { "brightness": 5, "tint": 15856113, "range": 15 } },
   "doors_leaf_closed": { "door": { "id": 1, "open": false } },
   "doors_leaf_open":   { "door": { "id": 1, "open": true } },
@@ -1672,7 +1672,7 @@ a deleted one is removed - with a warning if it had anything in it); you only fi
 
 | Key | Meaning |
 | --- | --- |
-| `category` | Which palette tab the **level editor** lists the sprite under: `dungeon`, `entities`, `weapons`, `items`, `misc` or `user` ([10.3](#103-layers-data-brushes-and-palette-categories)). Has no effect in play. A sprite with none is listed under Misc; an unknown value is a build error (and a console warning at run time). |
+| `category` | Which palette tab the **level editor** lists the sprite under: `floor`, `walls`, `dungeon`, `entities`, `weapons`, `items`, `misc` or `user` ([10.3](#103-layers-data-brushes-and-palette-categories)). Has no effect in play. A sprite with none is listed under Misc; an unknown value is a build error (and a console warning at run time). |
 | `collidable` | Blocks movement. |
 | `light` | A point light: `brightness` (peak, 0..1+; it is clamped to 1), `tint` (hex colour as a number), `range` (radius in tiles). Baked once at level load with linear falloff; overlapping lights keep whichever is brighter at each cell. Cells no light reaches have a dim ambient level. A hand-edited light missing a field is dropped with a console warning naming the sprite rather than baking black. |
 | `door` | `id` pairs a door's two sprites (closed and open); `open` says which half this is. The door swaps when the player's tile enters any of its footprint cells and swaps back when they leave, so it reads as "walked open" - unless that placement is locked, when the player needs its key ([9.6.1](#961-keys-and-locked-doors)). |
@@ -1855,7 +1855,7 @@ vertical **toolbar** of tools at the far right. Each palette tab ends in a **+**
 
 ### 10.3 Layers, data brushes and palette categories
 
-- **The palette is split into tabs by category**: **Dungeon** (floors, walls, doors, traps, columns, torches and other fixtures),
+- **The palette is split into tabs by category**: **Floor**, **Walls**, **Dungeon** (doors, traps, columns, torches and other fixtures),
   **Entities** (monsters and characters, and the spawner marker), **Weapons**, **Items** (pickups, gold, chests, potions),
   **Misc** (everything else - hearts, loose props) and **User** (content your users add). A data layer shows the **Data** tab instead.
   Each sprite's tab is its `category` in `assets-meta.json` ([9.6](#96-assets-metajson-tile-behaviour-by-sprite-name)); a sprite
@@ -1866,6 +1866,12 @@ vertical **toolbar** of tools at the far right. Each palette tab ends in a **+**
 - The categories are read when the editor is created, so the game's metadata must already be loaded then - add the game scene
   (which binds the metadata, [9.1](#91-how-the-pieces-fit)) before the editor scene, and load `global` first.
 - Tile layers draw in list order; add, rename, hide (the eye), reorder and duplicate them in the layer panel.
+- Every level has a **floor** and a **walls** layer as well as attributes (a new level starts with just those three, and an
+  older level gets an empty one of each when opened). A floor layer shows only the **Floor** tab and paints only `floor`
+  tiles; a walls layer likewise only **Walls**. Any other tile layer shows every tab but those two. The **+** in the layer
+  panel asks whether the new layer is generic, floor or walls. The last floor layer and the last walls layer can't be removed.
+- Each layer remembers its own tool and tile: switch from the floor layer to the walls layer and back, and the floor tile and
+  tool you were using are picked again (saved with the level). A layer you haven't used yet starts with no brush.
 - The one **attributes** layer is always present. Player start, collision and z-index are painted on it, and it also
   draws a read-only overlay of what the game *derives* from tiles' metadata (collision, door footprints, lights,
   spawners) so a cell's whole picture - hand-placed and intrinsic - is in one place.

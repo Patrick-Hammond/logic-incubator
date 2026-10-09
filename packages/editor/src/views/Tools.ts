@@ -12,6 +12,7 @@ import { EffectiveLight, EffectivePickup, EffectiveSpawner } from "@logic-incuba
 import { Brush, DataBrushValue } from "@logic-incubator/engine/level/LevelFormat";
 import { EditorActions, EditorTool, IEditorState, MouseButtonState } from "../stores/EditorStore";
 import { Layer, LevelDataActions } from "../stores/LevelDataStore";
+import { TakesCategory } from "./PaletteCategories";
 import { BoundsOfCells, CellRect, FloodFill, RectCells, SpanRect, TopmostBrushAt, TopmostBrushCovering } from "../tools/ToolGeometry";
 
 /**
@@ -264,7 +265,8 @@ export default class Tools extends EditorComponent {
     /**
      * The picked brush, to paint onto the selected layer - or null if there's nothing to paint: no
      * brush, the read-only layer, or a brush of the wrong kind for the layer (a data brush on a tile
-     * layer, or a tile on a data layer - e.g. just after adding a layer of the other kind).
+     * layer, or a tile on a data layer - e.g. just after adding a layer of the other kind - or a tile
+     * that isn't floor on a floor layer, or isn't walls on a walls layer; see `TakesCategory`).
      */
     private PaintBrush(state: IEditorState): Brush | null {
         const layer = this.EditableLayer();
@@ -273,7 +275,10 @@ export default class Tools extends EditorComponent {
             return null;
         }
         const isDataBrush = state.dataBrushes.some(db => db.name === name);
-        return isDataBrush === layer.isData ? { ...state.currentBrush, layerId: layer.id } : null;
+        if (isDataBrush !== layer.isData || (!isDataBrush && !TakesCategory(layer.kind, AssetMetadataStore.inst.CategoryOf(name)))) {
+            return null;
+        }
+        return { ...state.currentBrush, layerId: layer.id };
     }
 
     /** The selected layer, if there is one - every layer, including "attributes", can be painted on. */

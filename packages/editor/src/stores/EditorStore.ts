@@ -4,7 +4,7 @@ import Store, { IAction } from "@logic-incubator/lib/patterns/redux/Store";
 import { Scenes } from "@logic-incubator/engine/Constants";
 import { InitalScale } from "../Layout";
 import { DefaultPickupValue } from "@logic-incubator/engine/level/entities/Pickups";
-import { Brush, DataBrushName, DataBrushValue } from "@logic-incubator/engine/level/LevelFormat";
+import { Brush, DataBrushName, DataBrushValue, TileLayerKind } from "@logic-incubator/engine/level/LevelFormat";
 import { Layer } from "./LevelDataStore";
 
 export const enum EditorActions {
@@ -105,6 +105,52 @@ function WithImplicitLayer(layers: Layer[]): Layer[] {
     return layers;
 }
 
+/** The tile layers every level has, in the order they're added (floor under walls) - there's always at least one of each kind, so the palette always has somewhere to put floor and wall tiles. */
+export const DefaultTileLayerKinds: ReadonlyArray<TileLayerKind> = ["floor", "walls"];
+
+/**
+ * `layers` with "attributes" (see `WithImplicitLayer`) and at least one floor and one walls layer -
+ * a new level starts with just those three, and a level saved before layers had kinds gets an empty one
+ * of each, after "attributes" (so the tiles it already has stay drawn on top). Something is always
+ * selected: the first floor layer, if nothing was. Untouched (the same array) if there's nothing to add.
+ */
+export function WithDefaultLayers(layers: Layer[]): Layer[] {
+    let result = WithImplicitLayer(layers);
+    let nextId = NextTileLayerId(result);
+    DefaultTileLayerKinds.forEach((kind, index) => {
+        if (result.some(layer => layer.kind === kind)) {
+            return;
+        }
+        // After the last of the kinds before it (walls go over floor), else straight after "attributes".
+        let at = result.findIndex(layer => layer.id === IMPLICIT_LAYER_ID) + 1;
+        result.forEach((layer, i) => {
+            if (layer.kind && DefaultTileLayerKinds.indexOf(layer.kind) < index) {
+                at = Math.max(at, i + 1);
+            }
+        });
+        const layer: Layer = { id: nextId++, name: kind, selected: false, visible: true, isData: false, kind };
+        result = result.slice(0, at).concat(layer, result.slice(at));
+    });
+    if (!result.some(layer => layer.selected)) {
+        const floor = result.find(layer => layer.kind === "floor");
+        result = result.map(layer => (layer === floor ? { ...layer, selected: true } : layer));
+    }
+    return result;
+}
+
+/** One more than the highest tile layer id, or 0 for the first. ("attributes" has its own fixed id.) */
+export function NextTileLayerId(layers: Layer[]): number {
+    return layers.filter(layer => !layer.isData).reduce((next, layer) => Math.max(next, layer.id + 1), 0);
+}
+
+/** Whether `layer` can be removed: never "attributes", nor the last floor or walls layer. */
+export function IsRemovableLayer(layers: Layer[], layer: Layer | undefined): boolean {
+    if (!layer || layer.id === IMPLICIT_LAYER_ID) {
+        return false;
+    }
+    return !layer.kind || layers.some(other => other.kind === layer.kind && other.id !== layer.id);
+}
+
 export function EditableLayerCount(layers: Layer[]): number {
     return layers.filter(layer => layer.id !== IMPLICIT_LAYER_ID).length;
 }
@@ -138,7 +184,12 @@ interface IActionData {
     tool?: EditorTool;
     /** PICK_BRUSH: a brush placed on the map, to paint with next. */
     brush?: Brush;
+    /** ADD_LAYER: a floor or walls layer, rather than one that takes any other tile. */
+    kind?: TileLayerKind;
 }
+
+/** What a layer was last painted with: the tool and the brush picked on it, given back when it's selected again (see `IEditorState.layerMemory`). */
+export type LayerMemory = { tool: EditorTool; brush: Brush };
 
 export interface IEditorState {
     currentBrush: Brush;
@@ -152,6 +203,11 @@ export interface IEditorState {
     viewScale: number;
     currentScene: string;
     tool: EditorTool;
+    /**
+     * Each layer's tool and brush as they were when another layer was selected, keyed by layer id - so going
+     * back to a layer picks up where it was left, e.g. a floor tile on the floor layer and a wall on the walls one.
+     */
+    layerMemory: { [layerId: string]: LayerMemory };
 }
 
 export default class EditorStore extends Store<IEditorState, IActionData> {
@@ -182,7 +238,8 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
             // What the game shows at boot. Was null, which left every editor shortcut (gated on
             // `currentScene === EDITOR` in Keyboard) dead until the first Enter toggled it into place.
             currentScene: Scenes.EDITOR,
-            tool: EditorTool.BRUSH
+            tool: EditorTool.BRUSH,
+            layerMemory: {}
         };
     }
 
@@ -201,14 +258,16 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
      * otherwise switch scenes on load or disable the editor shortcuts again. Likewise the current `tool`.
      */
     Load(state: IEditorState): void {
-        const layers = WithImplicitLayer((state && state.layers) || []);
+        const layers = WithDefaultLayers((state && state.layers) || []);
         super.Load({
             ...state,
             currentScene: this.state.currentScene,
             // Still the current tool - unless the loaded layers have a tile layer selected, which data-select can't be used on.
             tool: this.UsableTool(this.state.tool, layers),
             dataBrushes: this.ReconcileDataBrushes(state && state.dataBrushes),
-            layers
+            layers,
+            // A save from before layers were remembered has none.
+            layerMemory: (state && state.layerMemory) || {}
         });
     }
 
@@ -220,10 +279,11 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
     }
 
     protected Reduce(state: IEditorState, action: IAction<IActionData>): IEditorState {
-        const layers = WithImplicitLayer(this.UpdateLayers(state.layers, action));
+        const layers = WithDefaultLayers(this.UpdateLayers(state.layers, action));
+        const switched = this.SwitchLayer(state, layers, action, this.UpdateBrush(state.currentBrush, action), this.UpdateTool(state.tool, action));
         const newState = {
             dataBrushes: this.UpdateDataBrushes(state.dataBrushes, action),
-            currentBrush: this.UpdateBrush(state.currentBrush, action),
+            currentBrush: switched.brush,
             brushVisible: this.UpdateBrushVisible(state.brushVisible, action),
             hoveredBrushName: this.UpdateHoveredBrushName(state.hoveredBrushName, action),
             layers,
@@ -232,9 +292,44 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
             viewOffset: this.UpdateViewOffset(state.viewOffset, action),
             viewScale: this.UpdateViewScale(state.viewScale, action),
             currentScene: this.UpdateCurrentScene(state.currentScene, action),
-            tool: this.UsableTool(this.UpdateTool(state.tool, action), layers)
+            tool: this.UsableTool(switched.tool, layers),
+            layerMemory: switched.layerMemory
         };
         return newState as IEditorState;
+    }
+
+    /**
+     * When the selected layer changes - picked in the panel, or by adding, removing or the dropper - the layer
+     * being left remembers its tool and brush, and the one selected gets back its own (or, the first time, the
+     * empty brush and whatever tool was in use). The dropper's pick is the exception: it's the brush wanted next,
+     * so it's kept. `brush` and `tool` are what the action would otherwise leave. Memory of a layer that's gone is
+     * dropped.
+     */
+    private SwitchLayer(state: IEditorState, layers: Layer[], action: IAction<IActionData>, brush: Brush, tool: EditorTool): { brush: Brush; tool: EditorTool; layerMemory: { [layerId: string]: LayerMemory } } {
+        let layerMemory = state.layerMemory || this.DefaultState().layerMemory;
+        if (action.type === EditorActions.RESET) {
+            return { brush, tool, layerMemory: this.DefaultState().layerMemory };
+        }
+        const from = (state.layers || []).find(layer => layer.selected);
+        const to = layers.find(layer => layer.selected);
+        if (from && to && from.id !== to.id) {
+            layerMemory = { ...layerMemory, [from.id]: { tool: state.tool, brush: state.currentBrush } };
+            const remembered = layerMemory[to.id];
+            if (action.type !== EditorActions.PICK_BRUSH) {
+                brush = remembered
+                    ? { ...remembered.brush, layerId: to.id, position: state.currentBrush.position }
+                    : { ...this.DefaultState().currentBrush, layerId: to.id, position: state.currentBrush.position };
+                if (remembered) {
+                    tool = remembered.tool;
+                }
+            }
+        }
+        const gone = Object.keys(layerMemory).filter(id => !layers.some(layer => String(layer.id) === id));
+        if (gone.length) {
+            layerMemory = { ...layerMemory };
+            gone.forEach(id => delete layerMemory[id]);
+        }
+        return { brush, tool, layerMemory };
     }
 
     private UpdateBrush(currentBrush: Brush, action: IAction<IActionData>): Brush {
@@ -385,6 +480,8 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
                 ) {
                     return AddTypes(this.state.currentBrush.position, this.state.viewOffset);
                 }
+                // A middle press or a release leaves it where it was.
+                return mouseDownPosition || this.DefaultState().mouseDownPosition;
             default:
                 return mouseDownPosition || this.DefaultState().mouseDownPosition;
         }
@@ -393,10 +490,13 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
     private UpdateLayers(layers: Layer[], action: IAction<IActionData>): Layer[] {
         switch (action.type) {
             case EditorActions.ADD_LAYER: {
-                const nextId = this.NextLayerId();
-                layers.forEach(layer => (layer.selected = false));
-                const layer = { id: nextId, name: "layer " + nextId, selected: true, visible: true, isData: false };
-                return layers.concat(layer);
+                const nextId = NextTileLayerId(layers);
+                const kind = action.data && action.data.kind;
+                const layer: Layer = { id: nextId, name: (kind || "layer") + " " + nextId, selected: true, visible: true, isData: false };
+                if (kind) {
+                    layer.kind = kind;
+                }
+                return layers.map(other => (other.selected ? { ...other, selected: false } : other)).concat(layer);
             }
             case EditorActions.REMOVE_LAYER:
                 return layers.filter(layer => layer.selected === false);
@@ -464,7 +564,7 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
                 if (!selectedLayer || selectedLayer.id === IMPLICIT_LAYER_ID) {
                     return layers;
                 }
-                const newLayer = { ...selectedLayer, id: this.NextLayerId(), selected: false };
+                const newLayer = { ...selectedLayer, id: NextTileLayerId(layers), selected: false };
                 return layers.concat(newLayer);
             }
             case EditorActions.RESET:
@@ -485,15 +585,19 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
 
     private UpdateViewOffset(offset: Vec2Like, action: IAction<IActionData>): Vec2Like {
         switch (action.type) {
-            case EditorActions.VIEW_DRAG:
+            case EditorActions.VIEW_DRAG: {
                 const delta = SubtractTypes(this.state.currentBrush.position, action.data.position);
                 return SubtractTypes(offset, delta);
-            case EditorActions.VIEW_MOVE:
+            }
+            case EditorActions.VIEW_MOVE: {
                 return AddTypes(offset, action.data.move);
-            case EditorActions.RESET:
+            }
+            case EditorActions.RESET: {
                 return this.DefaultState().viewOffset;
-            default:
+            }
+            default: {
                 return offset ? offset : this.DefaultState().viewOffset;
+            }
         }
     }
 
@@ -504,9 +608,8 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
             case EditorActions.ZOOM_OUT:
                 return scale * 0.909;
             case EditorActions.RESET:
-                if (!action.data.persistZoom) {
-                    return this.DefaultState().viewScale;
-                }
+                // Ctrl+Q keeps the zoom; a fresh start doesn't.
+                return action.data.persistZoom && scale ? scale : this.DefaultState().viewScale;
             default:
                 return scale ? scale : this.DefaultState().viewScale;
         }
@@ -548,12 +651,6 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
         }
         const inc = actionType === EditorActions.DATA_BRUSH_INC ? 1 : -1;
         return Math.max(Math.min(value + inc, 999), -999);
-    }
-
-    private NextLayerId(): number {
-        const spriteLayers = this.state.layers.filter(layer => layer.isData === false);
-        const nextId = spriteLayers.length ? spriteLayers.reduce((prev, curr) => (curr.id > prev.id ? curr : prev)).id + 1 : 0;
-        return nextId;
     }
 
     get SelectedDataBrush(): DataBrush {

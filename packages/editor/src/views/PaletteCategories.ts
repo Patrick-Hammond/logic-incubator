@@ -5,6 +5,7 @@
  */
 
 import { AssetCategories, AssetCategory } from "@logic-incubator/engine/level/AssetMetadata";
+import { TileLayerKind } from "@logic-incubator/engine/level/LevelFormat";
 
 /** A palette tab of tile brushes: one category, its sprites in name order. */
 export type TileSet = { id: AssetCategory; name: string; brushes: string[] };
@@ -36,4 +37,22 @@ export function EmptyTabHint(id: AssetCategory, canCreate = false): string {
             : 'Nothing here yet. Give a sprite "category": "user" in assets-meta.json and it is listed here.';
     }
     return canCreate ? "No sprites in this category. Click + to draw one." : "No sprites in this category.";
+}
+
+/**
+ * Whether the palette shows `category`'s tab while a tile layer of `kind` is selected: a floor or walls
+ * layer shows only its own tab (the kinds are named after their categories), any other tile layer every
+ * tab but those two.
+ */
+export function ShowsCategory(kind: TileLayerKind | undefined, category: AssetCategory): boolean {
+    return kind ? category === kind : category !== "floor" && category !== "walls";
+}
+
+/**
+ * Whether a tile of `category` can be painted onto a tile layer of `kind`: a floor or walls layer takes
+ * only its own category. A layer without a kind takes anything - its palette doesn't offer floor or wall
+ * tiles, but a level from before layers had kinds has them on such layers, and the dropper picks them up.
+ */
+export function TakesCategory(kind: TileLayerKind | undefined, category: AssetCategory): boolean {
+    return !kind || category === kind;
 }

@@ -89,7 +89,7 @@ describe("AssetMetadataStore.Load light validation", () => {
 
 describe("asset categories", () => {
     it("lists the palette's tabs in order, with Misc as the default", () => {
-        expect(AssetCategories.map(category => category.id)).toEqual(["dungeon", "entities", "weapons", "items", "misc", "user"]);
+        expect(AssetCategories.map(category => category.id)).toEqual(["floor", "walls", "dungeon", "entities", "weapons", "items", "misc", "user"]);
         expect(DefaultAssetCategory).toBe("misc");
     });
 
