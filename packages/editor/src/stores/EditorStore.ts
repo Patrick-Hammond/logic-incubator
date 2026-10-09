@@ -433,6 +433,7 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
                 ) {
                     return AddTypes(this.state.currentBrush.position, this.state.viewOffset);
                 }
+            break;
             default:
                 return mouseDownPosition || this.DefaultState().mouseDownPosition;
         }
@@ -536,15 +537,19 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
 
     private UpdateViewOffset(offset: Vec2Like, action: IAction<IActionData>): Vec2Like {
         switch (action.type) {
-            case EditorActions.VIEW_DRAG:
+            case EditorActions.VIEW_DRAG: {
                 const delta = SubtractTypes(this.state.currentBrush.position, action.data.position);
                 return SubtractTypes(offset, delta);
-            case EditorActions.VIEW_MOVE:
+            }
+            case EditorActions.VIEW_MOVE: {
                 return AddTypes(offset, action.data.move);
-            case EditorActions.RESET:
+            }
+            case EditorActions.RESET: {
                 return this.DefaultState().viewOffset;
-            default:
+            }
+            default: {
                 return offset ? offset : this.DefaultState().viewOffset;
+            }
         }
     }
 
