@@ -12,7 +12,7 @@ import {IsPickupValue, PickupValue} from "./entities/Pickups";
 import {SanitiseSpawnerValue, Spawner, SpawnerCells} from "./entities/Spawners";
 import {FindImplicitPlacements} from "./ImplicitData";
 import {Brush, DataBrushName, LevelFile, LevelLayer} from "./LevelFormat";
-import {AmbientLightGrid, BakeLighting, LightGrid, LightSource} from "./Lighting";
+import {AmbientLightGrid, BakeLights, ComposeLighting, LightBake, LightBlockersFor, LightGrid, LightSource, OpenLightBlockers} from "./Lighting";
 import {FindMapBounds} from "./MapBounds";
 import {FindRegions, Region, RegionIdsTouching} from "./Regions";
 
@@ -55,8 +55,10 @@ export default class Level {
     public collisionData: boolean[][] = [];
     /** Per-cell height painted with the `Z_INDEX` data brush. */
     public heightData: number[][] = [];
-    /** Light at every tile corner, baked from point lights - both the `LIGHT` data brush and any placed tile with `light` in its `AssetMetadata` (see `Lighting.BakeLighting`; read it with `CellCornerLight`/`SampleLight`/`FootLight`). */
+    /** Light at every tile corner, baked from point lights - both the `LIGHT` data brush and any placed tile with `light` in its `AssetMetadata` - with walls casting shadows (see `Lighting.ComposeLighting`; read it with `CellCornerLight`/`SampleLight`/`FootLight`). */
     public lightGrid: LightGrid = AmbientLightGrid(0, 0);
+    /** What `lightGrid` was built from: each light's shadowed reach and the corners' ambient occlusion. Rebuild the grid from it with `ComposeLighting` to change a light's strength without casting its rays again. */
+    public lightBake: LightBake = BakeLights([], OpenLightBlockers(0, 0));
     /** Per-cell flag: `true` if the cell is covered by the sprite footprint (see `DoorFootprint`) of a tile with a `door` id in its `AssetMetadata`. Purely a lookup for building `doors` - not consulted for movement collision, since a door must be walkable to trigger open (see `IsDoorClosed` for what keeps monsters out). */
     public doorData: boolean[][] = [];
     /** One entry per connected island of `doorData` cells that has a matching door sprite tile (see `FindDoorTile`). */
@@ -445,6 +447,15 @@ export default class Level {
             }
             this.collisionData[ posX ][ posY ] = true;
         });
+        // What stops light: walls and painted collision, before spawners add theirs below - a spawner is destroyed
+        // in play and the light is baked once, so it would leave its shadow behind. A tile's `blocksLight` has the last word.
+        const lightBlockers = LightBlockersFor(
+            this.boundRect.width,
+            this.boundRect.height,
+            (x, y) => !!(this.collisionData[ x ] && this.collisionData[ x ][ y ]),
+            (x, y) => this.HeightAt(x, y),
+            implicit.lightBlocks.map(({x, y, blocks}) => ({x: x - bounds.x1, y: y - bounds.y1, blocks}))
+        );
         implicit.doors.forEach(({x, y, id: doorId}) => {
             const posX = x - bounds.x1;
             const posY = y - bounds.y1;
@@ -498,7 +509,8 @@ export default class Level {
 
         this.depths = Array.from(depths).sort((a, b) => a - b);
 
-        this.lightGrid = BakeLighting(lights, this.boundRect.width, this.boundRect.height);
+        this.lightBake = BakeLights(lights, lightBlockers);
+        this.lightGrid = ComposeLighting(this.lightBake);
 
         const regionMap = FindRegions(this.collisionData, this.doorData, this.boundRect.width, this.boundRect.height);
         this.regionData = regionMap.regionData;

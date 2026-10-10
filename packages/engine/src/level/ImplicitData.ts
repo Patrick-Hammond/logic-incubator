@@ -24,6 +24,8 @@ export type ImplicitBrush = { name: string; position: Vec2Like; pixelOffset: Vec
 export type ImplicitPlacements = {
     /** Every cell of every `collidable` tile's sprite footprint (see `DoorFootprint`). May repeat a cell (several collidable footprints overlapping it). */
     collision: Vec2Like[];
+    /** Every cell of the sprite footprint of every tile whose asset sets `blocksLight`, with that value - see `Lighting.LightBlockersFor`. */
+    lightBlocks: { x: number; y: number; blocks: boolean }[];
     /** Every cell of every door tile's sprite footprint (see `DoorFootprint`), tagged with that door's `id`. */
     doors: { x: number; y: number; id: number }[];
     /** A tile's effective light (its own override, or its asset's default) - see `EffectiveLight`. */
@@ -63,17 +65,21 @@ export function FindImplicitPlacements(
     sizeFor: (assetName: string) => { width: number; height: number },
     tileSize: number
 ): ImplicitPlacements {
-    const placements: ImplicitPlacements = { collision: [], doors: [], doorLocks: [], lights: [], spawners: [], pickups: [] };
+    const placements: ImplicitPlacements = { collision: [], lightBlocks: [], doors: [], doorLocks: [], lights: [], spawners: [], pickups: [] };
     brushes.forEach(brush => {
         if (!isTileLayer(brush.layerId)) {
             return;
         }
         const meta = metaFor(brush.name);
         const { x, y } = brush.position;
-        if (meta?.collidable || meta?.door) {
+        if (meta?.collidable || meta?.door || meta?.blocksLight !== undefined) {
             const footprint = DoorFootprint(brush.position, sizeFor(brush.name), brush.pixelOffset, tileSize);
             if (meta.collidable) {
                 footprint.forEach(cell => placements.collision.push(cell));
+            }
+            const blocks = meta.blocksLight;
+            if (blocks !== undefined) {
+                footprint.forEach(cell => placements.lightBlocks.push({ x: cell.x, y: cell.y, blocks }));
             }
             if (meta.door) {
                 const id = meta.door.id;

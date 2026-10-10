@@ -16,7 +16,9 @@ const META: { [name: string]: AssetMetadata } = {
     door: { door: { id: 1, open: false } },
     torch: { light: { brightness: 1, tint: 0xff8100, range: 5 } },
     goblin_camp: { spawner: SPAWNER_VALUE },
-    sack_gold: { pickup: GOLD_PICKUP }
+    sack_gold: { pickup: GOLD_PICKUP },
+    table: { collidable: true, blocksLight: false },
+    curtain: { blocksLight: true }
 };
 const SIZES: { [name: string]: { width: number; height: number } } = { door: { width: 32, height: 32 }, big_wall: { width: 32, height: 32 } };
 
@@ -40,6 +42,12 @@ describe("FindImplicitPlacements", () => {
         expect(result.collision).toEqual([{ x: 1, y: 2 }]);
         expect(result.doors).toEqual([]);
         expect(result.lights).toEqual([]);
+    });
+
+    it("lists every cell of a tile with blocksLight, with its value, and nothing for tiles without one", () => {
+        const result = find([brush("table", 1, 1), brush("curtain", 3, 3), brush("wall", 5, 5), brush("big_wall", 7, 7)]);
+        expect(result.lightBlocks).toEqual([{ x: 1, y: 1, blocks: false }, { x: 3, y: 3, blocks: true }]);
+        expect(result.collision).toEqual(expect.arrayContaining([{ x: 1, y: 1 }]));
     });
 
     it("expands a door to every cell of its sprite footprint, tagged with its id", () => {

@@ -3,14 +3,24 @@ import {
     AMBIENT_LIGHT,
     AMBIENT_TINT,
     BakeLighting,
+    BakeLights,
+    BakeLightShape,
     CellCornerLight,
+    ComposeLighting,
+    CORNER_OCCLUSION,
+    CornerOcclusion,
     FootLight,
     IsCompleteLightValue,
+    LightBlockers,
+    LightBlockersFor,
     LightFalloff,
     LightGrid,
+    LightOrigin,
+    LightShape,
     LightToTint,
     MAX_LIGHT,
     MAX_SPRITE_LIGHT,
+    OpenLightBlockers,
     SampleLight
 } from "./Lighting";
 
@@ -152,6 +162,207 @@ describe("BakeLighting", () => {
         Corner(dark(0.5, 0), 5, 5).forEach((v, k) => expect(v).toBeCloseTo(AMBIENT[k]));
         expect(() => dark(-0.3, 5)).not.toThrow();
         Corner(dark(-0.3, 5), 5, 5).forEach((v, k) => expect(v).toBeCloseTo(AMBIENT[k]));
+    });
+});
+
+/**
+ * Blockers drawn as text, one string per row: `#` is a cell light can't pass, a digit an open cell at that
+ * height, anything else an open cell at height 0.
+ */
+function Blockers(rows: string[]): LightBlockers {
+    return LightBlockersFor(
+        rows[0].length,
+        rows.length,
+        (x, y) => rows[y][x] === "#",
+        (x, y) => /[0-9]/.test(rows[y][x]) ? Number(rows[y][x]) : 0,
+        []
+    );
+}
+
+/** `width` x `height` open cells with the given cells walled. */
+function Walled(width: number, height: number, walls: number[][]): LightBlockers {
+    const rows: string[] = [];
+    for (let y = 0; y < height; y++) {
+        let row = "";
+        for (let x = 0; x < width; x++) {
+            row += walls.some(([wx, wy]) => wx === x && wy === y) ? "#" : ".";
+        }
+        rows.push(row);
+    }
+    return Blockers(rows);
+}
+
+/** How much of a light's flame corner `(x, y)` can see, 0 to 1: its baked share over what falloff alone would give. */
+function Visibility(shape: LightShape, range: number, columns: number, x: number, y: number): number {
+    const k = Array.from(shape.corners).indexOf(y * columns + x);
+    const falloff = LightFalloff(Math.hypot(x - shape.origin.x, y - shape.origin.y), range);
+    return k < 0 ? 0 : shape.shares[k] / falloff;
+}
+
+const LAMP = { brightness: 1, tint: WHITE, range: 12 };
+
+describe("LightBlockersFor", () => {
+    const solid = (x: number, y: number): boolean => x === 1 && y === 0;
+
+    it("blocks light where the map is solid and records each cell's floor height", () => {
+        const blockers = LightBlockersFor(3, 2, solid, (x, y) => x + y, []);
+        expect(Array.from(blockers.opaque)).toEqual([0, 1, 0, 0, 0, 0]);
+        expect(Array.from(blockers.floor)).toEqual([0, 1, 2, 1, 2, 3]);
+    });
+
+    it("lets a tile's blocksLight override the collision either way, with true winning a tie", () => {
+        const blockers = LightBlockersFor(3, 2, solid, () => 0, [
+            { x: 1, y: 0, blocks: false },
+            { x: 2, y: 1, blocks: true },
+            { x: 0, y: 1, blocks: false },
+            { x: 0, y: 1, blocks: true },
+            { x: 9, y: 9, blocks: true }
+        ]);
+        expect(Array.from(blockers.opaque)).toEqual([0, 0, 0, 1, 0, 1]);
+    });
+
+    it("blocks nothing on an open grid", () => {
+        expect(Array.from(OpenLightBlockers(2, 2).opaque)).toEqual([0, 0, 0, 0]);
+    });
+});
+
+describe("LightOrigin", () => {
+    it("is the centre of an open cell", () => {
+        expect(LightOrigin(Walled(5, 5, []), 2, 3)).toEqual({ x: 2.5, y: 3.5 });
+    });
+
+    it("moves a light on a wall just past the wall's open side, trying south first", () => {
+        const wall = Blockers(["#####", "#####", "....."]);
+        const origin = LightOrigin(wall, 2, 1);
+        expect(origin.x).toBeCloseTo(2.5);
+        expect(origin.y).toBeGreaterThan(2);
+        expect(origin.y).toBeLessThan(2.5);
+
+        const eastOpen = Blockers(["##.", "##.", "##."]);
+        const east = LightOrigin(eastOpen, 1, 1);
+        expect(east.x).toBeGreaterThan(2);
+        expect(east.y).toBeCloseTo(1.5);
+    });
+
+    it("stays at the centre of a wall with no open side", () => {
+        expect(LightOrigin(Blockers(["###", "###", "###"]), 1, 1)).toEqual({ x: 1.5, y: 1.5 });
+    });
+});
+
+describe("Shadows", () => {
+    it("leaves a corner behind a wall with only the ambient light", () => {
+        const light = { x: 2, y: 7, value: LAMP };
+        const wall = Walled(20, 15, [[5, 4], [5, 5], [5, 6], [5, 7], [5, 8], [5, 9], [5, 10]]);
+        Corner(BakeLighting([light], 20, 15, wall), 9, 7).forEach((v, k) => expect(v).toBeCloseTo(AMBIENT[k]));
+        expect(Corner(BakeLighting([light], 20, 15), 9, 7)[0]).toBeGreaterThan(AMBIENT[0] + 0.1);
+    });
+
+    it("softens a shadow's edge: some corners see part of the flame", () => {
+        const wide = { brightness: 1, tint: WHITE, range: 20 };
+        const wall = Walled(30, 15, [[6, 6], [6, 7], [6, 8]]);
+        const shape = BakeLightShape({ x: 2, y: 7, value: wide }, wall);
+        const column = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15].map(y => Visibility(shape, wide.range, 31, 12, y));
+        expect(column.some(v => v > 0.05 && v < 0.95)).toBe(true);
+        expect(Math.min(...column)).toBe(0);
+        expect(Math.max(...column)).toBeCloseTo(1);
+    });
+
+    it("lights a wall's corners facing the light, not the ones behind it, and leaks nothing past it", () => {
+        const wall = Walled(12, 11, [[5, 2], [5, 3], [5, 4], [5, 5], [5, 6], [5, 7], [5, 8]]);
+        const grid = BakeLighting([{ x: 2, y: 5, value: LAMP }], 12, 11, wall);
+        expect(Corner(grid, 5, 5)[0]).toBeGreaterThan(AMBIENT[0] + 0.2);
+        Corner(grid, 6, 5).forEach((v, k) => expect(v).toBeCloseTo(AMBIENT[k] * CORNER_OCCLUSION[2]));
+        Corner(grid, 7, 5).forEach((v, k) => expect(v).toBeCloseTo(AMBIENT[k]));
+    });
+
+    it("stops light at a diagonal wall, even where its cells only touch at the corners", () => {
+        const diagonal = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(k => [k, k]);
+        const wall = Walled(10, 10, diagonal);
+        // The light is below the diagonal; every corner strictly above it is in shadow.
+        const shape = BakeLightShape({ x: 2, y: 6, value: LAMP }, wall);
+        for (let y = 0; y <= 10; y++) {
+            for (let x = y + 2; x <= 10; x++) {
+                expect(Visibility(shape, LAMP.range, 11, x, y)).toBe(0);
+            }
+        }
+    });
+
+    it("shines a light on a wall into the room it faces, not the one behind", () => {
+        const rows = ["..........", "..........", "..........", "##########", "..........", "..........", ".........."];
+        const grid = BakeLighting([{ x: 5, y: 3, value: LAMP }], 10, 7, Blockers(rows));
+        expect(Corner(grid, 5, 6)[0]).toBeGreaterThan(AMBIENT[0] + 0.2);
+        Corner(grid, 5, 1).forEach((v, k) => expect(v).toBeCloseTo(AMBIENT[k]));
+    });
+
+    it("lights the edge of a ledge two steps up but not the top beyond it", () => {
+        const ledge = Blockers(["..............", "..............", "....3333333333", "....3333333333", "....3333333333", "....3333333333", "....3333333333"]);
+        const shape = BakeLightShape({ x: 1, y: 4, value: LAMP }, ledge);
+        expect(Visibility(shape, LAMP.range, 15, 4, 4)).toBeCloseTo(1);
+        expect(Visibility(shape, LAMP.range, 15, 12, 4)).toBe(0);
+    });
+
+    it("lets light climb a stair that rises one step a tile", () => {
+        const stair = Blockers(["0123456789", "0123456789", "0123456789"]);
+        const shape = BakeLightShape({ x: 0, y: 1, value: LAMP }, stair);
+        [3, 6, 9].forEach(x => expect(Visibility(shape, LAMP.range, 11, x, 1)).toBeCloseTo(1));
+    });
+});
+
+describe("CornerOcclusion", () => {
+    it("darkens corners by how many of the cells around them are walls", () => {
+        const room = Blockers(["#####", "#...#", "#...#", "#####"]);
+        const occlusion = CornerOcclusion(room);
+        const at = (x: number, y: number): number => occlusion[y * 6 + x];
+        expect(at(2, 2)).toBeCloseTo(CORNER_OCCLUSION[0]);
+        expect(at(2, 1)).toBeCloseTo(CORNER_OCCLUSION[2]);
+        expect(at(1, 1)).toBeCloseTo(CORNER_OCCLUSION[3]);
+        expect(at(0, 0)).toBeCloseTo(CORNER_OCCLUSION[1]);
+    });
+
+    it("shades the foot of a ledge like a wall, but not a single stair step", () => {
+        const at = (rows: string[], x: number, y: number): number => CornerOcclusion(Blockers(rows))[y * (rows[0].length + 1) + x];
+        expect(at(["0022", "0022"], 2, 1)).toBeCloseTo(CORNER_OCCLUSION[2]);
+        expect(at(["0011", "0011"], 2, 1)).toBeCloseTo(CORNER_OCCLUSION[0]);
+    });
+
+    it("darkens the ambient light at the foot of a wall", () => {
+        const grid = BakeLighting([], 5, 4, Blockers(["#####", "#...#", "#...#", "#####"]));
+        Corner(grid, 2, 1).forEach((v, k) => expect(v).toBeCloseTo(AMBIENT[k] * CORNER_OCCLUSION[2]));
+        Corner(grid, 2, 2).forEach((v, k) => expect(v).toBeCloseTo(AMBIENT[k]));
+    });
+});
+
+describe("ComposeLighting", () => {
+    const lights = [
+        { x: 3, y: 3, value: { brightness: 0.4, tint: WHITE, range: 6 } },
+        { x: 8, y: 3, value: { brightness: 0.3, tint: 0xff0000, range: 6 } }
+    ];
+    const bake = BakeLights(lights, Walled(12, 8, [[5, 2], [5, 3], [5, 4]]));
+
+    it("matches BakeLighting with every light at its own strength", () => {
+        const grid = ComposeLighting(bake);
+        expect(Array.from(grid.data)).toEqual(Array.from(BakeLighting(lights, 12, 8, Walled(12, 8, [[5, 2], [5, 3], [5, 4]])).data));
+    });
+
+    it("scales each light by its entry in scales, so a torch can flicker without new rays", () => {
+        const off = ComposeLighting(bake, [0, 1]);
+        Corner(off, 3, 3).forEach((v, k) => expect(v).toBeCloseTo(AMBIENT[k]));
+        const doubled = ComposeLighting(bake, [2, 1]);
+        const base = ComposeLighting(bake);
+        expect(Corner(doubled, 3, 3)[1] - AMBIENT[1]).toBeCloseTo((Corner(base, 3, 3)[1] - AMBIENT[1]) * 2);
+    });
+
+    it("fills the grid it is given instead of making a new one", () => {
+        const grid = ComposeLighting(bake);
+        expect(ComposeLighting(bake, [0, 0], grid)).toBe(grid);
+        Corner(grid, 3, 3).forEach((v, k) => expect(v).toBeCloseTo(AMBIENT[k]));
+    });
+
+    it("keeps one shape per light, in order, and an empty one for a light with no brightness", () => {
+        const dark = BakeLights([{ x: 1, y: 1, value: { brightness: 0, tint: WHITE, range: 5 } }, lights[0]], OpenLightBlockers(10, 10));
+        expect(dark.shapes.length).toBe(2);
+        expect(dark.shapes[0].corners.length).toBe(0);
+        expect(dark.shapes[1].corners.length).toBeGreaterThan(0);
     });
 });
 

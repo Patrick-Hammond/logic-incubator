@@ -127,6 +127,18 @@ describe("asset categories", () => {
         warn.mockRestore();
     });
 
+    it("drops a blocksLight that isn't a boolean with a warning naming the asset, keeping the rest of the entry", () => {
+        const store = new AssetMetadataStore();
+        const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+        store.Load({ table: { blocksLight: "no" as never, collidable: true }, fence: { blocksLight: false } });
+        expect(store.Get("table").blocksLight).toBeUndefined();
+        expect(store.Get("table").collidable).toBe(true);
+        expect(store.Get("fence").blocksLight).toBe(false);
+        expect(warn).toHaveBeenCalledTimes(1);
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining('"table"'), "no");
+        warn.mockRestore();
+    });
+
     it("looks a category up through the scope, the level's bundle first", () => {
         const store = new AssetMetadataStore();
         store.Add("global", { torch: { category: "items" } });
