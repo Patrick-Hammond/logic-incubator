@@ -1,13 +1,16 @@
 import GameComponent from "@logic-incubator/lib/game/GameComponent";
 import AssetFactory from "@logic-incubator/lib/loading/AssetFactory";
+import { TileSize } from "./Constants";
 import Encounter from "./Encounter";
 import {GAME_PAUSED, GAME_RESUMED, LEVEL_CREATED, PLAYER_DIED} from "./Events";
 import AssetMetadataStore from "./level/AssetMetadata";
 import { AssetMetadataBinding, BindAssetMetadata } from "./level/AssetMetadataBinding";
 import LevelAssets from "./level/LevelAssets";
+import {LightSpell} from "./level/entities/LightSpell";
 import {WeaponDef} from "./level/entities/Projectiles";
 import Level from "./level/Level";
 import {LevelFile} from "./level/LevelFormat";
+import { MovingLight } from "./level/SceneLights";
 import TileCollision from "./level/TileCollision";
 import {Camera} from "./view/Camera";
 import Effects from "./view/Effects";
@@ -26,6 +29,8 @@ export type PlayerSetup = {
     hearts?: {full: string; half: string; empty: string};
     /** Starting loadout - the first is equipped. Fired while a fire direction is held (see `PlayerControl`). */
     weapons: WeaponDef[];
+    /** A light they can call up with the cast control (see `PlayerControl`) - a mage-light that floats beside them. Leave out for a hero who can't. */
+    lightSpell?: LightSpell;
 };
 
 export type DungeonMainOptions = {
@@ -46,6 +51,12 @@ export type DungeonMainOptions = {
      * returns one it is used in place of `player.sprite` - how a game lets the player pick a character.
      */
     playerSprite?: () => string | undefined;
+    /**
+     * The light spell the player has, asked each time a level starts, like `playerSprite`: null for none, a
+     * spell to use in place of `player.lightSpell`, or undefined to keep that - how a game gives only some
+     * characters the spell.
+     */
+    playerLightSpell?: () => LightSpell | null | undefined;
     /**
      * Something drawn over the HUD and kept with the scene - a pause menu, a death screen: made when the scene is, given the scene so it can `Pause`, `Resume` and `Restart` it, and
      * listening to the engine's events (`PLAYER_DIED`) for what else it needs.
@@ -77,6 +88,10 @@ export class DungeonMain extends GameComponent {
     private paused = false;
     /** Dead, in a game whose death waits for `Restart`: everything holds still until it comes. */
     private waitingForRestart = false;
+    /** Seconds of play so far - what the lights flicker by. */
+    private lightTime = 0;
+    /** This frame's moving lights, gathered afresh each frame into the same array - see `MovingLights`. */
+    private movingLights: MovingLight[] = [];
 
     constructor(private options: DungeonMainOptions) {
         super();
@@ -187,6 +202,8 @@ export class DungeonMain extends GameComponent {
     private OnLevelCreated(): void {
         this.encounter.Reset();
         this.player.SetSprite((this.options.playerSprite && this.options.playerSprite()) || this.options.player.sprite);
+        const spell = this.options.playerLightSpell && this.options.playerLightSpell();
+        this.player.SetLightSpell(spell !== undefined ? spell : this.options.player.lightSpell);
         this.player.Reset(this.level.playerStartPosition);
         this.renderer.Reset();
         this.restartIn = 0;
@@ -216,6 +233,10 @@ export class DungeonMain extends GameComponent {
             return;
         }
 
+        // Before the player moves, since moving them moves the camera and that draws the tiles.
+        this.lightTime += seconds;
+        this.level.UpdateLights(this.lightTime, this.MovingLights());
+
         this.player.Update(dt, seconds);
         const shot = this.player.TakeShot();
         if (shot) {
@@ -223,7 +244,27 @@ export class DungeonMain extends GameComponent {
         }
         this.encounter.Update(dt, seconds, this.player);
         this.renderer.Render(this.player, this.encounter);
-        this.hud.Render(this.player.Health, this.player.Gold, this.player.EquippedWeapon.icon, this.player.Inventory, this.player.Keys);
+        this.hud.Render(this.player.Health, this.player.Gold, this.player.EquippedWeapon.icon, this.player.Inventory, this.player.Keys, this.player.Spell);
+    }
+
+    /** The lights moving through the level this frame: the torch the player carries, their mage-light, and any shots that glow. */
+    private MovingLights(): MovingLight[] {
+        const lights = this.movingLights;
+        lights.length = 0;
+        const carried = this.player.Light;
+        if (carried) {
+            lights.push(carried);
+        }
+        const spell = this.player.SpellLight;
+        if (spell) {
+            lights.push(spell);
+        }
+        this.encounter.projectiles.forEach(projectile => {
+            if (projectile.light && !projectile.dead) {
+                lights.push({ x: projectile.x / TileSize, y: projectile.y / TileSize, value: projectile.light, key: projectile });
+            }
+        });
+        return lights;
     }
 
     /**

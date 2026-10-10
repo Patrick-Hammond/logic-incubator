@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { DescribeLock, DescribePickup, MapLabel, PickupLabel } from "./DataLabels";
 
 const WEAPON = { icon: "weapon_axe", shot: { sprite: "weapon_throwing_axe", speed: 5, damage: 2, cooldown: 0.4, range: 8 } };
+const TORCH = { brightness: 1, tint: 0xffc780, range: 7 };
 
 describe("PickupLabel", () => {
     it("is the kind's letter and its number", () => {
@@ -12,6 +13,7 @@ describe("PickupLabel", () => {
         expect(PickupLabel({ kind: "weapon", weapon: WEAPON })).toBe("W");
         expect(PickupLabel({ kind: "item", sprite: "flask_blue" })).toBe("I");
         expect(PickupLabel({ kind: "item" })).toBe("I");
+        expect(PickupLabel({ kind: "light", light: TORCH, seconds: 60 })).toBe("T");
     });
 
     it("only uses characters the map's bitmap font has - no + or $", () => {
@@ -42,6 +44,10 @@ describe("MapLabel", () => {
         expect(MapLabel({ kind: "weapon", weapon: WEAPON })).toBe("W");
     });
 
+    it("tells a light to carry from a light on the map", () => {
+        expect(MapLabel({ kind: "light", light: TORCH })).toBe("T");
+    });
+
     it("is empty for no value", () => {
         expect(MapLabel(null)).toBe("");
         expect(MapLabel(undefined)).toBe("");
@@ -57,6 +63,8 @@ describe("DescribePickup and DescribeLock", () => {
         expect(DescribePickup({ kind: "weapon", weapon: WEAPON })).toBe("weapon: weapon_axe");
         expect(DescribePickup({ kind: "item", sprite: "flask_blue" })).toBe("item: flask_blue");
         expect(DescribePickup({ kind: "item" })).toMatch(/its own sprite/);
+        expect(DescribePickup({ kind: "light", light: TORCH, seconds: 90 })).toBe("a light to carry, 90 s");
+        expect(DescribePickup({ kind: "light", light: TORCH })).toBe("a light to carry");
     });
 
     it("says what a door's lock needs", () => {

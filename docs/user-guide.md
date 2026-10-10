@@ -1530,6 +1530,7 @@ export function Dungeon(): () => void {
 | `overlay?` | `(main: DungeonMain) => GameComponent`. Called once; what it returns is attached above the HUD and kept with the scene. It gets the scene so it can `Pause()`, `Resume()` and `Restart()` it, and listens to `PLAYER_DIED` and the other events. This is how a game adds a pause menu and a death screen without the engine knowing what they look like. |
 | `manualRestart?` | `boolean`. A death holds everything still until `main.Restart()` is called, instead of restarting by itself 1.5 s later - for a game whose `overlay` offers a choice (try again, quit). |
 | `playerSprite?` | `() => string \| undefined`. Called on every start/restart; the animation it returns is what the player is drawn with, in place of `player.sprite`. Return `undefined` for the default. This is how a character select screen's pick reaches the game: keep the chosen character in your boot code (listen for the event your screen emits) and return their run animation. |
+| `playerLightSpell?` | `() => LightSpell \| null \| undefined`. Called with `playerSprite`: the light spell the chosen character has ([9.6.2](#962-lights-in-play)) - `null` for none, `undefined` to keep `player.lightSpell`. How a game gives the spell to only some characters. |
 
 The engine uses a fixed coordinate system from `@logic-incubator/engine/Constants`: a 1280x720 canvas, 16 px tiles, a
 320 px HUD column on the right (`PlayWidth` = 960 px of play area). Use these constants for your `Game` size.
@@ -1553,14 +1554,21 @@ export const PlayerSetup: PlayerSetup = {
                 damage: 1,                              // half-hearts for a monster, hit points for a spawner
                 cooldown: 0.2,                          // seconds between shots
                 range: 12,                              // tiles flown before fizzling
+                // light: { brightness: 1, tint: 0xff8a3d, range: 5, flicker: 0.2 },   // a shot that glows as it flies
             },
         },
     ],
+    lightSpell: {                                       // optional: a mage-light they can call up (see 9.6.2)
+        light: { brightness: 0.9, tint: 0xa8c4ff, range: 8, flicker: 0.04 },
+        seconds: 60,                                    // how long it stays lit (0: for good)
+        recharge: 20,                                   // seconds before it can be called up again
+    },
 };
 ```
 
 Controls (`PlayerControl`): move with arrow keys or WASD or the left stick; fire with Space or by pushing the right
-stick, always left or right in the direction last faced (Tutankham-style); the right stick also sets facing.
+stick, always left or right in the direction last faced (Tutankham-style); the right stick also sets facing. L, or a
+gamepad's Y button, calls up the light spell, if the player has one and it's ready.
 
 ### 9.4 Monsters
 
@@ -1580,7 +1588,8 @@ const Defs: { readonly [K in MonsterType]: MonsterDef } = {
               behaviour: () => new Wander({ aggroRange: 4 }) },
     shaman: { idle: "shaman_idle_anim", run: "shaman_run_anim", hitPoints: 3, speed: 0.4, contactDamage: 1, contactCooldown: 1,
               behaviour: () => new KeepDistance({ range: 5 }),
-              ranged: { sprite: "flask_green", speed: 2, damage: 1, cooldown: 2.5, range: 8 } },
+              ranged: { sprite: "flask_green", speed: 2, damage: 1, cooldown: 2.5, range: 8,
+                        light: { brightness: 0.8, tint: 0x7dff70, range: 4, flicker: 0.1 } } },   // its flask glows green
 };
 
 export const Monsters: IMonsterRoster<MonsterType> = {
@@ -1649,7 +1658,7 @@ There are exactly four **data brushes**, painted on the one `attributes` data la
 | `player-start` | - | Where the player starts (required: a level without one throws "Player start position is not defined"). |
 | `collision` | - | Marks a cell solid, in addition to whatever tiles there declare. |
 | `z-index` | number | The cell's **height** ([9.7](#97-heights)). |
-| `pickup` | a `PickupValue` | Turns whatever tile is on top at that cell into a pickup (it disappears when collected), for an item that isn't one by default. Edited with its popup - choose gold, health, a key, a weapon or an item. |
+| `pickup` | a `PickupValue` | Turns whatever tile is on top at that cell into a pickup (it disappears when collected), for an item that isn't one by default. Edited with its popup - choose gold, health, a key, a weapon, an item or a light to carry. |
 
 Lights, spawners and doors are **not** brushes: they are ordinary tiles that carry their behaviour in
 `assets-meta.json` (a pickup can be either: a tile that is one by default, or a `pickup` brush over any other).
@@ -1663,7 +1672,7 @@ a deleted one is removed - with a warning if it had anything in it); you only fi
 ```jsonc
 {
   "wall_mid":        { "category": "walls", "collidable": true },
-  "torch_1_anim":    { "category": "misc", "light": { "brightness": 1, "tint": 16762752, "range": 15 } },
+  "torch_1_anim":    { "category": "misc", "light": { "brightness": 1, "tint": 16762752, "range": 15, "flicker": 0.15 } },
   "doors_leaf_closed": { "door": { "id": 1, "open": false } },
   "doors_leaf_open":   { "door": { "id": 1, "open": true } },
   "mob_spawner":     { "spawner": { "monsters": ["goblin"], "interval": 3, "maxAlive": 4, "total": 0, "activationRange": 10, "hitPoints": 10 } },
@@ -1679,10 +1688,10 @@ a deleted one is removed - with a warning if it had anything in it); you only fi
 | `category` | Which palette tab the **level editor** lists the sprite under: `floor`, `walls`, `entities`, `weapons`, `items`, `misc` or `user` ([10.3](#103-layers-data-brushes-and-palette-categories)). Has no effect in play. A sprite with none is listed under Misc; an unknown value is a build error (and a console warning at run time). |
 | `collidable` | Blocks movement, and light. |
 | `blocksLight` | Whether the sprite stops light, where that should differ from `collidable`: `false` lets light past a solid tile (a table, a fence, a window), `true` stops it at one you can walk through. Left out, a tile stops light if it is collidable. Where tiles on one cell disagree, `true` wins. A value that isn't `true` or `false` is dropped with a console warning. |
-| `light` | A point light: `brightness` (its strength at its own cell, added on top of the ambient light; 1 is a normal torch, clamped to 0..2), `tint` (hex colour as a number; a warm colour reads as firelight against the cool ambient), `range` (radius in tiles). Baked once at level load at the corners of the tile grid, so it is blended smoothly across tiles, and fades out smoothly to nothing at its range. Overlapping lights add up, and light can go above 1 to brighten the art (capped). Where no light reaches, a dim, cool ambient light. Sprites, and tiles taller than a cell such as doors, are lit by the floor under their feet. Walls and other light-blocking tiles cast soft shadows, and the floor is a little darker along the foot of a wall and in a room's corners. A torch placed on a wall shines from the wall's open side (south first), so it lights the room it faces and not what's behind it. Height counts: a ledge two or more steps above the light hides its top, while stairs (one step a tile) stay lit. Spawners and doors don't cast shadows. A hand-edited light missing a field is dropped with a console warning naming the sprite rather than baking black. |
+| `light` | A point light: `brightness` (its strength at its own cell, added on top of the ambient light; 1 is a normal torch, clamped to 0..2), `tint` (hex colour as a number; a warm colour reads as firelight against the cool ambient), `range` (radius in tiles), and optionally `flicker` (how far its strength wavers either way, as a share of itself: 0.15 is a torch; left out or 0, it's steady). Its sprite gets a soft glow over its flame (centred across the art, a third of the way down), in the light's colour. Baked once at level load at the corners of the tile grid, so it is blended smoothly across tiles, and fades out smoothly to nothing at its range. Overlapping lights add up, and light can go above 1 to brighten the art (capped). Where no light reaches, a dim, cool ambient light. Sprites, and tiles taller than a cell such as doors, are lit by the floor under their feet. Walls and other light-blocking tiles cast soft shadows, and the floor is a little darker along the foot of a wall and in a room's corners. A torch placed on a wall shines from the wall's open side (south first), so it lights the room it faces and not what's behind it. Height counts: a ledge two or more steps above the light hides its top, while stairs (one step a tile) stay lit. Spawners and doors don't cast shadows. A hand-edited light missing a field is dropped with a console warning naming the sprite rather than baking black. |
 | `door` | `id` pairs a door's two sprites (closed and open); `open` says which half this is. The door swaps when the player's tile enters any of its footprint cells and swaps back when they leave, so it reads as "walked open" - unless that placement is locked, when the player needs its key ([9.6.1](#961-keys-and-locked-doors)). |
 | `spawner` | Produces `monsters` (a pool, picked at random) every `interval` s, at most `maxAlive` at once, `total` in all (0 = unlimited), only within `activationRange` tiles of the player (0 = always). `hitPoints` is the damage to destroy it (0 = indestructible). Its sprite's footprint is solid until destroyed. |
-| `pickup` | What walking over it gives: `gold` or `health` (an `amount`; health is in half-hearts and never goes past the maximum), a `key` (an `id`), a `weapon`, or an inventory `item` (its `sprite`, or - left out - the tile's own). The tile then disappears. A malformed one is dropped with a console warning naming the sprite. |
+| `pickup` | What walking over it gives: `gold` or `health` (an `amount`; health is in half-hearts and never goes past the maximum), a `key` (an `id`), a `weapon`, an inventory `item` (its `sprite`, or - left out - the tile's own), or a `light` to carry (a `light` value, and the `seconds` it burns for - 0 or left out for the rest of the level; see [9.6.2](#962-lights-in-play)). The tile then disappears, and if it gave off light its light goes with it. A malformed one is dropped with a console warning naming the sprite. |
 
 A **specific placement** can override its light, spawner, pickup or door lock (the editor's data-select tool edits them per placement);
 `assets-meta` is the default for the sprite. Metadata is per bundle: a level's bundle can have its own
@@ -1702,6 +1711,26 @@ the HUD's *Keys* panel. Keys aren't used up, and a second key with an id already
 level drops them. A door's `door.id` in `assets-meta.json` is only what pairs its closed and open sprites - it is not its lock.
 
 Monsters can never open or enter a closed door (see `Encounter` in the API reference), whatever keys the player has.
+
+#### 9.6.2 Lights in play
+
+Lights are baked when the level loads, but the light you see is rebuilt every frame (`Level.UpdateLights`), cheaply, from
+that bake:
+
+- **Flicker.** A light with `flicker` wavers smoothly around its strength, each one out of step with the others.
+- **Torches to carry.** A `light` pickup - a torch placed on the floor with a `pickup` brush set to *A light to carry*, say -
+  gives the player that light: it follows them, casting shadows as they go, until it has burnt for its `seconds`. It dims
+  over its last 8 seconds so they see it going. Picking up another replaces it; dying drops it.
+- **Glowing shots.** A shot with a `light` (a weapon's `shot`, or a monster's `ranged`) lights its way as it flies.
+- **The mage-light.** A hero with a `lightSpell` (`PlayerSetup.lightSpell`, or per character through `playerLightSpell`)
+  calls it up with L or a gamepad's Y: a ball of light floats just behind their shoulder and lights the floor around them for
+  its `seconds`, dimming at the end like a torch, then needs `recharge` seconds before it can be called up again. The HUD
+  shows it under the keys: a bar that empties as it burns and fills as it recharges, and READY, LIT or RECHARGING with the
+  seconds left.
+
+Lights that move are cast from fewer points across their flame, and only again once they've moved an eighth of a tile, so a
+handful of them costs little. Each gets a soft glow: a carried torch and a shot under the figures, the mage-light over them
+with a bright core.
 
 ### 9.7 Heights
 

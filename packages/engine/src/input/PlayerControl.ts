@@ -19,11 +19,16 @@ export interface IPlayerInput {
      * as it was, so firing still goes the way the player was already facing.
      */
     aimX: number;
+    /** Whether the cast control is held this frame - L on keyboard, a gamepad's Y (its top face button) - which calls up the player's light spell, if they have one. */
+    casting: boolean;
 }
+
+/** The gamepad button that casts: Y, the top face button, in the standard mapping. */
+const CastButton = 3;
 
 export default class PlayerControl {
     private inputVector = new Vec2();
-    private playerInput: IPlayerInput = { direction: new Vec2(), firing: false, aimX: 0 };
+    private playerInput: IPlayerInput = { direction: new Vec2(), firing: false, aimX: 0, casting: false };
     private keyboard: Keyboard;
     private gamePad: GamePad;
 
@@ -36,6 +41,7 @@ export default class PlayerControl {
         this.inputVector.Set(0, 0);
         let firing = false;
         let aimX = 0;
+        let casting = false;
 
         if (this.keyboard.AnyKeyPressed()) {
             if (this.keyboard.KeyPressed(Key.UpArrow) || this.keyboard.KeyPressed(Key.W)) {
@@ -51,6 +57,7 @@ export default class PlayerControl {
                 this.inputVector.Offset(1, 0);
             }
             firing = this.keyboard.KeyPressed(Key.Space);
+            casting = this.keyboard.KeyPressed(Key.L);
         } else {
             if (this.gamePad.controllers[this.playerId]) {
                 // GetStick is null for a controller without that stick (too few axes) - no movement then.
@@ -65,6 +72,8 @@ export default class PlayerControl {
                     firing = true;
                     aimX = aim.x;
                 }
+                const cast = this.gamePad.GetButton(this.playerId, CastButton);
+                casting = !!cast && cast.pressed;
             }
         }
 
@@ -75,6 +84,7 @@ export default class PlayerControl {
         }
         this.playerInput.firing = firing;
         this.playerInput.aimX = aimX;
+        this.playerInput.casting = casting;
 
         return this.playerInput;
     }

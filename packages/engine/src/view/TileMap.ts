@@ -1,4 +1,4 @@
-import { Container, GD8Symmetry, groupD8 } from "pixi.js";
+import { Container, GD8Symmetry, groupD8, Texture } from "pixi.js";
 import { CompositeTilemap } from "@logic-incubator/lib/tilemap";
 import GameComponent from "@logic-incubator/lib/game/GameComponent";
 import { TileSize } from "../Constants";
@@ -7,10 +7,17 @@ import { ZBandAlpha, ZScale } from "../level/Depth";
 import { CellCornerLight, FootLight } from "../level/Lighting";
 import Level from "../level/Level";
 import { Camera } from "./Camera";
+import GlowLayer, { CreateGlowTexture } from "./GlowLayer";
 import { ViewOrigin } from "./helpers/CameraWindow";
+import { GlowFlameY, GlowLook, LookOfGlow } from "./helpers/Glow";
 
-type Band = { z: number; root: Container; layers: CompositeTilemap[] };
+/** One height's tiles, a layer per tile layer, with the glows of the lit tiles among them drawn over them. */
+type Band = { z: number; root: Container; layers: CompositeTilemap[]; glows: GlowLayer };
 
+/** Name of the layer (a `GlowLayer`) the glows of moving lights - a carried torch, a glowing shot - are drawn into, under the figures - see `EntityRenderer`. */
+export const GlowsLayer = "glows";
+/** Name of the layer (a `GlowLayer`) a floating light - the player's mage-light - is drawn into, over the figures - see `EntityRenderer`. */
+export const OrbsLayer = "orbs";
 /** Name of the layer (a `CompositeTilemap`) the player, monsters and spawners are drawn into - see `EntityRenderer`. */
 export const EntitiesLayer = "entities";
 /** Name of the layer (a plain `Container` of sprites, which unlike a tilemap can turn to any angle) shots are drawn into. */
@@ -43,6 +50,9 @@ export function TileGD8Rotation(rotation: number, scaleX: number, scaleY: number
     return groupD8.add(flip, rotate);
 }
 
+/** How far inside the edges of a standing tile its light is sampled, in tiles - two pixels, as for a figure (see `EntityRenderer`). */
+const StandingFootInset = 2 / TileSize;
+
 /**
  * Draws tiles grouped by height (z). Each z band renders at `ZScale(z)`; all
  * bands are anchored on the same world point so they line up at the centre of
@@ -52,18 +62,23 @@ export function TileGD8Rotation(rotation: number, scaleX: number, scaleY: number
  * additionally scaled by `camera.EffectiveZoom`, a whole-scene zoom driven by
  * the player's height (see `Camera.UpdateZoom`/`StepZoom`), so climbing
  * doesn't stay pinned at a perfect 1:1 - though it eases back to 1 if the
- * player stays put. The player, monsters and spawners render into their own
- * layer on top (`EntitiesLayer`), and shots into one above that
- * (`ProjectilesLayer`); both get the same `EffectiveZoom` factor so they
- * grow/shrink in step with the world.
+ * player stays put. A tile that gives off light has a glow drawn over it, in
+ * its own band (see `Glow`). The player, monsters and spawners render into their
+ * own layer on top (`EntitiesLayer`), over the glows of lights that move
+ * (`GlowsLayer`) and under those that float (`OrbsLayer`), and shots into one
+ * above that (`ProjectilesLayer`); all four get the same `EffectiveZoom` factor
+ * so they grow/shrink in step with the world.
  */
-/** How far inside the edges of a standing tile its light is sampled, in tiles - two pixels, as for a figure (see `EntityRenderer`). */
-const StandingFootInset = 2 / TileSize;
-
 export default class TileMapView extends GameComponent {
     private bands: Band[] = [];
+    private glowsLayer: GlowLayer | null = null;
     private entitiesLayer: CompositeTilemap | null = null;
+    private orbsLayer: GlowLayer | null = null;
     private projectilesLayer: Container | null = null;
+    /** What every glow is drawn with - made once, and destroyed with this. */
+    private glowTexture: Texture | null = null;
+    /** One glow's look, refilled per lit tile. */
+    private glowLook: GlowLook = { tint: 0xffffff, alpha: 0, radius: 0 };
     /** One cell's corner light, refilled per cell and read by `tile()` as each tile is added - see `Lighting.CellCornerLight`. */
     private cornerLight = new Float32Array(12);
     /** Light for a tile taller than a cell, refilled per tile - see `StandingLight`. */
@@ -74,6 +89,8 @@ export default class TileMapView extends GameComponent {
     }
 
     protected OnInitialise(): void {
+        const glowTexture = this.glowTexture = CreateGlowTexture();
+        this.Own(() => glowTexture.destroy(true));
         this.Listen(this.game.dispatcher, LEVEL_LOADED, this.OnLevelLoaded);
         this.Listen(this.game.dispatcher, CAMERA_MOVED, this.Render);
     }
@@ -91,6 +108,13 @@ export default class TileMapView extends GameComponent {
         });
         this.bands = [];
 
+        [this.glowsLayer, this.orbsLayer].forEach(layer => {
+            if (layer) {
+                this.camera.root.removeChild(layer);
+                layer.destroy({ children: true });
+            }
+        });
+        this.glowsLayer = this.orbsLayer = null;
         if (this.entitiesLayer) {
             this.camera.root.removeChild(this.entitiesLayer);
             this.entitiesLayer.destroy();
@@ -119,16 +143,28 @@ export default class TileMapView extends GameComponent {
                 root.addChild(tileLayer);
                 layers.push(tileLayer);
             });
+            const glows = new GlowLayer(this.glowTexture);
+            root.addChild(glows);
 
             this.camera.root.addChild(root);
-            this.bands.push({ z, root, layers });
+            this.bands.push({ z, root, layers, glows });
         }
+
+        this.glowsLayer = new GlowLayer(this.glowTexture);
+        this.glowsLayer.name = GlowsLayer;
+        this.glowsLayer.scale.set(this.camera.Scale);
+        this.camera.root.addChild(this.glowsLayer);
 
         this.entitiesLayer = new CompositeTilemap();
         this.entitiesLayer.name = EntitiesLayer;
         this.entitiesLayer.interactive = this.entitiesLayer.interactiveChildren = false;
         this.entitiesLayer.scale.set(this.camera.Scale);
         this.camera.root.addChild(this.entitiesLayer);
+
+        this.orbsLayer = new GlowLayer(this.glowTexture);
+        this.orbsLayer.name = OrbsLayer;
+        this.orbsLayer.scale.set(this.camera.Scale);
+        this.camera.root.addChild(this.orbsLayer);
 
         this.projectilesLayer = new Container();
         this.projectilesLayer.name = ProjectilesLayer;
@@ -150,12 +186,11 @@ export default class TileMapView extends GameComponent {
         const boundW = this.level.boundRect.width;
         const boundH = this.level.boundRect.height;
 
-        if (this.entitiesLayer) {
-            this.entitiesLayer.scale.set(camScale * cameraZoom);
-        }
-        if (this.projectilesLayer) {
-            this.projectilesLayer.scale.set(camScale * cameraZoom);
-        }
+        [this.glowsLayer, this.entitiesLayer, this.orbsLayer, this.projectilesLayer].forEach(layer => {
+            if (layer) {
+                layer.scale.set(camScale * cameraZoom);
+            }
+        });
 
         for (let i = 0, len = this.bands.length; i < len; i++) {
             const band = this.bands[i];
@@ -172,6 +207,8 @@ export default class TileMapView extends GameComponent {
             const winW = this.camera.BaseViewWidth / zScale;
             const winH = this.camera.BaseViewHeight / zScale;
             const { x: originX, y: originY } = ViewOrigin(centre, this.camera.BaseViewWidth, this.camera.BaseViewHeight, zScale);
+            band.glows.Begin();
+            band.glows.scale.set(camScale * zScale);
 
             for (let l = 0, ll = band.layers.length; l < ll; l++) {
                 const layer = band.layers[l];
@@ -212,21 +249,24 @@ export default class TileMapView extends GameComponent {
                             const texture = tile.anim ? tile.anim.texture : tile.texture;
                             if (texture) {
                                 const light = texture.height > TileSize ? this.StandingLight(x, y, tile.pixelOffset, texture) : this.cornerLight;
-                                layer.tile(
-                                    texture,
-                                    (x - originX) * TileSize - tile.pixelOffset.x,
-                                    (y - originY) * TileSize - tile.pixelOffset.y,
-                                    // A new options object per tile: `tile()` writes the texture's frame into it.
-                                    { cornerTints: light }
-                                );
+                                const left = (x - originX) * TileSize - tile.pixelOffset.x;
+                                const top = (y - originY) * TileSize - tile.pixelOffset.y;
+                                // A new options object per tile: `tile()` writes the texture's frame into it.
+                                layer.tile(texture, left, top, { cornerTints: light });
                                 if (tile.rotation || tile.scale.x < 0 || tile.scale.y < 0) {
                                     layer.tileRotate(TileGD8Rotation(tile.rotation, tile.scale.x, tile.scale.y));
+                                }
+                                if (tile.light !== undefined) {
+                                    const lights = this.level.lights;
+                                    LookOfGlow(lights.Colour(tile.light), lights.Scale(tile.light), this.glowLook);
+                                    band.glows.Add(left + texture.width / 2, top + texture.height * GlowFlameY, this.glowLook, TileSize);
                                 }
                             }
                         }
                     }
                 }
             }
+            band.glows.End();
         }
     }
 

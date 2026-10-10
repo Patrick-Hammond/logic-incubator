@@ -5,10 +5,13 @@ import {
     BakeLighting,
     BakeLights,
     BakeLightShape,
+    CastMovingLight,
     CellCornerLight,
     ComposeLighting,
     CORNER_OCCLUSION,
     CornerOcclusion,
+    Flicker,
+    FlickerScale,
     FootLight,
     IsCompleteLightValue,
     LightBlockers,
@@ -41,6 +44,12 @@ describe("IsCompleteLightValue", () => {
         expect(IsCompleteLightValue({ brightness: 1, tint: TINT, range: Infinity })).toBe(false);
     });
 
+    it("accepts a numeric flicker, and rejects one that isn't a finite number", () => {
+        expect(IsCompleteLightValue({ brightness: 1, tint: TINT, range: 5, flicker: 0.15 })).toBe(true);
+        expect(IsCompleteLightValue({ brightness: 1, tint: TINT, range: 5, flicker: "0.15" })).toBe(false);
+        expect(IsCompleteLightValue({ brightness: 1, tint: TINT, range: 5, flicker: NaN })).toBe(false);
+    });
+
     it("rejects a plain number (the other half of the Brush.data union) and null/undefined", () => {
         expect(IsCompleteLightValue(5)).toBe(false);
         expect(IsCompleteLightValue(null)).toBe(false);
@@ -60,6 +69,52 @@ function Corner(grid: LightGrid, x: number, y: number): number[] {
     const c = (y * (grid.width + 1) + x) * 3;
     return [grid.data[c], grid.data[c + 1], grid.data[c + 2]];
 }
+
+describe("Flicker", () => {
+    it("wavers between -1 and 1, and isn't the same for every seed", () => {
+        let lowest = 1;
+        let highest = -1;
+        let sameAsNextSeed = 0;
+        for (let t = 0; t < 20; t += 0.01) {
+            const value = Flicker(t, 3);
+            lowest = Math.min(lowest, value);
+            highest = Math.max(highest, value);
+            if (Math.abs(value - Flicker(t, 4)) < 1e-6) {
+                sameAsNextSeed++;
+            }
+        }
+        expect(lowest).toBeGreaterThanOrEqual(-1);
+        expect(highest).toBeLessThanOrEqual(1);
+        expect(highest - lowest).toBeGreaterThan(1);
+        expect(sameAsNextSeed).toBeLessThan(10);
+    });
+
+    it("moves smoothly - no jump from one frame to the next", () => {
+        for (let t = 0; t < 10; t += 1 / 60) {
+            expect(Math.abs(Flicker(t + 1 / 60, 1) - Flicker(t, 1))).toBeLessThan(0.4);
+        }
+    });
+});
+
+describe("FlickerScale", () => {
+    it("is exactly 1 for a steady light", () => {
+        expect(FlickerScale(0, 1.234, 5)).toBe(1);
+    });
+
+    it("stays within flicker either side of 1", () => {
+        for (let t = 0; t < 5; t += 0.05) {
+            const scale = FlickerScale(0.15, t, 2);
+            expect(scale).toBeGreaterThanOrEqual(0.85 - 1e-9);
+            expect(scale).toBeLessThanOrEqual(1.15 + 1e-9);
+        }
+    });
+
+    it("never goes below 0, however wild the flicker", () => {
+        for (let t = 0; t < 5; t += 0.05) {
+            expect(FlickerScale(3, t, 2)).toBeGreaterThanOrEqual(0);
+        }
+    });
+});
 
 describe("LightFalloff", () => {
     it("is full at the light and reaches zero at the range, with no slope left at the edge", () => {
@@ -305,6 +360,32 @@ describe("Shadows", () => {
         const stair = Blockers(["0123456789", "0123456789", "0123456789"]);
         const shape = BakeLightShape({ x: 0, y: 1, value: LAMP }, stair);
         [3, 6, 9].forEach(x => expect(Visibility(shape, LAMP.range, 11, x, 1)).toBeCloseTo(1));
+    });
+});
+
+describe("CastMovingLight", () => {
+    const TORCH = { brightness: 1, tint: WHITE, range: 6 };
+    const Lit = (shape: LightShape, blockers: LightBlockers, columns: number, rows: number): LightGrid =>
+        ComposeLighting({ width: columns, height: rows, occlusion: BakeLights([], blockers).occlusion, shapes: [shape] });
+
+    it("shines from the very point it's given, not the centre of its cell", () => {
+        const open = OpenLightBlockers(12, 12);
+        const shape = CastMovingLight({ x: 4.25, y: 6 }, TORCH, open);
+        expect(shape.origin).toEqual({ x: 4.25, y: 6 });
+        const grid = Lit(shape, open, 12, 12);
+        expect(Corner(grid, 4, 6)[0]).toBeGreaterThan(Corner(grid, 5, 6)[0]);
+    });
+
+    it("casts shadows like a baked light", () => {
+        const wall = Walled(14, 10, [[6, 2], [6, 3], [6, 4], [6, 5], [6, 6], [6, 7]]);
+        const grid = Lit(CastMovingLight({ x: 3.5, y: 5 }, TORCH, wall), wall, 14, 10);
+        Corner(grid, 8, 5).forEach((v, k) => expect(v).toBeCloseTo(AMBIENT[k]));
+        expect(Corner(grid, 5, 5)[0]).toBeGreaterThan(AMBIENT[0] + 0.1);
+    });
+
+    it("keeps the light's flicker for whoever draws it to scale by", () => {
+        expect(CastMovingLight({ x: 1, y: 1 }, { ...TORCH, flicker: 0.2 }, OpenLightBlockers(4, 4)).flicker).toBe(0.2);
+        expect(CastMovingLight({ x: 1, y: 1 }, TORCH, OpenLightBlockers(4, 4)).flicker).toBe(0);
     });
 });
 

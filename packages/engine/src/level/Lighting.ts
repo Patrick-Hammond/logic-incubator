@@ -15,8 +15,12 @@
 
 import { Vec2Like } from "@logic-incubator/lib/math/Geometry";
 
-/** A light's authored properties - either painted with the `LIGHT` data brush, or intrinsic to a tile via `AssetMetadata.light` (see `Level.LoadLevel`). */
-export type LightValue = { brightness: number; tint: number; range: number };
+/**
+ * A light's authored properties - intrinsic to a tile via `AssetMetadata.light`, or set on one placement (see
+ * `Level.LoadLevel`). `flicker`, from 0 (steady, the default) up, is how far its strength wavers either way as a
+ * share of itself: 0.15 is a torch. See `FlickerScale`.
+ */
+export type LightValue = { brightness: number; tint: number; range: number; flicker?: number };
 
 /** Narrows a `Brush.data`/`DataBrush.value` to `LightValue`. Collision, z-index and player-start keep a plain number, but `SpawnerValue` is an object too, so this keys off `range` rather than just "is an object". Deliberately loose past that - callers that already trust the shape (e.g. a `LIGHT` brush placement) only need "is this the light variant"; see `IsCompleteLightValue` for untrusted input. */
 export function IsLightValue(value: unknown): value is LightValue {
@@ -29,7 +33,8 @@ export function IsCompleteLightValue(value: unknown): value is LightValue {
         IsLightValue(value) &&
         typeof value.brightness === "number" && Number.isFinite(value.brightness) &&
         typeof value.tint === "number" && Number.isFinite(value.tint) &&
-        typeof value.range === "number" && Number.isFinite(value.range)
+        typeof value.range === "number" && Number.isFinite(value.range) &&
+        (value.flicker === undefined || (typeof value.flicker === "number" && Number.isFinite(value.flicker)))
     );
 }
 
@@ -71,6 +76,20 @@ export function LightFalloff(distance: number, range: number): number {
     }
     const q = 1 - (distance * distance) / (range * range);
     return q * q;
+}
+
+/**
+ * How a flickering light's strength wavers at `time` seconds: from -1 to 1, smooth, and never quite repeating.
+ * `seed` sets one light apart from another, so a room of torches doesn't pulse together.
+ */
+export function Flicker(time: number, seed: number): number {
+    const phase = seed * 1.7;
+    return Math.sin(time * 17 + phase) * 0.45 + Math.sin(time * 29 + phase * 2.3) * 0.3 + Math.sin(time * 7 + phase * 0.6) * 0.25;
+}
+
+/** A light's strength at `time` as a multiple of its own - one of `ComposeLighting`'s `scales`: `1 + flicker * Flicker(time, seed)`, never below 0. Exactly 1 for a steady light. */
+export function FlickerScale(flicker: number, time: number, seed: number): number {
+    return flicker > 0 ? Math.max(0, 1 + flicker * Flicker(time, seed)) : 1;
 }
 
 function Channels(colour: number, scale: number, out: number[]): number[] {
@@ -144,9 +163,8 @@ const WALL_LIGHT_OFFSET = 0.1;
 /** How much higher than a light's path a cell's floor must be before it blocks the light. Leaves room for the path to clip the edge of a stair step. */
 const HEIGHT_TOLERANCE = 0.5;
 
-/** Points across a light's flame, as offsets in units of `LIGHT_RADIUS`: a sunflower spiral, so they cover the disc evenly. */
-const FLAME_POINTS = (() => {
-    const count = 16;
+/** `count` points across a light's flame, as x, y offsets in units of `LIGHT_RADIUS`: a sunflower spiral, so they cover the disc evenly. */
+function FlamePoints(count: number): number[] {
     const points: number[] = [];
     for (let i = 0; i < count; i++) {
         const r = Math.sqrt((i + 0.5) / count);
@@ -154,7 +172,13 @@ const FLAME_POINTS = (() => {
         points.push(r * Math.cos(angle), r * Math.sin(angle));
     }
     return points;
-})();
+}
+
+/** The points a baked light casts from: enough for smooth shadow edges, since it's done once at load. */
+const FLAME_POINTS = FlamePoints(16);
+
+/** The points a moving light casts from: fewer, since it's cast again every frame it moves. */
+const MOVING_FLAME_POINTS = FlamePoints(6);
 
 /**
  * Where light leaves a light placed on cell `(x, y)`: the cell's centre. A light on a cell that blocks light,
@@ -239,10 +263,11 @@ function IsPathClear(blockers: LightBlockers, sx: number, sy: number, sourceHeig
 /**
  * One light's reach, baked against what blocks it: `corners` lists the grid corners it reaches (as indexes,
  * row by row) and `shares` the part of its light that gets to each - `LightFalloff` times how much of its flame
- * the corner can see. `rgb` is its colour times its brightness. Kept per light so its strength can change, for a
- * flickering torch, without casting its rays again: see `ComposeLighting`.
+ * the corner can see. `rgb` is its colour times its brightness, and `flicker` its `LightValue.flicker` (0 if it has
+ * none). Kept per light so its strength can change, for a flickering torch, without casting its rays again: see
+ * `ComposeLighting`.
  */
-export type LightShape = { origin: Vec2Like; rgb: number[]; corners: Uint32Array; shares: Float32Array };
+export type LightShape = { origin: Vec2Like; rgb: number[]; flicker: number; corners: Uint32Array; shares: Float32Array };
 
 /** How much of a light reaches corner `(x, y)` past the walls, from 0 to 1: the share of `flame` points (pairs of x, y) with a clear line to it. */
 function CornerVisibility(blockers: LightBlockers, flame: number[], sourceHeight: number, x: number, y: number): number {
@@ -275,16 +300,38 @@ function AnyBlockerIn(blockers: LightBlockers, x0: number, y0: number, x1: numbe
 }
 
 /**
- * Bakes one light against `blockers` (see `LightShape`). Its `brightness` is clamped to `[0, MAX_BRIGHTNESS]`; a
- * light with no brightness or range reaches nothing. Light leaves from `LightOrigin` and fades by `LightFalloff`
- * over `range` tiles. Each corner gets the share of the flame (`LIGHT_RADIUS` across) it has a clear line to, so
- * shadows have soft edges that widen with distance.
+ * Bakes one light placed on a cell against `blockers` (see `LightShape`), shining from `LightOrigin`. See
+ * `CastLight` for how.
  */
 export function BakeLightShape(light: LightSource, blockers: LightBlockers): LightShape {
-    const brightness = Math.max(0, Math.min(MAX_BRIGHTNESS, light.value.brightness));
-    const range = light.value.range;
-    const origin = LightOrigin(blockers, light.x, light.y);
-    const shape: LightShape = { origin, rgb: Channels(light.value.tint, brightness, [0, 0, 0]), corners: new Uint32Array(0), shares: new Float32Array(0) };
+    return CastLight(LightOrigin(blockers, light.x, light.y), light.value, blockers, FLAME_POINTS);
+}
+
+/**
+ * Casts a light that moves - a carried torch, a glowing shot - from `origin`, in tiles (`(x + 0.5, y + 0.5)` is
+ * the centre of cell `(x, y)`). Like `BakeLightShape` but from any point, and with fewer rays, since it's cast
+ * again whenever it moves.
+ */
+export function CastMovingLight(origin: Vec2Like, value: LightValue, blockers: LightBlockers): LightShape {
+    return CastLight({ x: origin.x, y: origin.y }, value, blockers, MOVING_FLAME_POINTS);
+}
+
+/**
+ * Casts a light from `origin`. Its `brightness` is clamped to `[0, MAX_BRIGHTNESS]`; a light with no brightness
+ * or range reaches nothing. It fades by `LightFalloff` over `range` tiles, and each corner gets the share of the
+ * flame (`LIGHT_RADIUS` across, sampled at the `flamePoints`) it has a clear line to, so shadows have soft edges
+ * that widen with distance.
+ */
+function CastLight(origin: Vec2Like, value: LightValue, blockers: LightBlockers, flamePoints: number[]): LightShape {
+    const brightness = Math.max(0, Math.min(MAX_BRIGHTNESS, value.brightness));
+    const range = value.range;
+    const shape: LightShape = {
+        origin,
+        rgb: Channels(value.tint, brightness, [0, 0, 0]),
+        flicker: Math.max(0, value.flicker || 0),
+        corners: new Uint32Array(0),
+        shares: new Float32Array(0)
+    };
     if (!(brightness > 0) || !(range > 0)) {
         return shape;
     }
@@ -298,9 +345,9 @@ export function BakeLightShape(light: LightSource, blockers: LightBlockers): Lig
 
     // The flame's points that sit in open cells: a light pushed off a wall loses the half still inside it.
     const flame: number[] = [];
-    for (let i = 0; i < FLAME_POINTS.length; i += 2) {
-        const px = origin.x + FLAME_POINTS[i] * LIGHT_RADIUS;
-        const py = origin.y + FLAME_POINTS[i + 1] * LIGHT_RADIUS;
+    for (let i = 0; i < flamePoints.length; i += 2) {
+        const px = origin.x + flamePoints[i] * LIGHT_RADIUS;
+        const py = origin.y + flamePoints[i + 1] * LIGHT_RADIUS;
         if (!IsOpaque(blockers, Math.floor(px), Math.floor(py))) {
             flame.push(px, py);
         }
@@ -362,14 +409,19 @@ export function CornerOcclusion(blockers: LightBlockers): Float32Array {
     return occlusion;
 }
 
-/** Everything the light grid is built from: each light's baked shape and each corner's ambient occlusion. Kept by `Level` so the grid can be rebuilt with lights at new strengths - see `ComposeLighting`. */
-export type LightBake = { width: number; height: number; occlusion: Float32Array; shapes: LightShape[] };
+/**
+ * Everything the light grid is built from: each light's baked shape, each corner's ambient occlusion, and the
+ * blockers they were baked against (for casting lights that move - see `SceneLights`). Kept by `Level` so the grid
+ * can be rebuilt with lights at new strengths - see `ComposeLighting`.
+ */
+export type LightBake = { width: number; height: number; occlusion: Float32Array; shapes: LightShape[]; blockers: LightBlockers };
 
 /** Bakes `lights` against `blockers`: one `LightShape` per light, in order, plus the corners' occlusion. */
 export function BakeLights(lights: ReadonlyArray<LightSource>, blockers: LightBlockers): LightBake {
     return {
         width: blockers.width,
         height: blockers.height,
+        blockers,
         occlusion: CornerOcclusion(blockers),
         shapes: lights.map(light => BakeLightShape(light, blockers))
     };
@@ -384,7 +436,7 @@ export function BakeLights(lights: ReadonlyArray<LightSource>, blockers: LightBl
  * `scales`, one per shape, multiplies each light's strength - 1 if left out - so a torch can flicker without
  * casting its rays again. Pass the grid from last time as `out` to fill it in place.
  */
-export function ComposeLighting(bake: LightBake, scales?: ArrayLike<number>, out?: LightGrid): LightGrid {
+export function ComposeLighting(bake: Pick<LightBake, "width" | "height" | "occlusion" | "shapes">, scales?: ArrayLike<number>, out?: LightGrid): LightGrid {
     const columns = bake.width + 1;
     const rows = bake.height + 1;
     const grid = out && out.width === bake.width && out.height === bake.height
