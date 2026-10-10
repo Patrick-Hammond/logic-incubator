@@ -10,16 +10,19 @@ import {EffectiveDoorLock, FindDoorGroups} from "./Doors";
 import MonsterRoster from "./entities/MonsterRoster";
 import {IsPickupValue, PickupValue} from "./entities/Pickups";
 import {SanitiseSpawnerValue, Spawner, SpawnerCells} from "./entities/Spawners";
-import {FindImplicitPlacements} from "./ImplicitData";
+import {EffectiveLight, FindImplicitPlacements} from "./ImplicitData";
 import {Brush, DataBrushName, LevelFile, LevelLayer} from "./LevelFormat";
 import {AmbientLightGrid, BakeLights, ComposeLighting, LightBake, LightBlockersFor, LightGrid, LightSource, OpenLightBlockers} from "./Lighting";
 import {FindMapBounds} from "./MapBounds";
 import {FindRegions, Region, RegionIdsTouching} from "./Regions";
+import SceneLights, {MovingLight} from "./SceneLights";
 
 export type Tile = Brush & {
     texture: Texture;
     /** Set for tiles painted with an animated brush; `TileMapView` reads its live `.texture` each render instead of `texture`. */
     anim?: AnimatedSprite;
+    /** Set for a tile that gives off light (see `ImplicitData.EffectiveLight`): which of the level's baked lights is its own - see `SceneLights`. */
+    light?: number;
 };
 
 /** One door: the cell(s) whose tile has a `door` id in its `AssetMetadata`, and the visual tile whose texture is swapped between `closedSprite`/`openSprite` (that door's own pair, resolved via `AssetMetadataStore.GetDoorPartner`) when the player overlaps any of them - if they hold a key for it. `lockId` is what that key has to match (see `EffectiveDoorLock`, `Keys.CanOpen`). `regionIds` is the (possibly empty) set of regions this door borders - see `Regions.ts`. */
@@ -59,6 +62,8 @@ export default class Level {
     public lightGrid: LightGrid = AmbientLightGrid(0, 0);
     /** What `lightGrid` was built from: each light's shadowed reach and the corners' ambient occlusion. Rebuild the grid from it with `ComposeLighting` to change a light's strength without casting its rays again. */
     public lightBake: LightBake = BakeLights([], OpenLightBlockers(0, 0));
+    /** Keeps `lightGrid` up to date from frame to frame - flicker, lights switched off, lights that move. See `UpdateLights`. */
+    public lights: SceneLights = new SceneLights(this.lightBake, this.lightGrid);
     /** Per-cell flag: `true` if the cell is covered by the sprite footprint (see `DoorFootprint`) of a tile with a `door` id in its `AssetMetadata`. Purely a lookup for building `doors` - not consulted for movement collision, since a door must be walkable to trigger open (see `IsDoorClosed` for what keeps monsters out). */
     public doorData: boolean[][] = [];
     /** One entry per connected island of `doorData` cells that has a matching door sprite tile (see `FindDoorTile`). */
@@ -83,6 +88,11 @@ export default class Level {
     public pickups: Pickup[] = [];
     /** Distinct painted `Z_INDEX` heights, ascending, always including the unpainted default (0). `TileMapView` builds one band per entry - sparse, so a stray tile at an extreme height doesn't force bands for every height in between. */
     public depths: number[] = [0];
+
+    /** Rebuilds `lightGrid` for this moment: baked lights flicker (`time` is in seconds) and `moving` ones are cast where they are now. Call once a frame, before the level is drawn - see `SceneLights.Update`. */
+    UpdateLights(time: number, moving: ReadonlyArray<MovingLight>): void {
+        this.lights.Update(time, moving);
+    }
 
     /** Height painted under the given grid cell (0 if unpainted). Drives the camera zoom. */
     HeightAt(tileX: number, tileY: number): number {
@@ -167,6 +177,10 @@ export default class Level {
                 }
             });
             this.pickups.splice(this.pickups.indexOf(pickup), 1);
+            // A lit pickup - a torch on the floor - takes its light with it.
+            if (pickup.tile && pickup.tile.light !== undefined) {
+                this.lights.SetOn(pickup.tile.light, false);
+            }
         });
         return here.map(p => ({ value: p.value, sprite: p.tile ? p.tile.name : null }));
     }
@@ -288,6 +302,18 @@ export default class Level {
         for (const layer of this.levelData) {
             const stack = layer && layer[x] && layer[x][y];
             const found = stack && stack.find(t => AssetMetadataStore.inst.Get(t.name)?.pickup != null || IsPickupValue(t.data));
+            if (found) {
+                return found;
+            }
+        }
+        return null;
+    }
+
+    /** Finds a tile at the given cell that gives off light and isn't yet matched to one of the baked lights, searching every tile layer. Null if there's none. */
+    private FindLightTile(x: number, y: number): Tile | null {
+        for (const layer of this.levelData) {
+            const stack = layer && layer[x] && layer[x][y];
+            const found = stack && stack.find(t => t.light === undefined && EffectiveLight(t, AssetMetadataStore.inst.Get(t.name)) !== undefined);
             if (found) {
                 return found;
             }
@@ -511,6 +537,13 @@ export default class Level {
 
         this.lightBake = BakeLights(lights, lightBlockers);
         this.lightGrid = ComposeLighting(this.lightBake);
+        this.lights = new SceneLights(this.lightBake, this.lightGrid);
+        lights.forEach((light, i) => {
+            const tile = this.FindLightTile(light.x, light.y);
+            if (tile) {
+                tile.light = i;
+            }
+        });
 
         const regionMap = FindRegions(this.collisionData, this.doorData, this.boundRect.width, this.boundRect.height);
         this.regionData = regionMap.regionData;

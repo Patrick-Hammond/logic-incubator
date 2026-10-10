@@ -3,6 +3,7 @@
  * it runs under the plain node test runner, same as Spawners.ts.
  */
 
+import {IsCompleteLightValue, LightValue} from "../Lighting";
 import {WeaponDef} from "./Projectiles";
 
 export type PickupValue =
@@ -13,12 +14,14 @@ export type PickupValue =
     | { kind: "key"; id: number }
     | { kind: "weapon"; weapon: WeaponDef }
     /** `sprite` is what goes in the inventory; left out, it's the pickup's own tile. */
-    | { kind: "item"; sprite?: string };
+    | { kind: "item"; sprite?: string }
+    /** A light the player carries from then on - a torch. It burns for `seconds` (0 or left out: for the rest of the level), dimming at the end - see `CarriedLight`. */
+    | { kind: "light"; light: LightValue; seconds?: number };
 
 export type PickupKind = PickupValue["kind"];
 
 /** In the order the editor's pickup popup lists them. */
-export const PickupKinds: ReadonlyArray<PickupKind> = ["gold", "health", "key", "weapon", "item"];
+export const PickupKinds: ReadonlyArray<PickupKind> = ["gold", "health", "key", "weapon", "item", "light"];
 
 const IsNumber = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
 
@@ -31,7 +34,8 @@ function IsWeaponDef(value: unknown): value is WeaponDef {
     return (
         typeof shot === "object" && shot !== null && typeof shot.sprite === "string" &&
         IsNumber(shot.speed) && IsNumber(shot.damage) && IsNumber(shot.range) && IsNumber(shot.cooldown) &&
-        (shot.spriteAngle === undefined || IsNumber(shot.spriteAngle))
+        (shot.spriteAngle === undefined || IsNumber(shot.spriteAngle)) &&
+        (shot.light === undefined || IsCompleteLightValue(shot.light))
     );
 }
 
@@ -45,7 +49,7 @@ export function IsPickupValue(value: unknown): value is PickupValue {
     if (typeof value !== "object" || value === null) {
         return false;
     }
-    const pickup = value as { kind?: unknown; amount?: unknown; id?: unknown; weapon?: unknown; sprite?: unknown };
+    const pickup = value as { kind?: unknown; amount?: unknown; id?: unknown; weapon?: unknown; sprite?: unknown; light?: unknown; seconds?: unknown };
     switch (pickup.kind) {
         case "gold":
         case "health":
@@ -57,6 +61,8 @@ export function IsPickupValue(value: unknown): value is PickupValue {
             return IsWeaponDef(pickup.weapon);
         case "item":
             return pickup.sprite === undefined || typeof pickup.sprite === "string";
+        case "light":
+            return IsCompleteLightValue(pickup.light) && (pickup.seconds === undefined || (IsNumber(pickup.seconds) && pickup.seconds >= 0));
         default:
             return false;
     }
@@ -73,6 +79,8 @@ export function DefaultPickupValue(kind: PickupKind = "gold"): PickupValue {
             return { kind, weapon: { icon: "", shot: { sprite: "", speed: 5, damage: 1, cooldown: 0.4, range: 8 } } };
         case "item":
             return { kind };
+        case "light":
+            return { kind, light: { brightness: 1, tint: 0xffc780, range: 7, flicker: 0.15 }, seconds: 120 };
         default:
             return { kind: "gold", amount: 1 };
     }

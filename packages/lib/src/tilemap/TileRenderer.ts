@@ -1,4 +1,4 @@
-import { WRAP_MODES, BaseTexture, Buffer, ObjectRenderer, Renderer, utils } from "pixi.js";
+import { BLEND_MODES, WRAP_MODES, BaseTexture, Buffer, ObjectRenderer, Renderer, utils } from "pixi.js";
 import { settings } from "./settings";
 import { TilemapGeometry, TilemapShader } from "./TilemapShader";
 import { TextileResource } from "./TextileResource";
@@ -92,7 +92,9 @@ export class TileRenderer extends ObjectRenderer {
     }
 
     start(): void {
-        // sorry, nothing
+        // Tiles always draw with normal blending. Nothing else sets it for them, so they would otherwise draw
+        // with whatever the sprites before them left behind - additively, after an additive glow.
+        this.renderer.state.setBlendMode(BLEND_MODES.NORMAL);
     }
 
     /**

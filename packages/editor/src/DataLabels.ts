@@ -14,7 +14,7 @@ import { IsSpawnerValue } from "@logic-incubator/engine/level/entities/Spawners"
 import { IsLightValue } from "@logic-incubator/engine/level/Lighting";
 import { DataBrushValue } from "@logic-incubator/engine/level/LevelFormat";
 
-/** A pickup's tag on the map: gold G10, health H2, key K3, weapon W, item I. */
+/** A pickup's tag on the map: gold G10, health H2, key K3, weapon W, item I, a light to carry T (for torch - L is a locked door's). */
 export function PickupLabel(pickup: PickupValue): string {
     switch (pickup.kind) {
         case "gold":
@@ -25,6 +25,8 @@ export function PickupLabel(pickup: PickupValue): string {
             return "K" + pickup.id;
         case "weapon":
             return "W";
+        case "light":
+            return "T";
         default:
             return "I";
     }
@@ -66,6 +68,8 @@ export function DescribePickup(pickup: PickupValue): string {
             return `key ${pickup.id}`;
         case "weapon":
             return `weapon: ${pickup.weapon.icon || "unnamed"}`;
+        case "light":
+            return pickup.seconds ? `a light to carry, ${pickup.seconds} s` : "a light to carry";
         default:
             return pickup.sprite ? `item: ${pickup.sprite}` : "item (its own sprite)";
     }

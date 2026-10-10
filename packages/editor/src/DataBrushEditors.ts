@@ -22,7 +22,7 @@ import { NoLock } from "@logic-incubator/engine/level/entities/Keys";
 import MonsterRoster, { MonsterType } from "@logic-incubator/engine/level/entities/MonsterRoster";
 import { DefaultPickupValue, IsPickupValue, PickupKind, PickupKinds, PickupValue } from "@logic-incubator/engine/level/entities/Pickups";
 import { DefaultSpawnerValue, IsSpawnerValue, SanitiseSpawnerValue } from "@logic-incubator/engine/level/entities/Spawners";
-import { IsLightValue } from "@logic-incubator/engine/level/Lighting";
+import { IsLightValue, LightValue, MAX_BRIGHTNESS } from "@logic-incubator/engine/level/Lighting";
 import { DataBrushName, DataBrushValue } from "@logic-incubator/engine/level/LevelFormat";
 import { ChoiceOption, FieldSpec, FormValue, FormValues } from "./ui/dialog/FormDialog";
 
@@ -44,7 +44,7 @@ export type DataBrushEditor = {
     validate?: (form: FormValues, images?: EditorImages) => string | null;
 };
 
-const PICKUP_LABELS: { [kind in PickupKind]: string } = { gold: "Gold", health: "Health", key: "Key", weapon: "Weapon", item: "Item" };
+const PICKUP_LABELS: { [kind in PickupKind]: string } = { gold: "Gold", health: "Health", key: "Key", weapon: "Weapon", item: "Item", light: "A light to carry" };
 
 /** Fields for one kind of pickup show only while it's the chosen kind. */
 const whenKind = (kind: PickupKind) => (form: FormValues) => form.kind === kind;
@@ -63,7 +63,49 @@ function SpriteProblem(name: string, what: string, images?: EditorImages): strin
     return images && !images.hasSprite(name) ? `“${name}” isn't a sprite in the sheet.` : null;
 }
 
-const DEFAULT_LIGHT = { brightness: 0.5, tint: 0xff8100, range: 5 };
+/** A torch: what a new light starts as. */
+const DEFAULT_LIGHT: LightValue = { brightness: 1, tint: 0xffc780, range: 7, flicker: 0.15 };
+
+/** The fields that set a light, their keys starting `prefix`; shown only while `visibleWhen` says so, if given. */
+function LightFields(prefix: string, visibleWhen?: (form: FormValues) => boolean): FieldSpec[] {
+    return [
+        {
+            type: "number",
+            key: prefix + "Brightness",
+            label: "Brightness",
+            min: 0,
+            max: MAX_BRIGHTNESS,
+            step: 0.05,
+            hint: "Its strength at its own cell, on top of the ambient light. 1 is a torch.",
+            visibleWhen
+        },
+        { type: "colour", key: prefix + "Tint", label: "Tint", visibleWhen },
+        { type: "number", key: prefix + "Range", label: "Range", min: 0, max: 99, step: 0.5, sliderMax: 30, unit: "tiles", hint: "How far it reaches - it fades smoothly to nothing there.", visibleWhen },
+        {
+            type: "number",
+            key: prefix + "Flicker",
+            label: "Flicker",
+            min: 0,
+            max: 1,
+            step: 0.05,
+            sliderMax: 0.5,
+            hint: "How much its strength wavers, as a share of itself. 0 is steady; 0.15 is a torch.",
+            visibleWhen
+        }
+    ];
+}
+
+/** A light's values for `LightFields` with the same `prefix`. */
+function LightToForm(prefix: string, light: LightValue): FormValues {
+    return { [prefix + "Brightness"]: light.brightness, [prefix + "Tint"]: light.tint, [prefix + "Range"]: light.range, [prefix + "Flicker"]: light.flicker || 0 };
+}
+
+/** The light `LightFields` with the same `prefix` were set to. A steady one is saved without a `flicker`. */
+function LightFromForm(prefix: string, form: FormValues): LightValue {
+    const light: LightValue = { brightness: Number(form[prefix + "Brightness"]), tint: Number(form[prefix + "Tint"]), range: Number(form[prefix + "Range"]) };
+    const flicker = Number(form[prefix + "Flicker"]);
+    return flicker > 0 ? { ...light, flicker } : light;
+}
 
 const EDITORS: { [name: string]: DataBrushEditor } = {
     [DataBrushName.Z_INDEX]: {
@@ -88,17 +130,10 @@ const EDITORS: { [name: string]: DataBrushEditor } = {
     // Not DataBrushName.LIGHT - it isn't one any more (see the module doc comment) - but the same string.
     light: {
         title: "Light",
-        subtitle: "A static point light, baked when the level loads.",
-        fields: () => [
-            { type: "number", key: "brightness", label: "Brightness", min: 0, max: 1, step: 0.05, hint: "Peak brightness at the light's own cell." },
-            { type: "colour", key: "tint", label: "Tint" },
-            { type: "number", key: "range", label: "Range", min: 0, max: 99, step: 0.5, sliderMax: 30, unit: "tiles", hint: "Radius of the linear falloff." }
-        ],
-        toForm: value => {
-            const light = IsLightValue(value) ? value : DEFAULT_LIGHT;
-            return { brightness: light.brightness, tint: light.tint, range: light.range };
-        },
-        fromForm: form => ({ brightness: Number(form.brightness), tint: Number(form.tint), range: Number(form.range) })
+        subtitle: "A point light, baked when the level loads. Walls cast its shadows.",
+        fields: () => LightFields("light"),
+        toForm: value => LightToForm("light", IsLightValue(value) ? value : DEFAULT_LIGHT),
+        fromForm: form => LightFromForm("light", form)
     },
 
     [DataBrushName.PICKUP]: {
@@ -160,12 +195,32 @@ const EDITORS: { [name: string]: DataBrushEditor } = {
                 visibleWhen: form => form.kind === "weapon" && form.shotTurns === true
             },
             {
+                type: "toggle",
+                key: "shotGlows",
+                label: "Shot gives off light",
+                hint: "A fireball or a magic bolt lights its way as it flies.",
+                visibleWhen: whenKind("weapon")
+            },
+            ...LightFields("shotLight", form => form.kind === "weapon" && form.shotGlows === true),
+            {
                 type: "text",
                 key: "itemSprite",
                 label: "Item sprite",
                 placeholder: "the sprite it's on",
                 hint: "What goes in the inventory. Leave blank to use the sprite this pickup is on.",
                 visibleWhen: whenKind("item")
+            },
+            ...LightFields("carried", whenKind("light")),
+            {
+                type: "number",
+                key: "carriedSeconds",
+                label: "Burns for",
+                min: 0,
+                max: 3600,
+                sliderMax: 300,
+                unit: "seconds",
+                hint: "It dims over its last few seconds, then goes out. 0 lasts the rest of the level.",
+                visibleWhen: whenKind("light")
             }
         ],
         toForm: value => {
@@ -173,6 +228,8 @@ const EDITORS: { [name: string]: DataBrushEditor } = {
             // The weapon fields hold the default weapon's while the pickup is another kind, so changing the kind to weapon starts from something sensible.
             const weapon = pickup.kind === "weapon" ? pickup.weapon : (DefaultPickupValue("weapon") as Extract<PickupValue, { kind: "weapon" }>).weapon;
             const shot = weapon.shot;
+            // Like the weapon's: the carried light's fields hold the default one's while the pickup is another kind.
+            const carried = pickup.kind === "light" ? pickup : (DefaultPickupValue("light") as Extract<PickupValue, { kind: "light" }>);
             return {
                 kind: pickup.kind,
                 goldAmount: pickup.kind === "gold" ? pickup.amount : 1,
@@ -186,7 +243,11 @@ const EDITORS: { [name: string]: DataBrushEditor } = {
                 shotCooldown: shot.cooldown,
                 shotTurns: shot.spriteAngle !== undefined,
                 shotAngle: shot.spriteAngle !== undefined ? Round2(shot.spriteAngle / RADIANS) : -90,
-                itemSprite: pickup.kind === "item" ? pickup.sprite || "" : ""
+                shotGlows: shot.light !== undefined,
+                ...LightToForm("shotLight", shot.light || DEFAULT_LIGHT),
+                itemSprite: pickup.kind === "item" ? pickup.sprite || "" : "",
+                ...LightToForm("carried", carried.light),
+                carriedSeconds: carried.seconds || 0
             };
         },
         fromForm: form => {
@@ -196,13 +257,14 @@ const EDITORS: { [name: string]: DataBrushEditor } = {
                 case "key":
                     return { kind: "key", id: Math.max(0, Math.round(Number(form.keyId))) };
                 case "weapon": {
-                    const shot = {
+                    const plain = {
                         sprite: Name(form.shotSprite),
                         speed: Number(form.shotSpeed),
                         damage: Number(form.shotDamage),
                         cooldown: Number(form.shotCooldown),
                         range: Number(form.shotRange)
                     };
+                    const shot = form.shotGlows === true ? { ...plain, light: LightFromForm("shotLight", form) } : plain;
                     return {
                         kind: "weapon",
                         weapon: { icon: Name(form.weaponIcon), shot: form.shotTurns === true ? { ...shot, spriteAngle: Number(form.shotAngle) * RADIANS } : shot }
@@ -212,6 +274,8 @@ const EDITORS: { [name: string]: DataBrushEditor } = {
                     const sprite = Name(form.itemSprite);
                     return sprite ? { kind: "item", sprite } : { kind: "item" };
                 }
+                case "light":
+                    return { kind: "light", light: LightFromForm("carried", form), seconds: Math.max(0, Number(form.carriedSeconds)) };
                 default:
                     return { kind: "gold", amount: Math.max(0, Math.round(Number(form.goldAmount))) };
             }

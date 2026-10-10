@@ -5,15 +5,28 @@ import {Vec2, Vec2Like} from "@logic-incubator/lib/math/Geometry";
 import { TileSize } from "../Constants";
 import type {PlayerSetup} from "../DungeonMain";
 import PlayerControl from "../input/PlayerControl";
+import {CarriedLight, CarriedLightScale, CreateCarriedLight, TickCarriedLight} from "../level/entities/CarriedLight";
 import {AddGold, CreateGold, Gold} from "../level/entities/Gold";
 import {CreateHealth, DamageHealth, Health, HealHealth, TickHealth} from "../level/entities/Health";
 import {AddItem, CreateInventory, Inventory} from "../level/entities/Inventory";
 import {AddKey, CanOpen, CreateKeyRing, KeyRing} from "../level/entities/Keys";
+import {CastLightSpell, CreateLightSpellState, LightSpell, LightSpellScale, LightSpellState, TickLightSpell} from "../level/entities/LightSpell";
 import {WeaponDef} from "../level/entities/Projectiles";
 import Level, {CollectedPickup} from "../level/Level";
+import {MovingLight} from "../level/SceneLights";
 import TileCollision from "../level/TileCollision";
 import {Camera} from "./Camera";
 import {BoxCentre, CentreTile, ResolveMove} from "./helpers/PlayerMovement";
+
+/** How far behind the player (away from where they face) their mage-light floats, in tiles. */
+const OrbSide = 0.45;
+/** How high over the floor their mage-light floats, in tiles - about their shoulder. */
+const OrbHeight = 1;
+/** How far their mage-light bobs up and down, in tiles, and how fast, in radians a second. */
+const OrbBob = 0.06;
+const OrbBobRate = 2.4;
+/** Share of the way their mage-light drifts to its place behind them each frame - it trails them rather than being stuck to them. */
+const OrbFollow = 0.12;
 
 /**
  * The player: moving, shooting and taking hits. Driven one frame at a time by `DungeonMain`, which
@@ -35,6 +48,21 @@ export class Player {
     private equippedIndex = 0;
     private fireCooldown = 0;
     private shot: Vec2Like | null = null;
+    /** The torch they're carrying, if they've picked one up and it hasn't burnt out. */
+    private carried: CarriedLight | null = null;
+    /** What `Light` hands out, refilled each time rather than made anew every frame. */
+    private light: MovingLight = { x: 0, y: 0, value: { brightness: 0, tint: 0, range: 0 }, key: this, scale: 1 };
+    /** The light spell they get at the next `Reset` - see `SetLightSpell`. */
+    private lightSpell: LightSpell | undefined;
+    /** Their light spell in play - null for a hero without one. */
+    private spell: LightSpellState | null = null;
+    /** The floor under their mage-light, in world pixels. */
+    private orb = new Vec2();
+    /** Seconds their mage-light has been lit, which it bobs by. */
+    private orbTime = 0;
+    /** What `SpellLight` and `OrbPosition` hand out, refilled each time. Its key is itself, so it stays the same light frame to frame. */
+    private spellLight: MovingLight = { x: 0, y: 0, value: { brightness: 0, tint: 0, range: 0 }, scale: 1 };
+    private orbPosition = { x: 0, y: 0 };
 
     constructor(
         private camera: Camera,
@@ -50,6 +78,8 @@ export class Player {
         this.inventory = CreateInventory();
         this.keys = CreateKeyRing();
         this.weapons = setup.weapons;
+        this.lightSpell = setup.lightSpell;
+        this.spellLight.key = this.spellLight;
     }
 
     /** Top-left of the player's one-tile collision box, in pixels. */
@@ -95,6 +125,46 @@ export class Player {
         return this.weapons[this.equippedIndex];
     }
 
+    /** The light they carry, where they are now (see `Level.UpdateLights`) - null without one. */
+    get Light(): MovingLight | null {
+        if (!this.carried) {
+            return null;
+        }
+        const centre = this.Centre;
+        this.light.x = centre.x / TileSize;
+        this.light.y = centre.y / TileSize;
+        this.light.value = this.carried.value;
+        this.light.scale = CarriedLightScale(this.carried);
+        return this.light;
+    }
+
+    /** Their mage-light while it's lit, over the floor where it floats (see `Level.UpdateLights`) - null otherwise. */
+    get SpellLight(): MovingLight | null {
+        if (!this.spell || !this.spell.lit) {
+            return null;
+        }
+        this.spellLight.x = this.orb.x / TileSize;
+        this.spellLight.y = this.orb.y / TileSize;
+        this.spellLight.value = this.spell.lit.value;
+        this.spellLight.scale = LightSpellScale(this.spell);
+        return this.spellLight;
+    }
+
+    /** Where their mage-light is drawn while it's lit, in world pixels: floating, and bobbing, over the floor it lights. Null otherwise. */
+    get OrbPosition(): Vec2Like | null {
+        if (!this.spell || !this.spell.lit) {
+            return null;
+        }
+        this.orbPosition.x = this.orb.x;
+        this.orbPosition.y = this.orb.y - (OrbHeight + Math.sin(this.orbTime * OrbBobRate) * OrbBob) * TileSize;
+        return this.orbPosition;
+    }
+
+    /** Their light spell: lit, recharging or ready - null for a hero without one. */
+    get Spell(): LightSpellState | null {
+        return this.spell;
+    }
+
     /** Whether a door with this lock id opens for them: it's unlocked, or they carry its key. */
     HasKeyFor(lockId: number): boolean {
         return CanOpen(this.keys, lockId);
@@ -122,6 +192,11 @@ export class Player {
         previous.destroy();
     }
 
+    /** Gives them this light spell from the next `Reset` on - none for null or undefined. */
+    SetLightSpell(spell: LightSpell | null | undefined): void {
+        this.lightSpell = spell || undefined;
+    }
+
     /** Back to the start of a level: at its start position, with full health and nothing collected. Call on every `LEVEL_CREATED`. */
     Reset(playerStartPosition: Vec2Like | undefined) {
         if (!playerStartPosition) {
@@ -137,13 +212,22 @@ export class Player {
         this.equippedIndex = 0;
         this.fireCooldown = 0;
         this.shot = null;
+        this.carried = null;
+        this.spell = this.lightSpell ? CreateLightSpellState(this.lightSpell) : null;
     }
 
     /** One frame: `dt` in frames (the ticker's delta, which movement is tuned to), `seconds` of real time for timers. */
     Update(dt: number, seconds: number): void {
         TickHealth(this.health, seconds);
+        if (this.carried && !TickCarriedLight(this.carried, seconds)) {
+            this.carried = null;
+        }
+        if (this.spell) {
+            TickLightSpell(this.spell, seconds);
+        }
         this.GetInput(seconds);
         this.Move(dt);
+        this.MoveOrb(dt, seconds);
         const tile = this.Tile;
         this.MoveCamera(tile);
         this.level.UpdateDoors(tile.x, tile.y, lock => this.HasKeyFor(lock));
@@ -185,6 +269,11 @@ export class Player {
             // fire key has no direction of its own (aimX is always 0 there), so it just uses facing as-is.
             this.facingX = input.aimX < 0 ? -1 : 1;
         }
+        if (input.casting && this.spell && CastLightSpell(this.spell)) {
+            // It appears in its place behind them, then drifts after them from there.
+            this.orb.Copy(this.OrbTarget());
+            this.orbTime = 0;
+        }
         if (input.firing && this.fireCooldown === 0) {
             // Tutankham style: always straight left or right, whichever the player currently faces -
             // never up/down, and never anywhere the player isn't already facing.
@@ -196,7 +285,8 @@ export class Player {
     /**
      * Gold adds to the count; health restores hit points, up to the maximum; a key joins the ones carried
      * (shown as the tile it was); a weapon is added to the loadout and equipped immediately; an item goes to
-     * the first free inventory slot (dropped if it's full) - as its own sprite, or as the tile it was.
+     * the first free inventory slot (dropped if it's full) - as its own sprite, or as the tile it was; a light
+     * is carried from then on, in place of any they had.
      */
     private ApplyPickup(pickup: CollectedPickup): void {
         const value = pickup.value;
@@ -221,6 +311,9 @@ export class Player {
                 }
                 break;
             }
+            case "light":
+                this.carried = CreateCarriedLight(value.light, value.seconds);
+                break;
         }
     }
 
@@ -228,6 +321,23 @@ export class Player {
         this.newPosition.Copy(this.player.position);
         ResolveMove(this.newPosition, this.velocity, dt, this.collision);
         this.player.position.set(this.newPosition.x, this.newPosition.y);
+    }
+
+    /** Where their mage-light floats over: just behind them, away from where they face. */
+    private OrbTarget(): Vec2Like {
+        const centre = this.Centre;
+        return { x: centre.x - this.facingX * OrbSide * TileSize, y: centre.y };
+    }
+
+    /** Lets their mage-light, while it's lit, drift after them and bob. */
+    private MoveOrb(dt: number, seconds: number): void {
+        if (!this.spell || !this.spell.lit) {
+            return;
+        }
+        const target = this.OrbTarget();
+        const follow = Math.min(1, OrbFollow * dt);
+        this.orb.Set(this.orb.x + (target.x - this.orb.x) * follow, this.orb.y + (target.y - this.orb.y) * follow);
+        this.orbTime += seconds;
     }
 
     private MoveCamera(tile: Vec2Like): void {

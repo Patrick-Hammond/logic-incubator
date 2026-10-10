@@ -5,6 +5,7 @@
  */
 
 import { RectangleLike, Vec2Like } from "@logic-incubator/lib/math/Geometry";
+import { LightValue } from "../Lighting";
 
 export type ProjectileOwner = "player" | "monster";
 
@@ -19,6 +20,8 @@ export type ShotSetup = {
     damage: number;
     /** Tiles it flies before fizzling out. */
     range: number;
+    /** A light it carries as it flies - a fireball, a glowing bolt. Leave out for a shot that gives no light. */
+    light?: LightValue;
 };
 
 /** A `ShotSetup` that fires repeatedly - the player's while fire is held, a monster's `MonsterDef.ranged` at will. */
@@ -47,6 +50,8 @@ export type Projectile = {
     /** Pixels left to fly. */
     range: number;
     dead: boolean;
+    /** The light it carries, from its `ShotSetup` - none for most shots. */
+    light?: LightValue;
 };
 
 /** Side of the square a shot hits with, in pixels - smaller than its art, so near misses stay misses. */
@@ -68,7 +73,8 @@ export function CreateProjectile(from: Vec2Like, direction: Vec2Like, shot: Shot
         sprite: shot.sprite,
         spriteAngle: shot.spriteAngle,
         range: shot.range * tileSize,
-        dead: false
+        dead: false,
+        light: shot.light
     };
 }
 

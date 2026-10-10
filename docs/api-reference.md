@@ -1052,6 +1052,7 @@ type PlayerSetup = {
     hitPoints: number;                                    // half-hearts
     hearts?: { full: string; half: string; empty: string };// sprite names; without them the HUD draws the UI skin's hearts
     weapons: WeaponDef[];                                 // the first is equipped; fired while a fire direction is held
+    lightSpell?: LightSpell;                              // a mage-light they call up with the cast control; none if left out
 };
 
 type DungeonMainOptions = {
@@ -1059,6 +1060,7 @@ type DungeonMainOptions = {
     level: () => LevelFile | undefined;                   // asked on every start and restart
     levelBundle?: () => string | undefined;               // the asset bundle the level plays in
     playerSprite?: () => string | undefined;              // the animation to draw the player with, in place of player.sprite
+    playerLightSpell?: () => LightSpell | null | undefined;  // their light spell: null for none, undefined to keep player.lightSpell
     overlay?: (main: DungeonMain) => GameComponent;       // drawn over the HUD and kept with the scene: a pause menu, a death screen
     manualRestart?: boolean;                              // a death waits for Restart() instead of restarting by itself (default false)
 };
@@ -1079,6 +1081,12 @@ returns is attached above the HUD (shown, hidden and destroyed with the scene). 
 
 `playerSprite` is asked for each time a level starts (on `LEVEL_CREATED`, before the player is reset): when it returns an animation
 name the player is drawn with that (`Player.SetSprite`), otherwise with `player.sprite`. It is how a game lets the player pick a character.
+`playerLightSpell` is asked at the same moment, for the light spell that character has (`Player.SetLightSpell`): `null` for none, a spell,
+or `undefined` to keep `player.lightSpell`.
+
+Each frame, before the player moves (moving them moves the camera, which draws the tiles), it calls `Level.UpdateLights` with the seconds
+played so far and the lights that move: the torch the player carries (`Player.Light`), their mage-light while it's lit
+(`Player.SpellLight`), and every live shot with a `light`, keyed by the shot.
 
 Lifecycle: `OnInitialise` builds the `Level`, attaches `Camera`, `TileMapView`, `Effects` (into the camera) and `Hud`, creates `Player`, `EntityRenderer` and
 `Encounter`, binds asset metadata (`BindAssetMetadata`) and listens for `LEVEL_CREATED` / `PLAYER_DIED`. `OnShow` and each restart
@@ -1093,7 +1101,7 @@ player, disposes the level and releases the level bundle (when `levelBundle` was
 `@logic-incubator/engine/level/Level` - `default class Level`. Built by `DungeonMain`; `LoadLevel` fills it.
 
 ```ts
-type Tile = Brush & { texture: Texture; anim?: AnimatedSprite };
+type Tile = Brush & { texture: Texture; anim?: AnimatedSprite; light?: number };   // light: its baked light's index, for a tile that gives off light
 type Door = { cells: Vec2Like[]; tile: Tile; isOpen: boolean; regionIds: number[]; openSprite: string; closedSprite: string; lockId: number };
 type Pickup = Vec2Like & { tile: Tile | null; value: PickupValue };      // tile is null for a PICKUP brush on an empty cell
 type CollectedPickup = { value: PickupValue; sprite: string | null };    // sprite = the tile it was, for an item or key with none of its own
@@ -1107,6 +1115,7 @@ type CollectedPickup = { value: PickupValue; sprite: string | null };    // spri
 | `heightData` | `number[][]` | From the `z-index` brush. |
 | `lightGrid` | `LightGrid` | Light at every tile corner, baked from lights with walls casting shadows; read it with `CellCornerLight`, `SampleLight` or `FootLight` ([Lighting](#lighting)). |
 | `lightBake` | `LightBake` | What `lightGrid` was built from (each light's `LightShape` and the corners' occlusion); `ComposeLighting(level.lightBake, scales, level.lightGrid)` rebuilds the grid with lights at new strengths. |
+| `lights` | `SceneLights` | Keeps `lightGrid` up to date frame by frame from `lightBake`: flicker, lights switched off, lights that move ([Lighting](#lighting)). |
 | `doorData`, `doors` | | Door footprints and the doors found. |
 | `doorVersion` | `number` | Goes up each time a door opens or closes - how anything worked out from which doors are closed (the monsters' flow field) knows it's stale. |
 | `regionData`, `boundaryRegionData`, `regions`, `visibleRegions` | | Region analysis; see below. |
@@ -1123,7 +1132,8 @@ type CollectedPickup = { value: PickupValue; sprite: string | null };    // spri
 | `IsDoorClosed(x, y): boolean` | Whether the cell belongs to a door that is closed right now. Monsters can't enter one (their path and their movement both stop at it); the player can. A door with no sprite pair to swap never opens, so isn't in `doors` and doesn't count. |
 | `RemoveSpawner(spawner)` | Opens a destroyed spawner's cells. |
 | `IsDoorLocked(x, y, canOpen): boolean` | A closed door that doesn't open for the player (`canOpen(lockId)` says whether a lock does: it's unlocked, or they hold its key) - what their collider treats as a wall. A closed door that opens for them isn't: they walk onto it to open it. |
-| `CollectPickupsAt(x, y): CollectedPickup[]` | Collects and hides every pickup at the cell; the caller applies them. |
+| `CollectPickupsAt(x, y): CollectedPickup[]` | Collects and hides every pickup at the cell; the caller applies them. A pickup whose tile gives off light (a torch) takes its light with it: that baked light is switched off. |
+| `UpdateLights(time, moving)` | Rebuilds `lightGrid` for `time` seconds of play, with `moving: MovingLight[]` cast where they are now (`SceneLights.Update`). Call once a frame, before the level is drawn. |
 | `UpdateDoors(x, y, canOpen?)` | Opens/closes doors by the player's tile (call each frame) - a door opens only if `canOpen(door.lockId)` (with none given, every door does - so with the player's keys, an unlocked door always does); bumps `doorVersion` for each that changes. |
 | `UpdateVisibleRegions(x, y)` | Recomputes which regions are reachable through open doors (call after `UpdateDoors`). |
 | `IsCellVisible(x, y): boolean` | |
@@ -1220,12 +1230,12 @@ then `UseLevelBundle`; resolves `false` (quietly if the game was destroyed, with
 `@logic-incubator/engine/level/Lighting` (pure):
 
 ```ts
-type LightValue = { brightness: number; tint: number; range: number };
+type LightValue = { brightness: number; tint: number; range: number; flicker?: number };   // flicker: how far it wavers, as a share (0.15 is a torch)
 type LightSource = Vec2Like & { value: LightValue };
 type LightGrid = { width: number; height: number; data: Float32Array };   // RGB per tile corner, (width + 1) x (height + 1), row by row
 type LightBlockers = { width: number; height: number; opaque: Uint8Array; floor: Float32Array };   // per cell, row by row
-type LightShape = { origin: Vec2Like; rgb: number[]; corners: Uint32Array; shares: Float32Array };  // one light's shadowed reach
-type LightBake = { width: number; height: number; occlusion: Float32Array; shapes: LightShape[] };
+type LightShape = { origin: Vec2Like; rgb: number[]; flicker: number; corners: Uint32Array; shares: Float32Array };  // one light's shadowed reach
+type LightBake = { width: number; height: number; occlusion: Float32Array; shapes: LightShape[]; blockers: LightBlockers };
 
 const AMBIENT_LIGHT = 0.3;          // strength of the light where no light reaches
 const AMBIENT_TINT = 0xa0b2ff;      // its colour: a cool blue
@@ -1237,8 +1247,10 @@ const LIGHT_RADIUS = 0.35;          // radius of a light's flame in tiles; shado
 const CORNER_OCCLUSION = [1, 0.85, 0.7, 0.6, 0.5];   // light kept at a corner with 0..4 walls around it
 
 IsLightValue(value): value is LightValue            // loose: an object with "range"
-IsCompleteLightValue(value): value is LightValue    // strict: all three finite numbers
+IsCompleteLightValue(value): value is LightValue    // strict: all three finite numbers, and flicker one too if it's there
 LightFalloff(distance: number, range: number): number   // (1 - (d / range)^2)^2, 0 at and past range
+Flicker(time: number, seed: number): number          // -1..1, smooth; seed sets one light apart from another
+FlickerScale(flicker: number, time: number, seed: number): number   // 1 + flicker * Flicker(time, seed), never below 0; exactly 1 for a steady light
 BakeLighting(lights: ReadonlyArray<LightSource>, width: number, height: number, blockers?: LightBlockers): LightGrid
 AmbientLightGrid(width: number, height: number): LightGrid
 OpenLightBlockers(width, height): LightBlockers      // nothing blocks, all at height 0
@@ -1246,6 +1258,7 @@ LightBlockersFor(width, height, solid: (x, y) => boolean, floor: (x, y) => numbe
     overrides: ReadonlyArray<{ x; y; blocks: boolean }>): LightBlockers
 LightOrigin(blockers, x, y): Vec2Like                // where a light on cell (x, y) shines from
 BakeLightShape(light: LightSource, blockers): LightShape
+CastMovingLight(origin: Vec2Like, value: LightValue, blockers): LightShape   // a light at any point, in tiles, with fewer rays
 CornerOcclusion(blockers): Float32Array              // light kept at each corner, row by row
 BakeLights(lights, blockers): LightBake              // one shape per light, in order, plus the occlusion
 ComposeLighting(bake, scales?: ArrayLike<number>, out?: LightGrid): LightGrid
@@ -1272,6 +1285,25 @@ more steps above the lowest open one, and looks the count up in `CORNER_OCCLUSIO
 
 A `LightShape` keeps the corners a light reaches and its share at each, so `ComposeLighting` can rebuild the grid with each light scaled
 by `scales[i]` (1 if left out; 0 switches it off) without casting rays again. Pass the previous grid as `out` to fill it in place.
+`CastMovingLight` casts a light from any point (`(x + 0.5, y + 0.5)` is the centre of cell `(x, y)`) the same way, from 6 points across
+its flame instead of 16, since it's cast again whenever it moves.
+
+`@logic-incubator/engine/level/SceneLights` (pure) keeps a level's light up to date while it's played:
+
+```ts
+type MovingLight = Vec2Like & { value: LightValue; key?: unknown; scale?: number };   // in tiles; scale multiplies its strength
+
+new SceneLights(bake: LightBake, grid: LightGrid)   // grid is filled in place by every Update
+lights.Update(time: number, moving: ReadonlyArray<MovingLight>): LightGrid
+lights.SetOn(index, on), IsOn(index)                // a baked light, by its place in the bake
+lights.BakedCount, Scale(index), Origin(index), Colour(index)   // Scale: its strength at the last Update - its flicker, or 0 while off
+lights.MovingScale(key), MovingColour(key)         // a keyed moving light's strength and colour at the last Update; undefined if it wasn't there
+```
+
+`Update` composes every baked light that's on at `FlickerScale(flicker, time, index)`, plus each moving light cast where it is now, at
+its flicker times its `scale`. A moving light with a `key` (anything that stays the same from frame to frame - the shot it rides on) isn't
+cast again until it has moved an eighth of a tile or its value changes, and keeps one flicker seed; a keyed light left out of `moving` is
+forgotten.
 
 ---
 
@@ -1388,10 +1420,10 @@ plus `CreateSpawnerState` and `StepSpawner` (used by `Encounter`).
 
 ```ts
 type ProjectileOwner = "player" | "monster";
-type ShotSetup = { sprite: string; spriteAngle?: number; speed: number; damage: number; range: number };   // speed px/frame; range in tiles
+type ShotSetup = { sprite: string; spriteAngle?: number; speed: number; damage: number; range: number; light?: LightValue };   // speed px/frame; range in tiles; light: it glows as it flies
 type Weapon = ShotSetup & { cooldown: number };            // seconds between shots
 type WeaponDef = { icon: string; shot: Weapon };           // icon = the HUD weapon slot
-type Projectile = { x, y, vx, vy, owner, damage, sprite, spriteAngle?, range, dead };
+type Projectile = { x, y, vx, vy, owner, damage, sprite, spriteAngle?, range, dead, light? };
 
 CreateProjectile(from, direction, shot, owner, tileSize): Projectile
 StepProjectile(projectile, dt, isBlocked, tileSize): Vec2Like | null    // the blocking cell it hit, else null
@@ -1408,7 +1440,9 @@ Pure modules under `level/entities/`:
 | `Health` | `type Health = { hitPoints, max, invulnerable }`; `InvulnerableTime = 1`; `CreateHealth(max)`, `IsDead(h)`, `DamageHealth(h, damage, invulnerableTime?): boolean` (false while invulnerable/dead), `HealHealth(h, amount): boolean` (restores up to the maximum; nothing for the dead), `TickHealth(h, dt)` |
 | `Gold` | `type Gold = { amount }`; `CreateGold()`, `AddGold(gold, amount)` (never below 0) |
 | `Inventory` | `InventorySize = 8`; `type Inventory = { slots: (string \| null)[] }`; `CreateInventory()`, `AddItem(inventory, sprite): boolean` |
-| `Pickups` | `type PickupValue = { kind: "gold"; amount } \| { kind: "health"; amount } \| { kind: "key"; id } \| { kind: "weapon"; weapon: WeaponDef } \| { kind: "item"; sprite? }` (an item with no `sprite` is shown as its own tile); `PickupKinds`; `IsPickupValue(v)` (strict: a known kind with the fields it needs, finite numbers, a key id that's a whole number from 0 - also what tells a pickup from a light or spawner in a tile's `data`); `DefaultPickupValue(kind?)` |
+| `Pickups` | `type PickupValue = { kind: "gold"; amount } \| { kind: "health"; amount } \| { kind: "key"; id } \| { kind: "weapon"; weapon: WeaponDef } \| { kind: "item"; sprite? } \| { kind: "light"; light: LightValue; seconds? }` (an item with no `sprite` is shown as its own tile; a light is carried from then on, in place of any other, for `seconds` - 0 or left out for the rest of the level); `PickupKinds`; `IsPickupValue(v)` (strict: a known kind with the fields it needs, finite numbers, a key id that's a whole number from 0, a complete light - also what tells a pickup from a light or spawner in a tile's `data`); `DefaultPickupValue(kind?)` (a light: a torch that burns for 120 s) |
+| `CarriedLight` | `type CarriedLight = { value, seconds, left }`; `GutterTime = 8`; `CreateCarriedLight(value, seconds?)` (0, negative or left out: burns for the rest of the level), `TickCarriedLight(light, seconds): boolean` (false once it's out), `CarriedLightScale(light)` (1, falling to 0 over its last `GutterTime` seconds) |
+| `LightSpell` | `type LightSpell = { light: LightValue; seconds; recharge }` (lit for `seconds` - 0 for good - then `recharge` seconds before it can be cast again); `type LightSpellState = { spell, lit: CarriedLight \| null, recharging }`; `CreateLightSpellState(spell)`, `IsLightSpellReady(state)`, `CastLightSpell(state): boolean` (false unless ready), `TickLightSpell(state, seconds)`, `LightSpellScale(state)` (0 while not lit), `LightSpellStatusOf(state): { state: "ready" \| "lit" \| "recharging"; fill; seconds }` (what the HUD shows: a lit one's bar empties as it burns, a recharging one's fills back up) |
 | `Keys` | `NoLock = -1` (the lock of an unlocked door - every door by default - which opens for anyone, key or no key); `IsLocked(lock)` (0 and up); `type KeyRing = { keys: { id, sprite }[] }`; `CreateKeyRing()`, `AddKey(ring, id, sprite?): boolean` (false if that id is already held), `CanOpen(ring, lock): boolean` (the lock is `NoLock`, or a key with that id is held). There is no key that opens everything |
 
 ---
@@ -1446,11 +1480,13 @@ Constants `MaxMonsters = 150`, `HitFlashTime = 0.15`. `EncounterLevel` and `Enco
 | Class | Module | Summary |
 | --- | --- | --- |
 | `Camera extends GameComponent` | `view/Camera` | `ViewRect`, `Scale`, `ScaledTileSize`, `Zoom`, `BaseViewWidth/Height`, `CurrentZ`, `EffectiveZoom`; `Move(x, y)`, `CenterOn(x, y)`, `Follow(pixelX, pixelY, amount)`, `SetZ(z)`, `UpdateZoom(dt)`. Emits `CAMERA_MOVED`. `new Camera(cameraControl?)`. |
-| `TileMapView extends GameComponent` | `view/TileMap` | `new TileMapView(level, camera)`. Builds the tile layers, lit and banded by height, plus the `EntitiesLayer` (`"entities"`) and `ProjectilesLayer` (`"projectiles"`) containers; `TileGD8Rotation(rotation, scaleX, scaleY)`. Each tile is drawn with its cell's corner light (`CellCornerLight`); a tile taller than a cell (a door, a statue) stands up, so like a figure it takes `FootLight` along its foot. Emits `LEVEL_CREATED`. |
-| `Player` | `view/Player` | `new Player(camera, collision, level, setup)`; `Position`, `Centre`, `Tile`, `Texture`, `FacingX`, `Health`, `Gold`, `Inventory`, `Keys`, `EquippedWeapon`; `HasKeyFor(lockId)`, `IsLockedOut(x, y)` (a closed door they've no key for - what `DungeonMain` gives their collider); `Reset(startPosition)` (throws if the level has no player start), `SetSprite(animation)` (draw the player with another animation, keeping their position; a no-op for the one already in use), `Update(dt, seconds)` (input, movement, camera, doors, regions, pickups), `TakeShot(): Vec2Like \| null`, `Damage(n): boolean`, `Destroy()`. |
+| `TileMapView extends GameComponent` | `view/TileMap` | `new TileMapView(level, camera)`. Builds the tile layers, lit and banded by height, plus, in drawing order, the `GlowsLayer` (`"glows"`), `EntitiesLayer` (`"entities"`), `OrbsLayer` (`"orbs"`) and `ProjectilesLayer` (`"projectiles"`); `TileGD8Rotation(rotation, scaleX, scaleY)`. Each tile is drawn with its cell's corner light (`CellCornerLight`); a tile taller than a cell (a door, a statue) stands up, so like a figure it takes `FootLight` along its foot. A tile that gives off light gets a glow over its flame in its own band (`view/helpers/Glow`), at its light's strength that frame. Emits `LEVEL_CREATED`. |
+| `Player` | `view/Player` | `new Player(camera, collision, level, setup)`; `Position`, `Centre`, `Tile`, `Texture`, `FacingX`, `Health`, `Gold`, `Inventory`, `Keys`, `EquippedWeapon`; `HasKeyFor(lockId)`, `IsLockedOut(x, y)` (a closed door they've no key for - what `DungeonMain` gives their collider); `Reset(startPosition)` (throws if the level has no player start), `SetSprite(animation)` (draw the player with another animation, keeping their position; a no-op for the one already in use), `SetLightSpell(spell)` (from the next `Reset`; null or undefined for none), `Update(dt, seconds)` (input, movement, camera, doors, regions, pickups, their lights), `TakeShot(): Vec2Like \| null`, `Damage(n): boolean`, `Destroy()`. Their lights, as `MovingLight`s for `Level.UpdateLights` (null when they have none): `Light` (a torch they picked up, at their centre, dimming as it burns out) and `SpellLight` (their mage-light while it's lit, over the floor just behind them); `OrbPosition` is where the mage-light is drawn, floating and bobbing, and `Spell` its `LightSpellState`. |
 | `Effects extends GameComponent` | `view/Effects` | `new Effects(camera)`; `Play(art, config, x, y): Emitter \| undefined` starts a particle effect at a position in world pixels (`art`: a sprite or animation name, `config`: an `EmitterConfig` or `OldEmitterConfig`; `undefined` after a one-off warning when `art` isn't loaded). Its layer sits in the camera root above the entities and shots, placed every frame like the entities layer (`view/helpers/EffectsPlacement`), and goes back on top on `LEVEL_CREATED`, which also drops the level's effects. Emitters update from `Tick` (only while shown); a finished one (not emitting, no particles) is destroyed, a continuous one runs until `emit = false`. `DungeonMain` attaches it - use `main.Effects`. |
-| `Hud extends GameComponent` | `view/Hud` | `new Hud(setup.hearts?)`; `Render(health, gold, weaponIcon, inventory, keys)`. Built from the UI kit (a `UiPanel`, a `UiIconRow` of hearts, `UiItemSlot`s and `UiInventoryGrid`s, `UiText`) in the skin of the loaded `ui` bundle - the game must load it first. Hearts are the game's own pictures when `setup.hearts` gives them (enlarged 3x), else the skin's. The keys panel shows each key's sprite and its id. Warns once per missing sprite. |
-| `EntityRenderer` | `view/EntityRenderer` | `new EntityRenderer(camera, level)`; `Reset()` (call on `LEVEL_CREATED`), `Render(player, encounter)`. |
+| `Hud extends GameComponent` | `view/Hud` | `new Hud(setup.hearts?)`; `Render(health, gold, weaponIcon, inventory, keys, spell?)` (`spell`: the player's `LightSpellState`, shown under the keys as a bar - the skin's `mp` bar, if it has one - and READY, LIT or RECHARGING with the seconds left; null or left out hides it). Built from the UI kit (a `UiPanel`, a `UiIconRow` of hearts, `UiItemSlot`s and `UiInventoryGrid`s, `UiText`) in the skin of the loaded `ui` bundle - the game must load it first. Hearts are the game's own pictures when `setup.hearts` gives them (enlarged 3x), else the skin's. The keys panel shows each key's sprite and its id. Warns once per missing sprite. |
+| `EntityRenderer` | `view/EntityRenderer` | `new EntityRenderer(camera, level)`; `Reset()` (call on `LEVEL_CREATED`), `Render(player, encounter)`. Draws a glow under the figures for the player's torch and each glowing shot, and the mage-light - a glow with a bright core - over them. |
+| `GlowLayer extends Container` | `view/GlowLayer` | Glows added onto what's beneath them, from a pool of sprites: `Begin()`, `Add(x, y, look, pixelsPerTile)` per glow, `End()`. `CreateGlowTexture()` makes the soft white texture they're drawn with (the caller destroys it). |
+| `Glow` | `view/helpers/Glow` | Pure: `GlowTextureSize`, `GlowRadius` (1.25 tiles), `GlowStrength` (0.3), `GlowFlameY` (0.3 - a lit tile's glow sits this far down its art), `OrbCoreRadius`; `GlowPixels(size)` (premultiplied white, fading like `LightFalloff`), `type GlowLook = { tint, alpha, radius }`, `LookOfGlow(rgb, scale, out)` (the light's colour at full saturation, stronger the brighter it is, swelling a little as it flickers), `LookOfOrbCore(rgb, scale, out)` (small, pale and nearly opaque). |
 
 ## Player input
 
@@ -1461,11 +1497,12 @@ interface IPlayerInput {
     direction: Vec2;      // movement
     firing: boolean;      // Space, or the right stick pushed
     aimX: number;         // the right stick's horizontal component (0 from keyboard): sets facing
+    casting: boolean;     // L, or the gamepad's Y (top face) button: calls up the player's light spell
 }
 new PlayerControl(playerId: number);   Get(): IPlayerInput        // a shared object
 ```
 
-Keyboard: arrows or WASD, Space. Gamepad (only when no key is down): left stick moves, right stick fires/aims.
+Keyboard: arrows or WASD, Space, L. Gamepad (only when no key is down): left stick moves, right stick fires/aims, Y casts.
 `@logic-incubator/engine/input/StickInput`: `IsStickPushed(stick: Vec2Like | null): boolean` - a stick at rest is non-null but zero.
 
 ---
@@ -1641,8 +1678,8 @@ Used by the editor's own views; available for editor extensions.
 | `ui/dom/EditorOverlay` | `default class EditorOverlay` - singleton DOM overlay (`inst`, `Destroy()`), `Slot(name: OverlaySlot): HTMLElement` with `OverlaySlot = "brushes" \| "selected" \| "layers" \| "tools" \| "help"`, `SetVisible(visible)` |
 | `ui/dom/SpriteCanvas` | `default class SpriteCanvas` (draws textures to a 2D canvas); `FitIcon`, `VisibleBounds`, `DrawTexture`, `DrawDataBrushSwatch` |
 | `ui/dialog/FormDialog` | `OpenFormDialog(options: FormDialogOptions): Promise<FormValues \| null>`, `IsFormDialogOpen()`; field specs `NumberField`, `TextField`, `ColourField`, `ToggleField`, `ChoiceField` (exactly one option), `MultiChoiceField` (`FieldSpec`), `ChoiceOption`; any field can have `visibleWhen(values)` to show only while it applies to the other values (a pickup's key id only for a key); `IsFieldVisible(field, values)`; options may set `saveLabel` and `cancelLabel` (`null` leaves Cancel out - a message with just an OK, which the sprite editor uses for alerts and confirms) |
-| `DataBrushEditors` | `DataBrushEditorFor(name): DataBrushEditor \| undefined` - the dialog definitions for editing a value: `"light"`, `"spawner"`, `"pickup"` (the `PICKUP` brush's name - the same popup for the brush and for a tile that gives one), `"door"` (a door tile's lock: a Locked checkbox that reveals its key id) and the height. `EditorImages` carries the lookups they need from the game's art (`monster`, `hasSprite`) |
-| `DataLabels` | `PickupLabel(pickup)`, `MapLabel(value)` (the short tag drawn over a value on the attributes overlay: `G10`, `H2`, `K3`, `W`, `I`, `L3` for a locked door - an unlocked one has no tag...; only characters the bitmap font has), `DescribePickup(pickup)`, `DescribeLock(lock)` (pure) |
+| `DataBrushEditors` | `DataBrushEditorFor(name): DataBrushEditor \| undefined` - the dialog definitions for editing a value: `"light"` (brightness, tint, range and flicker), `"spawner"`, `"pickup"` (the `PICKUP` brush's name - the same popup for the brush and for a tile that gives one; a weapon's shot can be set to give off light, and a light to carry has a light and how long it burns), `"door"` (a door tile's lock: a Locked checkbox that reveals its key id) and the height. `EditorImages` carries the lookups they need from the game's art (`monster`, `hasSprite`) |
+| `DataLabels` | `PickupLabel(pickup)`, `MapLabel(value)` (the short tag drawn over a value on the attributes overlay: `G10`, `H2`, `K3`, `W`, `I`, `T` for a light to carry (a torch), `L3` for a locked door - an unlocked one has no tag...; only characters the bitmap font has), `DescribePickup(pickup)`, `DescribeLock(lock)` (pure) |
 | `views/PaletteCategories` | `type TileSet = { id: AssetCategory; name; brushes: string[] }`; `GroupByCategory(names, categoryOf): TileSet[]` (one set per category, in `AssetCategories` order, empty ones included, each sorted by name); `EmptyTabHint(id, canCreate?): string` (pure); `ShowsCategory(kind, category)` (a floor/walls layer shows only its own tab, any other tile layer all but those two); `TakesCategory(kind, category)` (a floor/walls layer paints only its own category, a generic one anything); `EmptyTabHint(id, canCreate?)` mentions the tab's + when the sprite editor is available |
 | `tools/ToolGeometry` | `SpanRect(a, b)`, `RectCells(rect, border?)`, `InRect(rect, x, y)`, `FloodFill(start, bounds, keyAt)`, `TopmostBrushAt(...)` (a brush is only at its anchor cell), `TopmostBrushCovering(brushes, layers, cell, footprintOf, accept?)` (a brush is on top at every cell of its footprint - what the data-select tool uses, so a 2x2 spawner or door is the target wherever it's clicked), `BoundsOfCells(cells)`, `type CellRect` |
 

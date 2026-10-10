@@ -29,6 +29,14 @@ describe("StepProjectile", () => {
     });
 });
 
+describe("CreateProjectile", () => {
+    it("carries its shot's light, if it has one", () => {
+        const light = { brightness: 0.8, tint: 0x7dff70, range: 4 };
+        expect(CreateProjectile({ x: 8, y: 8 }, { x: 1, y: 0 }, { ...ARROW, light }, "monster", TILE).light).toBe(light);
+        expect(CreateProjectile({ x: 8, y: 8 }, { x: 1, y: 0 }, ARROW, "player", TILE).light).toBeUndefined();
+    });
+});
+
 describe("hit boxes", () => {
     it("touch only on a real overlap", () => {
         expect(Overlaps({ x: 0, y: 0, width: 10, height: 10 }, { x: 9, y: 9, width: 10, height: 10 })).toBe(true);

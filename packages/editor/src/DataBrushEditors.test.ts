@@ -44,10 +44,17 @@ describe("DataBrushEditors", () => {
         });
     });
 
+    it("saves a light with no flicker as a steady one, without the field", () => {
+        const light = DataBrushEditorFor("light");
+        expect(light.fromForm({ ...light.toForm({ brightness: 1, tint: 0xffffff, range: 5, flicker: 0.2 }), lightFlicker: 0 })).toEqual({ brightness: 1, tint: 0xffffff, range: 5 });
+    });
+
     it("round-trips a light and a height", () => {
         const light = DataBrushEditorFor("light");
         const value = { brightness: 0.8, tint: 0x123456, range: 7.5 };
         expect(light.fromForm(light.toForm(value))).toEqual(value);
+        const torch = { brightness: 1, tint: 0xffc780, range: 15, flicker: 0.15 };
+        expect(light.fromForm(light.toForm(torch))).toEqual(torch);
         const height = DataBrushEditorFor(DataBrushName.Z_INDEX);
         expect(height.fromForm(height.toForm(-3))).toBe(-3);
     });
@@ -56,6 +63,8 @@ describe("DataBrushEditors", () => {
 
 const pickup = DataBrushEditorFor(DataBrushName.PICKUP);
 const WEAPON: PickupValue = { kind: "weapon", weapon: { icon: "weapon_axe", shot: { sprite: "weapon_throwing_axe", speed: 5, damage: 2, cooldown: 0.4, range: 8 } } };
+const GLOWING: PickupValue = { kind: "weapon", weapon: { icon: "weapon_axe", shot: { sprite: "weapon_throwing_axe", speed: 5, damage: 2, cooldown: 0.4, range: 8, light: { brightness: 0.8, tint: 0xff6020, range: 4, flicker: 0.2 } } } };
+const TORCH: PickupValue = { kind: "light", light: { brightness: 1, tint: 0xffc780, range: 7, flicker: 0.15 }, seconds: 90 };
 const ANGLED: PickupValue = { kind: "weapon", weapon: { icon: "weapon_bow", shot: { sprite: "weapon_arrow", speed: 6, damage: 1, cooldown: 0.2, range: 12, spriteAngle: -Math.PI / 2 } } };
 const visibleKeys = (form: ReturnType<typeof pickup.toForm>) =>
     pickup.fields(noImages).filter(field => IsFieldVisible(field, form)).map(field => field.key);
@@ -69,9 +78,23 @@ describe("the pickup editor", () => {
             { kind: "key", id: 0 },
             WEAPON,
             { kind: "item", sprite: "flask_blue" },
-            { kind: "item" }
+            { kind: "item" },
+            GLOWING,
+            TORCH,
+            { kind: "light", light: { brightness: 0.5, tint: 0xffffff, range: 4 }, seconds: 0 }
         ];
         values.forEach(value => expect(pickup.fromForm(pickup.toForm(value)), JSON.stringify(value)).toEqual(value));
+    });
+
+    it("gives a weapon's shot a light only when asked", () => {
+        const plain = pickup.fromForm(pickup.toForm(WEAPON)) as PickupValue;
+        expect(plain.kind === "weapon" && "light" in plain.weapon.shot).toBe(false);
+        const dimmed = pickup.fromForm({ ...pickup.toForm(GLOWING), shotGlows: false }) as PickupValue;
+        expect(dimmed.kind === "weapon" && "light" in dimmed.weapon.shot).toBe(false);
+    });
+
+    it("never lets a light burn for a negative time", () => {
+        expect(pickup.fromForm({ ...pickup.toForm(TORCH), carriedSeconds: -10 })).toEqual({ ...TORCH, seconds: 0 });
     });
 
     it("makes a weapon's shot turn to face its flight only when asked, in degrees", () => {
@@ -123,8 +146,10 @@ describe("the pickup editor", () => {
         expect(visibleKeys(pickup.toForm({ kind: "health", amount: 2 }))).toEqual(["kind", "healthAmount"]);
         expect(visibleKeys(pickup.toForm({ kind: "key", id: 3 }))).toEqual(["kind", "keyId"]);
         expect(visibleKeys(pickup.toForm({ kind: "item" }))).toEqual(["kind", "itemSprite"]);
-        expect(visibleKeys(pickup.toForm(WEAPON))).toEqual(["kind", "weaponIcon", "shotSprite", "shotDamage", "shotSpeed", "shotRange", "shotCooldown", "shotTurns"]);
+        expect(visibleKeys(pickup.toForm(WEAPON))).toEqual(["kind", "weaponIcon", "shotSprite", "shotDamage", "shotSpeed", "shotRange", "shotCooldown", "shotTurns", "shotGlows"]);
         expect(visibleKeys({ ...pickup.toForm(WEAPON), shotTurns: true })).toContain("shotAngle");
+        expect(visibleKeys(pickup.toForm(GLOWING))).toEqual(expect.arrayContaining(["shotLightBrightness", "shotLightTint", "shotLightRange", "shotLightFlicker"]));
+        expect(visibleKeys(pickup.toForm(TORCH))).toEqual(["kind", "carriedBrightness", "carriedTint", "carriedRange", "carriedFlicker", "carriedSeconds"]);
     });
 
     it("offers every kind, in order, as the choice", () => {

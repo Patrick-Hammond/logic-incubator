@@ -6,6 +6,7 @@ import UiIconRow from "@logic-incubator/ui/widgets/UiIconRow";
 import UiInventoryGrid from "@logic-incubator/ui/widgets/UiInventoryGrid";
 import UiItemSlot, {SlotItem} from "@logic-incubator/ui/widgets/UiItemSlot";
 import UiPanel from "@logic-incubator/ui/widgets/UiPanel";
+import UiProgressBar from "@logic-incubator/ui/widgets/UiProgressBar";
 import {CreateText} from "@logic-incubator/ui/widgets/UiText";
 import {GameHeight, HudWidth, PlayWidth} from "../Constants";
 import type {PlayerSetup} from "../DungeonMain";
@@ -13,6 +14,7 @@ import {Gold} from "../level/entities/Gold";
 import {Health} from "../level/entities/Health";
 import {Inventory, InventorySize} from "../level/entities/Inventory";
 import {KeyRing} from "../level/entities/Keys";
+import {LightSpellState, LightSpellStatusOf} from "../level/entities/LightSpell";
 
 /** The game's own hearts are small pixel art, drawn this many times as big. */
 const HeartScale = 3;
@@ -29,10 +31,14 @@ const HalfHeartsPerHeart = 2;
 const SlotColumns = 4;
 /** Keys the panel has room to show - one id each, so a level would need more than this many locks to run out. */
 const KeySlots = 8;
+/** The skin's bar the light spell is shown with - blue, for magic. Without it in the skin there's just the text. */
+const SpellBar = "mp";
+/** What the light spell's text says while it's ready, lit and recharging - the last two followed by the seconds that go with them. */
+const SpellWords = {ready: "READY", lit: "LIT", recharging: "RECHARGING"};
 
 /**
  * The right-hand HUD panel, built from the UI kit (`packages/ui`) in whatever skin the game has loaded: a panel with the hearts at the top, the gold, the equipped weapon, the
- * inventory grid and the keys carried. `Camera` reserves `PlayWidth` of the canvas so gameplay never renders under it. It only shows things - nothing in it takes the pointer.
+ * inventory grid, the keys carried and - for a hero who has one - the light spell: whether it's ready, lit or recharging, with a bar and the seconds left. `Camera` reserves `PlayWidth` of the canvas so gameplay never renders under it. It only shows things - nothing in it takes the pointer.
  *
  * Hearts are the game's own pictures if `PlayerSetup.hearts` gives them (and they are in the sprite sheet), the skin's otherwise.
  */
@@ -54,6 +60,11 @@ export default class Hud extends GameComponent {
     private shownInventory = "";
     private keySlots!: UiInventoryGrid;
     private shownKeys = "";
+
+    private spellHeading!: BitmapText;
+    private spellBar: UiProgressBar | null = null;
+    private spellText!: BitmapText;
+    private shownSpell = "";
 
     constructor(private sprites?: PlayerSetup["hearts"]) {
         super();
@@ -111,14 +122,32 @@ export default class Hud extends GameComponent {
         this.keySlots.position.set(inner, keysY);
 
         this.layer.root.addChild(this.weaponSlot, this.inventorySlots, this.keySlots);
+
+        // Hidden until the player has a light spell (see `RenderSpell`).
+        this.spellHeading = CreateText(theme, "SPELL", {colour: "muted"});
+        this.spellHeading.position.set(inner, keysY + this.keySlots.GridHeight + 24);
+        this.layer.root.addChild(this.spellHeading);
+        let spellY = this.spellHeading.y + Math.ceil(this.spellHeading.textHeight) + LabelGap;
+        if (theme.skin.bars[SpellBar]) {
+            this.spellBar = new UiProgressBar(theme, SpellBar, this.keySlots.GridWidth, 1);
+            this.spellBar.position.set(inner, spellY);
+            this.layer.root.addChild(this.spellBar);
+            spellY += this.spellBar.BarHeight + LabelGap;
+        }
+        this.spellText = CreateText(theme, "", {colour: "text"});
+        this.spellText.position.set(inner, spellY);
+        this.layer.root.addChild(this.spellText);
+        this.ShowSpell(false);
     }
 
-    Render(health: Health, gold: Gold, weaponIcon: string, inventory: Inventory, keys: KeyRing): void {
+    /** `spell` is the player's light spell - null hides that section, for a hero without one. */
+    Render(health: Health, gold: Gold, weaponIcon: string, inventory: Inventory, keys: KeyRing, spell: LightSpellState | null = null): void {
         this.RenderHearts(health);
         this.RenderGold(gold);
         this.RenderWeapon(weaponIcon);
         this.RenderInventory(inventory);
         this.RenderKeys(keys);
+        this.RenderSpell(spell);
     }
 
     /** The picture for a sprite name, or null (with a warning, once per name) if the sprite sheet hasn't it. */
@@ -201,6 +230,39 @@ export default class Hud extends GameComponent {
             // A key the sprite sheet has no picture for still shows its id.
             return {texture: texture || Texture.EMPTY, label: String(key.id)};
         }));
+    }
+
+    private RenderSpell(spell: LightSpellState | null): void {
+        if (!spell) {
+            if (this.shownSpell) {
+                this.shownSpell = "";
+                this.ShowSpell(false);
+            }
+            return;
+        }
+        const status = LightSpellStatusOf(spell);
+        const seconds = Math.ceil(status.seconds);
+        const text = SpellWords[status.state] + (seconds > 0 ? " " + seconds : "");
+        // Redrawn only when the text or the bar (to a pixel's worth or so) changes.
+        const signature = text + "|" + Math.round(status.fill * 200);
+        if (signature === this.shownSpell) {
+            return;
+        }
+        if (!this.shownSpell) {
+            this.ShowSpell(true);
+        }
+        this.shownSpell = signature;
+        this.spellText.text = text;
+        if (this.spellBar) {
+            this.spellBar.Value = status.fill;
+        }
+    }
+
+    private ShowSpell(visible: boolean): void {
+        this.spellHeading.visible = this.spellText.visible = visible;
+        if (this.spellBar) {
+            this.spellBar.visible = visible;
+        }
     }
 
     private ItemOf(name: string | null): SlotItem | null {

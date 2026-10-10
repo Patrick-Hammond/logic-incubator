@@ -8,11 +8,13 @@ import MonsterRoster from "../level/entities/MonsterRoster";
 import Level from "../level/Level";
 import {FootLight, LightGrid, LightToTint, SampleLight} from "../level/Lighting";
 import {Camera} from "./Camera";
+import GlowLayer from "./GlowLayer";
 import {ViewOrigin} from "./helpers/CameraWindow";
+import {GlowLook, LookOfGlow, LookOfOrbCore} from "./helpers/Glow";
 import {CentreTile} from "./helpers/PlayerMovement";
 import {SpriteDrawPosition} from "./helpers/SpriteDrawOffset";
 import {Player} from "./Player";
-import {EntitiesLayer, ProjectilesLayer, TileGD8Rotation} from "./TileMap";
+import {EntitiesLayer, GlowsLayer, OrbsLayer, ProjectilesLayer, TileGD8Rotation} from "./TileMap";
 
 /** Monsters' animation frames per ticker frame - see `AnimationSpeed` for tiles'. */
 const MonsterAnimationSpeed = 0.15;
@@ -50,10 +52,14 @@ function MultiplyLight(light: Float32Array, tint: number): void {
  * entities layer, sorted by their feet so whoever's lower on screen is in
  * front; shots into the projectiles layer as sprites, turned to face their
  * flight. Skips whatever stands where the player can't see (`IsCellVisible`),
- * and lights each one by the floor under its feet.
+ * and lights each one by the floor under its feet. The lights that move - the
+ * player's torch, glowing shots - get a glow (see `Glow`) in the glows layer,
+ * beneath the figures; the player's mage-light floats over them, in the orbs layer.
  */
 export default class EntityRenderer {
+    private glows: GlowLayer | null = null;
     private entities: CompositeTilemap | null = null;
+    private orbs: GlowLayer | null = null;
     private projectiles: Container | null = null;
     private sprites: Sprite[] = [];
     private frames = new Map<string, Texture[]>();
@@ -61,19 +67,22 @@ export default class EntityRenderer {
     /** Corner-light arrays reused frame to frame, one per drawable slot, so lighting 150 monsters doesn't allocate every frame. */
     private lights: Float32Array[] = [];
     private sampled = [0, 0, 0];
+    private glowLook: GlowLook = {tint: 0xffffff, alpha: 0, radius: 0};
 
     constructor(private camera: Camera, private level: Level) {}
 
     /** Picks up the layers `TileMapView` has just (re)built - call on every `LEVEL_CREATED`. */
     Reset(): void {
+        this.glows = this.camera.root.getChildByName(GlowsLayer) as GlowLayer;
         this.entities = this.camera.root.getChildByName(EntitiesLayer) as CompositeTilemap;
+        this.orbs = this.camera.root.getChildByName(OrbsLayer) as GlowLayer;
         this.projectiles = this.camera.root.getChildByName(ProjectilesLayer) as Container;
         // The old projectiles layer took its sprites with it when it was destroyed.
         this.sprites = [];
     }
 
     Render(player: Player, encounter: Encounter): void {
-        if (!this.entities || !this.projectiles) {
+        if (!this.glows || !this.entities || !this.orbs || !this.projectiles) {
             return;
         }
 
@@ -99,6 +108,7 @@ export default class EntityRenderer {
         });
 
         this.RenderProjectiles(encounter, origin);
+        this.RenderGlows(player, encounter, origin);
     }
 
     private AddSpawners(encounter: Encounter, origin: {x: number; y: number}): void {
@@ -195,6 +205,51 @@ export default class EntityRenderer {
             sprite.rotation = p.spriteAngle != null ? Math.atan2(p.vy, p.vx) - p.spriteAngle : 0;
             sprite.tint = LightToTint(SampleLight(this.level.lightGrid, p.x / TileSize, p.y / TileSize, this.sampled));
         });
+    }
+
+    /**
+     * A glow for each light that moves, where it is now - its strength and colour as `Level.UpdateLights` last
+     * cast it, so a shot fired since has none until the next frame - and the player's mage-light, a glow with a
+     * bright core where it floats.
+     */
+    private RenderGlows(player: Player, encounter: Encounter, origin: {x: number; y: number}): void {
+        this.glows.Begin();
+        const carried = player.Light;
+        if (carried) {
+            this.AddGlow(this.glows, carried.x * TileSize, carried.y * TileSize, carried.key, origin, LookOfGlow);
+        }
+        encounter.projectiles.forEach(p => {
+            if (p.light && !p.dead && this.level.IsCellVisible(Math.floor(p.x / TileSize), Math.floor(p.y / TileSize))) {
+                this.AddGlow(this.glows, p.x, p.y, p, origin, LookOfGlow);
+            }
+        });
+        this.glows.End();
+
+        this.orbs.Begin();
+        const spell = player.SpellLight;
+        const orb = player.OrbPosition;
+        if (spell && orb) {
+            this.AddGlow(this.orbs, orb.x, orb.y, spell.key, origin, LookOfGlow);
+            this.AddGlow(this.orbs, orb.x, orb.y, spell.key, origin, LookOfOrbCore);
+        }
+        this.orbs.End();
+    }
+
+    /** A glow into `layer` at world pixel `(x, y)` for the moving light with this key, looking as `look` says. */
+    private AddGlow(
+        layer: GlowLayer,
+        x: number,
+        y: number,
+        key: unknown,
+        origin: {x: number; y: number},
+        look: (rgb: ArrayLike<number>, scale: number, out: GlowLook) => GlowLook
+    ): void {
+        const lights = this.level.lights;
+        const colour = lights.MovingColour(key);
+        if (colour) {
+            look(colour, lights.MovingScale(key) || 0, this.glowLook);
+            layer.Add(x - origin.x * TileSize, y - origin.y * TileSize, this.glowLook, TileSize);
+        }
     }
 
     /** The reusable corner-light array for the drawable about to be pushed. */

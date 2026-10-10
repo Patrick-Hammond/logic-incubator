@@ -101,7 +101,7 @@ export default class AssetMetadataStore {
             let meta = source[name];
             if (meta.light && !IsCompleteLightValue(meta.light)) {
                 console.warn(
-                    `assets-meta.json: "${name}" has an incomplete light value (needs brightness, tint and range, all numbers) - ignoring it until fixed:`,
+                    `assets-meta.json: "${name}" has an incomplete light value (needs brightness, tint and range, all numbers, and flicker a number if it has one) - ignoring it until fixed:`,
                     meta.light
                 );
                 meta = { ...meta, light: undefined };
