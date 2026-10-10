@@ -98,7 +98,7 @@ logic-incubator/
         loading/             AssetFactory: sprites and animations by name
         io/                  Keyboard, GamePad, VirtualJoystick, Storage, Url
         tween/               Tween, Easing
-        tilemap/             vendored @pixi/tilemap with per-tile tint and flicker
+        tilemap/             vendored @pixi/tilemap with per-tile and per-corner tint, and flicker
         particles/           vendored pixi-particles: the particle Emitter
         colour/              colour transforms on 0xRRGGBB numbers: Darken, ShiftHue
         math/ patterns/ algorithms/ datastructures/ utils/ filters/
@@ -1405,8 +1405,8 @@ stops it (use `this.Own(...)` in a component).
 
 ### The tilemap
 
-`lib/src/tilemap` is a vendored copy of `@pixi/tilemap` 3.2.1 (see its README for what changed), with per-tile `tint` and
-GPU-driven `flicker` added. It draws thousands of tiles as a few draw calls:
+`lib/src/tilemap` is a vendored copy of `@pixi/tilemap` 3.2.1 (see its README for what changed), with per-tile `tint`, per-corner
+`cornerTints` and GPU-driven `flicker` added. It draws thousands of tiles as a few draw calls:
 
 ```ts
 import { CompositeTilemap } from "@logic-incubator/lib/tilemap";
@@ -1418,10 +1418,14 @@ this.root.addChild(map);
 map.clear();
 map.tile(this.assetFactory.CreateTexture("floor_1"), x * 16, y * 16, { tint: 0xffaa55 });
 map.tile(torchTexture, tx * 16, ty * 16, { flicker: 0.3, flickerSeed: tx * 31 + ty });
+// a colour per corner, blended across the tile: RGB for top-left, top-right, bottom-right, bottom-left
+map.tile(wallTexture, wx * 16, wy * 16, { cornerTints: [1.3, 1.1, 0.8,  0.6, 0.6, 0.7,  0.3, 0.3, 0.5,  0.9, 0.8, 0.7] });
 ```
 
-`TileOptions`: `tint`, `flicker`, `flickerSeed`, `alpha`, `rotate`, `animX`/`animY`/`animCountX`/`animCountY`/
-`animDivisor`, `u`/`v`/`tileWidth`/`tileHeight`. A container's `alpha` reaches the shader too.
+`TileOptions`: `tint`, `cornerTints`, `flicker`, `flickerSeed`, `alpha`, `rotate`, `animX`/`animY`/`animCountX`/`animCountY`/
+`animDivisor`, `u`/`v`/`tileWidth`/`tileHeight`. `cornerTints` overrides `tint`, and a channel above 1 brightens the texture; `rotate`
+turns the texture inside the tile, not its corners. The array is read when the tile is added, so one array can be refilled for every
+tile. A container's `alpha` reaches the shader too.
 
 ### Particles
 
@@ -1659,7 +1663,7 @@ a deleted one is removed - with a warning if it had anything in it); you only fi
 ```jsonc
 {
   "wall_mid":        { "category": "walls", "collidable": true },
-  "torch_1_anim":    { "category": "misc", "light": { "brightness": 5, "tint": 15856113, "range": 15 } },
+  "torch_1_anim":    { "category": "misc", "light": { "brightness": 1, "tint": 16762752, "range": 15 } },
   "doors_leaf_closed": { "door": { "id": 1, "open": false } },
   "doors_leaf_open":   { "door": { "id": 1, "open": true } },
   "mob_spawner":     { "spawner": { "monsters": ["goblin"], "interval": 3, "maxAlive": 4, "total": 0, "activationRange": 10, "hitPoints": 10 } },
@@ -1674,7 +1678,7 @@ a deleted one is removed - with a warning if it had anything in it); you only fi
 | --- | --- |
 | `category` | Which palette tab the **level editor** lists the sprite under: `floor`, `walls`, `entities`, `weapons`, `items`, `misc` or `user` ([10.3](#103-layers-data-brushes-and-palette-categories)). Has no effect in play. A sprite with none is listed under Misc; an unknown value is a build error (and a console warning at run time). |
 | `collidable` | Blocks movement. |
-| `light` | A point light: `brightness` (peak, 0..1+; it is clamped to 1), `tint` (hex colour as a number), `range` (radius in tiles). Baked once at level load with linear falloff; overlapping lights keep whichever is brighter at each cell. Cells no light reaches have a dim ambient level. A hand-edited light missing a field is dropped with a console warning naming the sprite rather than baking black. |
+| `light` | A point light: `brightness` (its strength at its own cell, added on top of the ambient light; 1 is a normal torch, clamped to 0..2), `tint` (hex colour as a number; a warm colour reads as firelight against the cool ambient), `range` (radius in tiles). Baked once at level load at the corners of the tile grid, so it is blended smoothly across tiles, and fades out smoothly to nothing at its range. Overlapping lights add up, and light can go above 1 to brighten the art (capped). Where no light reaches, a dim, cool ambient light. Sprites are lit by the floor under their feet. No shadows yet: light passes through walls. A hand-edited light missing a field is dropped with a console warning naming the sprite rather than baking black. |
 | `door` | `id` pairs a door's two sprites (closed and open); `open` says which half this is. The door swaps when the player's tile enters any of its footprint cells and swaps back when they leave, so it reads as "walked open" - unless that placement is locked, when the player needs its key ([9.6.1](#961-keys-and-locked-doors)). |
 | `spawner` | Produces `monsters` (a pool, picked at random) every `interval` s, at most `maxAlive` at once, `total` in all (0 = unlimited), only within `activationRange` tiles of the player (0 = always). `hitPoints` is the damage to destroy it (0 = indestructible). Its sprite's footprint is solid until destroyed. |
 | `pickup` | What walking over it gives: `gold` or `health` (an `amount`; health is in half-hearts and never goes past the maximum), a `key` (an `id`), a `weapon`, or an inventory `item` (its `sprite`, or - left out - the tile's own). The tile then disappears. A malformed one is dropped with a console warning naming the sprite. |

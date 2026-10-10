@@ -18,9 +18,19 @@ enum POINT_STRUCT {
     ANIM_COUNT_Y,
     ANIM_DIVISOR,
     ALPHA,
-    TINT_R,
-    TINT_G,
-    TINT_B,
+    // One tint per corner, in vertex order: top-left, top-right, bottom-right, bottom-left.
+    TINT_0_R,
+    TINT_0_G,
+    TINT_0_B,
+    TINT_1_R,
+    TINT_1_G,
+    TINT_1_B,
+    TINT_2_R,
+    TINT_2_G,
+    TINT_2_B,
+    TINT_3_R,
+    TINT_3_G,
+    TINT_3_B,
     FLICKER,
     FLICKER_SEED,
 }
@@ -39,8 +49,16 @@ export interface TileOptions {
     animCountY?: number;
     animDivisor?: number;
     alpha?: number;
-    /** Packed RGB hex (e.g. `0xffaa55`), multiplied into the tile's colour - for tinting/dimming a tile to a light level. Defaults to `0xffffff` (no tint). */
+    /** Packed RGB hex (e.g. `0xffaa55`), multiplied into the tile's colour - for tinting/dimming a tile to a light level. Defaults to `0xffffff` (no tint). Ignored when `cornerTints` is given. */
     tint?: number;
+    /**
+     * A separate tint for each corner, blended smoothly across the tile by the GPU: 12 numbers, red, green
+     * and blue (1 = unchanged) for the top-left, top-right, bottom-right and bottom-left corners. Unlike
+     * `tint`, a channel can go above 1 to brighten the texture. The corners are the tile's own on screen
+     * (`rotate` turns the texture inside them, not the corners). Read when the tile is added, so the same
+     * array can be refilled for the next tile.
+     */
+    cornerTints?: ArrayLike<number>;
     /** Flicker intensity in `[0, 1]`; 0 (the default) is a perfectly steady tile. Animated on the GPU from the shader's own clock, so it costs no per-frame upload. */
     flicker?: number;
     /**
@@ -230,6 +248,7 @@ export class Tilemap extends Container {
             animDivisor = 1,
             alpha = 1,
             tint = 0xffffff,
+            cornerTints,
             flicker = 0,
             flickerSeed = defaultFlickerSeed(x, y),
         } = options;
@@ -252,9 +271,18 @@ export class Tilemap extends Container {
         pb.push(animCountY);
         pb.push(animDivisor);
         pb.push(alpha);
-        pb.push(((tint >> 16) & 0xff) / 255);
-        pb.push(((tint >> 8) & 0xff) / 255);
-        pb.push((tint & 0xff) / 255);
+        if (cornerTints) {
+            for (let i = 0; i < 12; i++) {
+                pb.push(cornerTints[i]);
+            }
+        } else {
+            const r = ((tint >> 16) & 0xff) / 255;
+            const g = ((tint >> 8) & 0xff) / 255;
+            const b = (tint & 0xff) / 255;
+            for (let corner = 0; corner < 4; corner++) {
+                pb.push(r, g, b);
+            }
+        }
         pb.push(flicker);
         pb.push(flickerSeed);
 
@@ -299,13 +327,16 @@ export class Tilemap extends Container {
         pb[pb.length - (POINT_STRUCT_SIZE - POINT_STRUCT.ALPHA)] = alpha;
     }
 
-    /** Changes the tint (see {@link TileOptions.tint}) of the last tile. */
+    /** Changes the tint (see {@link TileOptions.tint}) of the last tile, all four corners alike. */
     tileTint(tint: number): void {
         const pb = this.pointsBuf;
+        const start = pb.length - (POINT_STRUCT_SIZE - POINT_STRUCT.TINT_0_R);
 
-        pb[pb.length - (POINT_STRUCT_SIZE - POINT_STRUCT.TINT_R)] = ((tint >> 16) & 0xff) / 255;
-        pb[pb.length - (POINT_STRUCT_SIZE - POINT_STRUCT.TINT_G)] = ((tint >> 8) & 0xff) / 255;
-        pb[pb.length - (POINT_STRUCT_SIZE - POINT_STRUCT.TINT_B)] = (tint & 0xff) / 255;
+        for (let corner = 0; corner < 4; corner++) {
+            pb[start + corner * 3] = ((tint >> 16) & 0xff) / 255;
+            pb[start + corner * 3 + 1] = ((tint >> 8) & 0xff) / 255;
+            pb[start + corner * 3 + 2] = (tint & 0xff) / 255;
+        }
     }
 
     /** Changes the flicker intensity/seed (see {@link TileOptions.flicker}) of the last tile. */
@@ -438,9 +469,7 @@ export class Tilemap extends Container {
                 const animYEncoded = animY + (animHeight * 2048);
                 const animDivisor = points[i + POINT_STRUCT.ANIM_DIVISOR];
                 const alpha = points[i + POINT_STRUCT.ALPHA];
-                const tintR = points[i + POINT_STRUCT.TINT_R];
-                const tintG = points[i + POINT_STRUCT.TINT_G];
-                const tintB = points[i + POINT_STRUCT.TINT_B];
+                const tint = i + POINT_STRUCT.TINT_0_R;
                 const flicker = points[i + POINT_STRUCT.FLICKER];
                 const flickerSeed = points[i + POINT_STRUCT.FLICKER_SEED];
 
@@ -499,9 +528,9 @@ export class Tilemap extends Container {
                 arr[sz++] = textureId;
                 arr[sz++] = animDivisor;
                 arr[sz++] = alpha;
-                arr[sz++] = tintR;
-                arr[sz++] = tintG;
-                arr[sz++] = tintB;
+                arr[sz++] = points[tint];
+                arr[sz++] = points[tint + 1];
+                arr[sz++] = points[tint + 2];
                 arr[sz++] = flicker;
                 arr[sz++] = flickerSeed;
 
@@ -518,9 +547,9 @@ export class Tilemap extends Container {
                 arr[sz++] = textureId;
                 arr[sz++] = animDivisor;
                 arr[sz++] = alpha;
-                arr[sz++] = tintR;
-                arr[sz++] = tintG;
-                arr[sz++] = tintB;
+                arr[sz++] = points[tint + 3];
+                arr[sz++] = points[tint + 4];
+                arr[sz++] = points[tint + 5];
                 arr[sz++] = flicker;
                 arr[sz++] = flickerSeed;
 
@@ -537,9 +566,9 @@ export class Tilemap extends Container {
                 arr[sz++] = textureId;
                 arr[sz++] = animDivisor;
                 arr[sz++] = alpha;
-                arr[sz++] = tintR;
-                arr[sz++] = tintG;
-                arr[sz++] = tintB;
+                arr[sz++] = points[tint + 6];
+                arr[sz++] = points[tint + 7];
+                arr[sz++] = points[tint + 8];
                 arr[sz++] = flicker;
                 arr[sz++] = flickerSeed;
 
@@ -556,9 +585,9 @@ export class Tilemap extends Container {
                 arr[sz++] = textureId;
                 arr[sz++] = animDivisor;
                 arr[sz++] = alpha;
-                arr[sz++] = tintR;
-                arr[sz++] = tintG;
-                arr[sz++] = tintB;
+                arr[sz++] = points[tint + 9];
+                arr[sz++] = points[tint + 10];
+                arr[sz++] = points[tint + 11];
                 arr[sz++] = flicker;
                 arr[sz++] = flickerSeed;
             }
