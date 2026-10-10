@@ -1165,10 +1165,10 @@ type LevelFile = {
 ```ts
 type DoorValue = { id: number; open: boolean };
 const AssetCategories: readonly [
-    { id: "dungeon"; name: "Dungeon" }, { id: "entities"; name: "Entities" }, { id: "weapons"; name: "Weapons" },
-    { id: "items"; name: "Items" }, { id: "misc"; name: "Misc" }, { id: "user"; name: "User" },
+    { id: "floor"; name: "Floor" }, { id: "walls"; name: "Walls" }, { id: "entities"; name: "Entities" },
+    { id: "weapons"; name: "Weapons" }, { id: "items"; name: "Items" }, { id: "misc"; name: "Misc" }, { id: "user"; name: "User" },
 ];                                                  // the editor palette's tabs, in order
-type AssetCategory = "floor" | "walls" | "dungeon" | "entities" | "weapons" | "items" | "misc" | "user";
+type AssetCategory = "floor" | "walls" | "entities" | "weapons" | "items" | "misc" | "user";
 const DefaultAssetCategory: AssetCategory = "misc";   // where a sprite with no category is listed
 IsAssetCategory(value: unknown): value is AssetCategory
 

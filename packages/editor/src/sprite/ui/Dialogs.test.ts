@@ -10,7 +10,7 @@ const bundles: BundleInfo[] = [
     { name: "global", sheets: ["dungeon", "user"], packedSheets: [], names: ["crate", "bomb", "title"] },
     { name: "level1", sheets: [], packedSheets: ["atlas"], names: ["level"] }
 ];
-const categories = [{ id: "dungeon", name: "Dungeon" }, { id: "user", name: "User" }];
+const categories = [{ id: "items", name: "Items" }, { id: "user", name: "User" }];
 
 const fieldKeys = (d: FormDialogOptions) => d.fields.map(f => f.key);
 const field = (d: FormDialogOptions, key: string): FieldSpec => d.fields.find(f => f.key === key);
@@ -73,7 +73,7 @@ describe("NewSpriteDialog", () => {
         const bundleField = field(dialog, "bundle");
         expect(bundleField.type === "choice" && bundleField.options.map(o => o.value)).toEqual(["global", "level1"]);
         const categoryField = field(dialog, "category");
-        expect(categoryField.type === "choice" && categoryField.options.map(o => o.label)).toEqual(["Dungeon", "User"]);
+        expect(categoryField.type === "choice" && categoryField.options.map(o => o.label)).toEqual(["Items", "User"]);
     });
 
     it("limits the size and frame count", () => {
@@ -90,7 +90,7 @@ describe("NewSpriteDialog", () => {
 });
 
 describe("SaveAsDialog", () => {
-    const args = { bundles, categories, name: "crate_copy", bundle: "global", sheet: "dungeon", category: "dungeon", canCopyProperties: true };
+    const args = { bundles, categories, name: "crate_copy", bundle: "global", sheet: "dungeon", category: "items", canCopyProperties: true };
 
     it("offers copying tile properties only when there's an original in the same bundle to copy from", () => {
         expect(fieldKeys(SaveAsDialog(args))).toContain("copyProperties");
@@ -111,7 +111,7 @@ describe("SaveAsDialog", () => {
 });
 
 describe("CloneDialog", () => {
-    const args = { bundles, categories, name: "crate_copy", bundle: "global", sheet: "dungeon", category: "dungeon", canCopyProperties: true };
+    const args = { bundles, categories, name: "crate_copy", bundle: "global", sheet: "dungeon", category: "items", canCopyProperties: true };
 
     it("is Save as's questions under its own title, with the original's properties copied by default", () => {
         const clone = CloneDialog(args);
@@ -119,7 +119,7 @@ describe("CloneDialog", () => {
         expect(clone.title).toBe("Clone tile");
         expect(clone.saveLabel).toBe("Clone");
         expect(clone.fields).toEqual(saveAs.fields);
-        expect(clone.values).toEqual({ name: "crate_copy", bundle: "global", sheet: "dungeon", category: "dungeon", copyProperties: true });
+        expect(clone.values).toEqual({ name: "crate_copy", bundle: "global", sheet: "dungeon", category: "items", copyProperties: true });
         expect(fieldKeys(CloneDialog({ ...args, canCopyProperties: false }))).not.toContain("copyProperties");
     });
 

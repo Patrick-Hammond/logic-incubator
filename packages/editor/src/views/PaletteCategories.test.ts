@@ -4,15 +4,15 @@ import { EmptyTabHint, GroupByCategory, ShowsCategory, TakesCategory } from "./P
 
 describe("GroupByCategory", () => {
     const categories: { [name: string]: AssetCategory } = {
-        wall_mid: "walls", floor_1: "floor", torch_anim: "dungeon",
+        wall_mid: "walls", floor_1: "floor",
         goblin_idle_anim: "entities", weapon_bow: "weapons", potion_1: "items", skull: "misc", my_tile: "user"
     };
     const categoryOf = (name: string): AssetCategory => categories[name] || "misc";
 
     it("makes a tab for every category, in the palette's order, even an empty one", () => {
         const sets = GroupByCategory([], categoryOf);
-        expect(sets.map(set => set.id)).toEqual(["floor", "walls", "dungeon", "entities", "weapons", "items", "misc", "user"]);
-        expect(sets.map(set => set.name)).toEqual(["Floor", "Walls", "Dungeon", "Entities", "Weapons", "Items", "Misc", "User"]);
+        expect(sets.map(set => set.id)).toEqual(["floor", "walls", "entities", "weapons", "items", "misc", "user"]);
+        expect(sets.map(set => set.name)).toEqual(["Floor", "Walls", "Entities", "Weapons", "Items", "Misc", "User"]);
         expect(sets.every(set => set.brushes.length === 0)).toBe(true);
         expect(sets.map(set => set.id)).toEqual(AssetCategories.map(category => category.id));
     });
@@ -22,7 +22,6 @@ describe("GroupByCategory", () => {
         const brushes = (id: string) => sets.find(set => set.id === id).brushes;
         expect(brushes("floor")).toEqual(["floor_1"]);
         expect(brushes("walls")).toEqual(["wall_mid"]);
-        expect(brushes("dungeon")).toEqual(["torch_anim"]);
         expect(brushes("entities")).toEqual(["goblin_idle_anim"]);
         expect(brushes("weapons")).toEqual(["weapon_bow"]);
         expect(brushes("items")).toEqual(["potion_1"]);
@@ -37,10 +36,10 @@ describe("GroupByCategory", () => {
 
     it("sorts a tab by name whatever order the names arrive in", () => {
         const names = ["wall_b", "wall_a", "wall_b_anim", "floor_1"];
-        const dungeon = (sets: ReturnType<typeof GroupByCategory>) => sets.find(set => set.id === "dungeon").brushes;
-        const sets = GroupByCategory(names, () => "dungeon");
-        expect(dungeon(sets)).toEqual(["floor_1", "wall_a", "wall_b", "wall_b_anim"]);
-        expect(dungeon(GroupByCategory(names.slice().reverse(), () => "dungeon"))).toEqual(dungeon(sets));
+        const misc = (sets: ReturnType<typeof GroupByCategory>) => sets.find(set => set.id === "misc").brushes;
+        const sets = GroupByCategory(names, () => "misc");
+        expect(misc(sets)).toEqual(["floor_1", "wall_a", "wall_b", "wall_b_anim"]);
+        expect(misc(GroupByCategory(names.slice().reverse(), () => "misc"))).toEqual(misc(sets));
     });
 
     it("doesn't drop a sprite whose category isn't one of the tabs", () => {
@@ -69,7 +68,7 @@ describe("ShowsCategory", () => {
     });
 
     it("shows any other tile layer every tab but floor and walls", () => {
-        expect(AssetCategories.filter(c => ShowsCategory(undefined, c.id)).map(c => c.id)).toEqual(["dungeon", "entities", "weapons", "items", "misc", "user"]);
+        expect(AssetCategories.filter(c => ShowsCategory(undefined, c.id)).map(c => c.id)).toEqual(["entities", "weapons", "items", "misc", "user"]);
     });
 });
 
@@ -77,7 +76,7 @@ describe("TakesCategory", () => {
     it("lets a floor or walls layer take only its own tiles", () => {
         expect(TakesCategory("floor", "floor")).toBe(true);
         expect(TakesCategory("floor", "walls")).toBe(false);
-        expect(TakesCategory("floor", "dungeon")).toBe(false);
+        expect(TakesCategory("floor", "misc")).toBe(false);
         expect(TakesCategory("walls", "walls")).toBe(true);
         expect(TakesCategory("walls", "floor")).toBe(false);
     });

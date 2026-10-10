@@ -74,7 +74,7 @@ describe("ObsoleteFiles", () => {
 describe("MetaSnippet", () => {
     it("is a line to paste into assets-meta.json", () => {
         expect(MetaSnippet("gem", { category: "user" })).toBe('"gem": {"category":"user"}');
-        expect(MetaSnippet("crate2", { category: "dungeon", collidable: true })).toBe('"crate2": {"category":"dungeon","collidable":true}');
+        expect(MetaSnippet("crate2", { category: "items", collidable: true })).toBe('"crate2": {"category":"items","collidable":true}');
         expect(JSON.parse("{" + MetaSnippet("a", { b: 1 }) + "}")).toEqual({ a: { b: 1 } });
     });
 });

@@ -23,7 +23,7 @@ const TILE_SCALE = 2;
 const SWATCH_SCALE = 4;
 
 /**
- * The brush picker: a tab per category (Floor, Walls, Dungeon, Entities, Weapons, Items, Misc, User) over a
+ * The brush picker: a tab per category (Floor, Walls, Entities, Weapons, Items, Misc, User) over a
  * scrolling grid of that category's tile brushes, or the data brushes when a data layer is selected. Only
  * the tabs the selected layer takes are shown: just Floor on a floor layer, just Walls on a walls layer, and
  * all but those two on any other tile layer (see `ShowsCategory`). A sprite's category is set in the game's
@@ -260,7 +260,7 @@ export default class Palette extends EditorComponent {
 }
 
 const STYLES = `
-/* Six category tabs (a tile layer without a kind) don't fit the sidebar's width in one row, so they wrap onto a second. */
+/* Five category tabs (a tile layer without a kind) don't fit the sidebar's width in one row, so they wrap onto a second. */
 .pl-tabs {
     display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0 2px; flex: 0 0 auto;
     padding: 4px 8px 0; border-bottom: 1px solid var(--ed-divider);
