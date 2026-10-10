@@ -52,6 +52,8 @@ export type AssetMetadata = {
     /** Which palette tab lists this sprite in the level editor - see `AssetCategories`. Doesn't affect play. */
     category?: AssetCategory;
     collidable?: boolean;
+    /** Whether the tile stops light, when that should differ from its collision: `false` lets light past a collidable tile (a table, a fence), `true` stops it at one you can walk through. Left out, a tile blocks light if it blocks movement. See `Lighting.LightBlockersFor`. */
+    blocksLight?: boolean;
     door?: DoorValue;
     light?: LightValue;
     spawner?: SpawnerValue;
@@ -88,7 +90,7 @@ export default class AssetMetadataStore {
      * type for one) would otherwise flow silently into `BakeLighting` as `NaN`/`undefined` and bake to a
      * black tint instead of failing loudly. Drop just the bad `light` (keeping `collidable`/`door` on the
      * same entry) and warn with the asset name, rather than reject the whole file over one typo.
-     * An unrecognised `category` is dropped the same way, so the sprite is just listed under `misc`, and so is a
+     * A `blocksLight` that isn't a boolean and an unrecognised `category` are dropped the same way, so the sprite is just listed under `misc`, and so is a
      * malformed `pickup` (an unknown kind, a missing amount) - the tile is then no pickup, rather than one
      * that hands the player `undefined`.
      */
@@ -110,6 +112,13 @@ export default class AssetMetadataStore {
                     meta.pickup
                 );
                 meta = { ...meta, pickup: undefined };
+            }
+            if (meta.blocksLight !== undefined && typeof meta.blocksLight !== "boolean") {
+                console.warn(
+                    `assets-meta.json: "${name}" has a blocksLight that isn't true or false - ignoring it until fixed:`,
+                    meta.blocksLight
+                );
+                meta = { ...meta, blocksLight: undefined };
             }
             if (meta.category !== undefined && !IsAssetCategory(meta.category)) {
                 console.warn(

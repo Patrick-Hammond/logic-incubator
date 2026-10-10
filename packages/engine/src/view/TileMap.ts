@@ -4,7 +4,7 @@ import GameComponent from "@logic-incubator/lib/game/GameComponent";
 import { TileSize } from "../Constants";
 import { CAMERA_MOVED, LEVEL_CREATED, LEVEL_LOADED } from "../Events";
 import { ZBandAlpha, ZScale } from "../level/Depth";
-import { CellCornerLight } from "../level/Lighting";
+import { CellCornerLight, FootLight } from "../level/Lighting";
 import Level from "../level/Level";
 import { Camera } from "./Camera";
 import { ViewOrigin } from "./helpers/CameraWindow";
@@ -57,12 +57,17 @@ export function TileGD8Rotation(rotation: number, scaleX: number, scaleY: number
  * (`ProjectilesLayer`); both get the same `EffectiveZoom` factor so they
  * grow/shrink in step with the world.
  */
+/** How far inside the edges of a standing tile its light is sampled, in tiles - two pixels, as for a figure (see `EntityRenderer`). */
+const StandingFootInset = 2 / TileSize;
+
 export default class TileMapView extends GameComponent {
     private bands: Band[] = [];
     private entitiesLayer: CompositeTilemap | null = null;
     private projectilesLayer: Container | null = null;
     /** One cell's corner light, refilled per cell and read by `tile()` as each tile is added - see `Lighting.CellCornerLight`. */
     private cornerLight = new Float32Array(12);
+    /** Light for a tile taller than a cell, refilled per tile - see `StandingLight`. */
+    private standingLight = new Float32Array(12);
 
     constructor(private level: Level, private camera: Camera) {
         super();
@@ -206,12 +211,13 @@ export default class TileMapView extends GameComponent {
                             const tile = tiles[t];
                             const texture = tile.anim ? tile.anim.texture : tile.texture;
                             if (texture) {
+                                const light = texture.height > TileSize ? this.StandingLight(x, y, tile.pixelOffset, texture) : this.cornerLight;
                                 layer.tile(
                                     texture,
                                     (x - originX) * TileSize - tile.pixelOffset.x,
                                     (y - originY) * TileSize - tile.pixelOffset.y,
                                     // A new options object per tile: `tile()` writes the texture's frame into it.
-                                    { cornerTints: this.cornerLight }
+                                    { cornerTints: light }
                                 );
                                 if (tile.rotation || tile.scale.x < 0 || tile.scale.y < 0) {
                                     layer.tileRotate(TileGD8Rotation(tile.rotation, tile.scale.x, tile.scale.y));
@@ -222,5 +228,17 @@ export default class TileMapView extends GameComponent {
                 }
             }
         }
+    }
+
+    /**
+     * Light for a tile taller than a cell - a door, a statue - drawn at cell `(x, y)`. It stands up out of the
+     * floor, so like a figure it's lit by the floor along its foot (`Lighting.FootLight`), not by the cells its
+     * top reaches into: for a door set in a wall, those are in the wall's shadow.
+     */
+    private StandingLight(x: number, y: number, pixelOffset: { x: number; y: number }, texture: { width: number; height: number }): Float32Array {
+        const left = x - pixelOffset.x / TileSize;
+        const bottom = y + (texture.height - pixelOffset.y) / TileSize;
+        FootLight(this.level.lightGrid, left + StandingFootInset, left + texture.width / TileSize - StandingFootInset, bottom - StandingFootInset, this.standingLight);
+        return this.standingLight;
     }
 }
