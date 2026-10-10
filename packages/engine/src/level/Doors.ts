@@ -129,3 +129,17 @@ export function DoorFootprint(
     }
     return cells;
 }
+
+/**
+ * Whether a door should be open after the heroes standing on `tiles` this step: when any of them is in one
+ * of its cells and either it's open already - it never shuts on someone, even if the key went with a hero
+ * who fell - or `canOpen` its lock (see `Level.UpdateDoors`). Otherwise it's shut.
+ */
+export function DoorOpens(
+    door: { cells: ReadonlyArray<Vec2Like>; isOpen: boolean; lockId: number },
+    tiles: ReadonlyArray<Vec2Like>,
+    canOpen: (lockId: number) => boolean
+): boolean {
+    const occupied = door.cells.some(c => tiles.some(t => t.x === c.x && t.y === c.y));
+    return occupied && (door.isOpen || canOpen(door.lockId));
+}

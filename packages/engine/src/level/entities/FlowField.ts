@@ -1,8 +1,9 @@
 /**
- * Walking distance from every cell of the map to one target cell (the player's),
- * shared by every monster: one search whenever the target changes cell, then each
- * monster's next step is a lookup of its neighbours. Pure - no pixi - so it runs
- * under the plain node test runner, same as Spawners.ts.
+ * Walking distance from every cell of the map to the nearest of its target cells
+ * (the heroes'), shared by every monster: one search whenever a target changes
+ * cell, then each monster's next step is a lookup of its neighbours - towards
+ * whichever hero is the shortest walk away. Pure - no pixi - so it runs under the
+ * plain node test runner, same as Spawners.ts.
  */
 
 import { Vec2Like } from "@logic-incubator/lib/math/Geometry";
@@ -27,19 +28,19 @@ const NEIGHBOURS: ReadonlyArray<{ x: number; y: number; cost: number }> = [
 
 /** What monster behaviours read from the field - an interface so their tests can hand them a stub. */
 export interface IFlowField {
-    /** Walking distance in tiles from the cell to the target, or `UNREACHABLE`. */
+    /** Walking distance in tiles from the cell to the nearest target, or `UNREACHABLE`. */
     DistanceAt(x: number, y: number): number;
-    /** The neighbouring cell one step closer to the target, or null at the target or with no way there. */
+    /** The neighbouring cell one step closer to the nearest target, or null at a target or with no way to one. */
     NextCell(x: number, y: number): Vec2Like | null;
-    /** The neighbouring cell one step further from the target, or null if none is. */
+    /** The neighbouring cell one step further from the nearest target, or null if none is. */
     AwayCell(x: number, y: number): Vec2Like | null;
 }
 
 export default class FlowField implements IFlowField {
     private readonly cost: Int32Array;
     private readonly heap: Int32Array;
-    private targetX = Number.NaN;
-    private targetY = Number.NaN;
+    /** The target cells of the last search, as cell indices in the order given. */
+    private targets: number[] = [];
     private dirty = true;
 
     /**
@@ -66,15 +67,24 @@ export default class FlowField implements IFlowField {
         this.dirty = true;
     }
 
-    /** Recomputes the field if the target has changed cell (or it was marked dirty). Returns whether it did. */
+    /** `UpdateTargets` with the one target cell. */
     Update(targetX: number, targetY: number): boolean {
-        if (!this.dirty && targetX === this.targetX && targetY === this.targetY) {
+        return this.UpdateTargets([{ x: targetX, y: targetY }]);
+    }
+
+    /**
+     * Recomputes the field if any target has changed cell (or it was marked dirty), with every one of them
+     * a starting point - so each cell holds the walk to whichever is nearest. Returns whether it did. A
+     * solid or off-map target is left out; with none left, every cell is `UNREACHABLE`.
+     */
+    UpdateTargets(targets: ReadonlyArray<Vec2Like>): boolean {
+        const cells = targets.map(t => (this.InBounds(t.x, t.y) ? t.x + t.y * this.width : -1));
+        if (!this.dirty && cells.length === this.targets.length && cells.every((cell, i) => cell === this.targets[i])) {
             return false;
         }
-        this.targetX = targetX;
-        this.targetY = targetY;
+        this.targets = cells;
         this.dirty = false;
-        this.Search();
+        this.Search(targets);
         return true;
     }
 
@@ -144,12 +154,9 @@ export default class FlowField implements IFlowField {
         }
     }
 
-    /** Dijkstra from the target over open cells, on a binary heap of (cost, cell) pairs. */
-    private Search(): void {
+    /** Dijkstra from every open target at once over open cells, on a binary heap of (cost, cell) pairs. */
+    private Search(targets: ReadonlyArray<Vec2Like>): void {
         this.cost.fill(UNREACHABLE);
-        if (!this.Open(this.targetX, this.targetY)) {
-            return;
-        }
 
         const heap = this.heap;
         let size = 0;
@@ -192,9 +199,13 @@ export default class FlowField implements IFlowField {
             return cell;
         };
 
-        const start = this.targetX + this.targetY * this.width;
-        this.cost[start] = 0;
-        push(0, start);
+        targets.forEach(target => {
+            const start = target.x + target.y * this.width;
+            if (this.Open(target.x, target.y) && this.cost[start] !== 0) {
+                this.cost[start] = 0;
+                push(0, start);
+            }
+        });
 
         while (size > 0) {
             const cost = heap[0];

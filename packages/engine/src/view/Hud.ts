@@ -1,4 +1,4 @@
-import {BitmapText, Sprite, Texture} from "pixi.js";
+import {BitmapText, Container, Sprite, Texture} from "pixi.js";
 import GameComponent from "@logic-incubator/lib/game/GameComponent";
 import AssetFactory from "@logic-incubator/lib/loading/AssetFactory";
 import UiLayer from "@logic-incubator/ui/UiLayer";
@@ -13,8 +13,9 @@ import type {PlayerSetup} from "../DungeonMain";
 import {Gold} from "../level/entities/Gold";
 import {Health} from "../level/entities/Health";
 import {Inventory, InventorySize} from "../level/entities/Inventory";
-import {KeyRing} from "../level/entities/Keys";
+import {HeldKey, KeyRing} from "../level/entities/Keys";
 import {LightSpellState, LightSpellStatusOf} from "../level/entities/LightSpell";
+import HudHeroRow, {FitScale, HeartTextures, HudHero, SpellStatusText, TextureOf} from "./HudHeroRow";
 
 /** The game's own hearts are small pixel art, drawn this many times as big. */
 const HeartScale = 3;
@@ -33,18 +34,26 @@ const SlotColumns = 4;
 const KeySlots = 8;
 /** The skin's bar the light spell is shown with - blue, for magic. Without it in the skin there's just the text. */
 const SpellBar = "mp";
-/** What the light spell's text says while it's ready, lit and recharging - the last two followed by the seconds that go with them. */
-const SpellWords = {ready: "READY", lit: "LIT", recharging: "RECHARGING"};
 
 /**
- * The right-hand HUD panel, built from the UI kit (`packages/ui`) in whatever skin the game has loaded: a panel with the hearts at the top, the gold, the equipped weapon, the
- * inventory grid, the keys carried and - for a hero who has one - the light spell: whether it's ready, lit or recharging, with a bar and the seconds left. `Camera` reserves `PlayWidth` of the canvas so gameplay never renders under it. It only shows things - nothing in it takes the pointer.
+ * The right-hand HUD panel, built from the UI kit (`packages/ui`) in whatever skin the game has loaded. For one hero: a panel with the hearts at the top, the gold, the equipped
+ * weapon, the inventory grid, the keys carried and - for a hero who has one - the light spell: whether it's ready, lit or recharging, with a bar and the seconds left. For a party
+ * (see `RenderHeroes`): a row per hero - their hearts, weapon, gold, light spell and items (see `HudHeroRow`) - and the team's keys at the bottom. `Camera` reserves `PlayWidth`
+ * of the canvas so gameplay never renders under it. It only shows things - nothing in it takes the pointer.
  *
  * Hearts are the game's own pictures if `PlayerSetup.hearts` gives them (and they are in the sprite sheet), the skin's otherwise.
  */
 export default class Hud extends GameComponent {
     private layer!: UiLayer;
-    private heartsTextures: {full: Texture; half: Texture; empty: Texture} | undefined;
+    private heartsTextures: HeartTextures | undefined;
+    /** Everything the lone hero's panel shows, hidden while a party's rows show instead. */
+    private solo!: Container;
+    /** A party's rows and keys, made for the party's size (see `RenderHeroes`) - null for a lone hero. */
+    private party: Container | null = null;
+    private rows: HudHeroRow[] = [];
+    private teamKeys: UiInventoryGrid | null = null;
+    private shownTeamKeys = "";
+    private teamKeyRing: KeyRing = {keys: []};
     private hearts: UiIconRow | undefined;
     private shownHitPoints = -1;
     private shownMax = -1;
@@ -92,7 +101,8 @@ export default class Hud extends GameComponent {
 
         const panel = new UiPanel(theme, "plain", HudWidth / scale, GameHeight / scale);
         panel.position.set(left, 0);
-        this.layer.root.addChild(panel);
+        this.solo = new Container();
+        this.layer.root.addChild(panel, this.solo);
 
         const goldY = 84;
         this.goldIcon = new Sprite(Texture.EMPTY);
@@ -100,12 +110,12 @@ export default class Hud extends GameComponent {
         this.goldIcon.position.set(inner + GoldBox / 2, goldY + GoldBox / 2);
         this.goldText = CreateText(theme, "0", {colour: "text"});
         this.goldText.position.set(inner + GoldBox + 8, goldY + Math.round((GoldBox - this.goldText.textHeight) / 2));
-        this.layer.root.addChild(this.goldIcon, this.goldText);
+        this.solo.addChild(this.goldIcon, this.goldText);
 
         const heading = (text: string, y: number) => {
             const label = CreateText(theme, text, {colour: "muted"});
             label.position.set(inner, y);
-            this.layer.root.addChild(label);
+            this.solo.addChild(label);
             return y + Math.ceil(label.textHeight) + LabelGap;
         };
 
@@ -121,27 +131,28 @@ export default class Hud extends GameComponent {
         this.keySlots = new UiInventoryGrid(theme, "default", SlotColumns, Math.ceil(KeySlots / SlotColumns));
         this.keySlots.position.set(inner, keysY);
 
-        this.layer.root.addChild(this.weaponSlot, this.inventorySlots, this.keySlots);
+        this.solo.addChild(this.weaponSlot, this.inventorySlots, this.keySlots);
 
         // Hidden until the player has a light spell (see `RenderSpell`).
         this.spellHeading = CreateText(theme, "SPELL", {colour: "muted"});
         this.spellHeading.position.set(inner, keysY + this.keySlots.GridHeight + 24);
-        this.layer.root.addChild(this.spellHeading);
+        this.solo.addChild(this.spellHeading);
         let spellY = this.spellHeading.y + Math.ceil(this.spellHeading.textHeight) + LabelGap;
         if (theme.skin.bars[SpellBar]) {
             this.spellBar = new UiProgressBar(theme, SpellBar, this.keySlots.GridWidth, 1);
             this.spellBar.position.set(inner, spellY);
-            this.layer.root.addChild(this.spellBar);
+            this.solo.addChild(this.spellBar);
             spellY += this.spellBar.BarHeight + LabelGap;
         }
         this.spellText = CreateText(theme, "", {colour: "text"});
         this.spellText.position.set(inner, spellY);
-        this.layer.root.addChild(this.spellText);
+        this.solo.addChild(this.spellText);
         this.ShowSpell(false);
     }
 
-    /** `spell` is the player's light spell - null hides that section, for a hero without one. */
+    /** The lone hero's panel: `spell` is their light spell - null hides that section, for a hero without one. */
     Render(health: Health, gold: Gold, weaponIcon: string, inventory: Inventory, keys: KeyRing, spell: LightSpellState | null = null): void {
+        this.ShowParty(0);
         this.RenderHearts(health);
         this.RenderGold(gold);
         this.RenderWeapon(weaponIcon);
@@ -150,16 +161,62 @@ export default class Hud extends GameComponent {
         this.RenderSpell(spell);
     }
 
-    /** The picture for a sprite name, or null (with a warning, once per name) if the sprite sheet hasn't it. */
-    private TextureOf(name: string | null): Texture | null {
-        if (!name) {
-            return null;
+    /**
+     * Every hero, in slot order, the fallen included: one gets the lone hero's panel (`Render`); a party gets a row
+     * each and the team's keys - every key any of them carries, which open their doors for all (see `World`).
+     */
+    RenderHeroes(heroes: ReadonlyArray<HudHero & {Keys: KeyRing}>): void {
+        if (heroes.length === 1) {
+            const hero = heroes[0];
+            this.Render(hero.Health, hero.Gold, hero.EquippedWeapon.icon, hero.Inventory, hero.Keys, hero.Spell);
+            return;
         }
-        if (!AssetFactory.inst.Has(name)) {
-            AssetFactory.inst.WarnMissing(name);
-            return null;
+        this.ShowParty(heroes.length);
+        heroes.forEach((hero, i) => this.rows[i].Render(hero));
+        const held: HeldKey[] = [];
+        heroes.forEach(hero => hero.Keys.keys.forEach(key => held.push(key)));
+        this.teamKeyRing.keys = held;
+        this.RenderTeamKeys(this.teamKeyRing);
+    }
+
+    /** Shows the party's rows for `count` heroes - made afresh when the count changes - or, for 0, the lone hero's panel. */
+    private ShowParty(count: number): void {
+        if (count === this.rows.length) {
+            return;
         }
-        return AssetFactory.inst.CreateTexture(name);
+        if (this.party) {
+            this.party.destroy({children: true});
+            this.party = null;
+            this.rows = [];
+            this.teamKeys = null;
+            this.shownTeamKeys = "";
+        }
+        this.solo.visible = count === 0;
+        if (count === 0) {
+            return;
+        }
+        const theme = this.layer.Theme;
+        const scale = theme.Scale;
+        const inner = PlayWidth / scale + Margin;
+        const width = HudWidth / scale - Margin * 2;
+        const bottom = GameHeight / scale - Margin;
+        const party = this.party = new Container();
+        this.layer.root.addChild(party);
+
+        const keys = this.teamKeys = new UiInventoryGrid(theme, "default", SlotColumns, Math.ceil(KeySlots / SlotColumns));
+        keys.position.set(inner, Math.round(bottom - keys.GridHeight));
+        const heading = CreateText(theme, "KEYS", {colour: "muted"});
+        heading.position.set(inner, Math.round(keys.y - LabelGap - heading.textHeight));
+        party.addChild(heading, keys);
+
+        const space = (heading.y - 24 - Margin) / count;
+        const spacing = Math.max(HudHeroRow.Height(theme) + 12, Math.floor(space));
+        for (let i = 0; i < count; i++) {
+            const row = new HudHeroRow(theme, i, width, this.heartsTextures);
+            row.position.set(inner, Margin + i * spacing);
+            party.addChild(row);
+            this.rows.push(row);
+        }
     }
 
     private RenderHearts(health: Health): void {
@@ -176,7 +233,7 @@ export default class Hud extends GameComponent {
             this.hearts = new UiIconRow(this.layer.Theme, "hearts", count, options);
             const scale = this.layer.Theme.Scale;
             this.hearts.position.set(Math.round((PlayWidth + HudWidth) / scale - Margin - this.hearts.RowWidth), Margin);
-            this.layer.root.addChild(this.hearts);
+            this.solo.addChild(this.hearts);
         }
         this.shownHitPoints = health.hitPoints;
         this.shownMax = health.max;
@@ -190,12 +247,11 @@ export default class Hud extends GameComponent {
         }
         this.shownGold = gold.amount;
         this.goldText.text = String(gold.amount);
-        const texture = this.TextureOf(GoldIcon);
+        const texture = TextureOf(GoldIcon);
         this.goldIcon.visible = !!texture;
         if (texture) {
             this.goldIcon.texture = texture;
-            const longest = Math.max(texture.width, texture.height);
-            this.goldIcon.scale.set(longest > GoldBox ? 1 / Math.ceil(longest / GoldBox) : Math.max(1, Math.floor(GoldBox / longest)));
+            this.goldIcon.scale.set(FitScale(texture, GoldBox));
         }
     }
 
@@ -204,7 +260,7 @@ export default class Hud extends GameComponent {
             return;
         }
         this.shownWeaponIcon = weaponIcon;
-        const texture = this.TextureOf(weaponIcon);
+        const texture = TextureOf(weaponIcon);
         this.weaponSlot.SetItem(texture ? {texture} : null);
     }
 
@@ -218,18 +274,28 @@ export default class Hud extends GameComponent {
     }
 
     private RenderKeys(keys: KeyRing): void {
+        this.shownKeys = this.FillKeys(this.keySlots, keys, this.shownKeys);
+    }
+
+    private RenderTeamKeys(keys: KeyRing): void {
+        if (this.teamKeys) {
+            this.shownTeamKeys = this.FillKeys(this.teamKeys, keys, this.shownTeamKeys);
+        }
+    }
+
+    /** Fills a keys grid with these keys, unless it already shows them (`shown`, what it last returned) - returns what it shows now. */
+    private FillKeys(grid: UiInventoryGrid, keys: KeyRing, shown: string): string {
         // The id a door's lock has to match is the corner label, so the player can tell their keys apart.
         const held = keys.keys.slice(0, KeySlots);
         const signature = held.map(key => key.id + ":" + key.sprite).join("|");
-        if (signature === this.shownKeys) {
-            return;
+        if (signature !== shown) {
+            grid.SetItems(held.map(key => {
+                const texture = TextureOf(key.sprite);
+                // A key the sprite sheet has no picture for still shows its id.
+                return {texture: texture || Texture.EMPTY, label: String(key.id)};
+            }));
         }
-        this.shownKeys = signature;
-        this.keySlots.SetItems(held.map(key => {
-            const texture = this.TextureOf(key.sprite);
-            // A key the sprite sheet has no picture for still shows its id.
-            return {texture: texture || Texture.EMPTY, label: String(key.id)};
-        }));
+        return signature;
     }
 
     private RenderSpell(spell: LightSpellState | null): void {
@@ -241,8 +307,7 @@ export default class Hud extends GameComponent {
             return;
         }
         const status = LightSpellStatusOf(spell);
-        const seconds = Math.ceil(status.seconds);
-        const text = SpellWords[status.state] + (seconds > 0 ? " " + seconds : "");
+        const text = SpellStatusText(spell);
         // Redrawn only when the text or the bar (to a pixel's worth or so) changes.
         const signature = text + "|" + Math.round(status.fill * 200);
         if (signature === this.shownSpell) {
@@ -266,7 +331,7 @@ export default class Hud extends GameComponent {
     }
 
     private ItemOf(name: string | null): SlotItem | null {
-        const texture = this.TextureOf(name);
+        const texture = TextureOf(name);
         return texture ? {texture} : null;
     }
 }

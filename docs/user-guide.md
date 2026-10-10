@@ -35,7 +35,7 @@ editor  ->  engine  ->  ui  ->  lib        (the editor may use ui too)
 | Package | Import prefix | What it is |
 | --- | --- | --- |
 | `packages/lib` | `@logic-incubator/lib/...` | The game framework: `Game`, scenes and components, the asset bundle system and its build, input, tweening, a tilemap renderer, small utilities. Knows nothing about any particular game. |
-| `packages/engine` | `@logic-incubator/engine/...` | A top-down tile dungeon engine: the level format, level loading, lighting, doors, regions, the player, monsters and combat, the HUD. |
+| `packages/engine` | `@logic-incubator/engine/...` | A top-down tile dungeon engine: the level format, level loading, lighting, doors, regions, the heroes (one, or a party sharing a screen), monsters and combat, the HUD. |
 | `packages/ui` | `@logic-incubator/ui/...` | A skinnable Pixi UI kit: widgets (buttons, menus, windows, sliders, text fields, inventory, tooltips, dialogue, toasts...), keyboard / gamepad / pointer focus navigation, and its own art, bitmap fonts and skin. See [chapter 14](#14-the-ui-kit). |
 | `packages/editor` | `@logic-incubator/editor/...` | A browser level editor for the engine's level format, with its own icons and font. |
 
@@ -1461,33 +1461,36 @@ carries on moving. Tick **Live until outside area** in `this.debug.Emitter` to t
 
 ## 9. The dungeon engine
 
-`@logic-incubator/engine` is a top-down, tile-based, Robotron-meets-Gauntlet engine. The game supplies **data** - its
-art, a monster roster, the player's setup, levels - and the engine runs it.
+`@logic-incubator/engine` is a top-down, tile-based, Robotron-meets-Gauntlet engine for one hero or a party of up to
+four on one screen. The game supplies **data** - its art, a monster roster, the heroes' setup, levels - and the engine runs it.
 
 ### 9.1 How the pieces fit
 
 ```
 DungeonMain (a scene)
- ├─ Camera            follows the player; handles height zoom
+ ├─ Camera            follows the heroes; handles height zoom, and zooms out to fit a party
  ├─ TileMapView       draws the level's tile layers, lit and banded by height
  ├─ Effects           particle effects over the world (`main.Effects.Play`)
- ├─ Hud               hearts, gold, equipped weapon, inventory (built from the UI kit)
- ├─ overlay?          the game's own UI over everything: a pause menu, a death screen
- ├─ PlayerControl     reads the keyboard and gamepad for the player
- ├─ Player            the player's state (PlayerState: moving, shooting, taking hits; pure logic) and how they're drawn
- ├─ Encounter         spawners, monsters, projectiles (pure logic, no pixi)
- ├─ EntityRenderer    draws the player, monsters and shots
- └─ Level             the loaded level: tiles, collision, doors, lights, regions, spawners, pickups
+ ├─ Hud               hearts, gold, equipped weapon, inventory - a row per hero for a party (built from the UI kit)
+ ├─ overlay?          the game's own UI over everything: a pause menu, an end-of-level screen
+ ├─ PlayerControl     one per hero: reads their keyboard or gamepad
+ ├─ World             everything that plays out (pure logic, no pixi):
+ │   ├─ Hero          one per hero: their state (PlayerState: moving, shooting, taking hits)
+ │   └─ Encounter     spawners, monsters, projectiles
+ ├─ HeroView          one per hero: how they're drawn, and the lights they carry
+ ├─ EntityRenderer    draws the heroes, monsters and shots
+ └─ Level             the loaded level: tiles, collision, doors, lights, regions, spawners, pickups, exits
 ```
 
-`DungeonMain.OnShow` loads the level (asking `LevelAssets` to get its bundle ready first) and starts playing;
-`PLAYER_DIED` restarts it after 1.5 s (or waits for you, with `manualRestart`). You rarely touch the parts directly - you configure `DungeonMain`.
+`DungeonMain.OnShow` loads the level (asking `LevelAssets` to get its bundle ready first) and starts playing. The level ends when
+every hero is down (`ALL_PLAYERS_DIED`) or one reaches an exit (`LEVEL_COMPLETED`), and starts over 1.5 s later - or waits for you,
+with `manualRestart` - with whatever level `level` hands back. You rarely touch the parts directly - you configure `DungeonMain`.
 
 Play moves in fixed steps of 1/60 s (`FixedStep`), as many each display frame as its time calls for, so it comes out the same at
 30, 60 or 144 frames a second; what's drawn sits between the last two steps, so it stays smooth on a fast screen. A step hands
-the controls to the player (`Player.Step`), then runs the `Encounter`, whose random numbers are seeded afresh at each level start
-(`Encounter.Reset(seed)`): the same seed, level and inputs play out the same. This is the groundwork for co-op play, where several
-players' inputs drive one game.
+every hero's controls to the world (`World.Step`), which moves the heroes and runs the `Encounter`, whose random numbers are seeded
+afresh at each level start: the same seed, level and inputs play out the same. That is what will let a game played over the
+network stay in step on every machine.
 The HUD and any `overlay` are drawn with the [UI kit](#14-the-ui-kit), so a game loads the `ui` bundle before the dungeon is created.
 
 ### 9.2 Booting a dungeon game
@@ -1531,13 +1534,14 @@ export function Dungeon(): () => void {
 
 | Option | Meaning |
 | --- | --- |
-| `player` | `PlayerSetup`: the player's look, hit points, hearts and weapons ([9.3](#93-the-player)). |
+| `player` | `PlayerSetup`: the heroes' look, hit points, hearts and weapons ([9.3](#93-the-player)). |
+| `heroes?` | `() => HeroSlot[] \| undefined`. Who plays: one slot per hero, called on every start/restart. Each slot gives that hero's `input` device, `sprite` and `lightSpell`. Leave it out (or return `undefined` or `[]`) for one hero on the keyboard or the first gamepad. See [9.3.1](#931-playing-together). |
 | `level` | `() => LevelFile \| undefined`. Called on every start/restart. In a dev build return the editor's latest save first (`editor.savedLevel() \|\| shipped`). |
 | `levelBundle?` | `() => string \| undefined`. The asset bundle the level plays in. Loaded (with its dependencies) *before* the level is built; the previous one is released after. |
-| `overlay?` | `(main: DungeonMain) => GameComponent`. Called once; what it returns is attached above the HUD and kept with the scene. It gets the scene so it can `Pause()`, `Resume()` and `Restart()` it, and listens to `PLAYER_DIED` and the other events. This is how a game adds a pause menu and a death screen without the engine knowing what they look like. |
-| `manualRestart?` | `boolean`. A death holds everything still until `main.Restart()` is called, instead of restarting by itself 1.5 s later - for a game whose `overlay` offers a choice (try again, quit). |
-| `playerSprite?` | `() => string \| undefined`. Called on every start/restart; the animation it returns is what the player is drawn with, in place of `player.sprite`. Return `undefined` for the default. This is how a character select screen's pick reaches the game: keep the chosen character in your boot code (listen for the event your screen emits) and return their run animation. |
-| `playerLightSpell?` | `() => LightSpell \| null \| undefined`. Called with `playerSprite`: the light spell the chosen character has ([9.6.2](#962-lights-in-play)) - `null` for none, `undefined` to keep `player.lightSpell`. How a game gives the spell to only some characters. |
+| `overlay?` | `(main: DungeonMain) => GameComponent`. Called once; what it returns is attached above the HUD and kept with the scene. It gets the scene so it can `Pause()`, `Resume()` and `Restart()` it, and listens to `ALL_PLAYERS_DIED`, `LEVEL_COMPLETED` and the other events. This is how a game adds a pause menu and an end-of-level screen without the engine knowing what they look like. |
+| `manualRestart?` | `boolean`. The end of a level - everyone down, or a hero out - holds everything still until `main.Restart()` is called, instead of starting over by itself 1.5 s later - for a game whose `overlay` offers a choice (try again, quit). |
+| `playerSprite?` | `() => string \| undefined`. Only without `heroes`. Called on every start/restart; the animation it returns is what the lone hero is drawn with, in place of `player.sprite`. Return `undefined` for the default. This is how a character select screen's pick reaches the game: keep the chosen character in your boot code (listen for the event your screen emits) and return their run animation. With `heroes`, each slot's `sprite` does this. |
+| `playerLightSpell?` | `() => LightSpell \| null \| undefined`. Only without `heroes`. Called with `playerSprite`: the light spell the chosen character has ([9.6.2](#962-lights-in-play)) - `null` for none, `undefined` to keep `player.lightSpell`. How a game gives the spell to only some characters. |
 
 The engine uses a fixed coordinate system from `@logic-incubator/engine/Constants`: a 1280x720 canvas, 16 px tiles, a
 320 px HUD column on the right (`PlayWidth` = 960 px of play area). Use these constants for your `Game` size.
@@ -1575,7 +1579,58 @@ export const PlayerSetup: PlayerSetup = {
 
 Controls (`PlayerControl`): move with arrow keys or WASD or the left stick; fire with Space or by pushing the right
 stick, always left or right in the direction last faced (Tutankham-style); the right stick also sets facing. L, or a
-gamepad's Y button, calls up the light spell, if the player has one and it's ready.
+gamepad's Y button, calls up the light spell, if the hero has one and it's ready. K, or a gamepad's X button, warps a hero
+who has strayed far from the rest of the party to the nearest of them ([9.3.1](#931-playing-together)).
+
+`PlayerSetup` is every hero's: a party shares its hit points, hearts and weapons, and each hero's `HeroSlot` can give them
+their own animation and light spell.
+
+#### 9.3.1 Playing together
+
+Up to four heroes can play on one screen. Tell `DungeonMain` who plays with `heroes`, asked for on every start and restart:
+
+```ts
+import { DungeonMain, HeroSlot } from "@logic-incubator/engine/DungeonMain";
+
+// filled in by your character select: one entry per player who joined
+let party: { character: Character; pad?: number }[] = [];
+
+new DungeonMain({
+    player: PlayerSetup,
+    level: () => game.assets.Data("level1.level"),
+    heroes: () => party.map((member): HeroSlot => ({
+        input: member.pad === undefined ? { keyboard: true } : { pad: member.pad },   // each player their own device
+        sprite: member.character.run,
+        lightSpell: member.character.lightSpell || null,                               // null: this character has none
+    })),
+});
+```
+
+An `InputDevice` is `{ keyboard: true }`, `{ pad: n }` (a gamepad by its browser index, from 0), or both - `DefaultInput`,
+`{ keyboard: true, pad: 0 }`, which reads the pad only while no key is down. Give couch players a device each, so no two read
+the same one. A lone hero (no `heroes`) plays with `DefaultInput`.
+
+What changes with more than one hero:
+
+- **One screen.** The camera centres on the box round the living heroes and zooms out as they spread, down to half its usual
+  zoom; past that, the edge of the screen holds them back like a wall. A hero who has strayed 8 tiles or more from everyone
+  else can warp to the nearest of them (K, or a gamepad's X).
+- **Shared keys and sight.** A key any living hero carries opens its doors for everyone, and what one hero can see, all see.
+  A door never shuts on a hero standing in it.
+- **Monsters go for the nearest hero.** They follow the walk to whichever is nearest, and spawners wake for whichever comes
+  near. Monsters and spawners are tougher for a bigger party - half as many hit points again for each hero past the first
+  (`PartyToughness`) - rather than more numerous.
+- **Falling.** A hero whose hearts run out drops the keys they carried where they fell (`PLAYER_DIED(hero)`) and stays on as a
+  ghost; the rest play on. When every hero is down, `ALL_PLAYERS_DIED` ends the level.
+- **Getting out.** The first hero to step onto an `exit` cell ([9.5](#95-the-level-file)) ends the level for everyone
+  (`LEVEL_COMPLETED(hero)`); every hero, fallen or not, starts the next one on their feet. To move on to another level, have
+  `level` (and `levelBundle`) return it once you hear `LEVEL_COMPLETED`.
+- **The HUD** shows a row per hero - PLAYER n, hearts, weapon, gold, light spell and items, dimmed with DOWN once they fall -
+  and the team's keys at the bottom.
+- **Events** about one hero name them by slot, from 0: their place in what `heroes` returned.
+
+There is no friendly fire and no bumping into each other. Everyone starts on the level's `player-start` cell or the open floor
+nearest it. The UI kit's menus (and so a pause menu) answer the keyboard and the first gamepad only.
 
 ### 9.4 Monsters
 
@@ -1610,12 +1665,12 @@ MonsterRoster.inst.Load(Monsters);
 ```
 
 `MonsterDef` fields: `idle`/`run` (animation names), `hitPoints`, `speed` (a multiple of the player's), `contactDamage`
-(half-hearts per touch; 0 = harmless), `contactCooldown` (seconds), optional `ranged` (a `Weapon` the monster shoots at a
-player within `range` tiles and in view), and `behaviour` - a factory called once per monster spawned, so a behaviour can
+(half-hearts per touch; 0 = harmless), `contactCooldown` (seconds), optional `ranged` (a `Weapon` the monster shoots at the
+nearest hero within `range` tiles, from where the heroes can see it), and `behaviour` - a factory called once per monster spawned, so a behaviour can
 keep its own state.
 
-**Behaviours** decide where a monster steers each step (60 a second). Built in: `Chase` (the shortest walk to the player),
-`Wander({ aggroRange, turnEvery, pace })` (amble until the player is near, then chase for good) and
+**Behaviours** decide where a monster steers each step (60 a second), always after the nearest living hero. Built in: `Chase`
+(the shortest walk to them), `Wander({ aggroRange, turnEvery, pace })` (amble until a hero is near, then chase for good) and
 `KeepDistance({ range, slack })` (hold a distance; pairs with `ranged`). Write your own by implementing
 `IMonsterBehaviour`:
 
@@ -1623,22 +1678,22 @@ keep its own state.
 import type { IMonsterBehaviour, MonsterContext } from "@logic-incubator/engine/level/entities/Behaviours";
 import { FollowFlow } from "@logic-incubator/engine/level/entities/Behaviours";
 
-/** Charges when it sees the player nearby, otherwise stands still. */
+/** Charges when a hero is nearby, otherwise stands still. */
 export class Guard implements IMonsterBehaviour {
     constructor(private sightTiles = 6) {}
 
     Steer(c: MonsterContext): { x: number; y: number } {
-        const distance = c.flow.DistanceAt(c.tile.x, c.tile.y);     // walking distance to the player, in tiles
+        const distance = c.flow.DistanceAt(c.tile.x, c.tile.y);     // walking distance to the nearest hero, in tiles
         if (distance < 0 || distance > this.sightTiles) {
             return { x: 0, y: 0 };                                   // UNREACHABLE (-1) or far: stay put
         }
-        return FollowFlow(c);                                        // down the flow field to the player
+        return FollowFlow(c);                                        // down the flow field to them
     }
 }
 ```
 
-`MonsterContext` gives `position`, `tile`, `player`, `flow` (`DistanceAt`, `NextCell`, `AwayCell`), `tileSize`, `dt` and an
-injectable `random`. Return a vector of length 0 (still) to 1 (full speed). Behaviours are pure (no pixi) and unit-testable.
+`MonsterContext` gives `position`, `tile`, `player` (the nearest living hero's position), `flow` (`DistanceAt`, `NextCell`,
+`AwayCell` - walking distances to the nearest living hero), `tileSize`, `dt` and an injectable `random`. Return a vector of length 0 (still) to 1 (full speed). Behaviours are pure (no pixi) and unit-testable.
 
 ### 9.5 The level file
 
@@ -1658,14 +1713,15 @@ A **brush** is one placed thing: a tile (`name` is a bare sprite or animation na
 data layer). Layers draw in list order, later on top. The engine reads only what `LevelFormat.ts` types; the editor saves
 more of its own state alongside.
 
-There are exactly four **data brushes**, painted on the one `attributes` data layer:
+There are exactly five **data brushes**, painted on the one `attributes` data layer:
 
 | Name | `data` | Effect |
 | --- | --- | --- |
-| `player-start` | - | Where the player starts (required: a level without one throws "Player start position is not defined"). |
+| `player-start` | - | Where the heroes start (required: a level without one throws "Player start position is not defined"); a party spreads onto the open floor nearest it. |
 | `collision` | - | Marks a cell solid, in addition to whatever tiles there declare. |
 | `z-index` | number | The cell's **height** ([9.7](#97-heights)). |
 | `pickup` | a `PickupValue` | Turns whatever tile is on top at that cell into a pickup (it disappears when collected), for an item that isn't one by default. Edited with its popup - choose gold, health, a key, a weapon, an item or a light to carry. |
+| `exit` | - | A way out: the first hero to step on it ends the level (`LEVEL_COMPLETED`). It isn't drawn - paint stairs or a ladder there too. A level without one is played until everyone falls. |
 
 Lights, spawners and doors are **not** brushes: they are ordinary tiles that carry their behaviour in
 `assets-meta.json` (a pickup can be either: a tile that is one by default, or a `pickup` brush over any other).
@@ -1696,28 +1752,30 @@ a deleted one is removed - with a warning if it had anything in it); you only fi
 | `collidable` | Blocks movement, and light. |
 | `blocksLight` | Whether the sprite stops light, where that should differ from `collidable`: `false` lets light past a solid tile (a table, a fence, a window), `true` stops it at one you can walk through. Left out, a tile stops light if it is collidable. Where tiles on one cell disagree, `true` wins. A value that isn't `true` or `false` is dropped with a console warning. |
 | `light` | A point light: `brightness` (its strength at its own cell, added on top of the ambient light; 1 is a normal torch, clamped to 0..2), `tint` (hex colour as a number; a warm colour reads as firelight against the cool ambient), `range` (radius in tiles), and optionally `flicker` (how far its strength wavers either way, as a share of itself: 0.15 is a torch; left out or 0, it's steady). Its sprite gets a soft glow over its flame (centred across the art, a third of the way down), in the light's colour. Baked once at level load at the corners of the tile grid, so it is blended smoothly across tiles, and fades out smoothly to nothing at its range. Overlapping lights add up, and light can go above 1 to brighten the art (capped). Where no light reaches, a dim, cool ambient light. Sprites, and tiles taller than a cell such as doors, are lit by the floor under their feet. Walls and other light-blocking tiles cast soft shadows, and the floor is a little darker along the foot of a wall and in a room's corners. A torch placed on a wall shines from the wall's open side (south first), so it lights the room it faces and not what's behind it. Height counts: a ledge two or more steps above the light hides its top, while stairs (one step a tile) stay lit. Spawners and doors don't cast shadows. A hand-edited light missing a field is dropped with a console warning naming the sprite rather than baking black. |
-| `door` | `id` pairs a door's two sprites (closed and open); `open` says which half this is. The door swaps when the player's tile enters any of its footprint cells and swaps back when they leave, so it reads as "walked open" - unless that placement is locked, when the player needs its key ([9.6.1](#961-keys-and-locked-doors)). |
-| `spawner` | Produces `monsters` (a pool, picked at random) every `interval` s, at most `maxAlive` at once, `total` in all (0 = unlimited), only within `activationRange` tiles of the player (0 = always). `hitPoints` is the damage to destroy it (0 = indestructible). Its sprite's footprint is solid until destroyed. |
+| `door` | `id` pairs a door's two sprites (closed and open); `open` says which half this is. The door swaps when a hero's tile enters any of its footprint cells and swaps back when the last of them leaves, so it reads as "walked open" - unless that placement is locked, when the team needs its key ([9.6.1](#961-keys-and-locked-doors)). |
+| `spawner` | Produces `monsters` (a pool, picked at random) every `interval` s, at most `maxAlive` at once, `total` in all (0 = unlimited), only while a hero is within `activationRange` tiles' walk (0 = always). `hitPoints` is the damage to destroy it (0 = indestructible). Its sprite's footprint is solid until destroyed. |
 | `pickup` | What walking over it gives: `gold` or `health` (an `amount`; health is in half-hearts and never goes past the maximum), a `key` (an `id`), a `weapon`, an inventory `item` (its `sprite`, or - left out - the tile's own), or a `light` to carry (a `light` value, and the `seconds` it burns for - 0 or left out for the rest of the level; see [9.6.2](#962-lights-in-play)). The tile then disappears, and if it gave off light its light goes with it. A malformed one is dropped with a console warning naming the sprite. |
 
 A **specific placement** can override its light, spawner, pickup or door lock (the editor's data-select tool edits them per placement);
 `assets-meta` is the default for the sprite. Metadata is per bundle: a level's bundle can have its own
 `assets-meta.json`, looked up before `global`'s, so a level can restyle a tile's behaviour as well as its art.
 
-Doors and fog: the level is divided into walkable **regions**; only regions reachable from the player through *open*
-doors are drawn, so closing a door conceals what is behind it again.
+Doors and fog: the level is divided into walkable **regions**; only regions reachable from a hero through *open*
+doors are drawn - what one hero sees, the whole party sees - so closing a door conceals what is behind it again.
 
 #### 9.6.1 Keys and locked doors
 
-Every door has a **lock id**, and by default it is `-1`: **unlocked**. The player opens an unlocked door by walking onto it,
+Every door has a **lock id**, and by default it is `-1`: **unlocked**. A hero opens an unlocked door by walking onto it,
 with or without keys - so a level with no keys behaves exactly as it always did. To lock a door, use the data-select tool's
 *Door lock* popup: tick **Locked** and give it a **Key id** (0 or more; kept in the tile's `data` as `{ "lock": n }`). The
-player then opens that door only if they carry a **key with the same id** (a `key` pickup, `{ "kind": "key", "id": n }`);
-without it the door is a wall to them. There is no master key. They see the keys they carry (each one's sprite and its id) in
-the HUD's *Keys* panel. Keys aren't used up, and a second key with an id already held adds nothing. Dying and restarting the
-level drops them. A door's `door.id` in `assets-meta.json` is only what pairs its closed and open sprites - it is not its lock.
+door then opens only if a hero carries a **key with the same id** (a `key` pickup, `{ "kind": "key", "id": n }`); without
+it the door is a wall. There is no master key. Keys are the team's: one carried by any living hero opens its door for
+everyone. The HUD's *Keys* panel shows them (each one's sprite and its id). Keys aren't used up, and a second key with an id
+already held adds nothing. A hero who falls drops the keys they carried where they fell, for the others to pick up; the
+level starting over takes them all away. A door's `door.id` in `assets-meta.json` is only what pairs its closed and open
+sprites - it is not its lock.
 
-Monsters can never open or enter a closed door (see `Encounter` in the API reference), whatever keys the player has.
+Monsters can never open or enter a closed door (see `Encounter` in the API reference), whatever keys the heroes have.
 
 #### 9.6.2 Lights in play
 
@@ -1726,14 +1784,14 @@ that bake:
 
 - **Flicker.** A light with `flicker` wavers smoothly around its strength, each one out of step with the others.
 - **Torches to carry.** A `light` pickup - a torch placed on the floor with a `pickup` brush set to *A light to carry*, say -
-  gives the player that light: it follows them, casting shadows as they go, until it has burnt for its `seconds`. It dims
+  gives the hero who picks it up that light: it follows them, casting shadows as they go, until it has burnt for its `seconds`. It dims
   over its last 8 seconds so they see it going. Picking up another replaces it; dying drops it.
 - **Glowing shots.** A shot with a `light` (a weapon's `shot`, or a monster's `ranged`) lights its way as it flies.
-- **The mage-light.** A hero with a `lightSpell` (`PlayerSetup.lightSpell`, or per character through `playerLightSpell`)
+- **The mage-light.** A hero with a `lightSpell` (`PlayerSetup.lightSpell`, or per character through `HeroSlot.lightSpell` or `playerLightSpell`)
   calls it up with L or a gamepad's Y: a ball of light floats just behind their shoulder and lights the floor around them for
   its `seconds`, dimming at the end like a torch, then needs `recharge` seconds before it can be called up again. The HUD
-  shows it under the keys: a bar that empties as it burns and fills as it recharges, and READY, LIT or RECHARGING with the
-  seconds left.
+  shows it under the keys (in a party, in each hero's row): a bar that empties as it burns and fills as it recharges, and
+  READY, LIT or RECHARGING with the seconds left.
 
 Lights that move are cast from fewer points across their flame, and only again once they've moved an eighth of a tile, so a
 handful of them costs little. Each gets a soft glow: a carried torch and a shot under the figures, the mage-light over them
@@ -1743,8 +1801,8 @@ with a bright core.
 
 The `z-index` data brush paints an integer height per cell. Height is **visual only** - movement and collision stay on one
 flat grid (a step of more than one height is blocked) - but it drives a distinctive look: tiles are drawn in bands by
-height, the band the player stands on is always 1:1, bands above are larger and bands below recede and fade, and the
-camera zooms a little as the player climbs. Tunables are in `engine/level/Depth.ts`.
+height, the band the hero stands on is always 1:1 (with a party, the first hero still standing), bands above are larger
+and bands below recede and fade, and the camera zooms a little as they climb. Tunables are in `engine/level/Depth.ts`.
 
 ### 9.8 Events and hooks
 
@@ -1755,13 +1813,18 @@ All on `game.dispatcher`; the constants are in `@logic-incubator/engine/Events`:
 | `LEVEL_LOADED` | - | `Level.LoadLevel` finished. |
 | `LEVEL_CREATED` | - | The level's display has been built; gameplay (re)starts. |
 | `CAMERA_MOVED` | - | Emitted every frame by the camera follow. |
-| `PLAYER_DAMAGED` | `(damage, hitPointsLeft)` | A hit landed on the player. |
-| `PLAYER_DIED` | - | Hit points reached 0; the level restarts shortly after. |
-| `MONSTER_KILLED` | `(type, x, y)` | A monster died (pixel position). |
+| `PLAYER_DAMAGED` | `(damage, hitPointsLeft, hero)` | A hit landed on a hero. |
+| `PLAYER_DIED` | `(hero)` | A hero's hit points reached 0. They drop their keys; the rest play on. |
+| `ALL_PLAYERS_DIED` | - | Every hero is down: the level is over, and starts over shortly after (or on `Restart()`, with `manualRestart`). |
+| `LEVEL_COMPLETED` | `(hero)` | A hero stepped onto an `exit`: the level is over, and the next start (whatever `level` returns then) brings every hero back. |
+| `MONSTER_KILLED` | `(type, x, y, hero)` | A monster died (pixel position), killed by that hero's shot (-1 if by none). |
 | `SPAWNER_DESTROYED` | `(spawner)` | A spawner was shot to pieces. |
+
+`hero` is the hero's slot, from 0 - their place in what `heroes` returned; a lone hero is 0.
 
 ```ts
 this.Listen(this.game.dispatcher, MONSTER_KILLED, (type: string, x: number, y: number) => this.SpawnLoot(x, y));
+this.Listen(this.game.dispatcher, LEVEL_COMPLETED, () => (CurrentLevel = NextLevel(CurrentLevel)));   // level() hands it back on the next start
 ```
 
 **Particle effects.** `DungeonMain` has an `Effects` layer over the world, under the HUD; `main.Effects.Play(art, config, x, y)` starts an
@@ -1794,7 +1857,8 @@ new DungeonMain({
 ```
 
 When the game switches `CurrentLevel` and restarts the scene, the engine loads the new bundle (showing nothing new until
-it is ready), builds the level, then releases the old one. Sprites a level redefines shadow `global`'s; see
+it is ready), builds the level, then releases the old one. Switching it when `LEVEL_COMPLETED` arrives is how a hero
+reaching an exit moves the party on: the start that follows the end of the level asks `level` and `levelBundle` again. Sprites a level redefines shadow `global`'s; see
 [5.8](#58-sprites-by-bare-name-scope-and-assetfactory).
 
 ---
@@ -1854,6 +1918,7 @@ export const EditorSetup: IDungeonEditorOptions = {
         [DataBrushName.COLLISION]: "wall_mid",
         [DataBrushName.Z_INDEX]: "floor_stairs",
         [DataBrushName.PICKUP]: "sack_gold",
+        [DataBrushName.EXIT]: "floor_ladder",
     },
     mapStyle: new MyStyle(),                   // the game's tiles for generated maps (keys 1-8); without it those keys do nothing
 };
@@ -1914,7 +1979,7 @@ vertical **toolbar** of tools at the far right. Each palette tab ends in a **+**
   panel asks whether the new layer is generic, floor or walls. The last floor layer and the last walls layer can't be removed.
 - Each layer remembers its own tool and tile: switch from the floor layer to the walls layer and back, and the floor tile and
   tool you were using are picked again (saved with the level). A layer you haven't used yet starts with no brush.
-- The one **attributes** layer is always present. Player start, collision and z-index are painted on it, and it also
+- The one **attributes** layer is always present. Player start, collision, z-index, pickups and exits are painted on it, and it also
   draws a read-only overlay of what the game *derives* from tiles' metadata (collision, door footprints, lights,
   spawners) so a cell's whole picture - hand-placed and intrinsic - is in one place.
 - Painting a torch or a spawner **tile** is enough; its light or spawner values come from `assets-meta.json`. Use the

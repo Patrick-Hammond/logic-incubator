@@ -6,7 +6,7 @@ import { AnimationSpeed, TileSize } from "../Constants";
 import {LEVEL_LOADED} from "../Events";
 import AssetMetadataStore from "./AssetMetadata";
 import {HeightAt} from "./Depth";
-import {EffectiveDoorLock, FindDoorGroups} from "./Doors";
+import {DoorOpens, EffectiveDoorLock, FindDoorGroups} from "./Doors";
 import MonsterRoster from "./entities/MonsterRoster";
 import {IsPickupValue, PickupValue} from "./entities/Pickups";
 import {SanitiseSpawnerValue, Spawner, SpawnerCells} from "./entities/Spawners";
@@ -78,10 +78,12 @@ export default class Level {
     public boundaryRegionData: number[][][] = [];
     /** One entry per connected walkable component of the map. */
     public regions: Region[] = [];
-    /** Regions currently reachable from the player: their own region, plus any reachable through a door that is open right now. Fully dynamic - closing a door conceals what's only reachable through it again. Recomputed every frame by `UpdateVisibleRegions`. */
+    /** Regions currently reachable from the heroes: each one's own region, plus any reachable through a door that is open right now - what one sees, all see. Fully dynamic - closing a door conceals what's only reachable through it again. Recomputed every step by `UpdateVisibleRegions`. */
     public visibleRegions: Set<number> = new Set<number>();
     public boundRect: Rectangle = new Rectangle();
     public playerStartPosition: Vec2Like | undefined;
+    /** Every cell painted with the `EXIT` data brush, in normalised map coordinates - see `IsExit`. */
+    public exits: Vec2Like[] = [];
     /** Every cell painted with the `SPAWNER` data brush, in normalised map coordinates. Each one's `cells` - the footprint of the roster's `spawnerSprite` - are solid (in `collisionData`) until `RemoveSpawner`. */
     public spawners: Spawner[] = [];
     /** Every tile with a `pickup` in its `AssetMetadata`, not yet collected. See `CollectPickupsAt`. */
@@ -133,6 +135,17 @@ export default class Level {
         return !!door && !door.isOpen && !canOpen(door.lockId);
     }
 
+    /** Whether the cell is a way out of the level (an `EXIT` brush) - where a hero standing ends it. */
+    IsExit(tileX: number, tileY: number): boolean {
+        return this.exits.some(exit => exit.x === tileX && exit.y === tileY);
+    }
+
+    /** Whether the cell is open floor: walkable and in a region - not a wall, a door, a spawner or off the map. Where heroes start and what's dropped lands. */
+    IsFloor(tileX: number, tileY: number): boolean {
+        const column = this.regionData[tileX];
+        return !!column && column[tileY] !== undefined && !this.IsSolid(tileX, tileY);
+    }
+
     /**
      * Opens up a destroyed spawner's cells: no longer solid, and each one joined to a region
      * it borders - without that, the player standing there would be in no region at all, and
@@ -161,10 +174,10 @@ export default class Level {
     }
 
     /**
-     * Collects every pickup at the given cell (call once per frame with the
-     * player's tile, like `UpdateDoors`): each one's tile stops drawing and it
-     * won't be offered again. Returns what was collected, for the caller to
-     * apply - `Level` itself has no notion of a player's gold/inventory/weapons.
+     * Collects every pickup at the given cell (call once per step with each living
+     * hero's tile, in turn - the first there gets it): each one's tile stops drawing
+     * and it won't be offered again. Returns what was collected, for the caller to
+     * apply - `Level` itself has no notion of a hero's gold/inventory/weapons.
      */
     CollectPickupsAt(tileX: number, tileY: number): CollectedPickup[] {
         const here = this.pickups.filter(p => p.x === tileX && p.y === tileY);
@@ -186,50 +199,54 @@ export default class Level {
     }
 
     /**
-     * Opens/closes doors whose footprint contains the given tile - call once per
-     * frame with the tile the player currently occupies (e.g. `Player`'s own
-     * `HeightAt` lookup tile). A door swaps open the instant the player's tile
-     * enters any of its cells and swaps closed the instant it leaves all of
-     * them, so it reads as "walked open" - but only for a player `canOpen` (the door's
-     * `lockId` is `NoLock`, or they hold its key; with none given every door opens). A
-     * door they can't open stays shut, and `IsDoorLocked` is what keeps them out of it.
+     * Opens/closes doors by where the heroes stand - call once per step with the
+     * tile each living hero occupies. A door swaps open the instant any of those
+     * tiles enters any of its cells and swaps closed the instant the last leaves
+     * them all, so it reads as "walked open" - but only if `canOpen` its lock (its
+     * `lockId` is `NoLock`, or the team holds its key; with none given every door
+     * opens). A door they can't open stays shut, and `IsDoorLocked` is what keeps
+     * them out of it. One that's already open stays open while anyone is in it,
+     * even if the key went with a hero who fell - it never shuts on someone.
      */
-    UpdateDoors(tileX: number, tileY: number, canOpen: (lockId: number) => boolean = () => true): void {
+    UpdateDoors(tiles: ReadonlyArray<Vec2Like>, canOpen: (lockId: number) => boolean = () => true): void {
         this.doors.forEach(door => {
-            const overlapping = door.cells.some(c => c.x === tileX && c.y === tileY) && canOpen(door.lockId);
-            if (overlapping !== door.isOpen) {
-                door.isOpen = overlapping;
-                door.tile.texture = AssetFactory.inst.CreateTexture(overlapping ? door.openSprite : door.closedSprite);
+            const open = DoorOpens(door, tiles, canOpen);
+            if (open !== door.isOpen) {
+                door.isOpen = open;
+                door.tile.texture = AssetFactory.inst.CreateTexture(open ? door.openSprite : door.closedSprite);
                 this.doorVersion++;
             }
         });
     }
 
     /**
-     * Recomputes which regions are currently reachable from the player: their
-     * own region, plus every region reachable by crossing a door that is open
-     * right now, chained through any number of simultaneously-open doors.
-     * Call once per frame, after `UpdateDoors` (this frame's door states must
-     * already be current). If the player's own tile has no region - they're
+     * Recomputes which regions are currently reachable from the heroes, whose
+     * tiles are given: each one's own region, plus every region reachable by
+     * crossing a door that is open right now, chained through any number of
+     * simultaneously-open doors - the union of what each can see, so the team
+     * shares its sight. Call once per step, after `UpdateDoors` (this step's door
+     * states must already be current). If a hero's tile has no region - they're
      * standing on a door cell, the common case while transiting one, since
      * door cells are deliberately excluded from the region flood fill - seed
-     * from that door's own `regionIds` instead (its `isOpen` was just synced
-     * by `UpdateDoors` for this exact tile, one line above the call site).
+     * from the open doors' own `regionIds` instead (the door they're in was just
+     * opened by `UpdateDoors`).
      */
-    UpdateVisibleRegions(tileX: number, tileY: number): void {
+    UpdateVisibleRegions(tiles: ReadonlyArray<Vec2Like>): void {
         const active = new Set<number>();
 
-        const column = this.regionData[tileX];
-        const ownRegion = column ? column[tileY] : undefined;
-        if (ownRegion !== undefined) {
-            active.add(ownRegion);
-        } else {
-            this.doors.forEach(door => {
-                if (door.isOpen) {
-                    door.regionIds.forEach(id => active.add(id));
-                }
-            });
-        }
+        tiles.forEach(tile => {
+            const column = this.regionData[tile.x];
+            const ownRegion = column ? column[tile.y] : undefined;
+            if (ownRegion !== undefined) {
+                active.add(ownRegion);
+            } else {
+                this.doors.forEach(door => {
+                    if (door.isOpen) {
+                        door.regionIds.forEach(id => active.add(id));
+                    }
+                });
+            }
+        });
 
         let expanded = true;
         while (expanded) {
@@ -248,6 +265,48 @@ export default class Level {
         }
 
         this.visibleRegions = active;
+    }
+
+    /**
+     * Puts a pickup down where a hero fell: on their cell, or the nearest open floor to it (see `IsFloor`)
+     * when that's a door or a wall - a key left in a doorway that then shut would be out of everyone's
+     * reach. Drawn as `sprite` on the top tile layer (nothing is drawn without one); collected like any
+     * other. Returns the cell it landed on.
+     */
+    DropPickup(tileX: number, tileY: number, value: PickupValue, sprite: string | null): Vec2Like {
+        const cell = this.NearestFloor(tileX, tileY);
+        let tile: Tile | null = null;
+        const layer = this.levelData[this.levelData.length - 1];
+        if (sprite && layer) {
+            tile = CreateTile({ name: sprite, position: {x: cell.x, y: cell.y}, pixelOffset: {x: 0, y: 0}, rotation: 0, scale: {x: 1, y: 1}, layerId: -1, data: null });
+            if (tile) {
+                const column = layer[cell.x] || (layer[cell.x] = []);
+                (column[cell.y] || (column[cell.y] = [])).push(tile);
+            }
+        }
+        this.pickups.push({x: cell.x, y: cell.y, tile, value});
+        return cell;
+    }
+
+    /** The open floor cell nearest the given one, by steps - the cell itself if it's floor, or it if there's none at all. */
+    private NearestFloor(tileX: number, tileY: number): Vec2Like {
+        const seen = new Set<string>([tileX + "," + tileY]);
+        const queue: Vec2Like[] = [{x: tileX, y: tileY}];
+        for (let i = 0; i < queue.length; i++) {
+            const cell = queue[i];
+            if (this.IsFloor(cell.x, cell.y)) {
+                return cell;
+            }
+            [{x: 1, y: 0}, {x: -1, y: 0}, {x: 0, y: 1}, {x: 0, y: -1}].forEach(step => {
+                const next = {x: cell.x + step.x, y: cell.y + step.y};
+                const key = next.x + "," + next.y;
+                if (!seen.has(key) && next.x >= 0 && next.y >= 0 && next.x < this.boundRect.width && next.y < this.boundRect.height) {
+                    seen.add(key);
+                    queue.push(next);
+                }
+            });
+        }
+        return {x: tileX, y: tileY};
     }
 
     /** Whether the given cell should currently be drawn: an open-floor cell is visible iff its own region is active, a wall/door cell is visible iff any region it touches is active. */
@@ -341,6 +400,7 @@ export default class Level {
         this.doorAt = [];
         this.spawners = [];
         this.pickups = [];
+        this.exits = [];
         const spawnerSprite = MonsterRoster.inst.SpawnerSprite;
         const hasSpawnerSprite = spawnerSprite != null && AssetFactory.inst.Has(spawnerSprite);
         if (spawnerSprite != null && !hasSpawnerSprite) {
@@ -438,6 +498,9 @@ export default class Level {
                         }
                         this.heightData[ posX ][ posY ] = brush.data as number;
                         depths.add(brush.data as number);
+                        break;
+                    case DataBrushName.EXIT:
+                        this.exits.push({x: posX, y: posY});
                         break;
                     case DataBrushName.PICKUP:
                         // A brush saved without a (valid) value is no pickup, rather than one that gives nothing.
@@ -595,7 +658,7 @@ export default class Level {
             this.playerStartPosition = { x: Math.floor(this.boundRect.width / 2), y: Math.floor(this.boundRect.height / 2) };
         }
 
-        this.UpdateVisibleRegions(this.playerStartPosition.x, this.playerStartPosition.y);
+        this.UpdateVisibleRegions([this.playerStartPosition]);
 
         Game.inst.dispatcher.emit(LEVEL_LOADED);
     }

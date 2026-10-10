@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DoorFootprint, EffectiveDoorLock, FindDoorGroups, IsDoorLockValue } from "./Doors";
+import { DoorFootprint, DoorOpens, EffectiveDoorLock, FindDoorGroups, IsDoorLockValue } from "./Doors";
 import { FindRegions } from "./Regions";
 
 /** Build a door-id grid from an ASCII map. Any non-'.' character is a door cell, its id being that character's char code (so '#' and '$' are automatically different ids) - '.' is unpainted. */
@@ -191,5 +191,25 @@ describe("door locks", () => {
     it("is nothing for a tile that isn't a door", () => {
         expect(EffectiveDoorLock({ data: { lock: 7 } }, {})).toBeUndefined();
         expect(EffectiveDoorLock({ data: { lock: 7 } }, undefined)).toBeUndefined();
+    });
+});
+
+describe("DoorOpens", () => {
+    const cells = [{ x: 4, y: 1 }, { x: 4, y: 2 }];
+    const yes = () => true;
+    const no = () => false;
+
+    it("opens while any hero stands in any of its cells, if its lock opens for them", () => {
+        expect(DoorOpens({ cells, isOpen: false, lockId: 3 }, [{ x: 0, y: 0 }, { x: 4, y: 2 }], yes)).toBe(true);
+        expect(DoorOpens({ cells, isOpen: false, lockId: 3 }, [{ x: 4, y: 2 }], no)).toBe(false);
+    });
+
+    it("shuts once no one is in it", () => {
+        expect(DoorOpens({ cells, isOpen: true, lockId: 3 }, [{ x: 5, y: 2 }], yes)).toBe(false);
+        expect(DoorOpens({ cells, isOpen: true, lockId: 3 }, [], yes)).toBe(false);
+    });
+
+    it("stays open on someone even once its lock no longer opens - the key's carrier fell", () => {
+        expect(DoorOpens({ cells, isOpen: true, lockId: 3 }, [{ x: 4, y: 1 }], no)).toBe(true);
     });
 });

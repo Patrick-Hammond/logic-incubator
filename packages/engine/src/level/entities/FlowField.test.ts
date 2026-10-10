@@ -137,3 +137,36 @@ describe("FlowField height gaps", () => {
         expect(field.DistanceAt(2, 0)).toBe(2);
     });
 });
+
+describe("FlowField with several targets", () => {
+    it("measures the walk to whichever target is nearest, and steps towards it", () => {
+        const field = Field(["........."]);
+        field.UpdateTargets([{ x: 0, y: 0 }, { x: 8, y: 0 }]);
+        expect(field.DistanceAt(2, 0)).toBe(2);
+        expect(field.DistanceAt(6, 0)).toBe(2);
+        expect(field.NextCell(2, 0)).toEqual({ x: 1, y: 0 });
+        expect(field.NextCell(6, 0)).toEqual({ x: 7, y: 0 });
+    });
+
+    it("leaves out a target it can't reach or that's off the map", () => {
+        const field = Field(["..#.."]);
+        field.UpdateTargets([{ x: 2, y: 0 }, { x: -3, y: 0 }, { x: 0, y: 0 }]);
+        expect(field.DistanceAt(1, 0)).toBe(1);
+        expect(field.DistanceAt(4, 0)).toBe(UNREACHABLE);
+    });
+
+    it("has nothing reachable with no targets", () => {
+        const field = Field(["..."]);
+        field.UpdateTargets([]);
+        expect(field.DistanceAt(1, 0)).toBe(UNREACHABLE);
+    });
+
+    it("only recomputes when one of them changes cell, or how many there are", () => {
+        const field = Field(["....."]);
+        expect(field.UpdateTargets([{ x: 0, y: 0 }, { x: 4, y: 0 }])).toBe(true);
+        expect(field.UpdateTargets([{ x: 0, y: 0 }, { x: 4, y: 0 }])).toBe(false);
+        expect(field.UpdateTargets([{ x: 0, y: 0 }, { x: 3, y: 0 }])).toBe(true);
+        expect(field.UpdateTargets([{ x: 0, y: 0 }])).toBe(true);
+        expect(field.DistanceAt(4, 0)).toBe(4);
+    });
+});
