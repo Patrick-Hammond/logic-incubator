@@ -89,23 +89,23 @@ describe("AssetMetadataStore.Load light validation", () => {
 
 describe("asset categories", () => {
     it("lists the palette's tabs in order, with Misc as the default", () => {
-        expect(AssetCategories.map(category => category.id)).toEqual(["floor", "walls", "dungeon", "entities", "weapons", "items", "misc", "user"]);
+        expect(AssetCategories.map(category => category.id)).toEqual(["floor", "walls", "entities", "weapons", "items", "misc", "user"]);
         expect(DefaultAssetCategory).toBe("misc");
     });
 
     it("recognises exactly those ids", () => {
         AssetCategories.forEach(category => expect(IsAssetCategory(category.id)).toBe(true));
-        expect(IsAssetCategory("Dungeon")).toBe(false);
+        expect(IsAssetCategory("Walls")).toBe(false);
         expect(IsAssetCategory("")).toBe(false);
         expect(IsAssetCategory(undefined)).toBe(false);
     });
 
     it("gives an asset the category its metadata names", () => {
         const store = new AssetMetadataStore();
-        store.Load({ wall_mid: { category: "dungeon", collidable: true }, bow: { category: "weapons" } });
-        expect(store.CategoryOf("wall_mid")).toBe("dungeon");
+        store.Load({ wall_mid: { category: "walls", collidable: true }, bow: { category: "weapons" } });
+        expect(store.CategoryOf("wall_mid")).toBe("walls");
         expect(store.CategoryOf("bow")).toBe("weapons");
-        expect(store.Get("wall_mid")).toEqual({ category: "dungeon", collidable: true });
+        expect(store.Get("wall_mid")).toEqual({ category: "walls", collidable: true });
     });
 
     it("files an asset with no metadata, or no category, under Misc", () => {
@@ -119,22 +119,22 @@ describe("asset categories", () => {
     it("drops an unknown category with a warning naming the asset, keeping the rest of the entry", () => {
         const store = new AssetMetadataStore();
         const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-        store.Load({ torch: { category: "Dungeon" as never, collidable: true } });
+        store.Load({ torch: { category: "Torches" as never, collidable: true } });
         expect(store.CategoryOf("torch")).toBe("misc");
         expect(store.Get("torch").collidable).toBe(true);
         expect(warn).toHaveBeenCalledWith(expect.stringContaining('"torch"'));
-        expect(warn).toHaveBeenCalledWith(expect.stringContaining('"Dungeon"'));
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining('"Torches"'));
         warn.mockRestore();
     });
 
     it("looks a category up through the scope, the level's bundle first", () => {
         const store = new AssetMetadataStore();
-        store.Add("global", { torch: { category: "dungeon" } });
+        store.Add("global", { torch: { category: "items" } });
         store.Add("level1", { torch: { category: "misc" } });
         store.SetScope(["level1", "global"]);
         expect(store.CategoryOf("torch")).toBe("misc");
         store.SetScope(["global"]);
-        expect(store.CategoryOf("torch")).toBe("dungeon");
+        expect(store.CategoryOf("torch")).toBe("items");
     });
 });
 

@@ -76,7 +76,7 @@ beforeEach(() => {
     write("assets/global/sprites/dungeon/crate.png", png(16, 16, 30));
     write("assets/global/images/title.png", png(8, 8, 40));
     write("assets/global/sounds/click.ogg", "ogg-bytes");
-    write("assets/global/data/assets-meta.json", JSON.stringify({ bomb: {}, crate: { category: "dungeon", collidable: true } }, null, "\t") + "\n");
+    write("assets/global/data/assets-meta.json", JSON.stringify({ bomb: {}, crate: { category: "items", collidable: true } }, null, "\t") + "\n");
     write("assets/level1/bundle.json", JSON.stringify({ dependsOn: ["global"] }));
     write("assets/level1/data/level.json", JSON.stringify({ tiles: [] }));
     write("assets/packed/sprites/atlas.json", JSON.stringify({ frames: { "pk_a.png": { frame: { x: 0, y: 0, w: 4, h: 4 } }, "pk_b.png": { frame: { x: 4, y: 0, w: 4, h: 4 } } }, meta: { image: "atlas.png" } }));
@@ -152,7 +152,7 @@ describe("ParseSaveRequest", () => {
         const request = api.ParseSaveRequest(good());
         expect(request).toMatchObject({ bundle: "global", name: "thing", mode: "create", sheet: "user", width: 4, height: 4 });
         expect(request.frames[0]).toBeInstanceOf(Buffer);
-        expect(api.ParseSaveRequest({ ...good(), sheet: "walls", category: "dungeon", copyMetaFrom: "crate" })).toMatchObject({ sheet: "walls", category: "dungeon", copyMetaFrom: "crate" });
+        expect(api.ParseSaveRequest({ ...good(), sheet: "walls", category: "items", copyMetaFrom: "crate" })).toMatchObject({ sheet: "walls", category: "items", copyMetaFrom: "crate" });
     });
 
     it("refuses what it can't make sense of, each with a 400 and the reason", () => {
@@ -333,20 +333,20 @@ describe("keeping assets-meta.json in step", () => {
         expect(result.notes).toEqual([]);
         expect(meta().gem).toEqual({ category: "items" });
         expect(Object.keys(meta())).toEqual(["bomb", "crate", "gem"]);
-        expect(meta().crate).toEqual({ category: "dungeon", collidable: true });
+        expect(meta().crate).toEqual({ category: "items", collidable: true });
     });
 
     it("copies another sprite's entry for a 'save as', letting the chosen category win", () => {
         save({ bundle: "global", name: "crate2", mode: "create", copyMetaFrom: "crate", frames: b64(png(16, 16, 1)) });
-        expect(meta().crate2).toEqual({ category: "dungeon", collidable: true });
+        expect(meta().crate2).toEqual({ category: "items", collidable: true });
         save({ bundle: "global", name: "crate3", mode: "create", copyMetaFrom: "crate", category: "user", frames: b64(png(16, 16, 1)) });
         expect(meta().crate3).toEqual({ category: "user", collidable: true });
-        expect(meta().crate).toEqual({ category: "dungeon", collidable: true });
+        expect(meta().crate).toEqual({ category: "items", collidable: true });
     });
 
     it("leaves the entry alone when overwriting, and gives a new sprite no entry if nothing was asked", () => {
         save({ bundle: "global", name: "crate", mode: "overwrite", category: "weapons", frames: b64(png(16, 16, 9)) });
-        expect(meta().crate).toEqual({ category: "dungeon", collidable: true });
+        expect(meta().crate).toEqual({ category: "items", collidable: true });
         save({ bundle: "global", name: "plain", mode: "create", frames: b64(png(8, 8, 1)) });
         expect(meta().plain).toEqual({});
     });

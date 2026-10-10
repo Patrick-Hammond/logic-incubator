@@ -30,7 +30,7 @@ const fs = require("fs");
 const path = require("path");
 
 /** The palette's categories. Plain Node can't import src/level/AssetMetadata.ts, so this repeats its list; AssetMetadata.test.ts fails if they drift apart. */
-const CATEGORIES = ["floor", "walls", "dungeon", "entities", "weapons", "items", "misc", "user"];
+const CATEGORIES = ["floor", "walls", "entities", "weapons", "items", "misc", "user"];
 
 function ReadJson(file) {
     return JSON.parse(fs.readFileSync(file, "utf8"));

@@ -132,12 +132,12 @@ describe("asset-meta plugin: a sprite saved by the editor", () => {
     });
 
     it("gets a copy of another sprite's entry - a copy, not the same object - and the chosen category wins", () => {
-        start({ wall: { category: "dungeon", collidable: true, light: { brightness: 1, tint: 2, range: 3 } } });
+        start({ wall: { category: "walls", collidable: true, light: { brightness: 1, tint: 2, range: 3 } } });
         saved({ copyMetaFrom: "wall" });
         expect(read().gem).toEqual(read().wall);
         saved({ name: "gem2", copyMetaFrom: "wall", category: "user" });
         expect(read().gem2).toEqual({ category: "user", collidable: true, light: { brightness: 1, tint: 2, range: 3 } });
-        expect(read().wall.category).toBe("dungeon");
+        expect(read().wall.category).toBe("walls");
     });
 
     it("copies nothing from a sprite it doesn't know", () => {
