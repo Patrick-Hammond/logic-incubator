@@ -13,6 +13,17 @@ describe("StepProjectile", () => {
         expect(p.dead).toBe(false);
     });
 
+    it("remembers where it was before each step, starting where it was fired from", () => {
+        const p = CreateProjectile({ x: 8, y: 8 }, { x: 1, y: 0 }, ARROW, "player", TILE, 7);
+        expect(p.id).toBe(7);
+        expect([p.px, p.py]).toEqual([8, 8]);
+        StepProjectile(p, 1, () => false, TILE);
+        expect([p.px, p.py]).toEqual([8, 8]);
+        StepProjectile(p, 1, () => false, TILE);
+        expect(p.px).toBeCloseTo(14);
+        expect(p.x).toBeCloseTo(20);
+    });
+
     it("stops at the first blocked cell - and says which - even when fast enough to skip it in one frame", () => {
         const fast = CreateProjectile({ x: 8, y: 8 }, { x: 1, y: 0 }, { ...ARROW, speed: 40 }, "player", TILE);
         const hit = StepProjectile(fast, 1, x => x === 2, TILE);

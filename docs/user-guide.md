@@ -1473,7 +1473,8 @@ DungeonMain (a scene)
  ├─ Effects           particle effects over the world (`main.Effects.Play`)
  ├─ Hud               hearts, gold, equipped weapon, inventory (built from the UI kit)
  ├─ overlay?          the game's own UI over everything: a pause menu, a death screen
- ├─ Player            input, movement, shooting, taking hits
+ ├─ PlayerControl     reads the keyboard and gamepad for the player
+ ├─ Player            the player's state (PlayerState: moving, shooting, taking hits; pure logic) and how they're drawn
  ├─ Encounter         spawners, monsters, projectiles (pure logic, no pixi)
  ├─ EntityRenderer    draws the player, monsters and shots
  └─ Level             the loaded level: tiles, collision, doors, lights, regions, spawners, pickups
@@ -1481,6 +1482,12 @@ DungeonMain (a scene)
 
 `DungeonMain.OnShow` loads the level (asking `LevelAssets` to get its bundle ready first) and starts playing;
 `PLAYER_DIED` restarts it after 1.5 s (or waits for you, with `manualRestart`). You rarely touch the parts directly - you configure `DungeonMain`.
+
+Play moves in fixed steps of 1/60 s (`FixedStep`), as many each display frame as its time calls for, so it comes out the same at
+30, 60 or 144 frames a second; what's drawn sits between the last two steps, so it stays smooth on a fast screen. A step hands
+the controls to the player (`Player.Step`), then runs the `Encounter`, whose random numbers are seeded afresh at each level start
+(`Encounter.Reset(seed)`): the same seed, level and inputs play out the same. This is the groundwork for co-op play, where several
+players' inputs drive one game.
 The HUD and any `overlay` are drawn with the [UI kit](#14-the-ui-kit), so a game loads the `ui` bundle before the dungeon is created.
 
 ### 9.2 Booting a dungeon game
@@ -1544,13 +1551,13 @@ export const PlayerSetup: PlayerSetup = {
     sprite: "wizzard_m_run_anim",                       // an animation, by bare name
     hitPoints: 6,                                       // in half-hearts: three hearts
     hearts: { full: "ui_heart_full", half: "ui_heart_half", empty: "ui_heart_empty" },   // sprite names for the HUD
-    weapons: [                                          // the first is equipped at the start
+    weapons: [                                          // the first is equipped at the start; a weapon picked up lasts until the level starts over
         {
             icon: "weapon_bow",                         // shown in the HUD's weapon slot
             shot: {
                 sprite: "weapon_arrow",
                 spriteAngle: -Math.PI / 2,              // which way the art points (0 = right); the sprite is turned to face its flight
-                speed: 6,                               // pixels per frame
+                speed: 6,                               // pixels per 60th of a second
                 damage: 1,                              // half-hearts for a monster, hit points for a spawner
                 cooldown: 0.2,                          // seconds between shots
                 range: 12,                              // tiles flown before fizzling
@@ -1607,7 +1614,7 @@ MonsterRoster.inst.Load(Monsters);
 player within `range` tiles and in view), and `behaviour` - a factory called once per monster spawned, so a behaviour can
 keep its own state.
 
-**Behaviours** decide where a monster steers each frame. Built in: `Chase` (the shortest walk to the player),
+**Behaviours** decide where a monster steers each step (60 a second). Built in: `Chase` (the shortest walk to the player),
 `Wander({ aggroRange, turnEvery, pace })` (amble until the player is near, then chase for good) and
 `KeepDistance({ range, slack })` (hold a distance; pairs with `ranged`). Write your own by implementing
 `IMonsterBehaviour`:

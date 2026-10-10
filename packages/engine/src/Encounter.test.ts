@@ -422,3 +422,56 @@ describe("Encounter shots", () => {
         expect(furthest).toBeLessThan(6 * TileSize);
     });
 });
+
+describe("Encounter ids and seeds", () => {
+    /** An encounter on its own seeded numbers - no `random` of the test's. */
+    function Seeded(player: TestPlayer, seed: number) {
+        const level = TestLevel(ROOM, [TestSpawner(12, 2, { monsters: ["walker", "shooter", "pusher"], interval: 0.2, maxAlive: 6 })]);
+        const encounter = new Encounter(level, { emit: () => undefined, sizeFor: () => ({ width: 16, height: 16 }) });
+        encounter.Reset(seed);
+        for (let i = 0; i < 240; i++) {
+            encounter.Update(1, FRAME, player);
+        }
+        return encounter;
+    }
+
+    const Snapshot = (encounter: Encounter) => encounter.monsters.map(m => [m.id, m.type, m.animTime, m.position.x, m.position.y]);
+
+    it("plays out the same from the same seed", () => {
+        const a = Seeded(new TestPlayer(At(2, 3)), 99);
+        const b = Seeded(new TestPlayer(At(2, 3)), 99);
+        expect(a.Seed).toBe(99);
+        expect(a.monsters.length).toBeGreaterThan(2);
+        expect(Snapshot(a)).toEqual(Snapshot(b));
+    });
+
+    it("plays out differently from another seed", () => {
+        expect(Snapshot(Seeded(new TestPlayer(At(2, 3)), 99))).not.toEqual(Snapshot(Seeded(new TestPlayer(At(2, 3)), 100)));
+    });
+
+    it("numbers monsters and shots apart, starting again at Reset", () => {
+        const player = new TestPlayer(At(2, 3));
+        const { encounter, run } = Setup(ROOM, [TestSpawner(12, 2, { interval: 0.2 })], player);
+        run(60);
+        encounter.Fire(player.Centre, { x: 1, y: 0 }, ARROW, "player");
+        const ids = encounter.monsters.map(m => m.id).concat(encounter.projectiles.map(p => p.id));
+        expect(ids.length).toBeGreaterThan(2);
+        expect(new Set(ids).size).toBe(ids.length);
+
+        encounter.Reset();
+        encounter.Fire(player.Centre, { x: 1, y: 0 }, ARROW, "player");
+        expect(encounter.projectiles[0].id).toBe(1);
+    });
+
+    it("has a monster remember where it was before each step, starting from the cell it spawned on", () => {
+        const player = new TestPlayer(At(2, 3));
+        const { encounter, run } = Setup(ROOM, [TestSpawner(12, 2, { maxAlive: 1, interval: 0 })], player);
+        run(1);
+        const monster = encounter.monsters[0];
+        expect([monster.previous.x % TileSize, monster.previous.y % TileSize]).toEqual([0, 0]);
+        const before = monster.position.Clone();
+        run(1);
+        expect(monster.previous).toEqual(before);
+        expect(monster.position).not.toEqual(before);
+    });
+});

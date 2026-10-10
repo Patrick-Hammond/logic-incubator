@@ -4,7 +4,9 @@ import AssetFactory from "@logic-incubator/lib/loading/AssetFactory";
 import {Vec2Like} from "@logic-incubator/lib/math/Geometry";
 import { TileSize } from "../Constants";
 import Encounter from "../Encounter";
+import {Between} from "../FixedStep";
 import MonsterRoster from "../level/entities/MonsterRoster";
+import {Projectile} from "../level/entities/Projectiles";
 import Level from "../level/Level";
 import {FootLight, LightGrid, LightToTint, SampleLight} from "../level/Lighting";
 import {Camera} from "./Camera";
@@ -55,6 +57,8 @@ function MultiplyLight(light: Float32Array, tint: number): void {
  * and lights each one by the floor under its feet. The lights that move - the
  * player's torch, glowing shots - get a glow (see `Glow`) in the glows layer,
  * beneath the figures; the player's mage-light floats over them, in the orbs layer.
+ * Play moves in steps (see `FixedStep`), so everything is drawn between where
+ * its last step started and where it ended, by the `alpha` it's given.
  */
 export default class EntityRenderer {
     private glows: GlowLayer | null = null;
@@ -68,6 +72,8 @@ export default class EntityRenderer {
     private lights: Float32Array[] = [];
     private sampled = [0, 0, 0];
     private glowLook: GlowLook = {tint: 0xffffff, alpha: 0, radius: 0};
+    /** Where a monster or shot is drawn this frame, worked out into the same object each time. */
+    private at: Vec2Like = {x: 0, y: 0};
 
     constructor(private camera: Camera, private level: Level) {}
 
@@ -81,7 +87,8 @@ export default class EntityRenderer {
         this.sprites = [];
     }
 
-    Render(player: Player, encounter: Encounter): void {
+    /** Draws the player (see `Player.Place`) and everything in the encounter `alpha` (0 to 1) of the way between their last two steps. */
+    Render(player: Player, encounter: Encounter, alpha = 1): void {
         if (!this.glows || !this.entities || !this.orbs || !this.projectiles) {
             return;
         }
@@ -95,7 +102,7 @@ export default class EntityRenderer {
         drawables.length = 0;
 
         this.AddSpawners(encounter, origin);
-        this.AddMonsters(encounter, origin);
+        this.AddMonsters(encounter, origin, alpha);
         this.AddPlayer(player, origin);
 
         drawables.sort((a, b) => a.feet - b.feet);
@@ -107,8 +114,8 @@ export default class EntityRenderer {
             }
         });
 
-        this.RenderProjectiles(encounter, origin);
-        this.RenderGlows(player, encounter, origin);
+        this.RenderProjectiles(encounter, origin, alpha);
+        this.RenderGlows(player, encounter, origin, alpha);
     }
 
     private AddSpawners(encounter: Encounter, origin: {x: number; y: number}): void {
@@ -140,9 +147,10 @@ export default class EntityRenderer {
         });
     }
 
-    private AddMonsters(encounter: Encounter, origin: {x: number; y: number}): void {
+    private AddMonsters(encounter: Encounter, origin: {x: number; y: number}, alpha: number): void {
         encounter.monsters.forEach(m => {
-            const tile = CentreTile(m.position);
+            const position = Between(m.previous, m.position, alpha, this.at);
+            const tile = CentreTile(position);
             if (!this.level.IsCellVisible(tile.x, tile.y)) {
                 return;
             }
@@ -151,15 +159,15 @@ export default class EntityRenderer {
                 return;
             }
             const texture = frames[Math.floor(m.animTime * MonsterAnimationSpeed) % frames.length];
-            const light = FigureLight(this.level.lightGrid, m.position, this.NextLight());
+            const light = FigureLight(this.level.lightGrid, position, this.NextLight());
             if (m.hitFlash > 0) {
                 MultiplyLight(light, HitTint);
             }
-            const draw = SpriteDrawPosition(m.position, origin, texture);
+            const draw = SpriteDrawPosition(position, origin, texture);
             this.drawables.push({
                 x: draw.x,
                 y: draw.y,
-                feet: m.position.y + TileSize,
+                feet: position.y + TileSize,
                 texture,
                 facingX: m.facingX,
                 light,
@@ -170,20 +178,21 @@ export default class EntityRenderer {
 
     private AddPlayer(player: Player, origin: {x: number; y: number}): void {
         const texture = player.Texture;
-        const draw = SpriteDrawPosition(player.Position, origin, texture);
+        const position = player.DrawPosition;
+        const draw = SpriteDrawPosition(position, origin, texture);
         const {invulnerable} = player.Health;
         this.drawables.push({
             x: draw.x,
             y: draw.y,
-            feet: player.Position.y + TileSize,
+            feet: position.y + TileSize,
             texture,
             facingX: player.FacingX,
-            light: FigureLight(this.level.lightGrid, player.Position, this.NextLight()),
+            light: FigureLight(this.level.lightGrid, position, this.NextLight()),
             alpha: invulnerable > 0 && Math.floor(invulnerable * BlinkRate) % 2 === 0 ? 0.25 : 1
         });
     }
 
-    private RenderProjectiles(encounter: Encounter, origin: {x: number; y: number}): void {
+    private RenderProjectiles(encounter: Encounter, origin: {x: number; y: number}, alpha: number): void {
         const projectiles = encounter.projectiles;
         while (this.sprites.length < projectiles.length) {
             const sprite = new Sprite(Texture.EMPTY);
@@ -194,16 +203,15 @@ export default class EntityRenderer {
         this.sprites.forEach((sprite, i) => {
             const p = projectiles[i];
             const frames = p ? this.Frames(p.sprite) : [];
-            const cellX = p ? Math.floor(p.x / TileSize) : 0;
-            const cellY = p ? Math.floor(p.y / TileSize) : 0;
-            sprite.visible = frames.length > 0 && this.level.IsCellVisible(cellX, cellY);
+            const at = p ? this.ProjectileAt(p, alpha) : this.at;
+            sprite.visible = frames.length > 0 && this.level.IsCellVisible(Math.floor(at.x / TileSize), Math.floor(at.y / TileSize));
             if (!sprite.visible) {
                 return;
             }
             sprite.texture = frames[0];
-            sprite.position.set(p.x - origin.x * TileSize, p.y - origin.y * TileSize);
+            sprite.position.set(at.x - origin.x * TileSize, at.y - origin.y * TileSize);
             sprite.rotation = p.spriteAngle != null ? Math.atan2(p.vy, p.vx) - p.spriteAngle : 0;
-            sprite.tint = LightToTint(SampleLight(this.level.lightGrid, p.x / TileSize, p.y / TileSize, this.sampled));
+            sprite.tint = LightToTint(SampleLight(this.level.lightGrid, at.x / TileSize, at.y / TileSize, this.sampled));
         });
     }
 
@@ -212,15 +220,19 @@ export default class EntityRenderer {
      * cast it, so a shot fired since has none until the next frame - and the player's mage-light, a glow with a
      * bright core where it floats.
      */
-    private RenderGlows(player: Player, encounter: Encounter, origin: {x: number; y: number}): void {
+    private RenderGlows(player: Player, encounter: Encounter, origin: {x: number; y: number}, alpha: number): void {
         this.glows.Begin();
         const carried = player.Light;
         if (carried) {
             this.AddGlow(this.glows, carried.x * TileSize, carried.y * TileSize, carried.key, origin, LookOfGlow);
         }
         encounter.projectiles.forEach(p => {
-            if (p.light && !p.dead && this.level.IsCellVisible(Math.floor(p.x / TileSize), Math.floor(p.y / TileSize))) {
-                this.AddGlow(this.glows, p.x, p.y, p, origin, LookOfGlow);
+            if (!p.light || p.dead) {
+                return;
+            }
+            const at = this.ProjectileAt(p, alpha);
+            if (this.level.IsCellVisible(Math.floor(at.x / TileSize), Math.floor(at.y / TileSize))) {
+                this.AddGlow(this.glows, at.x, at.y, p, origin, LookOfGlow);
             }
         });
         this.glows.End();
@@ -250,6 +262,13 @@ export default class EntityRenderer {
             look(colour, lights.MovingScale(key) || 0, this.glowLook);
             layer.Add(x - origin.x * TileSize, y - origin.y * TileSize, this.glowLook, TileSize);
         }
+    }
+
+    /** Where a shot's centre is drawn, `alpha` of the way through its last step. */
+    private ProjectileAt(p: Projectile, alpha: number): Vec2Like {
+        this.at.x = p.px + (p.x - p.px) * alpha;
+        this.at.y = p.py + (p.y - p.py) * alpha;
+        return this.at;
     }
 
     /** The reusable corner-light array for the drawable about to be pushed. */
