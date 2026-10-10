@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { Vec2Like } from "@logic-incubator/lib/math/Geometry";
 import { TileSize } from "./Constants";
-import Encounter, { EncounterLevel, EncounterPlayer } from "./Encounter";
+import Encounter, { EncounterLevel, EncounterPlayer, PartyToughness } from "./Encounter";
 import { MONSTER_KILLED, PLAYER_DAMAGED, PLAYER_DIED, SPAWNER_DESTROYED } from "./Events";
 import { Chase, KeepDistance } from "./level/entities/Behaviours";
 import { UNREACHABLE } from "./level/entities/FlowField";
@@ -32,7 +32,7 @@ const FRAME = 1 / 60;
 
 class TestPlayer implements EncounterPlayer {
     readonly Health: Health = CreateHealth(6);
-    constructor(public Position: Vec2Like) {}
+    constructor(public Position: Vec2Like, readonly Index = 0) {}
     get Centre(): Vec2Like {
         return BoxCentre(this.Position);
     }
@@ -149,7 +149,8 @@ const THICK = [
 
 type Emitted = { event: string; args: unknown[] }[];
 
-function Setup(rows: string[], spawners: Spawner[], player: TestPlayer, visible?: (x: number, y: number) => boolean) {
+function Setup(rows: string[], spawners: Spawner[], player: TestPlayer | TestPlayer[], visible?: (x: number, y: number) => boolean) {
+    const players = Array.isArray(player) ? player : [player];
     const events: Emitted = [];
     const level = TestLevel(rows, spawners, visible);
     const encounter = new Encounter(level, {
@@ -160,9 +161,9 @@ function Setup(rows: string[], spawners: Spawner[], player: TestPlayer, visible?
     encounter.Reset();
     const run =(frames: number, until?: () => boolean) => {
         for (let i = 0; i < frames && !(until && until()); i++) {
-            // What the real Player.Update does for its own health each frame.
-            TickHealth(player.Health, FRAME);
-            encounter.Update(1, FRAME, player);
+            // What a hero's own step does for their health.
+            players.forEach(p => TickHealth(p.Health, FRAME));
+            encounter.Update(1, FRAME, players);
         }
     };
     return { events, level, encounter, run, fired: (event: string) => events.filter(e => e.event === event) };
@@ -225,7 +226,7 @@ describe("Encounter monsters", () => {
             });
         }
         expect(fired(PLAYER_DAMAGED)).toHaveLength(1);
-        expect(fired(PLAYER_DAMAGED)[0].args).toEqual([1, 5]);
+        expect(fired(PLAYER_DAMAGED)[0].args).toEqual([1, 5, 0]);
         expect(inWall).toBe(false);
     });
 
@@ -430,7 +431,7 @@ describe("Encounter ids and seeds", () => {
         const encounter = new Encounter(level, { emit: () => undefined, sizeFor: () => ({ width: 16, height: 16 }) });
         encounter.Reset(seed);
         for (let i = 0; i < 240; i++) {
-            encounter.Update(1, FRAME, player);
+            encounter.Update(1, FRAME, [player]);
         }
         return encounter;
     }
@@ -473,5 +474,68 @@ describe("Encounter ids and seeds", () => {
         run(1);
         expect(monster.previous).toEqual(before);
         expect(monster.position).not.toEqual(before);
+    });
+});
+
+describe("Encounter with several heroes", () => {
+    it("sends each monster after the hero nearest it", () => {
+        const left = new TestPlayer(At(2, 3), 0);
+        const right = new TestPlayer(At(17, 3), 1);
+        const { encounter, run } = Setup(ROOM, [TestSpawner(5, 2, { maxAlive: 1, interval: 0 })], [left, right]);
+        run(1);
+        const monster = encounter.monsters[0];
+        const start = monster.position.x;
+        run(30);
+        expect(monster.position.x).toBeLessThan(start);
+    });
+
+    it("lets a dead hero be, and goes for the living", () => {
+        const left = new TestPlayer(At(2, 3), 0);
+        const right = new TestPlayer(At(17, 3), 1);
+        left.Health.hitPoints = 0;
+        const { encounter, run, fired } = Setup(ROOM, [TestSpawner(5, 2, { maxAlive: 1, interval: 0 })], [left, right]);
+        run(1);
+        const monster = encounter.monsters[0];
+        const start = monster.position.x;
+        run(30);
+        expect(monster.position.x).toBeGreaterThan(start);
+        run(600, () => fired(PLAYER_DAMAGED).length > 0);
+        expect(fired(PLAYER_DAMAGED)[0].args).toEqual([1, 5, 1]);
+    });
+
+    it("names the hero who died, and whose shot killed a monster", () => {
+        const left = new TestPlayer(At(9, 3), 0);
+        const right = new TestPlayer(At(2, 3), 1);
+        left.Health.hitPoints = 1;
+        const { encounter, run, fired } = Setup(ROOM, [TestSpawner(11, 3, { maxAlive: 1 })], [left, right]);
+        run(600, () => fired(PLAYER_DIED).length > 0);
+        expect(fired(PLAYER_DIED)[0].args).toEqual([0]);
+
+        const monster = encounter.monsters[0];
+        for (let shot = 0; shot < 5 && !fired(MONSTER_KILLED).length; shot++) {
+            encounter.Fire(right.Centre, { x: monster.position.x - right.Position.x, y: monster.position.y - right.Position.y }, ARROW, "player", 1);
+            run(30, () => fired(MONSTER_KILLED).length > 0);
+        }
+        expect(fired(MONSTER_KILLED)[0].args[3]).toBe(1);
+    });
+
+    it("makes monsters and spawners tougher for a bigger party", () => {
+        expect(PartyToughness(1)).toBe(1);
+        expect(PartyToughness(2)).toBe(1.5);
+        expect(PartyToughness(4)).toBe(2.5);
+        const players = [new TestPlayer(At(2, 3), 0), new TestPlayer(At(3, 3), 1), new TestPlayer(At(2, 4), 2)];
+        const { encounter, run } = Setup(ROOM, [TestSpawner(12, 2, { maxAlive: 1, interval: 0, hitPoints: 3 })], players);
+        encounter.Reset(1, players.length);
+        run(1);
+        expect(encounter.monsters[0].hitPoints).toBe(Walker.hitPoints * 2);
+        expect(encounter.spawners[0].hitPoints).toBe(6);
+    });
+
+    it("does nothing with no hero alive", () => {
+        const player = new TestPlayer(At(2, 3));
+        player.Health.hitPoints = 0;
+        const { encounter, run } = Setup(ROOM, [TestSpawner(12, 2, { interval: 0 })], player);
+        run(60);
+        expect(encounter.monsters).toHaveLength(0);
     });
 });

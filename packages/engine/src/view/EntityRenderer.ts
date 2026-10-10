@@ -14,16 +14,18 @@ import GlowLayer from "./GlowLayer";
 import {ViewOrigin} from "./helpers/CameraWindow";
 import {GlowLook, LookOfGlow, LookOfOrbCore} from "./helpers/Glow";
 import {CentreTile} from "./helpers/PlayerMovement";
+import {HeroView} from "./HeroView";
 import {SpriteDrawPosition} from "./helpers/SpriteDrawOffset";
-import {Player} from "./Player";
 import {EntitiesLayer, GlowsLayer, OrbsLayer, ProjectilesLayer, TileGD8Rotation} from "./TileMap";
 
 /** Monsters' animation frames per ticker frame - see `AnimationSpeed` for tiles'. */
 const MonsterAnimationSpeed = 0.15;
 /** Multiplied into a monster's or spawner's light while it shows a hit - a tint can only darken, so red it is. */
 const HitTint = 0xff4040;
-/** How fast the player blinks while invulnerable after a hit, in blinks per second. */
+/** How fast a hero blinks while invulnerable after a hit, in blinks per second. */
 const BlinkRate = 12;
+/** How solid a fallen hero is drawn - a ghost where they fell, until the level starts over. */
+const FallenAlpha = 0.35;
 
 /** How far inside the edges of a figure's 16 px footprint its light is sampled - see `FigureLight`. */
 const FootInset = 2;
@@ -50,13 +52,13 @@ function MultiplyLight(light: Float32Array, tint: number): void {
 }
 
 /**
- * Draws everything that moves - the player, monsters and spawners into the
+ * Draws everything that moves - the heroes, monsters and spawners into the
  * entities layer, sorted by their feet so whoever's lower on screen is in
  * front; shots into the projectiles layer as sprites, turned to face their
- * flight. Skips whatever stands where the player can't see (`IsCellVisible`),
+ * flight. Skips whatever stands where the heroes can't see (`IsCellVisible`),
  * and lights each one by the floor under its feet. The lights that move - the
- * player's torch, glowing shots - get a glow (see `Glow`) in the glows layer,
- * beneath the figures; the player's mage-light floats over them, in the orbs layer.
+ * heroes' torches, glowing shots - get a glow (see `Glow`) in the glows layer,
+ * beneath the figures; mage-lights float over them, in the orbs layer.
  * Play moves in steps (see `FixedStep`), so everything is drawn between where
  * its last step started and where it ended, by the `alpha` it's given.
  */
@@ -87,13 +89,13 @@ export default class EntityRenderer {
         this.sprites = [];
     }
 
-    /** Draws the player (see `Player.Place`) and everything in the encounter `alpha` (0 to 1) of the way between their last two steps. */
-    Render(player: Player, encounter: Encounter, alpha = 1): void {
+    /** Draws the heroes (where each view was last `Place`d) and everything in the encounter `alpha` (0 to 1) of the way between their last two steps. */
+    Render(heroes: ReadonlyArray<HeroView>, encounter: Encounter, alpha = 1): void {
         if (!this.glows || !this.entities || !this.orbs || !this.projectiles) {
             return;
         }
 
-        // The entities layer is scaled by camera.EffectiveZoom like the player's own z band (see
+        // The entities layer is scaled by camera.EffectiveZoom like the heroes' own z band (see
         // TileMapView), so its window origin must be computed the exact same way - not the raw
         // ViewRect, which ignores that zoom and would drift sprites off their tiles the moment
         // EffectiveZoom moves off 1.
@@ -103,7 +105,7 @@ export default class EntityRenderer {
 
         this.AddSpawners(encounter, origin);
         this.AddMonsters(encounter, origin, alpha);
-        this.AddPlayer(player, origin);
+        heroes.forEach(hero => this.AddHero(hero, origin));
 
         drawables.sort((a, b) => a.feet - b.feet);
         this.entities.clear();
@@ -115,7 +117,7 @@ export default class EntityRenderer {
         });
 
         this.RenderProjectiles(encounter, origin, alpha);
-        this.RenderGlows(player, encounter, origin, alpha);
+        this.RenderGlows(heroes, encounter, origin, alpha);
     }
 
     private AddSpawners(encounter: Encounter, origin: {x: number; y: number}): void {
@@ -176,19 +178,20 @@ export default class EntityRenderer {
         });
     }
 
-    private AddPlayer(player: Player, origin: {x: number; y: number}): void {
-        const texture = player.Texture;
-        const position = player.DrawPosition;
+    private AddHero(view: HeroView, origin: {x: number; y: number}): void {
+        const texture = view.Texture;
+        const position = view.DrawPosition;
         const draw = SpriteDrawPosition(position, origin, texture);
-        const {invulnerable} = player.Health;
+        const hero = view.Hero;
+        const {invulnerable} = hero.Health;
         this.drawables.push({
             x: draw.x,
             y: draw.y,
             feet: position.y + TileSize,
             texture,
-            facingX: player.FacingX,
+            facingX: hero.FacingX,
             light: FigureLight(this.level.lightGrid, position, this.NextLight()),
-            alpha: invulnerable > 0 && Math.floor(invulnerable * BlinkRate) % 2 === 0 ? 0.25 : 1
+            alpha: !hero.Alive ? FallenAlpha : invulnerable > 0 && Math.floor(invulnerable * BlinkRate) % 2 === 0 ? 0.25 : 1
         });
     }
 
@@ -217,15 +220,17 @@ export default class EntityRenderer {
 
     /**
      * A glow for each light that moves, where it is now - its strength and colour as `Level.UpdateLights` last
-     * cast it, so a shot fired since has none until the next frame - and the player's mage-light, a glow with a
+     * cast it, so a shot fired since has none until the next frame - and each hero's mage-light, a glow with a
      * bright core where it floats.
      */
-    private RenderGlows(player: Player, encounter: Encounter, origin: {x: number; y: number}, alpha: number): void {
+    private RenderGlows(heroes: ReadonlyArray<HeroView>, encounter: Encounter, origin: {x: number; y: number}, alpha: number): void {
         this.glows.Begin();
-        const carried = player.Light;
-        if (carried) {
-            this.AddGlow(this.glows, carried.x * TileSize, carried.y * TileSize, carried.key, origin, LookOfGlow);
-        }
+        heroes.forEach(hero => {
+            const carried = hero.Light;
+            if (carried) {
+                this.AddGlow(this.glows, carried.x * TileSize, carried.y * TileSize, carried.key, origin, LookOfGlow);
+            }
+        });
         encounter.projectiles.forEach(p => {
             if (!p.light || p.dead) {
                 return;
@@ -238,12 +243,14 @@ export default class EntityRenderer {
         this.glows.End();
 
         this.orbs.Begin();
-        const spell = player.SpellLight;
-        const orb = player.OrbPosition;
-        if (spell && orb) {
-            this.AddGlow(this.orbs, orb.x, orb.y, spell.key, origin, LookOfGlow);
-            this.AddGlow(this.orbs, orb.x, orb.y, spell.key, origin, LookOfOrbCore);
-        }
+        heroes.forEach(hero => {
+            const spell = hero.SpellLight;
+            const orb = hero.OrbPosition;
+            if (spell && orb) {
+                this.AddGlow(this.orbs, orb.x, orb.y, spell.key, origin, LookOfGlow);
+                this.AddGlow(this.orbs, orb.x, orb.y, spell.key, origin, LookOfOrbCore);
+            }
+        });
         this.orbs.End();
     }
 

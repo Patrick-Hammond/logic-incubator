@@ -30,7 +30,7 @@ export type Weapon = ShotSetup & {
     cooldown: number;
 };
 
-/** A `Weapon` plus the icon the HUD shows in the active-weapon slot while it's equipped - see `Player.EquippedWeapon`. */
+/** A `Weapon` plus the icon the HUD shows in the active-weapon slot while it's equipped - see `Hero.EquippedWeapon`. */
 export type WeaponDef = {
     icon: string;
     shot: Weapon;
@@ -49,6 +49,8 @@ export type Projectile = {
     vx: number;
     vy: number;
     owner: ProjectileOwner;
+    /** The index of the hero who fired it - -1 for a monster's. */
+    hero: number;
     damage: number;
     sprite: string;
     spriteAngle?: number;
@@ -66,7 +68,7 @@ export const ProjectileSize = 6;
 export const ContactInset = 2;
 
 /** Fired from `from` (a centre) along `direction` (any length - it's normalised). */
-export function CreateProjectile(from: Vec2Like, direction: Vec2Like, shot: ShotSetup, owner: ProjectileOwner, tileSize: number, id = 0): Projectile {
+export function CreateProjectile(from: Vec2Like, direction: Vec2Like, shot: ShotSetup, owner: ProjectileOwner, tileSize: number, id = 0, hero = -1): Projectile {
     const length = Math.sqrt(direction.x * direction.x + direction.y * direction.y) || 1;
     return {
         id,
@@ -77,6 +79,7 @@ export function CreateProjectile(from: Vec2Like, direction: Vec2Like, shot: Shot
         vx: (direction.x / length) * shot.speed,
         vy: (direction.y / length) * shot.speed,
         owner,
+        hero,
         damage: shot.damage,
         sprite: shot.sprite,
         spriteAngle: shot.spriteAngle,

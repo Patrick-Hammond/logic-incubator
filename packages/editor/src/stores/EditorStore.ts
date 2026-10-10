@@ -228,7 +228,8 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
                 { name: DataBrushName.PLAYER_START, colour: 0xfe3464, value: 0 },
                 { name: DataBrushName.COLLISION, colour: 0xffd166, value: 0 },
                 { name: DataBrushName.Z_INDEX, colour: 0x06d6a0, value: 0 },
-                { name: DataBrushName.PICKUP, colour: 0xf15bb5, value: DefaultPickupValue() }
+                { name: DataBrushName.PICKUP, colour: 0xf15bb5, value: DefaultPickupValue() },
+                { name: DataBrushName.EXIT, colour: 0x4cc9f0, value: 0 }
             ],
             layers: [],
             mouseButtonState: MouseButtonState.UP,

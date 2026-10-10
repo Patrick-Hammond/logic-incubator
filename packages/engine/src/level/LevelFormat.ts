@@ -23,12 +23,16 @@ import type { LightValue } from "./Lighting";
  * (their asset has no `pickup` in `AssetMetadata`); a tile that is one can be edited, via the same
  * popup, in its own `Brush.data` instead (see `ImplicitData.EffectivePickup`). Door locks work the
  * same way, but only as a tile's own value - there's no door data brush.
+ *
+ * `EXIT` marks a way out: the level is over the moment any hero stands on one (see `World`). It isn't
+ * drawn - paint stairs or a ladder there too.
  */
 export const enum DataBrushName {
     PLAYER_START = "player-start",
     COLLISION = "collision",
     Z_INDEX = "z-index",
-    PICKUP = "pickup"
+    PICKUP = "pickup",
+    EXIT = "exit"
 }
 
 /** A data brush's value - a number (`Z_INDEX`'s height), or a light's, spawner's, pickup's or door lock's settings. */

@@ -57,6 +57,7 @@ configuration files and plugin interface. For explanations, examples and workflo
 [Projectiles](#projectiles) ·
 [Player state](#player-state) ·
 [Encounter](#encounter) ·
+[World and heroes](#world-and-heroes) ·
 [Fixed step and seeded random](#fixed-step-and-seeded-random) ·
 [Views](#views) ·
 [Player input](#player-input)
@@ -1034,12 +1035,16 @@ does not fill `children`. Use it as an emitter's `parent` when there are many.
 | `LEVEL_LOADED` | `"levelloaded"` | - |
 | `LEVEL_CREATED` | `"levelCreated"` | - |
 | `CAMERA_MOVED` | `"cameraMoved"` | - |
-| `PLAYER_DAMAGED` | `"playerDamaged"` | `(damage, hitPointsLeft)` |
-| `PLAYER_DIED` | `"playerDied"` | - |
+| `PLAYER_DAMAGED` | `"playerDamaged"` | `(damage, hitPointsLeft, hero)` |
+| `PLAYER_DIED` | `"playerDied"` | `(hero)` - one hero fell; they drop their keys and the rest play on |
+| `ALL_PLAYERS_DIED` | `"allPlayersDied"` | - (every hero is down: the level is over and starts over) |
+| `LEVEL_COMPLETED` | `"levelCompleted"` | `(hero)` - a hero reached an `EXIT` cell: the level is over, every hero comes back for the next start |
 | `GAME_PAUSED` | `"gamePaused"` | - (`DungeonMain.Pause()` stopped play) |
 | `GAME_RESUMED` | `"gameResumed"` | - (`DungeonMain.Resume()` set it going again) |
-| `MONSTER_KILLED` | `"monsterKilled"` | `(type, x, y)` |
+| `MONSTER_KILLED` | `"monsterKilled"` | `(type, x, y, hero)` - `hero` is whose shot killed it (-1 for none) |
 | `SPAWNER_DESTROYED` | `"spawnerDestroyed"` | `(spawner)` |
+
+`hero` is always a hero's slot, from 0 - their place in `DungeonMainOptions.heroes`.
 
 ---
 
@@ -1056,51 +1061,64 @@ type PlayerSetup = {
     lightSpell?: LightSpell;                              // a mage-light they call up with the cast control; none if left out
 };
 
+type HeroSlot = {
+    input?: InputDevice;                                  // what they're played with (default DefaultInput: the keyboard, or the first gamepad without it)
+    sprite?: string;                                      // the animation they're drawn with, in place of player.sprite
+    lightSpell?: LightSpell | null;                       // null for none; left out, player.lightSpell
+};
+
 type DungeonMainOptions = {
-    player: PlayerSetup;
+    player: PlayerSetup;                                  // every hero's, unless their HeroSlot says otherwise
+    heroes?: () => ReadonlyArray<HeroSlot> | undefined;   // who plays, one slot per hero (hero 0 first), asked on every start and restart; none or empty: one hero
     level: () => LevelFile | undefined;                   // asked on every start and restart
     levelBundle?: () => string | undefined;               // the asset bundle the level plays in
-    playerSprite?: () => string | undefined;              // the animation to draw the player with, in place of player.sprite
-    playerLightSpell?: () => LightSpell | null | undefined;  // their light spell: null for none, undefined to keep player.lightSpell
-    overlay?: (main: DungeonMain) => GameComponent;       // drawn over the HUD and kept with the scene: a pause menu, a death screen
-    manualRestart?: boolean;                              // a death waits for Restart() instead of restarting by itself (default false)
+    playerSprite?: () => string | undefined;              // a lone hero's animation, in place of player.sprite (only without heroes)
+    playerLightSpell?: () => LightSpell | null | undefined;  // a lone hero's light spell: null for none, undefined to keep player.lightSpell (only without heroes)
+    overlay?: (main: DungeonMain) => GameComponent;       // drawn over the HUD and kept with the scene: a pause menu, an end-of-level screen
+    manualRestart?: boolean;                              // the end of a level waits for Restart() instead of starting over by itself (default false)
 };
 
 new DungeonMain(options: DungeonMainOptions)
 
 main.Effects: Effects | undefined       // where a game plays particle effects; undefined until the scene is initialised
 main.Paused: boolean                    // play is stopped by Pause()
-main.WaitingForRestart: boolean         // dead, with manualRestart: everything holds still until Restart()
-main.Pause(): void                      // nothing moves, shoots or spawns until Resume(); emits GAME_PAUSED. Does nothing before a level has started or while dead
+main.WaitingForRestart: boolean         // the level is over (everyone down, or a hero out), with manualRestart: everything holds still until Restart()
+main.Pause(): void                      // nothing moves, shoots or spawns until Resume(); emits GAME_PAUSED. Does nothing before a level has started or once it's over
 main.Resume(): void                     // emits GAME_RESUMED
-main.Restart(): void                    // starts the level over now (what happens by itself a moment after a death, without manualRestart)
+main.Restart(): void                    // starts over now, every hero on their feet, with whatever level() hands back (what happens by itself a moment after the end, without manualRestart)
 ```
 
 `overlay` is how a game puts its own UI over the dungeon without the engine knowing what it is: it is called once, when the scene initialises, and what it
 returns is attached above the HUD (shown, hidden and destroyed with the scene). It gets the scene so it can `Pause`, `Resume` and `Restart` it, and listens to
-`PLAYER_DIED` and the other events for the rest. `in-dungeons-we-dwell`'s `GameOverlay` is a pause menu (cancel while playing) and a death screen.
+`ALL_PLAYERS_DIED`, `LEVEL_COMPLETED` and the other events for the rest. `in-dungeons-we-dwell`'s `GameOverlay` is a pause menu (cancel while playing) and an
+end screen (YOU DIED or LEVEL CLEARED).
 
-`playerSprite` is asked for each time a level starts (on `LEVEL_CREATED`, before the player is reset): when it returns an animation
-name the player is drawn with that (`Player.SetSprite`), otherwise with `player.sprite`. It is how a game lets the player pick a character.
-`playerLightSpell` is asked at the same moment, for the light spell that character has (`Player.SetLightSpell`): `null` for none, a spell,
-or `undefined` to keep `player.lightSpell`.
+`heroes` is asked for each time a level starts (on `LEVEL_CREATED`): one `HeroSlot` per hero, so its length is the party's size. Each hero gets a
+`PlayerControl` for their `input`, and a `HeroView` drawn with their `sprite`. Without `heroes` (or when it returns `undefined` or an empty array)
+there is one hero, played with `DefaultInput`: `playerSprite` and `playerLightSpell` are asked for at the same moment, for the animation they're drawn
+with (`player.sprite` when it returns `undefined`) and their light spell (`null` for none, `undefined` to keep `player.lightSpell`). A game's character
+select hands its picks to the scene through these.
+
+With more than one hero, the party shares the screen: the world holds them within a span of each other (`World.SetLeash(PartySpan(view))`), and the
+camera frames the box round the living heroes, zooming out to fit them (`PartyZoom`, down to `MinPartyZoom`) - see [World and heroes](#world-and-heroes).
 
 Play runs in fixed steps of `StepSeconds` (1/60 s - see [Fixed step and seeded random](#fixed-step-and-seeded-random)), as many each
-display frame as its time calls for, and none after a step that stops play (the player dies). A step reads the player's controls
-(the scene's own `PlayerControl(0)`) and hands them to `Player.Step`, then, at the player's tile, opens doors (`Level.UpdateDoors`), updates
-the visible regions and collects pickups (`Player.ApplyPickup`), fires the shot they took, if any, and runs `Encounter.Update`. Then, once a
-frame, it places the player for drawing between their last two steps (`Player.Place(alpha)`), calls `Level.UpdateLights` with the seconds
-played so far and the lights that move - the torch the player carries (`Player.Light`), their mage-light while it's lit
-(`Player.SpellLight`), and every live shot with a `light`, keyed by the shot, all where they're drawn - and moves the camera: `SetZ` for the
-height under the player, `UpdateZoom`, and `Follow` where they're drawn (after the lights, since moving the camera draws the tiles; the pull
-is the same per second at any frame rate). Last it draws the figures (`EntityRenderer.Render(player, encounter, alpha)`) and the HUD.
-Each level start re-seeds the encounter's random numbers (`Encounter.Reset`).
+display frame as its time calls for, and none after a step that ends the level. A step reads every hero's controls (`PlayerControl.Get`, in slot
+order) and hands them to `World.Step`, which moves the heroes, opens doors, updates what's seen, collects pickups, fires and runs the `Encounter`. Then,
+once a frame, it places each hero for drawing between their last two steps (`HeroView.Place(alpha)`), calls `Level.UpdateLights` with the seconds
+played so far and the lights that move - each hero's carried torch (`HeroView.Light`) and mage-light while it's lit (`HeroView.SpellLight`), and every
+live shot with a `light`, keyed by the shot, all where they're drawn - and moves the camera: `SetZ` for the height under the first living hero,
+`UpdateZoom`, `ZoomForParty` and `Follow` the centre of the box round the living heroes where they're drawn (everyone, once all are down; after the
+lights, since moving the camera draws the tiles; the pull is the same per second at any frame rate). Last it draws the figures
+(`EntityRenderer.Render(views, encounter, alpha)`) and the HUD (`Hud.RenderHeroes`). Each level start re-seeds the encounter's random numbers
+(`World.Reset`, which calls `Encounter.Reset`).
 
-Lifecycle: `OnInitialise` builds the `Level`, attaches `Camera`, `TileMapView`, `Effects` (into the camera) and `Hud`, creates `Player`, `EntityRenderer` and
-`Encounter`, binds asset metadata (`BindAssetMetadata`) and listens for `LEVEL_CREATED` / `PLAYER_DIED`. `OnShow` and each restart
-(1.5 s after `PLAYER_DIED`, or when told to with `manualRestart`) call `Reload`: prepare the assets (`LevelAssets.Prepare` - refresh dev metadata, then
-`UseLevelBundle(levelBundle())`), then `Level.LoadLevel(level())` unless the scene was destroyed meanwhile. `OnDestroy` destroys the
-player, disposes the level and releases the level bundle (when `levelBundle` was given).
+Lifecycle: `OnInitialise` builds the `Level`, attaches `Camera`, `TileMapView`, `Effects` (into the camera) and `Hud`, creates the `EntityRenderer` and
+the `World`, binds asset metadata (`BindAssetMetadata`) and listens for `LEVEL_CREATED`, `ALL_PLAYERS_DIED` and `LEVEL_COMPLETED`. `OnShow` and each
+restart (1.5 s after the level ends, or when told to with `manualRestart`) call `Reload`: prepare the assets (`LevelAssets.Prepare` - refresh dev metadata,
+then `UseLevelBundle(levelBundle())`), then `Level.LoadLevel(level())` unless the scene was destroyed meanwhile - so after `LEVEL_COMPLETED` a game moves
+on by having `level` (and `levelBundle`) return the next one. On `LEVEL_CREATED` it resets the world for the slots `heroes` gives and keeps one
+`HeroView` per slot from level to level. `OnDestroy` destroys the hero views, disposes the level and releases the level bundle (when `levelBundle` was given).
 
 ---
 
@@ -1129,6 +1147,7 @@ type CollectedPickup = { value: PickupValue; sprite: string | null };    // spri
 | `regionData`, `boundaryRegionData`, `regions`, `visibleRegions` | | Region analysis; see below. |
 | `boundRect` | `Rectangle` | The map's bounds in cells. |
 | `playerStartPosition` | `Vec2Like \| undefined` | |
+| `exits` | `Vec2Like[]` | Every cell painted with the `exit` data brush - see `IsExit`. |
 | `spawners`, `pickups`, `depths` | | |
 
 | Method | Description |
@@ -1136,14 +1155,17 @@ type CollectedPickup = { value: PickupValue; sprite: string | null };    // spri
 | `LoadLevel(file: LevelFile): void` | Builds everything from a level file (and the metadata store). Unknown sprite names drop just their tiles, with a one-off warning. Emits `LEVEL_LOADED`. |
 | `Dispose(): void` | Stops animated tiles' sprites. |
 | `HeightAt(x, y): number` | |
-| `IsSolid(x, y): boolean` | A wall, a spawner, or anywhere off the map. Not a closed door - the player walks onto one to open it. |
-| `IsDoorClosed(x, y): boolean` | Whether the cell belongs to a door that is closed right now. Monsters can't enter one (their path and their movement both stop at it); the player can. A door with no sprite pair to swap never opens, so isn't in `doors` and doesn't count. |
+| `IsSolid(x, y): boolean` | A wall, a spawner, or anywhere off the map. Not a closed door - a hero walks onto one to open it. |
+| `IsFloor(x, y): boolean` | Open floor: in a region and not solid - not a wall, a door, a spawner or off the map. Where the party starts (`StartCells`) and what's dropped lands. |
+| `IsExit(x, y): boolean` | Whether the cell is a way out (an `exit` brush): a hero standing on one ends the level (`World`). |
+| `IsDoorClosed(x, y): boolean` | Whether the cell belongs to a door that is closed right now. Monsters can't enter one (their path and their movement both stop at it); the heroes can. A door with no sprite pair to swap never opens, so isn't in `doors` and doesn't count. |
 | `RemoveSpawner(spawner)` | Opens a destroyed spawner's cells. |
-| `IsDoorLocked(x, y, canOpen): boolean` | A closed door that doesn't open for the player (`canOpen(lockId)` says whether a lock does: it's unlocked, or they hold its key) - what their collider treats as a wall. A closed door that opens for them isn't: they walk onto it to open it. |
-| `CollectPickupsAt(x, y): CollectedPickup[]` | Collects and hides every pickup at the cell; the caller applies them. A pickup whose tile gives off light (a torch) takes its light with it: that baked light is switched off. |
+| `IsDoorLocked(x, y, canOpen): boolean` | A closed door that doesn't open for the heroes (`canOpen(lockId)` says whether a lock does: it's unlocked, or one of them holds its key - `World.TeamCanOpen`) - what their collider treats as a wall. A closed door that opens for them isn't: they walk onto it to open it. |
+| `CollectPickupsAt(x, y): CollectedPickup[]` | Collects and hides every pickup at the cell; the caller applies them. Called each step for each living hero's tile, in slot order, so the first there gets it. A pickup whose tile gives off light (a torch) takes its light with it: that baked light is switched off. |
+| `DropPickup(x, y, value: PickupValue, sprite): Vec2Like` | Puts a pickup down - a fallen hero's keys: on that cell, or the nearest open floor (`IsFloor`) when it's a door or a wall, so it can't be shut away. Drawn as `sprite` on the top tile layer (nothing is drawn for `null`); collected like any other. Returns the cell it landed on. |
 | `UpdateLights(time, moving)` | Rebuilds `lightGrid` for `time` seconds of play, with `moving: MovingLight[]` cast where they are now (`SceneLights.Update`). Call once a frame, before the level is drawn. |
-| `UpdateDoors(x, y, canOpen?)` | Opens/closes doors by the player's tile (call each step) - a door opens only if `canOpen(door.lockId)` (with none given, every door does - so with the player's keys, an unlocked door always does); bumps `doorVersion` for each that changes. |
-| `UpdateVisibleRegions(x, y)` | Recomputes which regions are reachable through open doors (call after `UpdateDoors`). |
+| `UpdateDoors(tiles: Vec2Like[], canOpen?)` | Opens/closes doors by the tiles the living heroes stand on (call each step): a door is open while any of them is in one of its cells and `canOpen(door.lockId)` (with none given, every door does - so with the team's keys, an unlocked door always does), and shut once the last leaves. One that's open stays open while anyone is in it, even if the key went with a hero who fell (`DoorOpens`). Bumps `doorVersion` for each that changes. |
+| `UpdateVisibleRegions(tiles: Vec2Like[])` | Recomputes which regions are reachable through open doors from any of these tiles - what one hero sees, all see (call after `UpdateDoors`). |
 | `IsCellVisible(x, y): boolean` | |
 
 ---
@@ -1153,7 +1175,7 @@ type CollectedPickup = { value: PickupValue; sprite: string | null };    // spri
 `@logic-incubator/engine/level/LevelFormat` - types and one enum; no runtime imports.
 
 ```ts
-const enum DataBrushName { PLAYER_START = "player-start", COLLISION = "collision", Z_INDEX = "z-index", PICKUP = "pickup" }
+const enum DataBrushName { PLAYER_START = "player-start", COLLISION = "collision", Z_INDEX = "z-index", PICKUP = "pickup", EXIT = "exit" }
 type DataBrushValue = number | LightValue | SpawnerValue | PickupValue | DoorLockValue;
 
 type Brush = {
@@ -1174,6 +1196,9 @@ type LevelFile = {
     levelData: { levelData: Brush[] };
 };
 ```
+
+`EXIT` marks a way out: the level is over the moment any hero stands on one (`LEVEL_COMPLETED`). It isn't drawn, so paint stairs or a ladder
+there too. A level with none has no way out but to fall.
 
 ---
 
@@ -1331,13 +1356,14 @@ Pure helpers behind `Level`; exported for tests and tooling.
 
 | Module | Exports |
 | --- | --- |
-| `level/Doors` | `FindDoorGroups(doorIds): Vec2Like[][]` (connected islands of door cells), `DoorFootprint(anchor, spriteSize, offset, tileSize): Vec2Like[]` (the cells a sprite drawn top-left on a cell covers) |
+| `level/Doors` | `FindDoorGroups(doorIds): Vec2Like[][]` (connected islands of door cells), `DoorFootprint(anchor, spriteSize, offset, tileSize): Vec2Like[]` (the cells a sprite drawn top-left on a cell covers), `DoorOpens(door, tiles, canOpen): boolean` (whether a door should be open with heroes on `tiles`: one of them is in its cells, and it's open already or `canOpen(door.lockId)` - so it never shuts on anyone) |
 | `level/Regions` | `type Region = { id; cells }`, `type RegionMap`, `FindRegions(...)` (connected walkable components), `RegionIdsTouching(...)` |
 | `level/ImplicitData` | `EffectiveLight(brush, meta)`, `EffectiveSpawner(brush, meta)` (a placement's override else the sprite's default), `FindImplicitPlacements(...)` (collision, `lightBlocks`, doors, lights, spawners, pickups), `OrphanedExplicitData(...)` |
 | `level/MapBounds` | `type MapBounds`, `FindMapBounds(brushes)` |
-| `level/TileCollision` | `default class TileCollision` - `new TileCollision(level, blocked?)`; `TestX(from, dir)`, `TestY(from, dir)`: the corrected position on a collision, else `null`. `blocked(x, y)` names extra cells that count as solid for that collider (asked live) - `Encounter` gives its monsters' collider the closed doors, while the player's has none |
+| `level/TileCollision` | `default class TileCollision` - `new TileCollision(level, blocked?)`; `TestX(from, dir)`, `TestY(from, dir)`: the corrected position on a collision, else `null`. `blocked(x, y)` names extra cells that count as solid for that collider (asked live) - `Encounter` gives its monsters' collider the closed doors, `World` gives the heroes' the closed doors the team has no key for (`World.IsLockedOut`) |
 | `view/helpers/PlayerMovement` | `MoveDamping`, `CentreTile(position)`, `BoxCentre(position)`, `ResolveMove(...)`, `interface MoveCollider` |
 | `view/helpers/CameraWindow` | `ViewOrigin(centre, baseWidth, baseHeight, zScale)` |
+| `view/helpers/PartyFrame` | How the camera frames a party: `MinPartyZoom` (0.5 - zoomed out to half the usual), `PartyMargin` (3 tiles), `type PartyBox = { minX, minY, maxX, maxY }`, `PartyBounds(positions, out?): PartyBox` (round the heroes' top-lefts, in pixels), `PartyZoom(box, view): number` (1 down to `MinPartyZoom`: what fits the box, each hero's tile and the margin into a view `view` tiles across at zoom 1), `PartySpan(view)` (the furthest apart, in tiles, a party may spread so it still fits at `MinPartyZoom` - what `World.SetLeash` is given) |
 | `view/helpers/SpriteDrawOffset` | `SpriteDrawPosition(position, viewOffsetTiles, texture)` (feet on the bottom of a monster's one-tile box, centred across it) |
 
 ---
@@ -1353,10 +1379,10 @@ interface MonsterDef {
     idle: string;               // animation standing still (also its picture in the editor's spawner dialog)
     run: string;                // animation while moving (same as idle for a single loop)
     hitPoints: number;
-    speed: number;              // a multiple of the player's
+    speed: number;              // a multiple of a hero's
     contactDamage: number;      // half-hearts per touch; 0 = harmless
     contactCooldown: number;    // seconds between touches from one monster
-    ranged?: Weapon;            // shoots at a visible player within `range` tiles
+    ranged?: Weapon;            // shoots at the nearest hero within `range` tiles, from where the heroes can see
     behaviour: () => IMonsterBehaviour;   // called once per monster spawned
 }
 
@@ -1379,8 +1405,8 @@ interface IMonsterRoster<T extends MonsterType = MonsterType> {
 type MonsterContext = {
     position: Vec2Like;       // top-left of the monster's one-tile box, pixels
     tile: Vec2Like;           // the cell under its centre
-    player: Vec2Like;
-    flow: IFlowField;         // walking distances to the player
+    player: Vec2Like;         // the nearest living hero's top-left
+    flow: IFlowField;         // walking distances to the nearest living hero
     tileSize: number;
     dt: number;               // seconds since the last step
     random: () => number;     // [0, 1)
@@ -1388,15 +1414,17 @@ type MonsterContext = {
 interface IMonsterBehaviour { Steer(context: MonsterContext): Vec2Like }   // length 0 (still) .. 1 (full speed)
 
 class Chase implements IMonsterBehaviour
-class Wander implements IMonsterBehaviour       // new Wander({ aggroRange = 5, turnEvery = 1.5, pace = 0.5 }): amble, then chase for good once the player is within aggroRange tiles' walk
+class Wander implements IMonsterBehaviour       // new Wander({ aggroRange = 5, turnEvery = 1.5, pace = 0.5 }): amble, then chase for good once a hero is within aggroRange tiles' walk
 class KeepDistance implements IMonsterBehaviour // new KeepDistance({ range = 5, slack = 1.5 }): hold ~range tiles' walk away
-FollowFlow(context): Vec2Like                   // down the flow field (straight at the player within a tile)
+FollowFlow(context): Vec2Like                   // down the flow field (straight at `player` within a tile)
 Toward(from, to): Vec2Like                      // unit vector
 Separation(index, positions, radius): Vec2Like  // a push away from neighbours so a crowd spreads out
 ```
 
 `@logic-incubator/engine/level/entities/FlowField`: `UNREACHABLE = -1`; `interface IFlowField { DistanceAt(x, y); NextCell(x, y); AwayCell(x, y) }`;
-`default class FlowField implements IFlowField` - `new FlowField(width, height, isSolid, isHeightGap?)`, `MarkDirty()`, `Update(targetX, targetY): boolean`.
+`default class FlowField implements IFlowField` - `new FlowField(width, height, isSolid, isHeightGap?)`, `MarkDirty()`, `UpdateTargets(targets: Vec2Like[]): boolean`
+(searches again when any target has changed cell or it was marked dirty, from every target at once, so each cell holds the walk to the nearest;
+a solid or off-map target is left out, and with none every cell is `UNREACHABLE`), `Update(targetX, targetY): boolean` (`UpdateTargets` with one).
 
 ## Spawners
 
@@ -1408,7 +1436,7 @@ type SpawnerValue = {
     interval: number;            // seconds between spawns
     maxAlive: number;            // cap on this spawner's live monsters
     total: number;               // monsters before going dormant; 0 = unlimited
-    activationRange: number;     // only while the player is within this many tiles; 0 = always
+    activationRange: number;     // only while a hero is within this many tiles' walk; 0 = always
     hitPoints: number;           // damage to destroy it; 0 = indestructible
 };
 type Spawner = Vec2Like & { value: SpawnerValue; cells: Vec2Like[] };
@@ -1431,9 +1459,9 @@ type ProjectileOwner = "player" | "monster";
 type ShotSetup = { sprite: string; spriteAngle?: number; speed: number; damage: number; range: number; light?: LightValue };   // speed px per step (a 60th of a second); range in tiles; light: it glows as it flies
 type Weapon = ShotSetup & { cooldown: number };            // seconds between shots
 type WeaponDef = { icon: string; shot: Weapon };           // icon = the HUD weapon slot
-type Projectile = { id, x, y, px, py, vx, vy, owner, damage, sprite, spriteAngle?, range, dead, light? };   // x, y its centre; px, py where it was before the last step
+type Projectile = { id, x, y, px, py, vx, vy, owner, hero, damage, sprite, spriteAngle?, range, dead, light? };   // x, y its centre; px, py where it was before the last step; hero: the slot of the hero who fired it, -1 for a monster's
 
-CreateProjectile(from, direction, shot, owner, tileSize, id = 0): Projectile                     // px, py start at from
+CreateProjectile(from, direction, shot, owner, tileSize, id = 0, hero = -1): Projectile          // px, py start at from
 StepProjectile(projectile, dt, isBlocked, tileSize): Vec2Like | null    // the blocking cell it hit, else null; sets px, py first
 ProjectileBox(p), ContactBox(position, tileSize), SpriteBox(position, size, tileSize), Overlaps(a, b)
 ProjectileSize = 6;  ContactInset = 2
@@ -1458,7 +1486,7 @@ Pure modules under `level/entities/`:
 
 ## Encounter
 
-`@logic-incubator/engine/Encounter` - `default class Encounter` (no pixi). Everything alive besides the player.
+`@logic-incubator/engine/Encounter` - `default class Encounter` (no pixi). Everything alive besides the heroes: monsters go for whichever living hero is nearest.
 
 ```ts
 new Encounter(level: EncounterLevel, options: EncounterOptions)
@@ -1474,14 +1502,90 @@ type EncounterOptions = {
 | --- | --- |
 | `monsters: Monster[]`, `projectiles: Projectile[]`, `spawners: SpawnerState[]`, `spawnerFlash: Map` | State. Each monster and shot has an `id`, unique in the encounter until the next `Reset`, and a monster's `previous` is where its `position` was before the last step. |
 | `Flow: FlowField` | Walking distances as of the last `Update`. |
-| `Reset(seed?)` | Starts over from the level's spawners (call on every `LEVEL_CREATED`), with ids from 1 and its random numbers started again from `seed` (a new one if left out), unless the options brought their own `random`. The same seed, level and player moves play out the same. |
+| `Reset(seed?, heroes = 1)` | Starts over from the level's spawners (call on every `LEVEL_CREATED` - `World.Reset` does), with ids from 1 and its random numbers started again from `seed` (a new one if left out), unless the options brought their own `random`. The same seed, level and heroes' moves play out the same. Monsters' and spawners' hit points are multiplied by `PartyToughness(heroes)`, rounded up. |
 | `Seed` | What the random numbers started from at the last `Reset`. |
-| `Fire(from, direction, shot, owner)` | Adds a projectile. |
-| `Update(dt, seconds, player: EncounterPlayer)` | One step: `dt` in frames (movement; 1 at 60 a second), `seconds` for timers. |
+| `Fire(from, direction, shot, owner, hero = -1)` | Adds a projectile; a hero's shot names them by slot (`hero`), which `MONSTER_KILLED` passes on. Heroes' shots pass through each other - there's no friendly fire. |
+| `Update(dt, seconds, players: EncounterPlayer[])` | One step: `dt` in frames (movement; 1 at 60 a second), `seconds` for timers. Only the living among `players` count: the flow field leads to the nearest of them, each monster steers for (and faces, and shoots at) the nearest in a straight line, a touch or a shot hurts the first it reaches, and the dead take no more hits. With none alive, nothing moves. |
 
-Constants `MaxMonsters = 150`, `HitFlashTime = 0.15`. `EncounterLevel` and `EncounterPlayer` are the narrow interfaces it needs of `Level` and `Player`.
+Constants `MaxMonsters = 150`, `HitFlashTime = 0.15`, `ToughnessPerHero = 0.5`; `PartyToughness(heroes): number` - `1 + ToughnessPerHero * (heroes - 1)`:
+x1 for one hero, x1.5 for two, x2.5 for four - more bows for the same crowd, without more monsters than `MaxMonsters`. `EncounterLevel` and
+`EncounterPlayer` are the narrow interfaces it needs of `Level` and of a hero (`Hero`); `EncounterPlayer.Index` is the hero's slot, named in
+`PLAYER_DAMAGED` and `PLAYER_DIED`.
 
-**Closed doors.** A monster can't enter a closed door (`Level.IsDoorClosed`). The flow field treats those cells as blocked, so a monster behind one has no path to the player (`DistanceAt` is `UNREACHABLE`: chasers hold still, wanderers keep wandering, and a spawner with an `activationRange` stays inactive); and the monsters' collider treats them as solid, so one steered at a door by a wander heading or another monster's push is stopped too. The field is recomputed when `Level.doorVersion` changes, not just when the player changes cell. Spawn cells are never closed-door cells. A monster a door shuts on (its box overlaps a closed-door cell) is walked out of it, whichever side it's nearer, using a collider that doesn't count the door's cells as solid - it can neither be trapped in the door nor slip through to the player. The player is unaffected - standing in a door is what opens it, and while they do the monsters can come through.
+**Closed doors.** A monster can't enter a closed door (`Level.IsDoorClosed`). The flow field treats those cells as blocked, so a monster behind one has no path to a hero (`DistanceAt` is `UNREACHABLE`: chasers hold still, wanderers keep wandering, and a spawner with an `activationRange` stays inactive); and the monsters' collider treats them as solid, so one steered at a door by a wander heading or another monster's push is stopped too. The field is recomputed when `Level.doorVersion` changes, not just when a hero changes cell. Spawn cells are never closed-door cells. A monster a door shuts on (its box overlaps a closed-door cell) is walked out of it, whichever side it's nearer, using a collider that doesn't count the door's cells as solid - it can neither be trapped in the door nor slip through to the heroes. The heroes are unaffected - standing in a door is what opens it, and while one does the monsters can come through.
+
+---
+
+## World and heroes
+
+Everything that plays out in a level, for any number of heroes, in pure modules under `sim/` (no pixi). `DungeonMain` owns the world, feeds it
+each hero's input every step and draws it; a game rarely touches it directly.
+
+`@logic-incubator/engine/sim/World` - `default class World`:
+
+```ts
+interface WorldLevel extends EncounterLevel {   // the parts of Level a world uses
+    playerStartPosition; IsFloor(x, y); IsExit(x, y); IsDoorLocked(x, y, canOpen); UpdateDoors(tiles, canOpen);
+    UpdateVisibleRegions(tiles); CollectPickupsAt(x, y); DropPickup(x, y, value, sprite);
+}
+
+new World(level: WorldLevel, options: EncounterOptions)
+
+world.encounter: Encounter
+world.Heroes: ReadonlyArray<Hero>      // every hero, in slot order, the fallen included
+world.Living: Hero[]                   // those still standing, in slot order
+world.AllDown: boolean                 // every hero has fallen - nothing steps until the next Reset
+world.Completed: boolean               // a hero reached an exit - nothing steps until the next Reset
+world.Reset(setup: Pick<PlayerSetup, "hitPoints" | "weapons">, lightSpells: (LightSpell | undefined)[], seed?): void
+world.SetLeash(span: { width; height } | null): void   // in tiles; null lets the party roam
+world.TeamCanOpen(lockId): boolean     // unlocked, or a living hero carries its key
+world.IsLockedOut(x, y): boolean       // a closed door the team can't open - a wall to every hero
+world.Step(inputs: (IPlayerInput | undefined)[], dt, seconds): void
+
+WarpDistance = 8                                              // tiles
+WarpTarget(hero, others: Hero[]): Hero | null                 // the nearest of others, if all are at least WarpDistance away
+StartCells(start, count, isFloor): Vec2Like[]                 // start, then the open floor nearest it by steps (up to 6), the rest sharing start
+```
+
+`Reset` (call on every `LEVEL_CREATED`) makes one hero per entry of `lightSpells`, each with that spell, if any, and `setup`'s hit points and
+weapons, on the cells `StartCells` gives round the level's `playerStartPosition` (it throws without one), and resets the encounter with the party's
+size (`Encounter.Reset(seed, heroes)`).
+
+`Step` runs one step of play, in this order:
+
+1. Each living hero, by slot, moves with `inputs[slot]` (standing still without one). One holding the warp control first jumps to the nearest other
+   living hero, if every one of them is at least `WarpDistance` tiles away. With a leash, the others' positions bound where they can go
+   (`LeashBoxFor`) and the edge stops them like a wall (`Leashed`).
+2. Doors open and shut by where the living heroes stand (`UpdateDoors`, with `TeamCanOpen`), and the regions they can see are recomputed together.
+3. Each picks up what's under them, in slot order, so the first there gets it.
+4. A hero on an exit ends the level: `Completed` is set, `LEVEL_COMPLETED(hero)` emitted, and nothing else happens this step.
+5. Each fires the shot they took, if any (`Encounter.Fire` with their slot), and the encounter steps with the living heroes.
+6. A hero who fell this step drops every key they carried (`Level.DropPickup`), for the others to pick up. Once none is left standing, `AllDown` is
+   set and `ALL_PLAYERS_DIED` emitted.
+
+Keys are the team's: a door opens for everyone if any living hero holds its key, and an open door never shuts on a hero in it, even if the key
+went with a hero who fell. There is no hero-to-hero collision.
+
+`@logic-incubator/engine/sim/Hero` - `default class Hero implements EncounterPlayer`: one hero's `PlayerState` and what can happen to it.
+
+```ts
+new Hero(index: number, setup: Pick<PlayerSetup, "hitPoints" | "weapons">)
+
+hero.Index                    // their slot, from 0
+hero.State: Readonly<PlayerState>
+hero.Alive, Position, Centre, Tile, FacingX, Health, Gold, Inventory, Keys, EquippedWeapon, Spell
+hero.HasKeyFor(lockId): boolean
+hero.Reset(startTile, lightSpell?): void      // a fresh PlayerState there
+hero.WarpTo(position): void                   // there at once (a top-left, in pixels) - nothing drawn between - their mage-light with them
+hero.Step(input, dt, seconds, collider: MoveCollider): void   // StepPlayer
+hero.ApplyPickup(pickup), TakeShot(): Vec2Like | null, Damage(n): boolean
+hero.DropKeys(): HeldKey[]                    // every key they carry, leaving them none
+```
+
+`@logic-incubator/engine/sim/Leash` - the screen's edge on a shared screen: `type LeashBox = { minX, minY, maxX, maxY }` (where a hero's top-left
+may go, in pixels); `LeashBoxFor(others, span): LeashBox | null` (so that no one in `others` is further than `span` pixels away across or down;
+null with no others); `Leashed(collider, box): MoveCollider` (`collider` with the box's edges as walls too: a hero stops at an edge on the axis they
+push against it and slides along the other; one already outside can't go further out, and no gap is lined up through an edge).
 
 ---
 
@@ -1511,12 +1615,13 @@ same seed on any machine (mulberry32); `NewSeed()` - a fresh 32-bit seed, differ
 
 | Class | Module | Summary |
 | --- | --- | --- |
-| `Camera extends GameComponent` | `view/Camera` | `ViewRect`, `Scale`, `ScaledTileSize`, `Zoom`, `BaseViewWidth/Height`, `CurrentZ`, `EffectiveZoom`; `Move(x, y)`, `CenterOn(x, y)`, `Follow(pixelX, pixelY, amount)`, `SetZ(z)`, `UpdateZoom(dt)`. Emits `CAMERA_MOVED`. `new Camera(cameraControl?)`. |
+| `Camera extends GameComponent` | `view/Camera` | `ViewRect`, `Scale`, `ScaledTileSize`, `Zoom`, `BaseViewWidth/Height`, `CurrentZ`, `EffectiveZoom` (the height zoom times `PartyZoom` - what the views scale by), `PartyZoom` (1, or less while a party is spread out); `Move(x, y)`, `CenterOn(x, y)`, `Follow(pixelX, pixelY, amount)`, `SetZ(z)`, `UpdateZoom(dt)`, `ZoomForParty(target, frames)` (eases `PartyZoom` towards `target` - from `PartyFrame.PartyZoom` - over `frames` 60ths of a second). Emits `CAMERA_MOVED`. `new Camera(cameraControl?)`. |
 | `TileMapView extends GameComponent` | `view/TileMap` | `new TileMapView(level, camera)`. Builds the tile layers, lit and banded by height, plus, in drawing order, the `GlowsLayer` (`"glows"`), `EntitiesLayer` (`"entities"`), `OrbsLayer` (`"orbs"`) and `ProjectilesLayer` (`"projectiles"`); `TileGD8Rotation(rotation, scaleX, scaleY)`. Each tile is drawn with its cell's corner light (`CellCornerLight`); a tile taller than a cell (a door, a statue) stands up, so like a figure it takes `FootLight` along its foot. A tile that gives off light gets a glow over its flame in its own band (`view/helpers/Glow`), at its light's strength that frame. Emits `LEVEL_CREATED`. |
-| `Player` | `view/Player` | A `PlayerState` and how it looks; an `EncounterPlayer`. `new Player(collision, level, setup)`; `Position`, `Centre`, `Tile` (as of the last step), `DrawPosition` (where they're drawn this frame, between their last two steps), `Texture`, `FacingX`, `Health`, `Gold`, `Inventory`, `Keys`, `EquippedWeapon`; `HasKeyFor(lockId)`, `IsLockedOut(x, y)` (a closed door they've no key for - what `DungeonMain` gives their collider); `Reset(startPosition)` (a fresh `PlayerState` there; throws if the level has no player start), `SetSprite(animation)` (draw the player with another animation; a no-op for the one already in use), `SetLightSpell(spell)` (from the next `Reset`; null or undefined for none), `Step(input: IPlayerInput, dt, seconds)` (one step with that input - `StepPlayer`), `Place(alpha)` (places them, and their mage-light, for drawing `alpha` of the way through their last step; call each frame after the steps), `ApplyPickup(pickup)`, `TakeShot(): Vec2Like \| null`, `Damage(n): boolean`, `Destroy()`. Their lights, as `MovingLight`s for `Level.UpdateLights` (null when they have none), where they're drawn: `Light` (a torch they picked up, at their centre, dimming as it burns out) and `SpellLight` (their mage-light while it's lit, over the floor just behind them); `OrbPosition` is where the mage-light is drawn, floating and bobbing, and `Spell` its `LightSpellState`. |
+| `HeroView` | `view/HeroView` | How one hero looks. `new HeroView(hero: Hero, animation)`; `Hero` (the hero it draws), `DrawPosition` (where they're drawn this frame, between their last two steps), `Texture`; `Reset(hero)` (point it at a new level's hero - `DungeonMain` keeps one view per slot from level to level), `SetSprite(animation)` (draw them with another animation; a no-op for the one already in use), `Place(alpha)` (places them, and their mage-light, for drawing `alpha` of the way through their last step; call each frame after the steps), `Destroy()`. Their lights, as `MovingLight`s for `Level.UpdateLights` (null when they have none, and always once they've fallen), where they're drawn: `Light` (a torch they picked up, at their centre, dimming as it burns out) and `SpellLight` (their mage-light while it's lit, over the floor just behind them); `OrbPosition` is where the mage-light is drawn, floating and bobbing. |
 | `Effects extends GameComponent` | `view/Effects` | `new Effects(camera)`; `Play(art, config, x, y): Emitter \| undefined` starts a particle effect at a position in world pixels (`art`: a sprite or animation name, `config`: an `EmitterConfig` or `OldEmitterConfig`; `undefined` after a one-off warning when `art` isn't loaded). Its layer sits in the camera root above the entities and shots, placed every frame like the entities layer (`view/helpers/EffectsPlacement`), and goes back on top on `LEVEL_CREATED`, which also drops the level's effects. Emitters update from `Tick` (only while shown); a finished one (not emitting, no particles) is destroyed, a continuous one runs until `emit = false`. `DungeonMain` attaches it - use `main.Effects`. |
-| `Hud extends GameComponent` | `view/Hud` | `new Hud(setup.hearts?)`; `Render(health, gold, weaponIcon, inventory, keys, spell?)` (`spell`: the player's `LightSpellState`, shown under the keys as a bar - the skin's `mp` bar, if it has one - and READY, LIT or RECHARGING with the seconds left; null or left out hides it). Built from the UI kit (a `UiPanel`, a `UiIconRow` of hearts, `UiItemSlot`s and `UiInventoryGrid`s, `UiText`) in the skin of the loaded `ui` bundle - the game must load it first. Hearts are the game's own pictures when `setup.hearts` gives them (enlarged 3x), else the skin's. The keys panel shows each key's sprite and its id. Warns once per missing sprite. |
-| `EntityRenderer` | `view/EntityRenderer` | `new EntityRenderer(camera, level)`; `Reset()` (call on `LEVEL_CREATED`), `Render(player, encounter, alpha = 1)` (the player where `Player.Place` put them; monsters and shots `alpha` of the way through their last step). Draws a glow under the figures for the player's torch and each glowing shot, and the mage-light - a glow with a bright core - over them. |
+| `Hud extends GameComponent` | `view/Hud` | `new Hud(setup.hearts?)`; `RenderHeroes(heroes)` (every hero, in slot order, the fallen included: one gets the lone hero's panel, as `Render`; a party gets a `HudHeroRow` each, spread down the panel, and the team's keys at the bottom - every key any of them carries); `Render(health, gold, weaponIcon, inventory, keys, spell?)` (the lone hero's panel: hearts, gold, weapon, inventory, keys and `spell`, their `LightSpellState`, shown under the keys as a bar - the skin's `mp` bar, if it has one - and READY, LIT or RECHARGING with the seconds left; null or left out hides it). Built from the UI kit (a `UiPanel`, a `UiIconRow` of hearts, `UiItemSlot`s and `UiInventoryGrid`s, `UiText`) in the skin of the loaded `ui` bundle - the game must load it first. Hearts are the game's own pictures when `setup.hearts` gives them (enlarged 3x, 2x in a party's rows), else the skin's. The keys panel shows each key's sprite and its id. Warns once per missing sprite. |
+| `HudHeroRow extends Container` | `view/HudHeroRow` | One hero's row when a party plays: PLAYER n (and DOWN, the row dimmed, once they've fallen) and their hearts, their weapon slot, gold and light spell bar, and a strip of the items they carry. `new HudHeroRow(theme, index, rowWidth, heartTextures?)`, `Render(hero: HudHero)` (redraws only what changed), `static Height(theme)`. Also exports `type HudHero` (what a row reads of a `Hero`), `SpellStatusText(spell)`, `FitScale(texture, box)` and `TextureOf(name)`, which `Hud` shares. |
+| `EntityRenderer` | `view/EntityRenderer` | `new EntityRenderer(camera, level)`; `Reset()` (call on `LEVEL_CREATED`), `Render(heroes: HeroView[], encounter, alpha = 1)` (each hero where their view was last `Place`d - a fallen one faint, a ghost where they fell; monsters and shots `alpha` of the way through their last step). Draws a glow under the figures for each hero's torch and each glowing shot, and the mage-lights - a glow with a bright core - over them. |
 | `GlowLayer extends Container` | `view/GlowLayer` | Glows added onto what's beneath them, from a pool of sprites: `Begin()`, `Add(x, y, look, pixelsPerTile)` per glow, `End()`. `CreateGlowTexture()` makes the soft white texture they're drawn with (the caller destroys it). |
 | `Glow` | `view/helpers/Glow` | Pure: `GlowTextureSize`, `GlowRadius` (1.25 tiles), `GlowStrength` (0.3), `GlowFlameY` (0.3 - a lit tile's glow sits this far down its art), `OrbCoreRadius`; `GlowPixels(size)` (premultiplied white, fading like `LightFalloff`), `type GlowLook = { tint, alpha, radius }`, `LookOfGlow(rgb, scale, out)` (the light's colour at full saturation, stronger the brighter it is, swelling a little as it flickers), `LookOfOrbCore(rgb, scale, out)` (small, pale and nearly opaque). |
 
@@ -1529,14 +1634,21 @@ interface IPlayerInput {
     direction: Vec2;      // movement
     firing: boolean;      // Space, or the right stick pushed
     aimX: number;         // the right stick's horizontal component (0 from keyboard): sets facing
-    casting: boolean;     // L, or the gamepad's Y (top face) button: calls up the player's light spell
+    casting: boolean;     // L, or the gamepad's Y (top face) button: calls up the hero's light spell
+    warping?: boolean;    // K, or the gamepad's X (left face) button: a hero far from the rest of the party joins the nearest (see World)
 }
-new PlayerControl(playerId: number);   Get(): IPlayerInput        // a shared object
+type InputDevice = { keyboard?: boolean; pad?: number };   // the keyboard, a gamepad by its browser index (from 0), or both
+const DefaultInput: InputDevice = { keyboard: true, pad: 0 };
+
+new PlayerControl(device: InputDevice = DefaultInput);   Get(): IPlayerInput        // a shared object, refilled
 ```
 
-`DungeonMain` owns the `PlayerControl` and hands what it reads to `Player.Step` each step; the player never reads a device itself.
+`DungeonMain` makes one `PlayerControl` per hero, for their `HeroSlot.input`, and hands what each reads to `World.Step` every step; no hero
+reads a device itself.
 
-Keyboard: arrows or WASD, Space, L. Gamepad (only when no key is down): left stick moves, right stick fires/aims, Y casts.
+Keyboard: arrows or WASD, Space, L, K. Gamepad: left stick moves, right stick fires/aims, Y casts, X warps. A device with both reads the gamepad
+only while no key is down. Give each couch player their own device - `{ keyboard: true }` for one, `{ pad: n }` for each of the others - so no
+two read the same one.
 `@logic-incubator/engine/input/StickInput`: `IsStickPushed(stick: Vec2Like | null): boolean` - a stick at rest is non-null but zero.
 
 ---

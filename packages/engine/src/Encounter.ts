@@ -1,6 +1,6 @@
 /**
- * Everything alive in a level besides the player: spawners producing monsters,
- * monsters hunting the player, and everyone's shots. `DungeonMain` runs it one
+ * Everything alive in a level besides the heroes: spawners producing monsters,
+ * monsters hunting the nearest hero, and everyone's shots. `DungeonMain` runs it one
  * step at a time; `EntityRenderer` draws it. No pixi in here - events go out
  * through an injected `emit`, sprite sizes come in through `sizeFor` - so it
  * runs under the plain node test runner too (see Encounter.test.ts).
@@ -22,6 +22,17 @@ import { BoxCentre, CentreTile, ResolveMove } from "./view/helpers/PlayerMovemen
 
 /** Most monsters alive at once, across every spawner - spawners wait while the level is at it. */
 export const MaxMonsters = 150;
+/** How much tougher monsters and spawners are for each hero past the first - see `PartyToughness`. */
+export const ToughnessPerHero = 0.5;
+
+/**
+ * What monsters' and spawners' hit points are multiplied by for a party of `heroes` (rounded up): 1 for one,
+ * half as much again for each more - more heroes bring more bows, so the same crowd takes longer to cut
+ * down, without more monsters on the map than `MaxMonsters`.
+ */
+export function PartyToughness(heroes: number): number {
+    return 1 + ToughnessPerHero * Math.max(0, heroes - 1);
+}
 /** Seconds a monster or spawner shows it's been hit. */
 export const HitFlashTime = 0.15;
 /** How close (px) monsters get before pushing each other apart - see `Separation`. */
@@ -42,8 +53,10 @@ export interface EncounterLevel {
     RemoveSpawner(spawner: Spawner): void;
 }
 
-/** The parts of `Player` an encounter uses. */
+/** The parts of a hero (see `Hero`) an encounter uses. */
 export interface EncounterPlayer {
+    /** Which hero it is: their slot, from 0 - named in the events about them. */
+    readonly Index: number;
     readonly Position: Vec2Like;
     readonly Centre: Vec2Like;
     readonly Tile: Vec2Like;
@@ -101,6 +114,8 @@ export default class Encounter {
     private escapeCollision: TileCollision;
     private random: () => number;
     private seed = 0;
+    /** What hit points are multiplied by, for the party's size - see `PartyToughness`. */
+    private toughness = 1;
     /** The id the next monster or shot gets. */
     private nextId = 1;
     private positions: Vec2Like[] = [];
@@ -117,17 +132,23 @@ export default class Encounter {
     /**
      * Starts over from the level's spawners, as just loaded. Call on every `LEVEL_CREATED` - there's nothing to
      * fight until the first. Its random numbers start again from `seed` (a new one if left out), so the same seed,
-     * level and players' moves play out the same - unless the options brought their own `random`.
+     * level and players' moves play out the same - unless the options brought their own `random`. Monsters and
+     * spawners are as tough as a party of `heroes` calls for (see `PartyToughness`).
      */
-    Reset(seed: number = NewSeed()): void {
+    Reset(seed: number = NewSeed(), heroes = 1): void {
         this.seed = seed;
+        this.toughness = PartyToughness(heroes);
         if (!this.options.random) {
             this.random = SeededRandom(seed);
         }
         this.nextId = 1;
         this.monsters = [];
         this.projectiles = [];
-        this.spawners = this.level.spawners.map(CreateSpawnerState);
+        this.spawners = this.level.spawners.map(spawner => {
+            const state = CreateSpawnerState(spawner);
+            state.hitPoints = Math.ceil(state.hitPoints * this.toughness);
+            return state;
+        });
         this.spawnerFlash.clear();
         this.doorVersion = this.level.doorVersion;
         this.flow = new FlowField(
@@ -198,29 +219,36 @@ export default class Encounter {
         return this.seed;
     }
 
-    /** Walking distances to the player, as of the last `Update`. */
+    /** Walking distances to the nearest living hero, as of the last `Update`. */
     get Flow(): FlowField {
         return this.flow;
     }
 
-    /** Fires a shot from `from` (a centre, in pixels) along `direction`. */
-    Fire(from: Vec2Like, direction: Vec2Like, shot: ShotSetup, owner: ProjectileOwner): void {
-        this.projectiles.push(CreateProjectile(from, direction, shot, owner, TileSize, this.nextId++));
+    /** Fires a shot from `from` (a centre, in pixels) along `direction` - a hero's names them by `hero`, their index. */
+    Fire(from: Vec2Like, direction: Vec2Like, shot: ShotSetup, owner: ProjectileOwner, hero = -1): void {
+        this.projectiles.push(CreateProjectile(from, direction, shot, owner, TileSize, this.nextId++, hero));
     }
 
-    /** One step of play: `dt` in frames (which movement is tuned to - 1 at 60 a second), `seconds` for timers. */
-    Update(dt: number, seconds: number, player: EncounterPlayer): void {
-        const tile = player.Tile;
+    /**
+     * One step of play: `dt` in frames (which movement is tuned to - 1 at 60 a second), `seconds` for timers.
+     * `players` are the heroes; only the living count - monsters go for whichever is nearest, and a dead one
+     * takes no more hits. With none alive, nothing moves.
+     */
+    Update(dt: number, seconds: number, players: ReadonlyArray<EncounterPlayer>): void {
+        const living = players.filter(p => !IsDead(p.Health));
+        if (!living.length) {
+            return;
+        }
         if (this.level.doorVersion !== this.doorVersion) {
-            // A door opened or closed: which cells monsters can cross changed, even if the player hasn't left their cell.
+            // A door opened or closed: which cells monsters can cross changed, even if no hero has left their cell.
             this.doorVersion = this.level.doorVersion;
             this.flow.MarkDirty();
         }
-        this.flow.Update(tile.x, tile.y);
+        this.flow.UpdateTargets(living.map(p => p.Tile));
 
         this.StepSpawners(seconds);
-        this.StepMonsters(dt, seconds, player);
-        this.StepProjectiles(dt, player);
+        this.StepMonsters(dt, seconds, living);
+        this.StepProjectiles(dt, living);
 
         this.spawnerFlash.forEach((time, state) => {
             if (time <= seconds) {
@@ -263,7 +291,7 @@ export default class Encounter {
             position: new Vec2(cell.x * TileSize, cell.y * TileSize),
             previous: new Vec2(cell.x * TileSize, cell.y * TileSize),
             velocity: new Vec2(),
-            hitPoints: def.hitPoints,
+            hitPoints: Math.ceil(def.hitPoints * this.toughness),
             size: this.options.sizeFor(def.idle) || { width: TileSize, height: TileSize },
             facingX: 1,
             moving: false,
@@ -277,16 +305,16 @@ export default class Encounter {
         };
     }
 
-    private StepMonsters(dt: number, seconds: number, player: EncounterPlayer): void {
+    private StepMonsters(dt: number, seconds: number, players: ReadonlyArray<EncounterPlayer>): void {
         const positions = this.positions;
         positions.length = 0;
         this.monsters.forEach(m => positions.push(m.position));
 
-        const playerPosition = player.Position;
-        const playerBox = ContactBox(playerPosition, TileSize);
-        const playerCentre = player.Centre;
+        const boxes = players.map(p => ContactBox(p.Position, TileSize));
 
         this.monsters.forEach((m, index) => {
+            const target = Nearest(players, m.position);
+            const playerPosition = target.Position;
             m.previous.Copy(m.position);
             const tile = CentreTile(m.position);
             // A door that has shut on it overrides whatever it was after: out of the door first.
@@ -314,7 +342,7 @@ export default class Encounter {
             m.velocity.Offset(x, y);
             ResolveMove(m.position, m.velocity, dt, exit ? this.escapeCollision : this.collision, PlayerSpeed * m.def.speed);
 
-            // Faces where it means to go - or at the player while it holds still.
+            // Faces where it means to go - or at the nearest hero while it holds still.
             const faceX = Math.abs(steer.x) > 0.1 ? steer.x : playerPosition.x - m.position.x;
             if (faceX !== 0) {
                 m.facingX = faceX < 0 ? -1 : 1;
@@ -325,15 +353,21 @@ export default class Encounter {
             m.rangedCooldown = Math.max(0, m.rangedCooldown - seconds);
             m.hitFlash = Math.max(0, m.hitFlash - seconds);
 
-            if (m.def.contactDamage > 0 && m.contactCooldown === 0 && Overlaps(ContactBox(m.position, TileSize), playerBox)) {
-                m.contactCooldown = m.def.contactCooldown;
-                this.HurtPlayer(player, m.def.contactDamage);
+            if (m.def.contactDamage > 0 && m.contactCooldown === 0) {
+                const box = ContactBox(m.position, TileSize);
+                // One bite at a time: the first hero it's touching.
+                const touched = players.find((p, i) => Overlaps(box, boxes[i]));
+                if (touched) {
+                    m.contactCooldown = m.def.contactCooldown;
+                    this.HurtPlayer(touched, m.def.contactDamage);
+                }
             }
 
             const ranged = m.def.ranged;
             if (ranged && m.rangedCooldown === 0 && this.level.IsCellVisible(tile.x, tile.y)) {
                 const centre = BoxCentre(m.position);
-                const toPlayer = { x: playerCentre.x - centre.x, y: playerCentre.y - centre.y };
+                const targetCentre = target.Centre;
+                const toPlayer = { x: targetCentre.x - centre.x, y: targetCentre.y - centre.y };
                 if (Math.sqrt(toPlayer.x * toPlayer.x + toPlayer.y * toPlayer.y) <= ranged.range * TileSize) {
                     this.Fire(centre, toPlayer, ranged, "monster");
                     m.rangedCooldown = ranged.cooldown;
@@ -342,10 +376,10 @@ export default class Encounter {
         });
     }
 
-    private StepProjectiles(dt: number, player: EncounterPlayer): void {
-        // Nothing flies into a room the player can't see (or through a closed door into one).
+    private StepProjectiles(dt: number, players: ReadonlyArray<EncounterPlayer>): void {
+        // Nothing flies into a room no hero can see (or through a closed door into one).
         const blocked = (x: number, y: number) => this.level.IsSolid(x, y) || !this.level.IsCellVisible(x, y);
-        const playerBox = ContactBox(player.Position, TileSize);
+        const boxes = players.map(p => ContactBox(p.Position, TileSize));
 
         this.projectiles.forEach(p => {
             const hitCell = StepProjectile(p, dt, blocked, TileSize);
@@ -357,14 +391,18 @@ export default class Encounter {
             }
             const box = ProjectileBox(p);
             if (p.owner === "player") {
+                // Heroes' shots pass through each other - there's no friendly fire.
                 const target = this.monsters.find(m => !m.dead && Overlaps(box, this.MonsterHitBox(m)));
                 if (target) {
-                    this.HurtMonster(target, p.damage);
+                    this.HurtMonster(target, p.damage, p.hero);
                     p.dead = true;
                 }
-            } else if (Overlaps(box, playerBox)) {
-                this.HurtPlayer(player, p.damage);
-                p.dead = true;
+            } else {
+                const hit = players.find((player, i) => Overlaps(box, boxes[i]));
+                if (hit) {
+                    this.HurtPlayer(hit, p.damage);
+                    p.dead = true;
+                }
             }
         });
     }
@@ -373,7 +411,8 @@ export default class Encounter {
         return SpriteBox(m.position, m.size, TileSize);
     }
 
-    private HurtMonster(m: Monster, damage: number): void {
+    /** `hero` is the index of the hero whose shot it was, named in `MONSTER_KILLED`. */
+    private HurtMonster(m: Monster, damage: number, hero: number): void {
         m.hitPoints -= damage;
         m.hitFlash = HitFlashTime;
         if (m.hitPoints <= 0) {
@@ -381,7 +420,7 @@ export default class Encounter {
             if (m.spawner) {
                 RecordDeath(m.spawner);
             }
-            this.options.emit(MONSTER_KILLED, m.type, m.position.x, m.position.y);
+            this.options.emit(MONSTER_KILLED, m.type, m.position.x, m.position.y, hero);
         }
     }
 
@@ -404,9 +443,25 @@ export default class Encounter {
         if (!player.Damage(damage)) {
             return;
         }
-        this.options.emit(PLAYER_DAMAGED, damage, player.Health.hitPoints);
+        this.options.emit(PLAYER_DAMAGED, damage, player.Health.hitPoints, player.Index);
         if (IsDead(player.Health)) {
-            this.options.emit(PLAYER_DIED);
+            this.options.emit(PLAYER_DIED, player.Index);
         }
     }
+}
+
+/** The hero whose box is nearest `position` (a one-tile box's top-left) in a straight line - the first of them on a tie. `players` mustn't be empty. */
+function Nearest(players: ReadonlyArray<EncounterPlayer>, position: Vec2Like): EncounterPlayer {
+    let best = players[0];
+    let bestDistance = Number.MAX_VALUE;
+    players.forEach(p => {
+        const dx = p.Position.x - position.x;
+        const dy = p.Position.y - position.y;
+        const distance = dx * dx + dy * dy;
+        if (distance < bestDistance) {
+            bestDistance = distance;
+            best = p;
+        }
+    });
+    return best;
 }

@@ -7,6 +7,9 @@ import { GameHeight, PlayWidth, Scenes, TileSize } from "../Constants";
 import { CAMERA_MOVED } from "../Events";
 import { StepZoom, ZoomState } from "../level/Depth";
 
+/** Share of the way the party's zoom closes on its target each 60th of a second - smooth, but quick enough to keep up with heroes running apart. */
+const PartyZoomFollow = 0.06;
+
 export class Camera extends GameComponent {
     get ViewRect(): Rectangle {
         return this.viewRect;
@@ -35,9 +38,16 @@ export class Camera extends GameComponent {
     get CurrentZ(): number {
         return this.currentZ;
     }
-    /** Height-driven zoom (see `UpdateZoom`) - what `TileMapView`/`Player` should scale their render by, instead of calling `CameraZoom(CurrentZ)` themselves. */
+    /**
+     * Height-driven zoom (see `UpdateZoom`) times the party's (see `ZoomForParty`) - what `TileMapView`/`EntityRenderer`
+     * should scale their render by, instead of calling `CameraZoom(CurrentZ)` themselves.
+     */
     get EffectiveZoom(): number {
-        return this.zoomState.value;
+        return this.zoomState.value * this.partyZoom;
+    }
+    /** The zoom for the party's spread, from 1 (one hero, or a party close together) down to `MinPartyZoom` - see `ZoomForParty`. */
+    get PartyZoom(): number {
+        return this.partyZoom;
     }
 
     private viewRect: Rectangle;
@@ -50,6 +60,7 @@ export class Camera extends GameComponent {
     private currentZ: number = 0;
     private zoomState: ZoomState = { value: 1, z: 0 };
     private zHeldTime: number = 0;
+    private partyZoom: number = 1;
 
     constructor(private cameraControl?: ICameraControl) {
         super();
@@ -103,6 +114,14 @@ export class Camera extends GameComponent {
             this.currentZ = z;
             this.zHeldTime = 0;
         }
+    }
+
+    /**
+     * Eases the party's zoom towards `target` (see `PartyFrame.PartyZoom`) - zooming out as heroes on a shared
+     * screen spread apart and back in as they gather - `frames` (60ths of a second) since the last display frame.
+     */
+    ZoomForParty(target: number, frames: number): void {
+        this.partyZoom += (target - this.partyZoom) * (1 - Math.pow(1 - PartyZoomFollow, frames));
     }
 
     /**
