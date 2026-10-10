@@ -15,7 +15,7 @@ export type ShotSetup = {
     sprite: string;
     /** Direction the sprite's art points, in radians (0 = right, -PI/2 = up), so it's turned to face its flight. Leave out to draw it upright whichever way it flies. */
     spriteAngle?: number;
-    /** Pixels per frame. */
+    /** Pixels per step (a 60th of a second). */
     speed: number;
     damage: number;
     /** Tiles it flies before fizzling out. */
@@ -37,10 +37,15 @@ export type WeaponDef = {
 };
 
 export type Projectile = {
+    /** Which shot it is, for as long as it flies - unique in its encounter until the encounter's next `Reset` (see `Encounter.Fire`). */
+    id: number;
     /** Centre, in pixels. */
     x: number;
     y: number;
-    /** Pixels per frame. */
+    /** Where its centre was before the last step - what drawing between steps starts from. */
+    px: number;
+    py: number;
+    /** Pixels per step (a 60th of a second). */
     vx: number;
     vy: number;
     owner: ProjectileOwner;
@@ -61,11 +66,14 @@ export const ProjectileSize = 6;
 export const ContactInset = 2;
 
 /** Fired from `from` (a centre) along `direction` (any length - it's normalised). */
-export function CreateProjectile(from: Vec2Like, direction: Vec2Like, shot: ShotSetup, owner: ProjectileOwner, tileSize: number): Projectile {
+export function CreateProjectile(from: Vec2Like, direction: Vec2Like, shot: ShotSetup, owner: ProjectileOwner, tileSize: number, id = 0): Projectile {
     const length = Math.sqrt(direction.x * direction.x + direction.y * direction.y) || 1;
     return {
+        id,
         x: from.x,
         y: from.y,
+        px: from.x,
+        py: from.y,
         vx: (direction.x / length) * shot.speed,
         vy: (direction.y / length) * shot.speed,
         owner,
@@ -92,6 +100,8 @@ export function StepProjectile(
     if (projectile.dead) {
         return null;
     }
+    projectile.px = projectile.x;
+    projectile.py = projectile.y;
     const dx = projectile.vx * dt;
     const dy = projectile.vy * dt;
     const distance = Math.sqrt(dx * dx + dy * dy);

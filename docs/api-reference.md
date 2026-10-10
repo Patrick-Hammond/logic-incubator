@@ -57,6 +57,7 @@ configuration files and plugin interface. For explanations, examples and workflo
 [Projectiles](#projectiles) ·
 [Player state](#player-state) ·
 [Encounter](#encounter) ·
+[Fixed step and seeded random](#fixed-step-and-seeded-random) ·
 [Views](#views) ·
 [Player input](#player-input)
 
@@ -1051,7 +1052,7 @@ type PlayerSetup = {
     sprite: string;                                       // animation name
     hitPoints: number;                                    // half-hearts
     hearts?: { full: string; half: string; empty: string };// sprite names; without them the HUD draws the UI skin's hearts
-    weapons: WeaponDef[];                                 // the first is equipped; fired while a fire direction is held
+    weapons: WeaponDef[];                                 // the first is equipped; fired while a fire direction is held; copied for each level start
     lightSpell?: LightSpell;                              // a mage-light they call up with the cast control; none if left out
 };
 
@@ -1084,9 +1085,16 @@ name the player is drawn with that (`Player.SetSprite`), otherwise with `player.
 `playerLightSpell` is asked at the same moment, for the light spell that character has (`Player.SetLightSpell`): `null` for none, a spell,
 or `undefined` to keep `player.lightSpell`.
 
-Each frame, before the player moves (moving them moves the camera, which draws the tiles), it calls `Level.UpdateLights` with the seconds
-played so far and the lights that move: the torch the player carries (`Player.Light`), their mage-light while it's lit
-(`Player.SpellLight`), and every live shot with a `light`, keyed by the shot.
+Play runs in fixed steps of `StepSeconds` (1/60 s - see [Fixed step and seeded random](#fixed-step-and-seeded-random)), as many each
+display frame as its time calls for, and none after a step that stops play (the player dies). A step reads the player's controls
+(the scene's own `PlayerControl(0)`) and hands them to `Player.Step`, then, at the player's tile, opens doors (`Level.UpdateDoors`), updates
+the visible regions and collects pickups (`Player.ApplyPickup`), fires the shot they took, if any, and runs `Encounter.Update`. Then, once a
+frame, it places the player for drawing between their last two steps (`Player.Place(alpha)`), calls `Level.UpdateLights` with the seconds
+played so far and the lights that move - the torch the player carries (`Player.Light`), their mage-light while it's lit
+(`Player.SpellLight`), and every live shot with a `light`, keyed by the shot, all where they're drawn - and moves the camera: `SetZ` for the
+height under the player, `UpdateZoom`, and `Follow` where they're drawn (after the lights, since moving the camera draws the tiles; the pull
+is the same per second at any frame rate). Last it draws the figures (`EntityRenderer.Render(player, encounter, alpha)`) and the HUD.
+Each level start re-seeds the encounter's random numbers (`Encounter.Reset`).
 
 Lifecycle: `OnInitialise` builds the `Level`, attaches `Camera`, `TileMapView`, `Effects` (into the camera) and `Hud`, creates `Player`, `EntityRenderer` and
 `Encounter`, binds asset metadata (`BindAssetMetadata`) and listens for `LEVEL_CREATED` / `PLAYER_DIED`. `OnShow` and each restart
@@ -1134,7 +1142,7 @@ type CollectedPickup = { value: PickupValue; sprite: string | null };    // spri
 | `IsDoorLocked(x, y, canOpen): boolean` | A closed door that doesn't open for the player (`canOpen(lockId)` says whether a lock does: it's unlocked, or they hold its key) - what their collider treats as a wall. A closed door that opens for them isn't: they walk onto it to open it. |
 | `CollectPickupsAt(x, y): CollectedPickup[]` | Collects and hides every pickup at the cell; the caller applies them. A pickup whose tile gives off light (a torch) takes its light with it: that baked light is switched off. |
 | `UpdateLights(time, moving)` | Rebuilds `lightGrid` for `time` seconds of play, with `moving: MovingLight[]` cast where they are now (`SceneLights.Update`). Call once a frame, before the level is drawn. |
-| `UpdateDoors(x, y, canOpen?)` | Opens/closes doors by the player's tile (call each frame) - a door opens only if `canOpen(door.lockId)` (with none given, every door does - so with the player's keys, an unlocked door always does); bumps `doorVersion` for each that changes. |
+| `UpdateDoors(x, y, canOpen?)` | Opens/closes doors by the player's tile (call each step) - a door opens only if `canOpen(door.lockId)` (with none given, every door does - so with the player's keys, an unlocked door always does); bumps `doorVersion` for each that changes. |
 | `UpdateVisibleRegions(x, y)` | Recomputes which regions are reachable through open doors (call after `UpdateDoors`). |
 | `IsCellVisible(x, y): boolean` | |
 
@@ -1374,7 +1382,7 @@ type MonsterContext = {
     player: Vec2Like;
     flow: IFlowField;         // walking distances to the player
     tileSize: number;
-    dt: number;               // seconds since the last frame
+    dt: number;               // seconds since the last step
     random: () => number;     // [0, 1)
 };
 interface IMonsterBehaviour { Steer(context: MonsterContext): Vec2Like }   // length 0 (still) .. 1 (full speed)
@@ -1420,13 +1428,13 @@ plus `CreateSpawnerState` and `StepSpawner` (used by `Encounter`).
 
 ```ts
 type ProjectileOwner = "player" | "monster";
-type ShotSetup = { sprite: string; spriteAngle?: number; speed: number; damage: number; range: number; light?: LightValue };   // speed px/frame; range in tiles; light: it glows as it flies
+type ShotSetup = { sprite: string; spriteAngle?: number; speed: number; damage: number; range: number; light?: LightValue };   // speed px per step (a 60th of a second); range in tiles; light: it glows as it flies
 type Weapon = ShotSetup & { cooldown: number };            // seconds between shots
 type WeaponDef = { icon: string; shot: Weapon };           // icon = the HUD weapon slot
-type Projectile = { x, y, vx, vy, owner, damage, sprite, spriteAngle?, range, dead, light? };
+type Projectile = { id, x, y, px, py, vx, vy, owner, damage, sprite, spriteAngle?, range, dead, light? };   // x, y its centre; px, py where it was before the last step
 
-CreateProjectile(from, direction, shot, owner, tileSize): Projectile
-StepProjectile(projectile, dt, isBlocked, tileSize): Vec2Like | null    // the blocking cell it hit, else null
+CreateProjectile(from, direction, shot, owner, tileSize, id = 0): Projectile                     // px, py start at from
+StepProjectile(projectile, dt, isBlocked, tileSize): Vec2Like | null    // the blocking cell it hit, else null; sets px, py first
 ProjectileBox(p), ContactBox(position, tileSize), SpriteBox(position, size, tileSize), Overlaps(a, b)
 ProjectileSize = 6;  ContactInset = 2
 ```
@@ -1443,6 +1451,7 @@ Pure modules under `level/entities/`:
 | `Pickups` | `type PickupValue = { kind: "gold"; amount } \| { kind: "health"; amount } \| { kind: "key"; id } \| { kind: "weapon"; weapon: WeaponDef } \| { kind: "item"; sprite? } \| { kind: "light"; light: LightValue; seconds? }` (an item with no `sprite` is shown as its own tile; a light is carried from then on, in place of any other, for `seconds` - 0 or left out for the rest of the level); `PickupKinds`; `IsPickupValue(v)` (strict: a known kind with the fields it needs, finite numbers, a key id that's a whole number from 0, a complete light - also what tells a pickup from a light or spawner in a tile's `data`); `DefaultPickupValue(kind?)` (a light: a torch that burns for 120 s) |
 | `CarriedLight` | `type CarriedLight = { value, seconds, left }`; `GutterTime = 8`; `CreateCarriedLight(value, seconds?)` (0, negative or left out: burns for the rest of the level), `TickCarriedLight(light, seconds): boolean` (false once it's out), `CarriedLightScale(light)` (1, falling to 0 over its last `GutterTime` seconds) |
 | `LightSpell` | `type LightSpell = { light: LightValue; seconds; recharge }` (lit for `seconds` - 0 for good - then `recharge` seconds before it can be cast again); `type LightSpellState = { spell, lit: CarriedLight \| null, recharging }`; `CreateLightSpellState(spell)`, `IsLightSpellReady(state)`, `CastLightSpell(state): boolean` (false unless ready), `TickLightSpell(state, seconds)`, `LightSpellScale(state)` (0 while not lit), `LightSpellStatusOf(state): { state: "ready" \| "lit" \| "recharging"; fill; seconds }` (what the HUD shows: a lit one's bar empties as it burns, a recharging one's fills back up) |
+| `PlayerState` | A hero's whole state and one step of it. `type PlayerState = { position, previous, velocity, facingX, health, gold, inventory, keys, weapons, equippedIndex, fireCooldown, shot, carried, spell, orb, previousOrb, orbTime }` (`position` the top-left of their one-tile box in pixels, `previous` where it was before the last step; `orb` the floor under their mage-light). `CreatePlayerState(setup, startTile, lightSpell?)` (on `startTile`, at full health, with a **copy** of `setup.weapons`, so a weapon picked up is gone when the level starts over); `StepPlayer(state, input: IPlayerInput, dt, seconds, collider: MoveCollider)` (timers tick, `input` turns and moves them, a shot fired waits in `shot`, the mage-light drifts after them - it reads no device, so it runs the same for input from anywhere); `TakePlayerShot(state): Vec2Like \| null` (once), `DamagePlayer(state, n): boolean`, `EquippedWeapon(state)`, `ApplyPickup(state, pickup: CollectedPickup)` (gold, health, a key, a weapon - added and equipped -, an item, a light) |
 | `Keys` | `NoLock = -1` (the lock of an unlocked door - every door by default - which opens for anyone, key or no key); `IsLocked(lock)` (0 and up); `type KeyRing = { keys: { id, sprite }[] }`; `CreateKeyRing()`, `AddKey(ring, id, sprite?): boolean` (false if that id is already held), `CanOpen(ring, lock): boolean` (the lock is `NoLock`, or a key with that id is held). There is no key that opens everything |
 
 ---
@@ -1457,21 +1466,44 @@ new Encounter(level: EncounterLevel, options: EncounterOptions)
 type EncounterOptions = {
     emit: (event: string, ...args: unknown[]) => void;           // the game's dispatcher
     sizeFor: (name: string) => { width: number; height: number } | undefined;   // a sprite's pixel size
-    random?: () => number;
+    random?: () => number;                                        // [0, 1); left out, numbers seeded at each Reset
 };
 ```
 
 | Member | |
 | --- | --- |
-| `monsters: Monster[]`, `projectiles: Projectile[]`, `spawners: SpawnerState[]`, `spawnerFlash: Map` | State. |
+| `monsters: Monster[]`, `projectiles: Projectile[]`, `spawners: SpawnerState[]`, `spawnerFlash: Map` | State. Each monster and shot has an `id`, unique in the encounter until the next `Reset`, and a monster's `previous` is where its `position` was before the last step. |
 | `Flow: FlowField` | Walking distances as of the last `Update`. |
-| `Reset()` | Starts over from the level's spawners (call on every `LEVEL_CREATED`). |
+| `Reset(seed?)` | Starts over from the level's spawners (call on every `LEVEL_CREATED`), with ids from 1 and its random numbers started again from `seed` (a new one if left out), unless the options brought their own `random`. The same seed, level and player moves play out the same. |
+| `Seed` | What the random numbers started from at the last `Reset`. |
 | `Fire(from, direction, shot, owner)` | Adds a projectile. |
-| `Update(dt, seconds, player: EncounterPlayer)` | One frame: `dt` in frames (movement), `seconds` for timers. |
+| `Update(dt, seconds, player: EncounterPlayer)` | One step: `dt` in frames (movement; 1 at 60 a second), `seconds` for timers. |
 
 Constants `MaxMonsters = 150`, `HitFlashTime = 0.15`. `EncounterLevel` and `EncounterPlayer` are the narrow interfaces it needs of `Level` and `Player`.
 
 **Closed doors.** A monster can't enter a closed door (`Level.IsDoorClosed`). The flow field treats those cells as blocked, so a monster behind one has no path to the player (`DistanceAt` is `UNREACHABLE`: chasers hold still, wanderers keep wandering, and a spawner with an `activationRange` stays inactive); and the monsters' collider treats them as solid, so one steered at a door by a wander heading or another monster's push is stopped too. The field is recomputed when `Level.doorVersion` changes, not just when the player changes cell. Spawn cells are never closed-door cells. A monster a door shuts on (its box overlaps a closed-door cell) is walked out of it, whichever side it's nearer, using a collider that doesn't count the door's cells as solid - it can neither be trapped in the door nor slip through to the player. The player is unaffected - standing in a door is what opens it, and while they do the monsters can come through.
+
+---
+
+## Fixed step and seeded random
+
+`@logic-incubator/engine/FixedStep` (no pixi) runs play in steps of a fixed length whatever the display's frame rate, so it comes out the
+same on a 60 Hz screen, a 144 Hz one or a slow phone, and on every machine in a game played together.
+
+```ts
+StepSeconds = 1 / 60;        // one step: the rate movement was tuned at (a dt of 1 frame)
+MaxFrameSeconds = 0.1;       // most one display frame counts for, so a stall slows play down rather than running a burst of steps
+
+const step = new FixedStep(stepSeconds = StepSeconds);
+step.Advance(seconds): number   // adds a display frame's time; returns how many steps are due now (a step may run a tenth of a step early, so a 60 Hz display runs exactly one a frame)
+step.Alpha: number              // 0 to 1: how far the time so far is between the last step and the next - what drawing goes between the last two steps by
+step.Reset(): void              // forgets the time saved up - for a fresh start
+
+Between(from, to, alpha, out): Vec2Like   // out set to the point alpha of the way from from to to - where to draw something between its last two steps
+```
+
+`@logic-incubator/engine/Random` (no pixi): `SeededRandom(seed): () => number` - numbers in `[0, 1)` like `Math.random`, the same ones for the
+same seed on any machine (mulberry32); `NewSeed()` - a fresh 32-bit seed, different every time.
 
 ---
 
@@ -1481,10 +1513,10 @@ Constants `MaxMonsters = 150`, `HitFlashTime = 0.15`. `EncounterLevel` and `Enco
 | --- | --- | --- |
 | `Camera extends GameComponent` | `view/Camera` | `ViewRect`, `Scale`, `ScaledTileSize`, `Zoom`, `BaseViewWidth/Height`, `CurrentZ`, `EffectiveZoom`; `Move(x, y)`, `CenterOn(x, y)`, `Follow(pixelX, pixelY, amount)`, `SetZ(z)`, `UpdateZoom(dt)`. Emits `CAMERA_MOVED`. `new Camera(cameraControl?)`. |
 | `TileMapView extends GameComponent` | `view/TileMap` | `new TileMapView(level, camera)`. Builds the tile layers, lit and banded by height, plus, in drawing order, the `GlowsLayer` (`"glows"`), `EntitiesLayer` (`"entities"`), `OrbsLayer` (`"orbs"`) and `ProjectilesLayer` (`"projectiles"`); `TileGD8Rotation(rotation, scaleX, scaleY)`. Each tile is drawn with its cell's corner light (`CellCornerLight`); a tile taller than a cell (a door, a statue) stands up, so like a figure it takes `FootLight` along its foot. A tile that gives off light gets a glow over its flame in its own band (`view/helpers/Glow`), at its light's strength that frame. Emits `LEVEL_CREATED`. |
-| `Player` | `view/Player` | `new Player(camera, collision, level, setup)`; `Position`, `Centre`, `Tile`, `Texture`, `FacingX`, `Health`, `Gold`, `Inventory`, `Keys`, `EquippedWeapon`; `HasKeyFor(lockId)`, `IsLockedOut(x, y)` (a closed door they've no key for - what `DungeonMain` gives their collider); `Reset(startPosition)` (throws if the level has no player start), `SetSprite(animation)` (draw the player with another animation, keeping their position; a no-op for the one already in use), `SetLightSpell(spell)` (from the next `Reset`; null or undefined for none), `Update(dt, seconds)` (input, movement, camera, doors, regions, pickups, their lights), `TakeShot(): Vec2Like \| null`, `Damage(n): boolean`, `Destroy()`. Their lights, as `MovingLight`s for `Level.UpdateLights` (null when they have none): `Light` (a torch they picked up, at their centre, dimming as it burns out) and `SpellLight` (their mage-light while it's lit, over the floor just behind them); `OrbPosition` is where the mage-light is drawn, floating and bobbing, and `Spell` its `LightSpellState`. |
+| `Player` | `view/Player` | A `PlayerState` and how it looks; an `EncounterPlayer`. `new Player(collision, level, setup)`; `Position`, `Centre`, `Tile` (as of the last step), `DrawPosition` (where they're drawn this frame, between their last two steps), `Texture`, `FacingX`, `Health`, `Gold`, `Inventory`, `Keys`, `EquippedWeapon`; `HasKeyFor(lockId)`, `IsLockedOut(x, y)` (a closed door they've no key for - what `DungeonMain` gives their collider); `Reset(startPosition)` (a fresh `PlayerState` there; throws if the level has no player start), `SetSprite(animation)` (draw the player with another animation; a no-op for the one already in use), `SetLightSpell(spell)` (from the next `Reset`; null or undefined for none), `Step(input: IPlayerInput, dt, seconds)` (one step with that input - `StepPlayer`), `Place(alpha)` (places them, and their mage-light, for drawing `alpha` of the way through their last step; call each frame after the steps), `ApplyPickup(pickup)`, `TakeShot(): Vec2Like \| null`, `Damage(n): boolean`, `Destroy()`. Their lights, as `MovingLight`s for `Level.UpdateLights` (null when they have none), where they're drawn: `Light` (a torch they picked up, at their centre, dimming as it burns out) and `SpellLight` (their mage-light while it's lit, over the floor just behind them); `OrbPosition` is where the mage-light is drawn, floating and bobbing, and `Spell` its `LightSpellState`. |
 | `Effects extends GameComponent` | `view/Effects` | `new Effects(camera)`; `Play(art, config, x, y): Emitter \| undefined` starts a particle effect at a position in world pixels (`art`: a sprite or animation name, `config`: an `EmitterConfig` or `OldEmitterConfig`; `undefined` after a one-off warning when `art` isn't loaded). Its layer sits in the camera root above the entities and shots, placed every frame like the entities layer (`view/helpers/EffectsPlacement`), and goes back on top on `LEVEL_CREATED`, which also drops the level's effects. Emitters update from `Tick` (only while shown); a finished one (not emitting, no particles) is destroyed, a continuous one runs until `emit = false`. `DungeonMain` attaches it - use `main.Effects`. |
 | `Hud extends GameComponent` | `view/Hud` | `new Hud(setup.hearts?)`; `Render(health, gold, weaponIcon, inventory, keys, spell?)` (`spell`: the player's `LightSpellState`, shown under the keys as a bar - the skin's `mp` bar, if it has one - and READY, LIT or RECHARGING with the seconds left; null or left out hides it). Built from the UI kit (a `UiPanel`, a `UiIconRow` of hearts, `UiItemSlot`s and `UiInventoryGrid`s, `UiText`) in the skin of the loaded `ui` bundle - the game must load it first. Hearts are the game's own pictures when `setup.hearts` gives them (enlarged 3x), else the skin's. The keys panel shows each key's sprite and its id. Warns once per missing sprite. |
-| `EntityRenderer` | `view/EntityRenderer` | `new EntityRenderer(camera, level)`; `Reset()` (call on `LEVEL_CREATED`), `Render(player, encounter)`. Draws a glow under the figures for the player's torch and each glowing shot, and the mage-light - a glow with a bright core - over them. |
+| `EntityRenderer` | `view/EntityRenderer` | `new EntityRenderer(camera, level)`; `Reset()` (call on `LEVEL_CREATED`), `Render(player, encounter, alpha = 1)` (the player where `Player.Place` put them; monsters and shots `alpha` of the way through their last step). Draws a glow under the figures for the player's torch and each glowing shot, and the mage-light - a glow with a bright core - over them. |
 | `GlowLayer extends Container` | `view/GlowLayer` | Glows added onto what's beneath them, from a pool of sprites: `Begin()`, `Add(x, y, look, pixelsPerTile)` per glow, `End()`. `CreateGlowTexture()` makes the soft white texture they're drawn with (the caller destroys it). |
 | `Glow` | `view/helpers/Glow` | Pure: `GlowTextureSize`, `GlowRadius` (1.25 tiles), `GlowStrength` (0.3), `GlowFlameY` (0.3 - a lit tile's glow sits this far down its art), `OrbCoreRadius`; `GlowPixels(size)` (premultiplied white, fading like `LightFalloff`), `type GlowLook = { tint, alpha, radius }`, `LookOfGlow(rgb, scale, out)` (the light's colour at full saturation, stronger the brighter it is, swelling a little as it flickers), `LookOfOrbCore(rgb, scale, out)` (small, pale and nearly opaque). |
 
@@ -1501,6 +1533,8 @@ interface IPlayerInput {
 }
 new PlayerControl(playerId: number);   Get(): IPlayerInput        // a shared object
 ```
+
+`DungeonMain` owns the `PlayerControl` and hands what it reads to `Player.Step` each step; the player never reads a device itself.
 
 Keyboard: arrows or WASD, Space, L. Gamepad (only when no key is down): left stick moves, right stick fires/aims, Y casts.
 `@logic-incubator/engine/input/StickInput`: `IsStickPushed(stick: Vec2Like | null): boolean` - a stick at rest is non-null but zero.

@@ -1,7 +1,7 @@
 /**
  * Everything alive in a level besides the player: spawners producing monsters,
  * monsters hunting the player, and everyone's shots. `DungeonMain` runs it one
- * frame at a time; `EntityRenderer` draws it. No pixi in here - events go out
+ * step at a time; `EntityRenderer` draws it. No pixi in here - events go out
  * through an injected `emit`, sprite sizes come in through `sizeFor` - so it
  * runs under the plain node test runner too (see Encounter.test.ts).
  */
@@ -17,6 +17,7 @@ import MonsterRoster, { MonsterDef, MonsterType } from "./level/entities/Monster
 import { ContactBox, CreateProjectile, Overlaps, Projectile, ProjectileBox, ProjectileOwner, ShotSetup, SpriteBox, StepProjectile } from "./level/entities/Projectiles";
 import { CreateSpawnerState, DamageSpawner, RecordDeath, RecordSpawn, SpawnCell, Spawner, SpawnerState, StepSpawner } from "./level/entities/Spawners";
 import TileCollision from "./level/TileCollision";
+import { NewSeed, SeededRandom } from "./Random";
 import { BoxCentre, CentreTile, ResolveMove } from "./view/helpers/PlayerMovement";
 
 /** Most monsters alive at once, across every spawner - spawners wait while the level is at it. */
@@ -55,16 +56,20 @@ export type EncounterOptions = {
     emit: (event: string, ...args: unknown[]) => void;
     /** Pixel size of a sprite or animation, or undefined if there's no such thing - what a monster's shootable box is sized from. */
     sizeFor: (name: string) => { width: number; height: number } | undefined;
-    /** `[0, 1)`, like `Math.random` - which monster a spawner picks, where wanderers wander. */
+    /** `[0, 1)`, like `Math.random` - which monster a spawner picks, where wanderers wander. Left out, it's numbers seeded at each `Reset`. */
     random?: () => number;
 };
 
 export type Monster = {
+    /** Which monster it is, for as long as it lives - unique in its encounter until the next `Reset`, shots' ids included. */
+    id: number;
     type: MonsterType;
     def: MonsterDef;
     behaviour: IMonsterBehaviour;
     /** Top-left of its one-tile collision box, in pixels - like the player's. */
     position: Vec2;
+    /** Where `position` was before the last step - what drawing between steps starts from. */
+    previous: Vec2;
     velocity: Vec2;
     hitPoints: number;
     /** Size of its idle frame - see `SpriteBox`. */
@@ -95,6 +100,9 @@ export default class Encounter {
     /** What a monster caught in a closed door moves with on its way out: the same, but the door's own cells don't block it. */
     private escapeCollision: TileCollision;
     private random: () => number;
+    private seed = 0;
+    /** The id the next monster or shot gets. */
+    private nextId = 1;
     private positions: Vec2Like[] = [];
     /** The level's `doorVersion` the flow field was last worked out at. */
     private doorVersion = 0;
@@ -106,8 +114,17 @@ export default class Encounter {
         this.escapeCollision = new TileCollision(level);
     }
 
-    /** Starts over from the level's spawners, as just loaded. Call on every `LEVEL_CREATED` - there's nothing to fight until the first. */
-    Reset(): void {
+    /**
+     * Starts over from the level's spawners, as just loaded. Call on every `LEVEL_CREATED` - there's nothing to
+     * fight until the first. Its random numbers start again from `seed` (a new one if left out), so the same seed,
+     * level and players' moves play out the same - unless the options brought their own `random`.
+     */
+    Reset(seed: number = NewSeed()): void {
+        this.seed = seed;
+        if (!this.options.random) {
+            this.random = SeededRandom(seed);
+        }
+        this.nextId = 1;
         this.monsters = [];
         this.projectiles = [];
         this.spawners = this.level.spawners.map(CreateSpawnerState);
@@ -176,6 +193,11 @@ export default class Encounter {
         return best;
     }
 
+    /** What the random numbers started from at the last `Reset`. */
+    get Seed(): number {
+        return this.seed;
+    }
+
     /** Walking distances to the player, as of the last `Update`. */
     get Flow(): FlowField {
         return this.flow;
@@ -183,10 +205,10 @@ export default class Encounter {
 
     /** Fires a shot from `from` (a centre, in pixels) along `direction`. */
     Fire(from: Vec2Like, direction: Vec2Like, shot: ShotSetup, owner: ProjectileOwner): void {
-        this.projectiles.push(CreateProjectile(from, direction, shot, owner, TileSize));
+        this.projectiles.push(CreateProjectile(from, direction, shot, owner, TileSize, this.nextId++));
     }
 
-    /** One frame: `dt` in frames (the ticker's delta, which movement is tuned to), `seconds` of real time for timers. */
+    /** One step of play: `dt` in frames (which movement is tuned to - 1 at 60 a second), `seconds` for timers. */
     Update(dt: number, seconds: number, player: EncounterPlayer): void {
         const tile = player.Tile;
         if (this.level.doorVersion !== this.doorVersion) {
@@ -234,10 +256,12 @@ export default class Encounter {
 
     private CreateMonster(type: MonsterType, def: MonsterDef, cell: Vec2Like, spawner: SpawnerState | null): Monster {
         return {
+            id: this.nextId++,
             type,
             def,
             behaviour: def.behaviour(),
             position: new Vec2(cell.x * TileSize, cell.y * TileSize),
+            previous: new Vec2(cell.x * TileSize, cell.y * TileSize),
             velocity: new Vec2(),
             hitPoints: def.hitPoints,
             size: this.options.sizeFor(def.idle) || { width: TileSize, height: TileSize },
@@ -263,6 +287,7 @@ export default class Encounter {
         const playerCentre = player.Centre;
 
         this.monsters.forEach((m, index) => {
+            m.previous.Copy(m.position);
             const tile = CentreTile(m.position);
             // A door that has shut on it overrides whatever it was after: out of the door first.
             const caught = this.ClosedDoorsUnder(m.position);
