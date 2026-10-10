@@ -12,7 +12,7 @@ import {IsPickupValue, PickupValue} from "./entities/Pickups";
 import {SanitiseSpawnerValue, Spawner, SpawnerCells} from "./entities/Spawners";
 import {FindImplicitPlacements} from "./ImplicitData";
 import {Brush, DataBrushName, LevelFile, LevelLayer} from "./LevelFormat";
-import {AMBIENT_LIGHT, AMBIENT_TINT, BakedLight, BakeLighting, LightSource} from "./Lighting";
+import {AmbientLightGrid, BakeLighting, LightGrid, LightSource} from "./Lighting";
 import {FindMapBounds} from "./MapBounds";
 import {FindRegions, Region, RegionIdsTouching} from "./Regions";
 
@@ -55,8 +55,8 @@ export default class Level {
     public collisionData: boolean[][] = [];
     /** Per-cell height painted with the `Z_INDEX` data brush. */
     public heightData: number[][] = [];
-    /** Per-cell lighting baked from point lights - both the `LIGHT` data brush and any placed tile with `light` in its `AssetMetadata` (see `LightAt`, `Lighting.BakeLighting`). */
-    public lightData: BakedLight[][] = [];
+    /** Light at every tile corner, baked from point lights - both the `LIGHT` data brush and any placed tile with `light` in its `AssetMetadata` (see `Lighting.BakeLighting`; read it with `CellCornerLight`/`SampleLight`/`FootLight`). */
+    public lightGrid: LightGrid = AmbientLightGrid(0, 0);
     /** Per-cell flag: `true` if the cell is covered by the sprite footprint (see `DoorFootprint`) of a tile with a `door` id in its `AssetMetadata`. Purely a lookup for building `doors` - not consulted for movement collision, since a door must be walkable to trigger open (see `IsDoorClosed` for what keeps monsters out). */
     public doorData: boolean[][] = [];
     /** One entry per connected island of `doorData` cells that has a matching door sprite tile (see `FindDoorTile`). */
@@ -167,13 +167,6 @@ export default class Level {
             this.pickups.splice(this.pickups.indexOf(pickup), 1);
         });
         return here.map(p => ({ value: p.value, sprite: p.tile ? p.tile.name : null }));
-    }
-
-    /** Lighting under the given grid cell, already baked (see `Lighting.BakeLighting`) to `LightTint`'s expected shape. A cell no light's radius reaches reads as ambient (`AMBIENT_LIGHT`/`AMBIENT_TINT`), not fully lit. */
-    LightAt(tileX: number, tileY: number): BakedLight {
-        const column = this.lightData[tileX];
-        const value = column && column[tileY];
-        return value != null ? value : { brightness: AMBIENT_LIGHT, tint: AMBIENT_TINT };
     }
 
     /**
@@ -505,7 +498,7 @@ export default class Level {
 
         this.depths = Array.from(depths).sort((a, b) => a - b);
 
-        this.lightData = BakeLighting(lights, this.boundRect.width, this.boundRect.height);
+        this.lightGrid = BakeLighting(lights, this.boundRect.width, this.boundRect.height);
 
         const regionMap = FindRegions(this.collisionData, this.doorData, this.boundRect.width, this.boundRect.height);
         this.regionData = regionMap.regionData;

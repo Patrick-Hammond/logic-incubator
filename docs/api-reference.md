@@ -959,7 +959,7 @@ Notification iterates a copy of the subscribers, so unsubscribing during a notif
 ## Tilemap
 
 `@logic-incubator/lib/tilemap` - vendored `@pixi/tilemap` 3.2.1 for pixi 5.2.1; see `packages/lib/src/tilemap/README.md` for the changes
-(bug fixes, per-tile tint and flicker, container alpha).
+(bug fixes, per-tile and per-corner tint, flicker, container alpha).
 
 Exports: `CompositeTilemap`, `Tilemap`, `TileOptions`, `TilemapShader`, `TilemapGeometry`, `TileRenderer`, `TextileResource`, `settings`.
 
@@ -974,7 +974,8 @@ Exports: `CompositeTilemap`, `Tilemap`, `TileOptions`, `TilemapShader`, `Tilemap
 | `tileRotate(rotate)`, `tileAnimX(offset, count)`, `tileAnimY(offset, count)`, `tileAnimDivisor(d)`, `tileTint(tint)`, `tileFlicker(intensity, seed?)` | Change an option of the **last added** tile (chainable): `map.tile(t, x, y).tileTint(0xff0000)`. |
 
 `TileOptions`: `u`, `v`, `tileWidth`, `tileHeight`, `animX`, `animY`, `animCountX`, `animCountY`, `animDivisor`, `rotate`, `alpha`,
-`tint` (packed RGB, default `0xffffff`), `flicker` (0..1, GPU-animated), `flickerSeed`.
+`tint` (packed RGB, default `0xffffff`), `cornerTints` (12 numbers: RGB for the top-left, top-right, bottom-right and bottom-left corners,
+blended across the tile; 1 leaves a channel unchanged, above 1 brightens; overrides `tint`), `flicker` (0..1, GPU-animated), `flickerSeed`.
 
 `settings`: `TEXTURES_PER_TILEMAP` (16), `TEXTILE_DIMEN` (1024), `TEXTILE_UNITS` (1), `TEXTILE_SCALE_MODE`, `use32bitIndex` (false), `DO_CLEAR` (true).
 Do not change after the renderer has initialised.
@@ -1104,7 +1105,7 @@ type CollectedPickup = { value: PickupValue; sprite: string | null };    // spri
 | `tileLayers` | `LevelLayer[]` | Drawn in order. |
 | `collisionData` | `boolean[][]` | Per cell: a `collidable` tile or the `collision` brush. |
 | `heightData` | `number[][]` | From the `z-index` brush. |
-| `lightData` | `BakedLight[][]` | Baked from lights. |
+| `lightGrid` | `LightGrid` | Light at every tile corner, baked from lights; read it with `CellCornerLight`, `SampleLight` or `FootLight` ([Lighting](#lighting)). |
 | `doorData`, `doors` | | Door footprints and the doors found. |
 | `doorVersion` | `number` | Goes up each time a door opens or closes - how anything worked out from which doors are closed (the monsters' flow field) knows it's stale. |
 | `regionData`, `boundaryRegionData`, `regions`, `visibleRegions` | | Region analysis; see below. |
@@ -1122,7 +1123,6 @@ type CollectedPickup = { value: PickupValue; sprite: string | null };    // spri
 | `RemoveSpawner(spawner)` | Opens a destroyed spawner's cells. |
 | `IsDoorLocked(x, y, canOpen): boolean` | A closed door that doesn't open for the player (`canOpen(lockId)` says whether a lock does: it's unlocked, or they hold its key) - what their collider treats as a wall. A closed door that opens for them isn't: they walk onto it to open it. |
 | `CollectPickupsAt(x, y): CollectedPickup[]` | Collects and hides every pickup at the cell; the caller applies them. |
-| `LightAt(x, y): BakedLight` | |
 | `UpdateDoors(x, y, canOpen?)` | Opens/closes doors by the player's tile (call each frame) - a door opens only if `canOpen(door.lockId)` (with none given, every door does - so with the player's keys, an unlocked door always does); bumps `doorVersion` for each that changes. |
 | `UpdateVisibleRegions(x, y)` | Recomputes which regions are reachable through open doors (call after `UpdateDoors`). |
 | `IsCellVisible(x, y): boolean` | |
@@ -1220,18 +1220,29 @@ then `UseLevelBundle`; resolves `false` (quietly if the game was destroyed, with
 ```ts
 type LightValue = { brightness: number; tint: number; range: number };
 type LightSource = Vec2Like & { value: LightValue };
-type BakedLight = { brightness: number; tint: number };
+type LightGrid = { width: number; height: number; data: Float32Array };   // RGB per tile corner, (width + 1) x (height + 1), row by row
 
-const AMBIENT_LIGHT = 0.3;          // brightness of a cell no light reaches
-const AMBIENT_TINT = 0xffffff;
+const AMBIENT_LIGHT = 0.3;          // strength of the light where no light reaches
+const AMBIENT_TINT = 0xa0b2ff;      // its colour: a cool blue
+const MAX_LIGHT = 1.6;              // cap per channel once lights add up
+const MAX_BRIGHTNESS = 2;           // cap on a light's brightness
+const MAX_SPRITE_LIGHT = 1.25;      // cap on the light a sprite takes
 
 IsLightValue(value): value is LightValue            // loose: an object with "range"
 IsCompleteLightValue(value): value is LightValue    // strict: all three finite numbers
-BakeLighting(lights: ReadonlyArray<LightSource>, width: number, height: number): BakedLight[][]
+LightFalloff(distance: number, range: number): number   // (1 - (d / range)^2)^2, 0 at and past range
+BakeLighting(lights: ReadonlyArray<LightSource>, width: number, height: number): LightGrid
+AmbientLightGrid(width: number, height: number): LightGrid
+CellCornerLight(grid, x, y, out): out                // 12 numbers: RGB at the cell's top-left, top-right, bottom-right, bottom-left corners
+SampleLight(grid, x, y, out: number[]): number[]     // RGB blended between corners at a point in tile units
+FootLight(grid, left, right, feetY, out): out        // a sprite's corner light from the floor under its feet, capped at MAX_SPRITE_LIGHT
+LightToTint(rgb): number                             // packs RGB into 0xRRGGBB for a plain sprite's tint, capped at 1
 ```
 
-`BakeLighting`: peak brightness is clamped to [0, 1]; linear falloff to `range` tiles (floored at the ambient level); overlapping lights keep the
-brighter one and its tint (no colour blending); no occlusion.
+`BakeLighting` works out light at tile corners, so a tile drawn with its four corners' light (`TileOptions.cornerTints`) is blended smoothly.
+Each light sits at the centre of its cell. Every corner starts at the ambient light and each light adds `tint * brightness * LightFalloff`
+(brightness clamped to `[0, MAX_BRIGHTNESS]`); overlapping lights add up, capped per channel at `MAX_LIGHT`, so light can go above 1 and
+brighten a texture. No occlusion yet. Cells off the grid take the nearest edge.
 
 ---
 
@@ -1406,7 +1417,7 @@ Constants `MaxMonsters = 150`, `HitFlashTime = 0.15`. `EncounterLevel` and `Enco
 | Class | Module | Summary |
 | --- | --- | --- |
 | `Camera extends GameComponent` | `view/Camera` | `ViewRect`, `Scale`, `ScaledTileSize`, `Zoom`, `BaseViewWidth/Height`, `CurrentZ`, `EffectiveZoom`; `Move(x, y)`, `CenterOn(x, y)`, `Follow(pixelX, pixelY, amount)`, `SetZ(z)`, `UpdateZoom(dt)`. Emits `CAMERA_MOVED`. `new Camera(cameraControl?)`. |
-| `TileMapView extends GameComponent` | `view/TileMap` | `new TileMapView(level, camera)`. Builds the tile layers, lit and banded by height, plus the `EntitiesLayer` (`"entities"`) and `ProjectilesLayer` (`"projectiles"`) containers; `LightTint(light)`, `TileGD8Rotation(rotation, scaleX, scaleY)`. Emits `LEVEL_CREATED`. |
+| `TileMapView extends GameComponent` | `view/TileMap` | `new TileMapView(level, camera)`. Builds the tile layers, lit and banded by height, plus the `EntitiesLayer` (`"entities"`) and `ProjectilesLayer` (`"projectiles"`) containers; `TileGD8Rotation(rotation, scaleX, scaleY)`. Each tile is drawn with its cell's corner light (`CellCornerLight`). Emits `LEVEL_CREATED`. |
 | `Player` | `view/Player` | `new Player(camera, collision, level, setup)`; `Position`, `Centre`, `Tile`, `Texture`, `FacingX`, `Health`, `Gold`, `Inventory`, `Keys`, `EquippedWeapon`; `HasKeyFor(lockId)`, `IsLockedOut(x, y)` (a closed door they've no key for - what `DungeonMain` gives their collider); `Reset(startPosition)` (throws if the level has no player start), `SetSprite(animation)` (draw the player with another animation, keeping their position; a no-op for the one already in use), `Update(dt, seconds)` (input, movement, camera, doors, regions, pickups), `TakeShot(): Vec2Like \| null`, `Damage(n): boolean`, `Destroy()`. |
 | `Effects extends GameComponent` | `view/Effects` | `new Effects(camera)`; `Play(art, config, x, y): Emitter \| undefined` starts a particle effect at a position in world pixels (`art`: a sprite or animation name, `config`: an `EmitterConfig` or `OldEmitterConfig`; `undefined` after a one-off warning when `art` isn't loaded). Its layer sits in the camera root above the entities and shots, placed every frame like the entities layer (`view/helpers/EffectsPlacement`), and goes back on top on `LEVEL_CREATED`, which also drops the level's effects. Emitters update from `Tick` (only while shown); a finished one (not emitting, no particles) is destroyed, a continuous one runs until `emit = false`. `DungeonMain` attaches it - use `main.Effects`. |
 | `Hud extends GameComponent` | `view/Hud` | `new Hud(setup.hearts?)`; `Render(health, gold, weaponIcon, inventory, keys)`. Built from the UI kit (a `UiPanel`, a `UiIconRow` of hearts, `UiItemSlot`s and `UiInventoryGrid`s, `UiText`) in the skin of the loaded `ui` bundle - the game must load it first. Hearts are the game's own pictures when `setup.hearts` gives them (enlarged 3x), else the skin's. The keys panel shows each key's sprite and its id. Warns once per missing sprite. |

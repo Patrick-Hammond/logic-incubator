@@ -4,7 +4,7 @@ import GameComponent from "@logic-incubator/lib/game/GameComponent";
 import { TileSize } from "../Constants";
 import { CAMERA_MOVED, LEVEL_CREATED, LEVEL_LOADED } from "../Events";
 import { ZBandAlpha, ZScale } from "../level/Depth";
-import { BakedLight } from "../level/Lighting";
+import { CellCornerLight } from "../level/Lighting";
 import Level from "../level/Level";
 import { Camera } from "./Camera";
 import { ViewOrigin } from "./helpers/CameraWindow";
@@ -43,15 +43,6 @@ export function TileGD8Rotation(rotation: number, scaleX: number, scaleY: number
     return groupD8.add(flip, rotate);
 }
 
-/** Packs a baked `BakedLight` (see `Lighting.ts`) into a colour multiply-tint: each of the light's own `tint` channels scaled by `brightness` (`[0, 1]`, 1 = that channel at full strength). `tint` can only darken a texture by multiplying it, never brighten it past its own colours - a white light (`AMBIENT_TINT`) at brightness 1 leaves a texture unchanged. */
-export function LightTint(light: BakedLight): number {
-    const brightness = Math.max(0, Math.min(1, light.brightness));
-    const r = Math.round(((light.tint >> 16) & 0xff) * brightness);
-    const g = Math.round(((light.tint >> 8) & 0xff) * brightness);
-    const b = Math.round((light.tint & 0xff) * brightness);
-    return (r << 16) | (g << 8) | b;
-}
-
 /**
  * Draws tiles grouped by height (z). Each z band renders at `ZScale(z)`; all
  * bands are anchored on the same world point so they line up at the centre of
@@ -70,6 +61,8 @@ export default class TileMapView extends GameComponent {
     private bands: Band[] = [];
     private entitiesLayer: CompositeTilemap | null = null;
     private projectilesLayer: Container | null = null;
+    /** One cell's corner light, refilled per cell and read by `tile()` as each tile is added - see `Lighting.CellCornerLight`. */
+    private cornerLight = new Float32Array(12);
 
     constructor(private level: Level, private camera: Camera) {
         super();
@@ -208,7 +201,7 @@ export default class TileMapView extends GameComponent {
                         if (!this.level.IsCellVisible(x, y)) {
                             continue;
                         }
-                        const tint = LightTint(this.level.LightAt(x, y));
+                        CellCornerLight(this.level.lightGrid, x, y, this.cornerLight);
                         for (let t = 0, tt = tiles.length; t < tt; t++) {
                             const tile = tiles[t];
                             const texture = tile.anim ? tile.anim.texture : tile.texture;
@@ -217,7 +210,8 @@ export default class TileMapView extends GameComponent {
                                     texture,
                                     (x - originX) * TileSize - tile.pixelOffset.x,
                                     (y - originY) * TileSize - tile.pixelOffset.y,
-                                    { tint }
+                                    // A new options object per tile: `tile()` writes the texture's frame into it.
+                                    { cornerTints: this.cornerLight }
                                 );
                                 if (tile.rotation || tile.scale.x < 0 || tile.scale.y < 0) {
                                     layer.tileRotate(TileGD8Rotation(tile.rotation, tile.scale.x, tile.scale.y));

@@ -1,16 +1,18 @@
 import {Container, Sprite, Texture} from "pixi.js";
 import {CompositeTilemap} from "@logic-incubator/lib/tilemap";
 import AssetFactory from "@logic-incubator/lib/loading/AssetFactory";
+import {Vec2Like} from "@logic-incubator/lib/math/Geometry";
 import { TileSize } from "../Constants";
 import Encounter from "../Encounter";
 import MonsterRoster from "../level/entities/MonsterRoster";
 import Level from "../level/Level";
+import {FootLight, LightGrid, LightToTint, SampleLight} from "../level/Lighting";
 import {Camera} from "./Camera";
 import {ViewOrigin} from "./helpers/CameraWindow";
 import {CentreTile} from "./helpers/PlayerMovement";
 import {SpriteDrawPosition} from "./helpers/SpriteDrawOffset";
 import {Player} from "./Player";
-import {EntitiesLayer, LightTint, ProjectilesLayer, TileGD8Rotation} from "./TileMap";
+import {EntitiesLayer, ProjectilesLayer, TileGD8Rotation} from "./TileMap";
 
 /** Monsters' animation frames per ticker frame - see `AnimationSpeed` for tiles'. */
 const MonsterAnimationSpeed = 0.15;
@@ -19,15 +21,28 @@ const HitTint = 0xff4040;
 /** How fast the player blinks while invulnerable after a hit, in blinks per second. */
 const BlinkRate = 12;
 
-/** One sprite to draw into the entities layer: `x`/`y` on screen (already offset by the view), `feet` its bottom edge in the world, which is what the draw order sorts by. */
-type Drawable = {x: number; y: number; feet: number; texture: Texture; facingX: number; tint: number; alpha: number};
+/** How far inside the edges of a figure's 16 px footprint its light is sampled - see `FigureLight`. */
+const FootInset = 2;
 
-/** Each channel of two packed RGB tints multiplied together. */
-function MultiplyTint(a: number, b: number): number {
-    const r = (((a >> 16) & 0xff) * ((b >> 16) & 0xff)) / 255;
-    const g = (((a >> 8) & 0xff) * ((b >> 8) & 0xff)) / 255;
-    const bl = ((a & 0xff) * (b & 0xff)) / 255;
-    return (Math.round(r) << 16) | (Math.round(g) << 8) | Math.round(bl);
+/** One sprite to draw into the entities layer: `x`/`y` on screen (already offset by the view), `feet` its bottom edge in the world, which is what the draw order sorts by, and `light` its four corners' light (see `Lighting.FootLight`). */
+type Drawable = {x: number; y: number; feet: number; texture: Texture; facingX: number; light: Float32Array; alpha: number};
+
+/** Fills `out` with the light for a figure whose one-tile footprint has its top-left at `position` (world pixels): the floor's light just inside its feet, so it shades smoothly as it walks. */
+function FigureLight(grid: LightGrid, position: Vec2Like, out: Float32Array): Float32Array {
+    FootLight(grid, (position.x + FootInset) / TileSize, (position.x + TileSize - FootInset) / TileSize, (position.y + TileSize - FootInset) / TileSize, out);
+    return out;
+}
+
+/** Multiplies a packed RGB tint into every corner of a corner light, in place. */
+function MultiplyLight(light: Float32Array, tint: number): void {
+    const r = ((tint >> 16) & 0xff) / 255;
+    const g = ((tint >> 8) & 0xff) / 255;
+    const b = (tint & 0xff) / 255;
+    for (let i = 0; i < light.length; i += 3) {
+        light[i] *= r;
+        light[i + 1] *= g;
+        light[i + 2] *= b;
+    }
 }
 
 /**
@@ -35,7 +50,7 @@ function MultiplyTint(a: number, b: number): number {
  * entities layer, sorted by their feet so whoever's lower on screen is in
  * front; shots into the projectiles layer as sprites, turned to face their
  * flight. Skips whatever stands where the player can't see (`IsCellVisible`),
- * and lights each one by the cell it's on.
+ * and lights each one by the floor under its feet.
  */
 export default class EntityRenderer {
     private entities: CompositeTilemap | null = null;
@@ -43,6 +58,9 @@ export default class EntityRenderer {
     private sprites: Sprite[] = [];
     private frames = new Map<string, Texture[]>();
     private drawables: Drawable[] = [];
+    /** Corner-light arrays reused frame to frame, one per drawable slot, so lighting 150 monsters doesn't allocate every frame. */
+    private lights: Float32Array[] = [];
+    private sampled = [0, 0, 0];
 
     constructor(private camera: Camera, private level: Level) {}
 
@@ -74,7 +92,7 @@ export default class EntityRenderer {
         drawables.sort((a, b) => a.feet - b.feet);
         this.entities.clear();
         drawables.forEach(d => {
-            this.entities.tile(d.texture, d.x, d.y, {tint: d.tint, alpha: d.alpha});
+            this.entities.tile(d.texture, d.x, d.y, {cornerTints: d.light, alpha: d.alpha});
             if (d.facingX < 0) {
                 this.entities.tileRotate(TileGD8Rotation(0, d.facingX, 1));
             }
@@ -95,7 +113,10 @@ export default class EntityRenderer {
                 return;
             }
             const texture = frames[0];
-            const light = LightTint(this.level.LightAt(x, y));
+            const light = FigureLight(this.level.lightGrid, {x: x * TileSize, y: y * TileSize}, this.NextLight());
+            if (encounter.spawnerFlash.has(state)) {
+                MultiplyLight(light, HitTint);
+            }
             // Drawn top-left on its own cell, over the footprint that makes it solid (see `SpawnerCells`).
             this.drawables.push({
                 x: (x - origin.x) * TileSize,
@@ -103,7 +124,7 @@ export default class EntityRenderer {
                 feet: y * TileSize + texture.height,
                 texture,
                 facingX: 1,
-                tint: encounter.spawnerFlash.has(state) ? MultiplyTint(light, HitTint) : light,
+                light,
                 alpha: 1
             });
         });
@@ -120,7 +141,10 @@ export default class EntityRenderer {
                 return;
             }
             const texture = frames[Math.floor(m.animTime * MonsterAnimationSpeed) % frames.length];
-            const light = LightTint(this.level.LightAt(tile.x, tile.y));
+            const light = FigureLight(this.level.lightGrid, m.position, this.NextLight());
+            if (m.hitFlash > 0) {
+                MultiplyLight(light, HitTint);
+            }
             const draw = SpriteDrawPosition(m.position, origin, texture);
             this.drawables.push({
                 x: draw.x,
@@ -128,14 +152,13 @@ export default class EntityRenderer {
                 feet: m.position.y + TileSize,
                 texture,
                 facingX: m.facingX,
-                tint: m.hitFlash > 0 ? MultiplyTint(light, HitTint) : light,
+                light,
                 alpha: 1
             });
         });
     }
 
     private AddPlayer(player: Player, origin: {x: number; y: number}): void {
-        const tile = player.Tile;
         const texture = player.Texture;
         const draw = SpriteDrawPosition(player.Position, origin, texture);
         const {invulnerable} = player.Health;
@@ -145,7 +168,7 @@ export default class EntityRenderer {
             feet: player.Position.y + TileSize,
             texture,
             facingX: player.FacingX,
-            tint: LightTint(this.level.LightAt(tile.x, tile.y)),
+            light: FigureLight(this.level.lightGrid, player.Position, this.NextLight()),
             alpha: invulnerable > 0 && Math.floor(invulnerable * BlinkRate) % 2 === 0 ? 0.25 : 1
         });
     }
@@ -170,8 +193,14 @@ export default class EntityRenderer {
             sprite.texture = frames[0];
             sprite.position.set(p.x - origin.x * TileSize, p.y - origin.y * TileSize);
             sprite.rotation = p.spriteAngle != null ? Math.atan2(p.vy, p.vx) - p.spriteAngle : 0;
-            sprite.tint = LightTint(this.level.LightAt(cellX, cellY));
+            sprite.tint = LightToTint(SampleLight(this.level.lightGrid, p.x / TileSize, p.y / TileSize, this.sampled));
         });
+    }
+
+    /** The reusable corner-light array for the drawable about to be pushed. */
+    private NextLight(): Float32Array {
+        const slot = this.drawables.length;
+        return this.lights[slot] ?? (this.lights[slot] = new Float32Array(12));
     }
 
     /** Every frame of a sprite or animation, cached - none (after a one-off warning) if the sprite sheet hasn't got it. */
