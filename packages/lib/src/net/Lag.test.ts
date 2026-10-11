@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { WithLag } from "./Lag";
-import { LoopbackPair } from "./Loopback";
+import { WithLag, WithLinkLag } from "./Lag";
+import { LoopbackLinks, LoopbackPair } from "./Loopback";
+import type { LagOptions } from "./Lag";
+import type { PeerLink } from "./PeerLink";
 import { Message } from "./Transport";
 
 /** Lets the loopback's own deliveries (promise callbacks) run. */
@@ -80,5 +82,78 @@ describe("WithLag", () => {
         expect(events).toEqual([]);
         await vi.advanceTimersByTimeAsync(50);
         expect(events).toEqual(["message last words", "closed"]);
+    });
+});
+
+describe("WithLinkLag", () => {
+    beforeEach(() => {
+        vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    /** Two ends of a link in memory, the first slowed by `lag`, open and passing their signals to each other. */
+    async function Linked(lag: LagOptions): Promise<[PeerLink, PeerLink]> {
+        const links = new LoopbackLinks();
+        const lagged = WithLinkLag(links.Make(true), lag);
+        const other = links.Make(false);
+        lagged.OnSignal(signal => other.Signal(signal));
+        other.OnSignal(signal => lagged.Signal(signal));
+        await Flush();
+        expect(lagged.IsOpen && other.IsOpen).toBe(true);
+        return [lagged, other];
+    }
+
+    function Heard(link: PeerLink): string[] {
+        const heard: string[] = [];
+        link.OnMessage((payload, fast) => heard.push((fast ? "fast " : "") + payload[0]));
+        return heard;
+    }
+
+    it("holds both lanes back by the delay, each way", async () => {
+        const [lagged, other] = await Linked({ delayMs: 100 });
+        const atOther = Heard(other);
+        const atLagged = Heard(lagged);
+        lagged.Send(new Uint8Array([1]), false);
+        lagged.Send(new Uint8Array([2]), true);
+        other.Send(new Uint8Array([3]), true);
+        await Flush();
+        expect(atOther).toEqual([]);
+        expect(atLagged).toEqual([]);
+        await vi.advanceTimersByTimeAsync(100);
+        await Flush();
+        expect(atOther).toEqual(["1", "fast 2"]);
+        expect(atLagged).toEqual(["fast 3"]);
+    });
+
+    it("keeps the reliable lane in order through a stall, while the fast lane loses and is overtaken", async () => {
+        let n = 0;
+        // The first of each lane is unlucky - stalled on the reliable lane, lost on the fast one - and the jitter shrinks
+        // after it, so later ones would overtake. The reliable lane asks for jitter then loss; the fast lane, loss then jitter.
+        const random = () => [0.9, 0.1, 0.5, 0.9, 0.1, 0.9, 0.1, 0.9, 0.9, 0.9, 0.1][n++];
+        const [lagged, other] = await Linked({ delayMs: 10, jitterMs: 100, lossChance: 0.5, lossDelayMs: 300, random });
+        const heard = Heard(other);
+        [1, 2, 3].forEach(i => lagged.Send(new Uint8Array([i]), false));
+        await vi.advanceTimersByTimeAsync(1000);
+        await Flush();
+        expect(heard).toEqual(["1", "2", "3"]);
+
+        heard.splice(0);
+        [4, 5, 6].forEach(i => lagged.Send(new Uint8Array([i]), true));
+        await vi.advanceTimersByTimeAsync(1000);
+        await Flush();
+        expect(heard).toEqual(["fast 6", "fast 5"]);
+    });
+
+    it("closes as its link does", async () => {
+        const [lagged, other] = await Linked({ delayMs: 50 });
+        const closed: string[] = [];
+        lagged.OnClose(reason => closed.push(reason));
+        other.Close();
+        await Flush();
+        expect(closed).toEqual(["closed by the other end"]);
+        expect(lagged.IsOpen).toBe(false);
     });
 });

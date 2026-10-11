@@ -7,7 +7,7 @@
  */
 
 /** The version of these messages: a guest on another is turned away (`refused`, "version"). Raise it whenever a message changes. */
-export const NetVersion = 3;
+export const NetVersion = 4;
 
 /** The most characters a player's name keeps. */
 export const NameLength = 12;

@@ -303,8 +303,9 @@ export default class HostSession extends PlaySession {
         if (this.away.has(index)) {
             return "AWAY, NOTHING FOR " + Math.floor((now - this.heard[index]) / 1000) + " S";
         }
-        const rtt = this.RoundTrip(this.seats[index].peer);
-        return (rtt === undefined ? "-" : Math.round(rtt) + " MS") + ", " + this.inputs[index].Waiting + " INPUTS WAITING";
+        const peer = this.seats[index].peer;
+        const rtt = this.RoundTrip(peer);
+        return this.LinkText(peer) + ", " + (rtt === undefined ? "-" : Math.round(rtt) + " MS") + ", " + this.inputs[index].Waiting + " INPUTS WAITING";
     }
 
     private SendSnapshot(): void {

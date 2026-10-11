@@ -106,7 +106,7 @@ logic-incubator/
         tilemap/             vendored @pixi/tilemap with per-tile and per-corner tint, and flicker
         particles/           vendored pixi-particles: the particle Emitter
         colour/              colour transforms on 0xRRGGBB numbers: Darken, ShiftHue
-        net/                 online play: transports (WebSocket, in memory), the lag simulator, bytes, the relay's rules, RelaySession
+        net/                 online play: transports (WebSocket, in memory), direct links (WebRTC, in memory), the lag simulator, bytes, the relay's rules, RelaySession
         math/ patterns/ algorithms/ datastructures/ utils/ filters/
       scripts/               build-assets.js and its modules: the asset build (plain Node)
       html/                  index.template + index.styles.css the games are served in
@@ -1730,13 +1730,19 @@ goes and it gets back in.
 **Playing.** The host's machine runs the run: its world is the only one that moves monsters, lands hits and opens doors. `CreateNetPlay`
 gives the host a `HostSession` and each guest a `GuestSession`, and `DungeonMain` plays through whichever it was given (`net`):
 
-- **Guests send inputs.** Each step a guest sends its hero's input - numbered, the last three in each message, so one lost message costs
-  nothing - and the host plays them as they come, in order. A hero whose next input hasn't arrived stands still; once more than four are
+- **Guests send inputs.** Each step a guest sends its hero's input - numbered, the last six in each message (`InputsSent`), so a few lost
+  messages in a row cost nothing - and the host plays them as they come, in order. A hero whose next input hasn't arrived stands still; once more than four are
   waiting, the host plays two a step to catch up.
 - **The host sends snapshots**, 20 a second (every third step), to everyone: every hero (position, hearts, gold, weapon, light spell,
   torch, the last input it played), every monster and shot, which doors are open, and what happened since the last one - pickups, kills,
   hits, keys dropped, the level's end. A guest emits those as the engine's own events on its dispatcher, so
   sounds and an overlay work the same on every machine. About 150 bytes each for two players, about 3 KB a second.
+- **Straight to the host, where it can.** Given direct links ([15.5](#155-direct-links-between-players)), each guest links to the host as it
+  joins, and once the link opens they talk over it, not the relay - a shorter way, and one where a lost message doesn't hold up the ones
+  behind it. What's sent again soon anyway (`MayBeLost`: inputs, pings, and a snapshot with nothing happening in it) goes by its fast lane,
+  which may lose a message or let a later one overtake it; the rest - the lobby, a snapshot with events in it, a catch-up - goes reliably,
+  whole and in order. A snapshot older than the newest a guest has is only what happened in it: the guest fires its events and skips its
+  world. Two machines that can't reach each other directly (some mobile networks and offices) never link, and play on by the relay.
 - **A guest draws the others a moment behind.** It draws the host's world 100 ms behind the newest snapshot (`PlayClock`), between the
   two snapshots either side, so the monsters and the other heroes move smoothly through a late or lost message (`Replica`).
 - **A guest's own hero moves at once.** It steps its own hero with the same code the host runs (`Prediction`), keeps the inputs the host
@@ -1757,7 +1763,8 @@ gives the host a `HostSession` and each guest a `GuestSession`, and `DungeonMain
   Their next input puts it back. A hero whose connection has gone is held for `HoldAwayMs` (a minute), then taken out for good, as if
   they'd left.
 - **Getting back in.** A guest's lobby given `reconnect` (a new `RelaySession.Join` on the same code) notices its connection has gone -
-  closed, or nothing heard for 8 seconds (`QuietForMs`; the host pings every second) - and emits `DROPPED`. Its hero stands still
+  closed, nothing heard for 8 seconds (`QuietForMs`; the host pings every second), or its open direct link to the host failed under it
+  (`link`), with whatever was on its way - and emits `DROPPED`. Its hero stands still
   (`NetPlay.Connected` is false - the game shows RECONNECTING). It tries again and again, 0.5, 1, 2, then every 4 seconds, for as long
   as the host holds its hero (`ReconnectForMs`), saying hello with the token the host's start gave it. The host's lobby asks the run
   (`HostLobby.SetRejoin`, which `CreateNetPlay` sets to the `HostSession`) and lets it back in as the hero it was: the guest's lobby emits
@@ -1769,9 +1776,10 @@ gives the host a `HostSession` and each guest a `GuestSession`, and `DungeonMain
   the relay closes its room.
 - **Seeing how it's going.** In a development build an online run shows a small box (`DebugTools.Watch`, [4.2](#42-gamecomponent-the-lifecycle)):
   the round trip to the host, each snapshot's size and the bytes a second, how far behind the guest draws, how many times its own hero
-  has been corrected, and on the host how many inputs are waiting for each guest - or that they're AWAY, GONE (and for how much longer
-  their hero is held) or LEFT. `in-dungeons-we-dwell`'s `?lag=150&loss=2` slows its connection down to try it
-  ([15.4](#154-testing-without-a-server)).
+  has been corrected, whether each guest and the host talk DIRECT, by the RELAY, or by the relay while LINKING, and on the host how many
+  inputs are waiting for each guest - or that they're AWAY, GONE (and for how much longer their hero is held) or LEFT.
+  `in-dungeons-we-dwell`'s `?lag=150&loss=2` slows its connection down to try it ([15.4](#154-testing-without-a-server)), and
+  `?direct=off` keeps it to the relay.
 
 Play messages (`engine/net/PlayMessages`) are bytes, kinds 16 to 22, alongside the lobby's; `NetVersion` covers both.
 
@@ -2536,14 +2544,16 @@ Beyond the widgets the game's screens use, the kit has a component for each of t
 browser (host)  --WebSocket-->  relay  <--WebSocket--  browser (guest)
    RelaySession                rooms by code              RelaySession
    HostLobby                   (passes bytes along)       GuestLobby
+        ^                                                      ^
+        +------------- direct link (WebRTC), if any -----------+
 ```
 
 - A **`Transport`** carries whole messages, in order, between two ends: `WebSocketTransport` in a browser, `LoopbackPair` in memory.
-  What sits on top sees only the interface, so a direct WebRTC connection can be added later without changing it.
 - The **relay** puts players with the same five-letter room code together - one host and up to three guests - and passes their messages
   along. It holds no game rules and runs no game: the host's browser does.
 - A **`RelaySession`** is one machine's place in a room: `Send(to, bytes)` to a peer by number (the host is 0), `Broadcast(bytes)`, and
-  events for messages, peers joining and leaving, and the end. `Leave()` leaves the room; `Drop(reason)` lets go of a connection taken
+  events for messages, peers joining and leaving, and the end. Given a `LinkMaker`, it also links each guest straight to the host
+  ([15.5](#155-direct-links-between-players)) and sends by that once it opens; what's on top doesn't need to know which way a message went. `Leave()` leaves the room; `Drop(reason)` lets go of a connection taken
   for lost (one gone quiet) the same way, but ends with `reason`, so whoever is listening can get back in on a new one - a guest's place
   is freed when its connection goes, the room stays, and joining it again takes a free seat (the dungeon's lobby then puts the player
   back in their own hero's, [9.3.2](#932-playing-online)).
@@ -2602,3 +2612,49 @@ guest.Send(0, new ByteWriter().U8(1).String("hello").ToBytes());
 `WithLag(transport, { delayMs, jitterMs, lossChance })` slows a connection down - each message, each way, in order, now and then held up
 as if lost and sent again - to try play over a slow line. `in-dungeons-we-dwell` wraps its connection in it for `?lag=150` on the page's
 address (milliseconds each way), and `?loss=2` (percent of messages lost).
+
+`LoopbackLinks` makes direct links in memory: pass its `Make` as `links` to every session in a room. `unreachable` keeps them from ever
+opening, `fastLoss` loses a share of the fast lane's messages, and `CutAll()` fails every open link, as a network that stops letting
+them through. `WithLinkLag(link, lag)` slows a link as `WithLag` does a connection - its reliable lane in order, its fast lane each
+message on its own clock, so one can overtake another, and lost outright.
+
+```ts
+const links = new LoopbackLinks();
+const host = await RelaySession.Host(relay.Connect(), "my-game", { links: links.Make });
+const guest = await RelaySession.Join(relay.Connect(), "my-game", host.Code, { links: links.Make });
+// a moment later: guest.LinkTo(0) === "direct"
+links.CutAll();                                   // UNLINKED at both ends; the relay carries on
+```
+
+### 15.5 Direct links between players
+
+The relay is the way in and the way back, but players can talk without it. Given a `LinkMaker` (`RelayJoinOptions.links`) at both ends,
+each guest's `RelaySession` sets up a direct link to the host as it joins - in a browser a `WebRtcLink`, a WebRTC connection - with the
+relay carrying the setting up: the offer, the answer, and the addresses each end can be reached at. Once the link opens, `Send` and
+`Broadcast` go by it, and `LINKED` says so; `LinkTo(peer)` tells which way messages to a peer go now (`relay`, `linking` or `direct`).
+
+```ts
+import WebRtcLink from "@logic-incubator/lib/net/WebRtcLink";
+
+const links = WebRtcLink.Supported ? (offer: boolean) => new WebRtcLink(offer) : undefined;
+const host = await RelaySession.Host(await WebSocketTransport.Connect(relayUrl), "my-game", { links });
+// ...and the same `links` for every Join, including a guest's reconnect
+```
+
+- **Two lanes.** A link carries bytes on a reliable lane - whole and in order, as the relay does - and a fast lane, which neither resends
+  nor waits: a message on it may be lost or overtaken, but a lost one never holds up those behind it. `Send(to, bytes, fast)` picks the
+  fast lane for what's sent again soon anyway; by the relay, `fast` changes nothing. On the reliable lane a `WebRtcLink` sends a message
+  over 16 KB (`PieceBytes`) in pieces and puts it back together.
+- **Nothing overtaken in the switch.** Messages sent by the relay before the link opened may still be on their way when the first come by
+  the link. So each end, once its link opens, sends a marker by the relay before anything by the link, and the other end holds what the
+  reliable lane brings until that marker arrives. Payloads starting with `LinkPayload` (`0xff`) are the session's own, and never handed on:
+  a game's message kinds must start with any other byte.
+- **The relay is the fallback.** A link that hasn't opened within `LinkTimeoutMs` (10 s) is given up, and one that fails or closes ends;
+  either way `UNLINKED(peer, wasOpen)` is emitted and messages go by the relay again. One that was open (`wasOpen`) may have lost what was
+  on its way over it - the dungeon's guest takes that as its connection gone and gets back in ([9.3.2](#932-playing-online)).
+- **Finding each other.** A browser learns the address the internet sees it at from free public STUN servers (`StunServers`: Google's
+  and Cloudflare's). There is no TURN server to carry the link when the two can't reach each other: the relay does that already.
+- **Privacy.** A direct link shows each player the other's IP address, as any peer-to-peer game does; by the relay, only the relay sees
+  them. A game can offer a way to keep to the relay (`in-dungeons-we-dwell`'s `?direct=off`).
+- **Cost.** With links, the run's inputs and snapshots go browser to browser, so the relay carries far fewer bytes. Each player's
+  connection to it stays open all the same - it's the way back in, and the way for anyone who can't link.

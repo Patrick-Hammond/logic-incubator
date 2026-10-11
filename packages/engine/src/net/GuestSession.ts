@@ -7,7 +7,9 @@
  * `Prediction`). What happened in between - pickups, keys dropped, spawners
  * destroyed, doors - it does to its own level as it's told, and it passes on
  * the host's events (see Events.ts) as its own, so a HUD, sounds or an end
- * screen hear of them as they would offline. If its connection goes, its hero
+ * screen hear of them as they would offline. Over a direct link a snapshot
+ * may be lost, or come after a newer one; what happened always comes, in
+ * order (see `MayBeLost`). If its connection goes, its hero
  * stands still until it's back in the room (`Rejoin`, from its lobby); the host
  * then says what it missed (`catch-up`) before anything else. Pure - no pixi -
  * so it runs under the plain node test runner.
@@ -29,8 +31,8 @@ import PlayClock from "./PlayClock";
 import Prediction from "./Prediction";
 import Replica from "./Replica";
 
-/** How many of its latest inputs a guest sends each step - one lost on the way costs nothing. */
-export const InputsSent = 3;
+/** How many of its latest inputs a guest sends each step - so a few lost in a row on a direct link's fast lane cost nothing. */
+export const InputsSent = 6;
 
 export default class GuestSession extends PlaySession {
     readonly IsHost = false;
@@ -184,7 +186,7 @@ export default class GuestSession extends PlaySession {
         const behind = newest ? Math.round(((newest.tick - this.clock.Tick) * 1000) / 60) : 0;
         return [
             "GUEST - ROUND " + (this.round + 1),
-            "ROUND TRIP " + (rtt === undefined ? "-" : Math.round(rtt) + " MS"),
+            "ROUND TRIP " + (rtt === undefined ? "-" : Math.round(rtt) + " MS") + ", " + this.LinkText(RelayHost),
             // Far ahead of the newest means none are coming - the level is over, or the host stalled.
             "SNAPSHOT " + BytesText(this.received.Last) + ", " + BytesText(this.received.PerSecond(now)) + "/S" + (behind < -250 ? ", NONE COMING" : ", DRAWN " + behind + " MS BEHIND"),
             "CORRECTIONS " + this.prediction.Corrections + ", LAST " + this.prediction.LastError.toFixed(1) + " PX",
@@ -267,7 +269,11 @@ export default class GuestSession extends PlaySession {
         });
     }
 
-    /** A snapshot of this round: what happened, the doors, then the world to draw - and this machine's hero put right. */
+    /**
+     * A snapshot of this round: what happened, the doors, then the world to draw - and this machine's hero put right.
+     * One older than the newest - overtaken on a direct link (see `MayBeLost`) - is only what happened in it: the world
+     * has moved on from the rest.
+     */
     private Apply(snapshot: Snapshot): void {
         const context = this.context;
         const replica = this.replica;
@@ -277,6 +283,10 @@ export default class GuestSession extends PlaySession {
         snapshot.events.forEach(event => this.Happened(event));
         // Happening can end the level - an end screen, a restart - and with it this one.
         if (this.context !== context) {
+            return;
+        }
+        const newest = replica.Newest;
+        if (newest && snapshot.tick <= newest.tick) {
             return;
         }
         const level = context.level;

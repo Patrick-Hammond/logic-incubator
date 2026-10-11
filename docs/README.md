@@ -15,7 +15,7 @@ engine (`engine`), a UI kit (`ui`) and a level editor (`editor`), plus the relay
 - **Writing a scene**: [User guide, chapter 4](user-guide.md#4-games-scenes-and-components) - the component lifecycle.
 - **Making a dungeon game**: [chapters 9 and 10](user-guide.md#9-the-dungeon-engine) - monsters, levels, `assets-meta.json`, the editor.
 - **Building menus and a HUD**: [the UI kit](user-guide.md#14-the-ui-kit) - widgets, focus and gamepad navigation, skins and the art workflow.
-- **Playing online**: [the online lobby](user-guide.md#932-playing-online) and [networking and the relay](user-guide.md#15-networking-and-the-relay) - transports, room codes, running and deploying the relay.
+- **Playing online**: [the online lobby](user-guide.md#932-playing-online) and [networking and the relay](user-guide.md#15-networking-and-the-relay) - transports, direct links between players, room codes, running and deploying the relay.
 - **Drawing the art**: [the sprite editor](user-guide.md#106-the-sprite-editor) - pixel editing, 256-colour palettes with alpha, a channel mixer and animation frames, inside the level editor.
 - **Something is broken**: [Troubleshooting](user-guide.md#13-troubleshooting) and the [asset diagnostics table](user-guide.md#513-diagnostics).
 
