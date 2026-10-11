@@ -5,8 +5,10 @@ import { ALL_PLAYERS_DIED, LEVEL_COMPLETED } from "../Events";
 import type { IPlayerInput } from "../input/PlayerControl";
 import { DoorOpens } from "../level/Doors";
 import type { CollectedPickup } from "../level/Level";
+import { Chase } from "../level/entities/Behaviours";
 import { NoLock } from "../level/entities/Keys";
 import { LightSpell } from "../level/entities/LightSpell";
+import type { MonsterDef } from "../level/entities/MonsterRoster";
 import { PickupValue } from "../level/entities/Pickups";
 import { WeaponDef } from "../level/entities/Projectiles";
 import World, { StartCells, WarpDistance, WorldLevel } from "./World";
@@ -21,6 +23,7 @@ const FRAME = 1 / 60;
 const BOW: WeaponDef = { icon: "bow", shot: { sprite: "arrow", speed: 6, damage: 1, range: 20, cooldown: 0.5 } };
 const SETUP = { hitPoints: 6, weapons: [BOW] };
 const SPELL: LightSpell = { light: { brightness: 1, tint: 0xffffff, range: 5 }, seconds: 10, recharge: 5 };
+const Walker: MonsterDef = { idle: "walker_idle", run: "walker_run", hitPoints: 2, speed: 0.5, contactDamage: 1, contactCooldown: 1, behaviour: () => new Chase() };
 
 type Pickup = Vec2Like & { value: PickupValue; sprite: string | null };
 type TestLevel = WorldLevel & { door: { cells: Vec2Like[]; isOpen: boolean; lockId: number }; pickups: Pickup[]; visibleFrom: Vec2Like[] };
@@ -297,6 +300,51 @@ describe("World", () => {
         expect(world.Heroes[0].Position).toEqual(at);
     });
 
+    it("leaves a hero who is away standing where they were, out of play - picking nothing up, gone for by no monster - until they're back", () => {
+        const { level, world } = Setup(ROOM, 2);
+        Put(world, 0, { x: 2, y: 2 });
+        Put(world, 1, { x: 6, y: 2 });
+        level.pickups.push({ x: 6, y: 2, value: { kind: "gold", amount: 5 }, sprite: null });
+        const walker = WalkerAt(7, 2);
+        world.encounter.monsters.push(walker);
+        world.SetAway(1, true);
+        expect(world.Heroes[1].Away).toBe(true);
+        expect(world.Active.map(h => h.Index)).toEqual([0]);
+        expect(world.Living.map(h => h.Index)).toEqual([0, 1]);
+
+        const at = { x: world.Heroes[1].Position.x, y: world.Heroes[1].Position.y };
+        for (let i = 0; i < 30; i++) {
+            world.Step([undefined, Input(1, 0)], 1, FRAME);
+        }
+        expect(world.Heroes[1].Position).toEqual(at);
+        expect(world.Heroes[1].Gold.amount).toBe(0);
+        expect(world.Heroes[1].Health.hitPoints).toBe(SETUP.hitPoints);
+        expect(level.pickups).toHaveLength(1);
+        // Past them, after the one in play.
+        expect(walker.position.x).toBeLessThan(7 * TileSize);
+
+        world.SetAway(1, false);
+        world.Step([], 1, FRAME);
+        expect(world.Heroes[1].Gold.amount).toBe(5);
+    });
+
+    it("ends the level when every hero still standing is away, as if all had fallen", () => {
+        const { world, events } = Setup(ROOM, 2);
+        world.Heroes[0].Damage(6);
+        world.Step([], 1, FRAME);
+        expect(world.AllDown).toBe(false);
+        world.SetAway(1, true);
+        expect(world.AllDown).toBe(true);
+        expect(events.filter(e => e.event === ALL_PLAYERS_DIED)).toHaveLength(1);
+
+        // The next level starts with everyone in play; one who has left for good is never away.
+        world.Reset(SETUP, [undefined, undefined]);
+        expect(world.Heroes[1].Away).toBe(false);
+        world.RemoveHero(1);
+        world.SetAway(1, true);
+        expect(world.Heroes[1].Away).toBe(false);
+    });
+
     it("ends the level when any hero reaches a way out, and holds still until the next Reset", () => {
         const { world, events } = Setup(EXIT, 2);
         Put(world, 1, { x: 5, y: 1 });
@@ -317,3 +365,26 @@ describe("World", () => {
         expect(world.Living.length).toBe(2);
     });
 });
+
+/** A walker standing at cell (`x`, `y`), going for the nearest hero in play. */
+function WalkerAt(x: number, y: number) {
+    return {
+        id: 1,
+        type: "walker",
+        def: Walker,
+        behaviour: Walker.behaviour(),
+        position: new Vec2(x * TileSize, y * TileSize),
+        previous: new Vec2(x * TileSize, y * TileSize),
+        velocity: new Vec2(),
+        hitPoints: 2,
+        size: { width: TileSize, height: TileSize },
+        facingX: 1,
+        moving: false,
+        animTime: 0,
+        contactCooldown: 0,
+        rangedCooldown: 0,
+        hitFlash: 0,
+        spawner: null,
+        dead: false
+    };
+}

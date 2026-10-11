@@ -1117,10 +1117,12 @@ session.Peers: ReadonlyArray<number>      // everyone else in the room, in peer 
 session.Send(to: number, payload: Uint8Array): void
 session.Broadcast(payload: Uint8Array): void
 session.Leave(): void                    // closes the connection - and the room, from the host
+session.Drop(reason: string): void       // lets go of a connection taken for lost (gone quiet): closes it as Leave does,
+                                         // but CLOSED hears `reason`, so a listener can get back in on a new one
 
 RelayEvents = { MESSAGE: "message", PEER_JOINED: "peer-joined", PEER_LEFT: "peer-left", CLOSED: "closed" }
 // message (from: number, payload: Uint8Array) · peer-joined (peer) · peer-left (peer)
-// closed (reason: "left" | "host-left" | the connection's own reason) - once; every listener is dropped after it
+// closed (reason: "left" | "host-left" | Drop's reason | the connection's own reason) - once; every listener is dropped after it
 RefusalText(reason: RelayError): string   // "There's no game with that code." ...
 ```
 
@@ -1254,7 +1256,7 @@ select hands its picks to the scene through these.
 
 A hero whose `input` is `null` is played on another machine, in an online run: no `PlayerControl` is made for them, so here they get no input, and the
 camera leaves them out. The camera keeps to the heroes played on this machine - every hero, when none is - and while those are all down, follows the
-first teammate still standing (with no one standing, it stays on the fallen). `Hud.SetNames` heads each row with the slot's `name`, the rows played
+first teammate still standing and not away (with no one, it stays on the fallen). `Hud.SetNames` heads each row with the slot's `name`, the rows played
 here in the skin's `focus` colour when the party is spread over machines.
 
 **Online** (`net`, see [Online play](#online-play)): each step hands the inputs to `NetPlay.Step` in place of `World.Step`, each frame calls
@@ -1704,7 +1706,8 @@ new World(level: WorldLevel, options: EncounterOptions)
 world.encounter: Encounter
 world.Heroes: ReadonlyArray<Hero>      // every hero, in slot order, the fallen included
 world.Living: Hero[]                   // those still standing, in slot order
-world.AllDown: boolean                 // every hero has fallen - nothing steps until the next Reset
+world.Active: Hero[]                   // those in play: standing and not Away, in slot order - who steps, picks up and is gone for
+world.AllDown: boolean                 // every hero has fallen, or every one standing is away - nothing steps until the next Reset
 world.Completed: boolean               // a hero reached an exit - nothing steps until the next Reset
 world.Reset(setup: Pick<PlayerSetup, "hitPoints" | "weapons">, lightSpells: (LightSpell | undefined)[], seed?): void
 world.SetLeash(span: { width; height } | null): void   // in tiles; null lets the party roam
@@ -1713,6 +1716,8 @@ world.IsLockedOut(x, y): boolean       // a closed door the team can't open - a 
 world.Collider: MoveCollider           // what the heroes move against - an online guest moves its own with it
 world.Step(inputs: ReadonlyArray<HeroInput>, dt, seconds): void
 world.RemoveHero(index): void           // their player has left: Gone, out of play for good (keys dropped, and the level ends if no one's left standing)
+world.SetAway(index, away: boolean): void   // online, their player's connection has gone (true) or is back: out of play meanwhile, standing
+                                        // where they were (the level ends if no one else is in play); never for a hero who is Gone
 
 type HeroInput = IPlayerInput | ReadonlyArray<IPlayerInput> | undefined   // a list: several steps' worth for that hero, played in turn this step
 NoInput: IPlayerInput                   // standing still
@@ -1728,16 +1733,17 @@ size (`Encounter.Reset(seed, heroes)`).
 
 `Step` runs one step of play, in this order:
 
-1. Each living hero, by slot, moves with `inputs[slot]` (standing still without one; a list of inputs moves them once for each, in order - an
-   online host catching up on a guest's inputs). One holding the warp control first jumps to the nearest other living hero, if every one of
+1. Each hero in play (`Active`: living and not away), by slot, moves with `inputs[slot]` (standing still without one; a list of inputs moves them once for each, in order - an
+   online host catching up on a guest's inputs). One holding the warp control first jumps to the nearest other hero in play, if every one of
    them is at least `WarpDistance` tiles away. With a leash, the others' positions bound where they can go (`LeashBoxFor`) and the edge stops
    them like a wall (`Leashed`).
-2. Doors open and shut by where the living heroes stand (`UpdateDoors`, with `TeamCanOpen`), and the regions they can see are recomputed together.
+2. Doors open and shut by where the heroes in play stand (`UpdateDoors`, with `TeamCanOpen`), and the regions they can see are recomputed together.
 3. Each picks up what's under them, in slot order, so the first there gets it (`PICKUP_COLLECTED(hero, x, y)` when there was anything).
 4. A hero on an exit ends the level: `Completed` is set, `LEVEL_COMPLETED(hero)` emitted, and nothing else happens this step.
-5. Each fires the shots they took, if any (`Encounter.Fire` with their slot and the input's `seq`), and the encounter steps with the living heroes.
+5. Each fires the shots they took, if any (`Encounter.Fire` with their slot and the input's `seq`), and the encounter steps with the heroes in
+   play - so a monster never goes for, or hits, one who is away.
 6. A hero who fell this step drops every key they carried (`Level.DropPickup`, then `KEYS_DROPPED(hero, x, y)` with the cell they landed on), for
-   the others to pick up. Once none is left standing, `AllDown` is set and `ALL_PLAYERS_DIED` emitted.
+   the others to pick up. Once none is left in play, `AllDown` is set and `ALL_PLAYERS_DIED` emitted.
 
 Keys are the team's: a door opens for everyone if any living hero holds its key, and an open door never shuts on a hero in it, even if the key
 went with a hero who fell. There is no hero-to-hero collision.
@@ -1758,6 +1764,9 @@ hero.ApplyPickup(pickup), TakeShot(): Vec2Like | null, Damage(n): boolean
 hero.DropKeys(): HeldKey[]                    // every key they carry, leaving them none
 hero.Gone: boolean                            // their player has left an online run (Leave) - not Alive, and the HUD says LEFT
 hero.Leave(): void                            // out for good: no hit points, Gone until the next Reset
+hero.Away: boolean                            // their player's connection to an online run has gone, for now: still Alive, but
+                                              // out of play (World.Active), drawn faint, and the HUD says AWAY
+hero.SetAway(away: boolean): void             // just the flag - World.SetAway is the host's way; a guest copies it from snapshots
 hero.Writable: PlayerState                    // their state to write to - what an online guest copies the host's snapshots into
 ```
 
@@ -1799,8 +1808,8 @@ same seed on any machine (mulberry32); `NewSeed()` - a fresh 32-bit seed, differ
 | `HeroView` | `view/HeroView` | How one hero looks. `new HeroView(hero: Hero, animation)`; `Hero` (the hero it draws), `DrawPosition` (where they're drawn this frame, between their last two steps), `Texture`; `Reset(hero)` (point it at a new level's hero - `DungeonMain` keeps one view per slot from level to level), `SetSprite(animation)` (draw them with another animation; a no-op for the one already in use), `Place(alpha, offset?)` (places them, and their mage-light, for drawing `alpha` of the way through their last step, `offset` pixels from there - an online guest's correction being drawn away; call each frame after the steps), `Destroy()`. Their lights, as `MovingLight`s for `Level.UpdateLights` (null when they have none, and always once they've fallen), where they're drawn: `Light` (a torch they picked up, at their centre, dimming as it burns out) and `SpellLight` (their mage-light while it's lit, over the floor just behind them); `OrbPosition` is where the mage-light is drawn, floating and bobbing. |
 | `Effects extends GameComponent` | `view/Effects` | `new Effects(camera)`; `Play(art, config, x, y): Emitter \| undefined` starts a particle effect at a position in world pixels (`art`: a sprite or animation name, `config`: an `EmitterConfig` or `OldEmitterConfig`; `undefined` after a one-off warning when `art` isn't loaded). Its layer sits in the camera root above the entities and shots, placed every frame like the entities layer (`view/helpers/EffectsPlacement`), and goes back on top on `LEVEL_CREATED`, which also drops the level's effects. Emitters update from `Tick` (only while shown); a finished one (not emitting, no particles) is destroyed, a continuous one runs until `emit = false`. `DungeonMain` attaches it - use `main.Effects`. |
 | `Hud extends GameComponent` | `view/Hud` | `new Hud(setup.hearts?)`; `RenderHeroes(heroes)` (every hero, in slot order, the fallen included: one gets the lone hero's panel, as `Render`; a party gets a `HudHeroRow` each, spread down the panel, and the team's keys at the bottom - every key any of them carries); `Render(health, gold, weaponIcon, inventory, keys, spell?)` (the lone hero's panel: hearts, gold, weapon, inventory, keys and `spell`, their `LightSpellState`, shown under the keys as a bar - the skin's `mp` bar, if it has one - and READY, LIT or RECHARGING with the seconds left; null or left out hides it). `SetNames(names: { name; own }[])` heads each row (in slot order) with `name` in place of PLAYER n, in the skin's `focus` colour for `own` - the players at this machine - and `muted` for the rest; rows made later take them too. Built from the UI kit (a `UiPanel`, a `UiIconRow` of hearts, `UiItemSlot`s and `UiInventoryGrid`s, `UiText`) in the skin of the loaded `ui` bundle - the game must load it first. Hearts are the game's own pictures when `setup.hearts` gives them (enlarged 3x, 2x in a party's rows), else the skin's. The keys panel shows each key's sprite and its id. Warns once per missing sprite. |
-| `HudHeroRow extends Container` | `view/HudHeroRow` | One hero's row when a party plays: PLAYER n or `SetName(name, own)`'s (and DOWN, the row dimmed, once they've fallen - LEFT once their player has gone) and their hearts, their weapon slot, gold and light spell bar, and a strip of the items they carry. `new HudHeroRow(theme, index, rowWidth, heartTextures?)`, `Render(hero: HudHero)` (redraws only what changed), `static Height(theme)`. Also exports `type HudHero` (what a row reads of a `Hero`), `SpellStatusText(spell)`, `FitScale(texture, box)` and `TextureOf(name)`, which `Hud` shares. |
-| `EntityRenderer` | `view/EntityRenderer` | `new EntityRenderer(camera, level)`; `Reset()` (call on `LEVEL_CREATED`), `Render(heroes: HeroView[], encounter, alpha = 1)` (each hero where their view was last `Place`d - a fallen one faint, a ghost where they fell; monsters and shots `alpha` of the way through their last step). Draws a glow under the figures for each hero's torch and each glowing shot, and the mage-lights - a glow with a bright core - over them. |
+| `HudHeroRow extends Container` | `view/HudHeroRow` | One hero's row when a party plays: PLAYER n or `SetName(name, own)`'s (and DOWN, the row dimmed, once they've fallen - LEFT once their player has gone, AWAY while their player's connection is gone) and their hearts, their weapon slot, gold and light spell bar, and a strip of the items they carry. `new HudHeroRow(theme, index, rowWidth, heartTextures?)`, `Render(hero: HudHero)` (redraws only what changed), `static Height(theme)`. Also exports `type HudHero` (what a row reads of a `Hero`), `SpellStatusText(spell)`, `FitScale(texture, box)` and `TextureOf(name)`, which `Hud` shares. |
+| `EntityRenderer` | `view/EntityRenderer` | `new EntityRenderer(camera, level)`; `Reset()` (call on `LEVEL_CREATED`), `Render(heroes: HeroView[], encounter, alpha = 1)` (each hero where their view was last `Place`d - a fallen one faint, a ghost where they fell, and one who is away as faint; monsters and shots `alpha` of the way through their last step). Draws a glow under the figures for each hero's torch and each glowing shot, and the mage-lights - a glow with a bright core - over them. |
 | `GlowLayer extends Container` | `view/GlowLayer` | Glows added onto what's beneath them, from a pool of sprites: `Begin()`, `Add(x, y, look, pixelsPerTile)` per glow, `End()`. `CreateGlowTexture()` makes the soft white texture they're drawn with (the caller destroys it). |
 | `Glow` | `view/helpers/Glow` | Pure: `GlowTextureSize`, `GlowRadius` (1.25 tiles), `GlowStrength` (0.3), `GlowFlameY` (0.3 - a lit tile's glow sits this far down its art), `OrbCoreRadius`; `GlowPixels(size)` (premultiplied white, fading like `LightFalloff`), `type GlowLook = { tint, alpha, radius }`, `LookOfGlow(rgb, scale, out)` (the light's colour at full saturation, stronger the brighter it is, swelling a little as it flickers), `LookOfOrbCore(rgb, scale, out)` (small, pale and nearly opaque). |
 
@@ -1843,21 +1852,22 @@ same level onto every machine, and the host's and guests' lobbies. All pure.
 `@logic-incubator/engine/net/NetMessages` - a kind byte, then JSON (a `level`'s body is its bytes).
 
 ```ts
-NetVersion = 2;     // a guest on another is refused ("version"); raise it whenever a message changes - this file's or PlayMessages'
+NetVersion = 3;     // a guest on another is refused ("version"); raise it whenever a message changes - this file's or PlayMessages'
 NameLength = 12;
 
 type LobbySeat = { peer: number; name: string; character: string | null };   // host's seat first; character: a game's id, null while choosing
-type RefusedReason = "version" | "started" | "full";
+type RefusedReason = "version" | "started" | "full" | "gone";   // started: also a rejoin token it doesn't know; gone: away too long
 type StartLevel = { bundle: string | null; hash: string; sent: boolean };      // sent: the host sends the level whole after the start
 
 type LobbyMessage =
-    | { t: "hello"; version: number; name: string }                  // guest -> host, first
+    | { t: "hello"; version: number; name: string; rejoin?: string } // guest -> host, first - with rejoin, the token of a guest coming back
     | { t: "refused"; reason: RefusedReason }                        // host -> guest
     | { t: "lobby"; seats: LobbySeat[] }                             // host -> each guest let in, on every change
     | { t: "pick"; character: string | null }                        // guest -> host
-    | { t: "start"; seed: number; level: StartLevel; seats: LobbySeat[] }   // host -> each guest
+    | { t: "start"; seed: number; level: StartLevel; seats: LobbySeat[]; token?: string }   // host -> each guest, with a token of its own
     | { t: "need-level" }                                            // guest -> host: my copy isn't yours
-    | { t: "level"; packed: Uint8Array };                            // host -> guest: PackLevel's bytes
+    | { t: "level"; packed: Uint8Array }                             // host -> guest: PackLevel's bytes
+    | { t: "rejoined" };                                             // host -> guest coming back: you're in, as the hero you were
 
 EncodeMessage(message): Uint8Array
 DecodeMessage(bytes): LobbyMessage | null      // null for an unknown kind, garbled JSON or missing fields
@@ -1879,13 +1889,19 @@ CleanName(name, fallback): string             // control characters out, spaces 
 `@logic-incubator/engine/net/Lobby` - eventemitter3s, so a component can `Listen` to them.
 
 ```ts
-LobbyEvents = { CHANGED: "changed", STARTING: "starting", STARTED: "started", CLOSED: "closed" }
+LobbyEvents = { CHANGED: "changed", STARTING: "starting", STARTED: "started", CLOSED: "closed", DROPPED: "dropped", REJOINED: "rejoined" }
 // changed () - Seats changed · starting () - a guest's: the host has started, the level is being made ready
 // started (start: LobbyStart) · closed (reason: string) - once; see LobbyClosedText
+// dropped () - a guest's, during the run: its connection has gone and it's getting back in · rejoined () - it's back, in Session
+
+ReconnectForMs = HoldAwayMs (60000)   // how long a guest keeps trying to get back in - as long as the host holds its hero
+QuietForMs = 8000                     // nothing heard from the room for this long during the run, and a guest takes its connection for lost
+interface RejoinHandler { CanRejoin(index: number): boolean; Rejoin(index: number, peer: number): void }   // a HostSession
 
 type LobbyStart = { seed: number; bundle: string | null; level: LevelFile; seats: LobbySeat[]; you: number };   // you: this machine's index in seats
 type HostLevel = { bundle: string | null; file: LevelFile; shipped: boolean };   // shipped: the game's own, which every copy has in bundle
-LobbyClosedText(reason): string    // "The host has left." / "That game has already started." / "Lost the connection (...)." ...
+LobbyClosedText(reason): string    // "The host has left." / "That game has already started." / "You were away too long." /
+                                   // "Lost the connection, and couldn't get back in." (lost) / "Lost the connection (...)." ...
 
 // Both
 lobby.Code: string;  lobby.Seats: ReadonlyArray<LobbySeat>;  lobby.Mine: LobbySeat | undefined
@@ -1897,11 +1913,18 @@ host.Pick(character: string | null): void             // the host's own; not aft
 host.CanStart: boolean                                // everyone has picked, and it hasn't started
 host.Started: boolean
 host.Start(level: HostLevel, seed = NewSeed()): Promise<LobbyStart>   // rejects unless CanStart
+host.SetRejoin(handler: RejoinHandler | null): void   // what lets a guest back into the run - CreateNetPlay sets the HostSession
 
-new GuestLobby(session: RelaySession, { name: string; shippedLevel: (bundle: string | null) => Promise<LevelFile | undefined> })
+new GuestLobby(session: RelaySession, options: GuestLobbyOptions)
+type GuestLobbyOptions = {
+    name: string;
+    shippedLevel: (bundle: string | null) => Promise<LevelFile | undefined>;
+    reconnect?: () => Promise<RelaySession>;          // a new place in the same room (RelaySession.Join with session.Code) - without
+};                                                    // it, the lobby closes when its connection does
 guest.Pick(character: string | null): void            // asks the host; Seats shows it once the host has it
 guest.Joined: boolean                                 // the host has let this guest in (Mine is set)
 guest.Started: boolean                                // the host has started; the level may still be on its way
+guest.Reconnecting: boolean                           // between DROPPED and REJOINED (or CLOSED)
 ```
 
 How it runs:
@@ -1915,7 +1938,15 @@ How it runs:
   otherwise it sends `need-level` and the host sends that guest the level, packed. A level that isn't shipped - an editor level - is sent
   to every guest right after the start, unasked. Either way the guest emits `STARTED` with the level in hand.
 - The host leaving closes the room (`CLOSED` with `host-left` at every guest); `Leave` closes with `left`; a lost connection closes with its
-  reason. A lobby is done with after `CLOSED`.
+  reason - but see below. A lobby is done with after `CLOSED`. Once the run has begun the host keeps every seat, whoever leaves.
+- **Getting back in.** The host's `start` gives each guest a random token. A guest given `reconnect` whose connection goes once its run has
+  begun (`STARTED`) - closed, or nothing heard for `QuietForMs` (`RelaySession.Drop("quiet")`) - emits `DROPPED` and tries again after
+  0.5, 1, 2, then every 4 s: `reconnect()`, then `hello` with its token, waiting up to 5 s for the answer. The host's lobby looks the token
+  up and asks its `RejoinHandler`: `rejoined` (it moves the seat to the new peer, calls `Rejoin(index, peer)` - the run sends its
+  catch-up straight after - and emits `CHANGED`), or refused `gone` (`CanRejoin` false) or `started` (a token it never gave, or no
+  handler). The guest emits `REJOINED` the moment the answer comes, so the run is listening on the new `Session` for the catch-up. It
+  closes with `host-left` if the room has gone (`no-room`), with the refusal's reason, or with `lost` once `ReconnectForMs` is up.
+  A guest leaving (`Leave`), the host leaving, or a lobby without `reconnect` or before the run has begun closes as it always did.
 
 ## Online play
 
@@ -1929,11 +1960,13 @@ drives it - see [DungeonMain](#dungeonmain).
 
 ```ts
 CreateNetPlay(lobby: HostLobby | GuestLobby, start: LobbyStart, options?: PlaySessionOptions): NetPlay   // a HostSession or a GuestSession, in lobby.Session
+// - and kept in the run when a guest's connection goes: the host's lobby asks the HostSession (SetRejoin); a guest's moves to its new Session on REJOINED
 type PlaySessionOptions = { now?: () => number };   // this machine's clock in ms - performance.now by default
 
 interface NetPlay {
     readonly IsHost: boolean;
     readonly You: number;                           // the hero played here (this machine's seat)
+    readonly Connected: boolean;                    // in touch with the run - false on a guest from its connection going until it's back and caught up
     readonly Entities: EncounterView | null;        // what to draw of monsters, shots and spawners: null on the host (its own encounter), the Replica on a guest
     Begin(context: NetLevelContext): void;          // a level has started here (every LEVEL_CREATED)
     Step(local: ReadonlyArray<IPlayerInput | undefined>): void;   // one step; local[i]: hero i's input, read on this machine
@@ -1942,7 +1975,7 @@ interface NetPlay {
     Record(event: string, args: ReadonlyArray<unknown>): void;    // an event the world emitted - the host sends it on
     Restart(): void;                                // the host starts the level over, for everyone; a guest's does nothing
     Stats(): string[];                              // lines for a developer's eye (round trip, snapshot sizes, corrections...)
-    End(): void;                                    // stops listening and sending - on leaving the run
+    End(): void;                                    // stops listening and sending - on leaving the run (a guest's tells the host first: its hero goes at once)
 }
 
 type NetLevelContext = {
@@ -1961,18 +1994,22 @@ departures, answers pings and pings its peers once a second, keeping each one's 
 
 | | Host | Guest |
 | --- | --- | --- |
-| `Begin` | Waits for every guest still in the room to say it has the level ready (an empty input message), or `WaitForGuestsMs` (10 s); departed heroes are removed again. | A new `Replica` from the level's spawners; sends "ready"; plays any snapshots that came before it. |
+| `Begin` | Waits for every guest still in the room to say it has the level ready (an empty input message), or `WaitForGuestsMs` (10 s); departed heroes are removed again, and away ones set away (those whose connection has gone aren't waited for). | A new `Replica` from the level's spawners; sends "ready"; plays any snapshots that came before it. |
 | `Step` | Each guest's hero plays its waiting inputs (`RemoteInput.Take`), this machine's hero its own; `World.Step`; a snapshot every `SnapshotEvery` (3) steps and as the level ends. | Its own hero steps ahead (`Prediction.Step`); a shot it fires flies at once as a stand-in; sends the last `InputsSent` (3) inputs. |
 | `Frame` | Pings. | Pings; moves the `PlayClock` on; samples the `Replica`; puts the other heroes where they were at that moment; settles the correction; updates what's seen. |
 | `Record` | Turns the engine's events into `NetEvent`s for the next snapshot. | - |
 | `Restart` | The next round: tells every guest, forgets their inputs. | - (a `restart` message calls `restart`) |
-| A peer leaves | `World.RemoveHero` and a snapshot at once. | (the host leaving closes the lobby) |
+| A guest leaves (`leave`, from its `End`) | `World.RemoveHero` and a snapshot at once. | (the host leaving closes the lobby) |
+| A guest's connection goes, or it sends nothing for `AwayAfterMs` (3 s) | `World.SetAway` and a snapshot at once; its inputs wait. Its next input puts the hero back. One whose connection went is taken out (`RemoveHero`) after `HoldAwayMs` (60 s). | Its hero stands still (`Step` does nothing while not `Connected`). |
+| A guest comes back | `CanRejoin(index)` (not ended, not departed); `Rejoin(index, peer)`: listens for that hero's inputs from `peer`, numbered afresh, sends `catch-up` (with the level's end, if it's over), then a snapshot at once. | `Rejoin(session)`: listens there, lets go of the inputs the host never had, and plays nothing till the `catch-up`: what lasting happened that it hasn't done, done quietly (no events emitted), and the level's end emitted if it hadn't heard it - or, for a new round, its level started over and caught up as it begins. |
 
-`HostSession.Round`, `Playing` (every guest ready); `GuestSession.Prediction`, `Playing`, `DrawnTick`.
+`HostSession.Round`, `Playing` (every guest in the room ready), `CanRejoin`, `Rejoin`; `GuestSession.Prediction`, `Playing`, `DrawnTick`,
+`Rejoin`; `Prediction.Forget()` (drops the pending inputs, numbering on). The host's `Stats` says per guest its round trip and inputs waiting,
+`AWAY, NOTHING FOR n S`, `GONE, HELD n S MORE` or `LEFT`.
 
 ### Messages
 
-`@logic-incubator/engine/net/PlayMessages` - bytes, kinds 16-20 after the lobby's (`EncodePlay(message, writer?)`, `DecodePlay(bytes): PlayMessage | null`):
+`@logic-incubator/engine/net/PlayMessages` - bytes, kinds 16-22 after the lobby's (`EncodePlay(message, writer?)`, `DecodePlay(bytes): PlayMessage | null`):
 
 ```ts
 type InputMessage = { t: "input"; round: number; inputs: IPlayerInput[] };   // guest -> host: the newest few, numbered (seq); none: "ready"
@@ -1980,12 +2017,15 @@ type Snapshot = { t: "snapshot"; round; tick; heroes: HeroSnapshot[]; monsters: 
                   doors: boolean[]; flashing: number[]; events: NetEvent[] };   // host -> every guest
 type RestartMessage = { t: "restart"; round: number };                      // host -> every guest
 type PingMessage = { t: "ping" | "pong"; id: number };
+type CatchUpMessage = { t: "catch-up"; round: number; events: NetEvent[] };   // host -> a guest back in: the round, every lasting event in it, then its end if it's over
+type LeaveMessage = { t: "leave" };                                          // guest -> host: leaving for good
 type NetEvent = pickup | keys | spawner | killed | damaged | died | all-died | completed | shot   // the engine's events, and a new kind of shot's setup
+IsLastingEvent(event): boolean           // pickup, keys, spawner, shot - what changes the level or a hero for good, and goes in a catch-up
 
 QuantiseInput(input, seq): IPlayerInput   // what the host will have of it: each axis to 1/127 - a guest steps its own hero with this, so both agree
 ```
 
-An input is 4 bytes (each axis a signed byte, flags). A hero's position, speed and timers are 64-bit floats, so a guest's hero lands exactly where
+A `HeroSnapshot` carries `gone` and `away` (flags). An input is 4 bytes (each axis a signed byte, flags). A hero's position, speed and timers are 64-bit floats, so a guest's hero lands exactly where
 the host's is; monsters and shots are quarter pixels (16 bits each). `round` (a byte) counts the host's restarts: anything from another round is
 ignored.
 
@@ -1996,7 +2036,7 @@ ignored.
 | `RemoteInput` | The host's queue of one guest's inputs, by `seq`: `Receive(inputs)`, `Take(): IPlayerInput[]` (the next one, none while it hasn't come, two once more than `MaxWaiting` (4) are waiting; past 30 waiting it skips a lost one), `Acked` (the last played), `Waiting`, `Started`, `Reset()`. |
 | `PlayClock` | Which of the host's steps a guest draws: `DrawDelayMs` (100) behind the newest, trusting the quickest arrivals and moving smoothly when that changes. `Observe(tick, nowMs)` for each snapshot, `Advance(nowMs, frames)` each frame, `Tick` (fractional), `Started`, `Reset()`. |
 | `Replica` | The guest's copy of the host's monsters, shots and spawners - an `EncounterView`. `new Replica({ you, sizeFor })`; `Reset(spawners)`, `AddShot(index, setup)`, `Push(snapshot)` (keeps the last 20), `Sample(tick, frames)` (each monster and shot between the snapshots either side of `tick`, carried on up to 6 steps past the newest), `HeroAt(index, tick): HeroMoment \| null`, `Newest`. This machine's own shots are stand-ins from the moment they're fired (`Fire(from, direction, setup, seq)`, `StepStandIns(isBlocked)`), stopped by walls and by monsters as drawn, until the host's copy has gone or the host played that input without one. |
-| `Prediction` | The guest's own hero, ahead of the host: `Step(hero, input, others, collider)` numbers and plays an input, kept until the host has played it; `Reconcile(hero, snapshot, others, collider)` starts from the host's word and plays the rest again, leaving the difference in `Offset`, which `Settle(frames)` draws away (or jumps, past two tiles); `Corrections` (differences over half a pixel), `LastError`, `Pending`, `Recent(n)`, `Reset()`. |
+| `Prediction` | The guest's own hero, ahead of the host: `Step(hero, input, others, collider)` numbers and plays an input, kept until the host has played it; `Reconcile(hero, snapshot, others, collider)` starts from the host's word and plays the rest again, leaving the difference in `Offset`, which `Settle(frames)` draws away (or jumps, past two tiles); `Corrections` (differences over half a pixel), `LastError`, `Pending`, `Recent(n)`, `Reset()`, `Forget()` (drops the inputs the host never had - after the connection went - numbering on). |
 | `HeroSync` | `HeroSnapshotOf(hero, ack)` and `ApplyHeroSnapshot(hero, snapshot)` (everything but where they stand, which the caller places). |
 
 ---

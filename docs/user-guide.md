@@ -1671,10 +1671,13 @@ import { GuestLobby, HostLobby, LobbyEvents, LobbyStart } from "@logic-incubator
 const host = new HostLobby(await RelaySession.Host(await WebSocketTransport.Connect(relayUrl), "my-game"), "Ada");
 host.Code;                                    // "KXQTB"
 
-// ...a guest joins with it, saying which level is its own copy of the game's
-const guest = new GuestLobby(await RelaySession.Join(await WebSocketTransport.Connect(relayUrl), "my-game", "kxqtb"), {
+// ...a guest joins with it, saying which level is its own copy of the game's - and how to get back into the room
+// on a new connection, should this one go during the run
+const joined = await RelaySession.Join(await WebSocketTransport.Connect(relayUrl), "my-game", "kxqtb");
+const guest = new GuestLobby(joined, {
     name: "Sam",
     shippedLevel: async bundle => { await game.assets.Acquire(bundle); return game.assets.Data(bundle + ".level"); },
+    reconnect: async () => RelaySession.Join(await WebSocketTransport.Connect(relayUrl), "my-game", joined.Code),
 });
 
 // Each picks - picking is being ready. Once everyone has (host.CanStart), the host begins.
@@ -1704,13 +1707,14 @@ new DungeonMain({
     })) : undefined,                                               // undefined: one hero, played here
 });
 
-// Leaving: end the run and the lobby, which tells the others.
+// Leaving: end the run and then the lobby, which tells the others - in that order, so the host hears the hero is leaving for good.
 play.End();
 lobby.Leave();
 ```
 
 Both lobbies emit `CHANGED` whenever someone joins, picks or leaves (redraw from `Seats`), `STARTED` with the start, and `CLOSED` when
-it's over; a guest's also emits `STARTING` while the level is made ready.
+it's over; a guest's also emits `STARTING` while the level is made ready, and during the run `DROPPED` and `REJOINED` as its connection
+goes and it gets back in.
 
 - **The same level.** A game's own level - `shipped: true` - is named by its bundle and `LevelHash`: each guest plays its own copy if the
   hash matches, and is sent the host's whole if it doesn't (another version of the game, say). Anything else - a dev build's editor level
@@ -1721,7 +1725,7 @@ it's over; a guest's also emits `STARTING` while the level is made ready.
   heroes played here. A party spread over machines isn't held within one screen.
 - **Leaving.** The host leaving closes the room - every guest's lobby emits `CLOSED` with `host-left` (`LobbyClosedText` puts it in words).
   A guest who leaves frees their seat. Once the run has started, latecomers are turned away (`started`), as is a guest on another
-  `NetVersion` (`version`).
+  `NetVersion` (`version`) - but a guest whose connection goes is let back in (see *Getting back in*, below).
 
 **Playing.** The host's machine runs the run: its world is the only one that moves monsters, lands hits and opens doors. `CreateNetPlay`
 gives the host a `HostSession` and each guest a `GuestSession`, and `DungeonMain` plays through whichever it was given (`net`):
@@ -1739,19 +1743,38 @@ gives the host a `HostSession` and each guest a `GuestSession`, and `DungeonMain
   hasn't played yet, and when a snapshot says where the host has it, starts from there and plays them again. When both agree - nearly
   always - nothing shows; a difference is drawn away over a few frames, or jumped if it's more than two tiles. Its own shots fly from the
   moment they're fired, and the host's copy takes over.
-- **Each screen follows its own hero**, and while that hero is down, a teammate still standing.
+- **Each screen follows its own hero**, and while that hero is down, a teammate still standing (and not away).
 - **The menu doesn't pause.** The run is everyone's, so opening the pause menu online only stands this player's hero still
   (`DungeonMain.Pause`).
 - **The level's end is the host's.** When every hero is down, or one gets out, the host chooses: its `Restart()` starts the level over on
   every machine. A guest can't (`CanRestart` is false); its end screen waits for the host, and it can leave.
-- **Leaving.** A guest who leaves (or whose connection goes) is out of the run: their hero is gone (LEFT in the HUD) on every machine,
-  and the run plays on without them. The host leaving ends it for everyone - each guest's lobby closes with `host-left`.
+- **Leaving.** A guest who leaves (`play.End()`, which tells the host, then `lobby.Leave()`) is out of the run: their hero is gone (LEFT
+  in the HUD) on every machine, and the run plays on without them. The host leaving ends it for everyone - each guest's lobby closes
+  with `host-left`.
+- **Away.** A guest whose connection goes, or who sends nothing for 3 seconds (`AwayAfterMs` - a frozen tab, a stalled line), has their
+  hero taken out of play on the host (`World.SetAway`): it stands where it was, drawn faint and marked AWAY in the HUD on every machine;
+  no monster goes for it, nothing hits it and it picks nothing up, and with no one else in play the level ends as if all had fallen.
+  Their next input puts it back. A hero whose connection has gone is held for `HoldAwayMs` (a minute), then taken out for good, as if
+  they'd left.
+- **Getting back in.** A guest's lobby given `reconnect` (a new `RelaySession.Join` on the same code) notices its connection has gone -
+  closed, or nothing heard for 8 seconds (`QuietForMs`; the host pings every second) - and emits `DROPPED`. Its hero stands still
+  (`NetPlay.Connected` is false - the game shows RECONNECTING). It tries again and again, 0.5, 1, 2, then every 4 seconds, for as long
+  as the host holds its hero (`ReconnectForMs`), saying hello with the token the host's start gave it. The host's lobby asks the run
+  (`HostLobby.SetRejoin`, which `CreateNetPlay` sets to the `HostSession`) and lets it back in as the hero it was: the guest's lobby emits
+  `REJOINED`, its `GuestSession` moves to the new connection, and the host sends a `catch-up` - the round and everything lasting that happened
+  in it (pickups, keys dropped, spawners destroyed, kinds of shot), which the guest does quietly, without the events firing, before it plays
+  on - and, if the level has ended meanwhile, how, which does fire, so the end screen shows - then a snapshot. If the host has started the
+  level over meanwhile, the guest does too. The lobby closes - and the game should go back to its menu - if the host has left (`host-left`),
+  won't have it back (`gone`: away too long), or the time is up (`lost`). Only guests reconnect: the host's connection going ends the run, as
+  the relay closes its room.
 - **Seeing how it's going.** In a development build an online run shows a small box (`DebugTools.Watch`, [4.2](#42-gamecomponent-the-lifecycle)):
   the round trip to the host, each snapshot's size and the bytes a second, how far behind the guest draws, how many times its own hero
-  has been corrected, and on the host how many inputs are waiting for each guest. `in-dungeons-we-dwell`'s `?lag=150&loss=2` slows its
-  connection down to try it ([15.4](#154-testing-without-a-server)).
+  has been corrected, and on the host how many inputs are waiting for each guest - or that they're AWAY, GONE (and for how much longer
+  their hero is held) or LEFT. `in-dungeons-we-dwell`'s `?lag=150&loss=2` slows its connection down to try it
+  ([15.4](#154-testing-without-a-server)).
 
-Play messages (`engine/net/PlayMessages`) are bytes, kinds 16 to 20, alongside the lobby's; `NetVersion` covers both.
+Play messages (`engine/net/PlayMessages`) are bytes, kinds 16 to 22, alongside the lobby's; `NetVersion` covers both.
+
 
 ### 9.4 Monsters
 
@@ -2520,7 +2543,10 @@ browser (host)  --WebSocket-->  relay  <--WebSocket--  browser (guest)
 - The **relay** puts players with the same five-letter room code together - one host and up to three guests - and passes their messages
   along. It holds no game rules and runs no game: the host's browser does.
 - A **`RelaySession`** is one machine's place in a room: `Send(to, bytes)` to a peer by number (the host is 0), `Broadcast(bytes)`, and
-  events for messages, peers joining and leaving, and the end.
+  events for messages, peers joining and leaving, and the end. `Leave()` leaves the room; `Drop(reason)` lets go of a connection taken
+  for lost (one gone quiet) the same way, but ends with `reason`, so whoever is listening can get back in on a new one - a guest's place
+  is freed when its connection goes, the room stays, and joining it again takes a free seat (the dungeon's lobby then puts the player
+  back in their own hero's, [9.3.2](#932-playing-online)).
 - Messages are bytes: `ByteWriter` and `ByteReader` pack numbers and text, little-endian. A game puts a kind byte first and versions its
   messages (the dungeon's are `engine/net/NetMessages`: JSON for the lobby's few small ones, and `engine/net/PlayMessages`: packed bytes
   for inputs and snapshots).

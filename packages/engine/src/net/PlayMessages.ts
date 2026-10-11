@@ -1,7 +1,7 @@
 /**
  * The messages of play itself, once a run has begun: each guest's inputs, the
  * host's snapshots of the world (with what happened since the last one), a
- * restart, and pings. Bytes, as they go many times a second - through the room
+ * restart, pings, a guest leaving, and catching up a guest who has come back. Bytes, as they go many times a second - through the room
  * beside the lobby's messages (see `NetMessages`), each kind with a first byte
  * of its own. Pure - no pixi - so it runs under the plain node test runner.
  */
@@ -17,6 +17,8 @@ const SnapshotKind = 17;
 const RestartKind = 18;
 const PingKind = 19;
 const PongKind = 20;
+const CatchUpKind = 21;
+const LeaveKind = 22;
 
 /** How finely a direction or aim is sent: each axis a signed byte, so to 1/127. */
 const AxisSteps = 127;
@@ -32,6 +34,8 @@ export type InputMessage = { t: "input"; round: number; inputs: IPlayerInput[] }
 export type HeroSnapshot = {
     /** Their player has left the game (see `Hero.Leave`). */
     gone: boolean;
+    /** Their player's connection has gone, for now (see `Hero.Away`). */
+    away: boolean;
     /** Top-left of their box, and their speed, in pixels - to the bit, as the host has them. */
     x: number;
     y: number;
@@ -125,7 +129,22 @@ export type RestartMessage = { t: "restart"; round: number };
 /** Guest to host, and back again as a pong: how long a round trip takes. */
 export type PingMessage = { t: "ping" | "pong"; id: number };
 
-export type PlayMessage = InputMessage | Snapshot | RestartMessage | PingMessage;
+/**
+ * Host to a guest back after its connection went (see `HostSession.Rejoin`): the round being played, and everything
+ * lasting that has happened in it (`IsLastingEvent`) - what its own copy of the level may have missed - then, if the
+ * level has ended, how (`all-died` or `completed`).
+ */
+export type CatchUpMessage = { t: "catch-up"; round: number; events: NetEvent[] };
+
+/** Guest to host: its player is leaving the run for good - their hero goes at once, not held for them to come back. */
+export type LeaveMessage = { t: "leave" };
+
+export type PlayMessage = InputMessage | Snapshot | RestartMessage | PingMessage | CatchUpMessage | LeaveMessage;
+
+/** Whether `event` changes the level or a hero for good - a pickup, keys dropped, a spawner gone, a kind of shot - rather than just being shown. */
+export function IsLastingEvent(event: NetEvent): boolean {
+    return event.e === "pickup" || event.e === "keys" || event.e === "spawner" || event.e === "shot";
+}
 
 const EventKinds = ["pickup", "keys", "spawner", "killed", "damaged", "died", "all-died", "completed", "shot"];
 
@@ -133,6 +152,7 @@ const HeroGone = 1;
 const HeroFacingLeft = 2;
 const HeroSpellLit = 4;
 const HeroCarrying = 8;
+const HeroAway = 16;
 const MonsterFacingLeft = 1;
 const MonsterMoving = 2;
 const MonsterHit = 4;
@@ -172,6 +192,13 @@ export function EncodePlay(message: PlayMessage, writer = new ByteWriter(256)): 
         case "pong":
             writer.U8(message.t === "ping" ? PingKind : PongKind).U16(message.id & 0xffff);
             break;
+        case "catch-up":
+            writer.U8(CatchUpKind).U8(message.round & 0xff);
+            WriteEvents(writer, message.events);
+            break;
+        case "leave":
+            writer.U8(LeaveKind);
+            break;
     }
     return writer.ToBytes();
 }
@@ -194,6 +221,12 @@ export function DecodePlay(bytes: Uint8Array): PlayMessage | null {
                 return { t: "ping", id: reader.U16() };
             case PongKind:
                 return { t: "pong", id: reader.U16() };
+            case CatchUpKind: {
+                const round = reader.U8();
+                return { t: "catch-up", round, events: ReadEvents(reader) };
+            }
+            case LeaveKind:
+                return { t: "leave" };
             default:
                 return null;
         }
@@ -238,7 +271,7 @@ function WriteSnapshot(writer: ByteWriter, snapshot: Snapshot): void {
 
     writer.U8(snapshot.heroes.length);
     snapshot.heroes.forEach(hero => {
-        const flags = (hero.gone ? HeroGone : 0) | (hero.facingX < 0 ? HeroFacingLeft : 0) | (hero.spellLit !== null ? HeroSpellLit : 0) | (hero.carried !== null ? HeroCarrying : 0);
+        const flags = (hero.gone ? HeroGone : 0) | (hero.away ? HeroAway : 0) | (hero.facingX < 0 ? HeroFacingLeft : 0) | (hero.spellLit !== null ? HeroSpellLit : 0) | (hero.carried !== null ? HeroCarrying : 0);
         // Exactly: a guest moves its own hero on from here, and must land where the host's steps will.
         writer.U8(flags).F64(hero.x).F64(hero.y).F64(hero.vx).F64(hero.vy);
         writer.U16(Math.max(0, Math.round(hero.hitPoints))).F32(hero.invulnerable).U32(Math.max(0, Math.round(hero.gold)));
@@ -277,8 +310,12 @@ function WriteSnapshot(writer: ByteWriter, snapshot: Snapshot): void {
     writer.U8(snapshot.flashing.length);
     snapshot.flashing.forEach(index => writer.U16(index));
 
-    writer.U16(snapshot.events.length);
-    snapshot.events.forEach(event => {
+    WriteEvents(writer, snapshot.events);
+}
+
+function WriteEvents(writer: ByteWriter, events: ReadonlyArray<NetEvent>): void {
+    writer.U16(events.length);
+    events.forEach(event => {
         writer.U8(EventKinds.indexOf(event.e));
         switch (event.e) {
             case "pickup":
@@ -332,6 +369,7 @@ function ReadSnapshot(reader: ByteReader): Snapshot {
         const orbTime = lit ? reader.F32() : 0;
         heroes.push({
             gone: (flags & HeroGone) !== 0,
+            away: (flags & HeroAway) !== 0,
             x, y, vx, vy,
             facingX: (flags & HeroFacingLeft) !== 0 ? -1 : 1,
             hitPoints, invulnerable, gold, equipped, fireCooldown,
@@ -381,12 +419,16 @@ function ReadSnapshot(reader: ByteReader): Snapshot {
         flashing.push(reader.U16());
     }
 
+    return { t: "snapshot", round, tick, heroes, monsters, projectiles, doors, flashing, events: ReadEvents(reader) };
+}
+
+function ReadEvents(reader: ByteReader): NetEvent[] {
     const events: NetEvent[] = [];
-    const eventCount = reader.U16();
-    for (let i = 0; i < eventCount; i++) {
+    const count = reader.U16();
+    for (let i = 0; i < count; i++) {
         events.push(ReadEvent(reader));
     }
-    return { t: "snapshot", round, tick, heroes, monsters, projectiles, doors, flashing, events };
+    return events;
 }
 
 function ReadEvent(reader: ByteReader): NetEvent {

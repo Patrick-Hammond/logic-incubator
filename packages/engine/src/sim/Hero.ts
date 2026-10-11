@@ -23,6 +23,8 @@ export default class Hero implements EncounterPlayer {
     private state: PlayerState;
     /** Whether their player has left an online game - see `Leave`. */
     private gone = false;
+    /** Whether their player's connection to an online game has gone, for now - see `SetAway`. */
+    private away = false;
 
     /** `Index` is their slot, from 0; `setup` is what every hero starts a level with. */
     constructor(readonly Index: number, private setup: Pick<PlayerSetup, "hitPoints" | "weapons">) {
@@ -41,6 +43,14 @@ export default class Hero implements EncounterPlayer {
     /** Whether their player has left the online game they were in (see `Leave`) - out of play, and not drawn. */
     get Gone(): boolean {
         return this.gone;
+    }
+
+    /**
+     * Whether their player's connection to an online game has gone, for now (see `SetAway`): they stand where they
+     * were, out of play - no monster goes for them, nothing hits them - until their player is back.
+     */
+    get Away(): boolean {
+        return this.away;
     }
 
     /**
@@ -104,12 +114,18 @@ export default class Hero implements EncounterPlayer {
     Reset(start: Vec2Like, lightSpell?: LightSpell): void {
         this.state = CreatePlayerState(this.setup, start, lightSpell);
         this.gone = false;
+        this.away = false;
     }
 
     /** Their player has left the online game: they're out of play - down, as far as the rest of the party goes - and no longer drawn. */
     Leave(): void {
         this.gone = true;
         this.state.health.hitPoints = 0;
+    }
+
+    /** Their player's connection has gone (true) or come back (false) - see `Away`. `World.SetAway` is how the host's world does it. */
+    SetAway(away: boolean): void {
+        this.away = away;
     }
 
     /** Puts them at `position` (a top-left, in pixels) at once - nothing drawn between - their mage-light, if lit, moving with them. */

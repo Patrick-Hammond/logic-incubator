@@ -11,7 +11,7 @@ const BOLT: ShotSetup = { sprite: "bolt", speed: 4, damage: 1, range: 8 };
 
 function HeroAt(x: number, y: number, ack = 0, extra: Partial<HeroSnapshot> = {}): HeroSnapshot {
     return {
-        gone: false, x, y, vx: 0, vy: 0, facingX: 1, hitPoints: 6, invulnerable: 0, gold: 0, equipped: 0, fireCooldown: 0,
+        gone: false, away: false, x, y, vx: 0, vy: 0, facingX: 1, hitPoints: 6, invulnerable: 0, gold: 0, equipped: 0, fireCooldown: 0,
         spellLit: null, spellRecharging: 0, carried: null, orbX: 0, orbY: 0, orbTime: 0, ack, ...extra
     };
 }

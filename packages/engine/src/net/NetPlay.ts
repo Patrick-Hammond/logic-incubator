@@ -12,7 +12,7 @@ import type World from "../sim/World";
 import type { WorldLevel } from "../sim/World";
 import GuestSession from "./GuestSession";
 import HostSession from "./HostSession";
-import type { GuestLobby, HostLobby, LobbyStart } from "./Lobby";
+import { GuestLobby, HostLobby, LobbyEvents, LobbyStart } from "./Lobby";
 import type { PlaySessionOptions } from "./PlaySession";
 
 /** The parts of `Level` an online session uses, on top of what the world does. */
@@ -40,6 +40,8 @@ export interface NetPlay {
     readonly IsHost: boolean;
     /** The hero played on this machine. */
     readonly You: number;
+    /** Whether this machine is in touch with the run - false on a guest while its connection is gone and it's trying to get back in (see `GuestLobby`). */
+    readonly Connected: boolean;
     /** What to draw of the monsters, shots and spawners: the world's own encounter on the host, the copy of it on a guest. */
     readonly Entities: EncounterView | null;
     /** A level has started on this machine (every `LEVEL_CREATED`). */
@@ -62,9 +64,17 @@ export interface NetPlay {
 
 /**
  * The run that `lobby` has just started (its `STARTED` event's `start`), played on this machine: a `HostSession` for
- * the host, a `GuestSession` for a guest, in the lobby's room. Hand it to `DungeonMain` (`DungeonMainOptions.net`),
- * and `End` it when the run is over here.
+ * the host, a `GuestSession` for a guest, in the lobby's room - and kept there when a guest's connection goes and it
+ * gets back in (the host's lobby asks the host's session whether it may; a guest's moves its session to the new
+ * connection). Hand it to `DungeonMain` (`DungeonMainOptions.net`), and `End` it when the run is over here.
  */
 export function CreateNetPlay(lobby: HostLobby | GuestLobby, start: LobbyStart, options?: PlaySessionOptions): NetPlay {
-    return lobby.IsHost ? new HostSession(lobby.Session, start.seats, options) : new GuestSession(lobby.Session, start.seats, options);
+    if (lobby instanceof HostLobby) {
+        const host = new HostSession(lobby.Session, start.seats, options);
+        lobby.SetRejoin(host);
+        return host;
+    }
+    const guest = new GuestSession(lobby.Session, start.seats, options);
+    lobby.on(LobbyEvents.REJOINED, () => guest.Rejoin(lobby.Session));
+    return guest;
 }

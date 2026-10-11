@@ -5,9 +5,13 @@
  * sends every guest a snapshot of the world and what has happened since the
  * last (see `Snapshot`) - 20 a second, and one more as a level ends. As a level
  * starts it waits, up to `WaitForGuestsMs`, for each guest to have it ready. A
- * guest who leaves takes their hero with them (`World.RemoveHero`); the host
- * starting the level over starts it over for everyone. Pure - no pixi - so it
- * runs under the plain node test runner.
+ * guest who leaves takes their hero with them (`World.RemoveHero`). One whose
+ * connection goes - or who sends nothing for `AwayAfterMs` - leaves their hero
+ * away (`World.SetAway`), out of play, for up to `HoldAwayMs` to come back
+ * (`Rejoin`, from the host's lobby); they're caught up on what they missed, and
+ * their hero is back in play with their first input. The host starting the
+ * level over starts it over for everyone. Pure - no pixi - so it runs under the
+ * plain node test runner.
  */
 
 import { RelayHost } from "@logic-incubator/lib/net/RelayRooms";
@@ -21,13 +25,17 @@ import type { HeroInput } from "../sim/World";
 import { HeroSnapshotOf } from "./HeroSync";
 import type { NetLevelContext } from "./NetPlay";
 import PlaySession, { ByteRate, BytesText } from "./PlaySession";
-import type { NetEvent, PlayMessage, Snapshot } from "./PlayMessages";
+import { IsLastingEvent, NetEvent, PlayMessage, Snapshot } from "./PlayMessages";
 import RemoteInput from "./RemoteInput";
 
 /** Every how many steps a snapshot goes out: every third, 20 a second. */
 export const SnapshotEvery = 3;
 /** How long, in milliseconds, a level waits as it starts for every guest to have it ready before it starts without them. */
 export const WaitForGuestsMs = 10000;
+/** How long, in milliseconds, a guest whose connection has gone has to come back before their hero is taken out for good. */
+export const HoldAwayMs = 60000;
+/** How long, in milliseconds, without a guest's inputs during play before their hero is away - their machine or its line has stalled - until the next comes. */
+export const AwayAfterMs = 3000;
 
 export default class HostSession extends PlaySession {
     readonly IsHost = true;
@@ -43,7 +51,17 @@ export default class HostSession extends PlaySession {
     private waitingSince = 0;
     /** The heroes whose players have left, by slot - out of every level from then on. */
     private departed = new Set<number>();
+    /** The heroes out of play until their players are back, by slot (see `World.SetAway`). */
+    private away = new Set<number>();
+    /** When each away hero's player's connection went, by slot - they're taken out for good `HoldAwayMs` after. */
+    private lost = new Map<number, number>();
+    /** When each guest's hero's last inputs came, by slot. */
+    private heard = this.seats.map(() => 0);
     private events: NetEvent[] = [];
+    /** What has lastingly happened this level, as sent (see `IsLastingEvent`) - what a guest coming back is caught up with. */
+    private history: NetEvent[] = [];
+    /** How this level ended (`all-died` or `completed`), once it has and the guests have been told - a guest coming back is told too. */
+    private end: NetEvent | null = null;
     /** The kinds of shot fired this level, numbered as the guests were told (the `shot` event). */
     private shots = new Map<ShotSetup, number>();
     private sent = new ByteRate();
@@ -67,10 +85,39 @@ export default class HostSession extends PlaySession {
         this.context = context;
         this.tick = 0;
         this.events = [];
+        this.history = [];
+        this.end = null;
         this.shots.clear();
         this.playing = false;
         this.waitingSince = this.now();
+        this.heard = this.heard.map(() => this.waitingSince);
         this.departed.forEach(index => context.world.RemoveHero(index));
+        this.away.forEach(index => context.world.SetAway(index, true));
+    }
+
+    /** Whether guest `index`'s player can come back into the run: they haven't left it, nor been gone too long. */
+    CanRejoin(index: number): boolean {
+        return !this.Ended && this.IsGuest(index) && !this.departed.has(index);
+    }
+
+    /**
+     * Guest `index`'s player is back, as peer `peer` (see `HostLobby.SetRejoin`) - when `CanRejoin`. Their inputs are
+     * listened for from there, numbered afresh, and they're told the round, what has lastingly happened in it and how
+     * it ended, if it has (`catch-up`) - then where everything is now, in a snapshot to everyone, so they needn't wait for
+     * one (there are none while a level is over). Their hero stays away until their first input comes.
+     */
+    Rejoin(index: number, peer: number): void {
+        if (!this.CanRejoin(index)) {
+            return;
+        }
+        this.ready.delete(this.seats[index].peer);
+        this.seats = this.seats.map((seat, i) => (i === index ? { ...seat, peer } : seat));
+        this.lost.delete(index);
+        this.inputs[index].Reset();
+        this.heard[index] = this.now();
+        this.Away(index);
+        this.Send(peer, { t: "catch-up", round: this.round, events: this.end ? this.history.concat([this.end]) : this.history });
+        this.SendSnapshot();
     }
 
     Step(local: ReadonlyArray<IPlayerInput | undefined>): void {
@@ -79,7 +126,14 @@ export default class HostSession extends PlaySession {
             return;
         }
         const world = context.world;
-        const inputs: HeroInput[] = world.Heroes.map((_, i) => (this.IsGuest(i) ? this.inputs[i].Take() : local[i]));
+        const now = this.now();
+        this.seats.forEach((_, i) => {
+            if (this.IsGuest(i) && !this.departed.has(i) && !this.away.has(i) && now - this.heard[i] >= AwayAfterMs) {
+                this.Away(i);
+            }
+        });
+        // An away hero isn't stepped, so their inputs wait for them.
+        const inputs: HeroInput[] = world.Heroes.map((_, i) => (!this.IsGuest(i) ? local[i] : this.away.has(i) ? undefined : this.inputs[i].Take()));
         world.Step(inputs, 1, StepSeconds);
         this.tick++;
         if (this.tick % SnapshotEvery === 0 || world.AllDown || world.Completed) {
@@ -89,6 +143,12 @@ export default class HostSession extends PlaySession {
 
     Frame(_frames: number): void {
         this.PingNow(this.Guests());
+        const now = this.now();
+        this.lost.forEach((since, index) => {
+            if (now - since >= HoldAwayMs) {
+                this.Depart(index);
+            }
+        });
     }
 
     Record(event: string, args: ReadonlyArray<unknown>): void {
@@ -143,9 +203,7 @@ export default class HostSession extends PlaySession {
         const lines = ["HOST - ROUND " + (this.round + 1) + (this.context && !this.playing ? ", WAITING FOR PLAYERS" : ""), "SNAPSHOT " + BytesText(this.sent.Last) + ", " + BytesText(this.sent.PerSecond(now)) + "/S"];
         this.seats.forEach((seat, i) => {
             if (this.IsGuest(i)) {
-                const rtt = this.RoundTrip(seat.peer);
-                const state = this.departed.has(i) ? "LEFT" : (rtt === undefined ? "-" : Math.round(rtt) + " MS") + ", " + this.inputs[i].Waiting + " INPUTS WAITING";
-                lines.push(seat.name + ": " + state);
+                lines.push(seat.name + ": " + this.GuestState(i, now));
             }
         });
         return lines;
@@ -153,21 +211,64 @@ export default class HostSession extends PlaySession {
 
     protected OnMessage(from: number, message: PlayMessage): void {
         const index = this.HeroOf(from);
-        if (message.t !== "input" || index < 0 || message.round !== this.round) {
+        if (index < 0) {
+            return;
+        }
+        if (message.t === "leave") {
+            this.Depart(index);
+            return;
+        }
+        if (message.t !== "input" || message.round !== this.round || this.departed.has(index)) {
             return;
         }
         // Even an empty one says the guest has the level ready.
         this.ready.add(from);
+        this.heard[index] = this.now();
+        if (this.away.has(index)) {
+            this.away.delete(index);
+            if (this.context) {
+                this.context.world.SetAway(index, false);
+            }
+        }
         this.inputs[index].Receive(message.inputs);
     }
 
+    /** A guest's connection has gone: their hero is away, kept for them to come back (`Rejoin`) - unless they said they were leaving. */
     protected PeerLeft(peer: number): void {
         const index = this.HeroOf(peer);
         if (index < 0 || this.departed.has(index)) {
             return;
         }
-        this.departed.add(index);
         this.ready.delete(peer);
+        if (!this.lost.has(index)) {
+            this.lost.set(index, this.now());
+        }
+        this.Away(index);
+    }
+
+    /** Takes hero `index` out of play until their player is back (see `World.SetAway`). */
+    private Away(index: number): void {
+        if (this.departed.has(index) || this.away.has(index)) {
+            return;
+        }
+        this.away.add(index);
+        const context = this.context;
+        if (context) {
+            context.world.SetAway(index, true);
+            // At once: the level may have ended with them (no one else in play), and then there's no next step.
+            this.SendSnapshot();
+        }
+    }
+
+    /** Takes hero `index` out for good: their player has left, or been gone too long. */
+    private Depart(index: number): void {
+        if (this.departed.has(index)) {
+            return;
+        }
+        this.departed.add(index);
+        this.away.delete(index);
+        this.lost.delete(index);
+        this.ready.delete(this.seats[index].peer);
         const context = this.context;
         if (context) {
             context.world.RemoveHero(index);
@@ -176,13 +277,34 @@ export default class HostSession extends PlaySession {
         }
     }
 
-    /** Whether play can go on: it has, or every guest still here has the level ready, or they've been waited for long enough. */
+    /** Whether play can go on: it has, or every guest still in the room has the level ready, or they've been waited for long enough. */
     private ReadyToPlay(): boolean {
         if (!this.playing) {
-            const waiting = this.seats.some((seat, i) => this.IsGuest(i) && !this.departed.has(i) && !this.ready.has(seat.peer));
+            // Not one whose connection has gone - but one merely quiet may yet say it's ready.
+            const waiting = this.seats.some((seat, i) => this.IsGuest(i) && !this.departed.has(i) && !this.lost.has(i) && !this.ready.has(seat.peer));
             this.playing = !waiting || this.now() - this.waitingSince >= WaitForGuestsMs;
+            if (this.playing) {
+                const now = this.now();
+                this.heard = this.heard.map(() => now);
+            }
         }
         return this.playing;
+    }
+
+    /** How guest `index`'s connection is doing, for `Stats`. */
+    private GuestState(index: number, now: number): string {
+        if (this.departed.has(index)) {
+            return "LEFT";
+        }
+        const lost = this.lost.get(index);
+        if (lost !== undefined) {
+            return "GONE, HELD " + Math.max(0, Math.ceil((HoldAwayMs - (now - lost)) / 1000)) + " S MORE";
+        }
+        if (this.away.has(index)) {
+            return "AWAY, NOTHING FOR " + Math.floor((now - this.heard[index]) / 1000) + " S";
+        }
+        const rtt = this.RoundTrip(this.seats[index].peer);
+        return (rtt === undefined ? "-" : Math.round(rtt) + " MS") + ", " + this.inputs[index].Waiting + " INPUTS WAITING";
     }
 
     private SendSnapshot(): void {
@@ -228,6 +350,13 @@ export default class HostSession extends PlaySession {
             }
         });
         snapshot.events = this.events.splice(0);
+        snapshot.events.forEach(event => {
+            if (IsLastingEvent(event)) {
+                this.history.push(event);
+            } else if (event.e === "all-died" || event.e === "completed") {
+                this.end = event;
+            }
+        });
         this.sent.Add(this.Broadcast(snapshot), this.now());
     }
 
@@ -250,7 +379,7 @@ export default class HostSession extends PlaySession {
 
     /** The guests, by peer, still in the room. */
     private Guests(): number[] {
-        return this.seats.filter((seat, i) => this.IsGuest(i) && !this.departed.has(i)).map(seat => seat.peer);
+        return this.seats.filter((seat, i) => this.IsGuest(i) && !this.departed.has(i) && !this.lost.has(i)).map(seat => seat.peer);
     }
 
     /** Which hero peer `peer` plays - -1 for none. */

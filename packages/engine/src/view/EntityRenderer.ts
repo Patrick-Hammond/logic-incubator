@@ -194,7 +194,8 @@ export default class EntityRenderer {
             texture,
             facingX: hero.FacingX,
             light: FigureLight(this.level.lightGrid, position, this.NextLight()),
-            alpha: !hero.Alive ? FallenAlpha : invulnerable > 0 && Math.floor(invulnerable * BlinkRate) % 2 === 0 ? 0.25 : 1
+            // One who is away (online, their player's connection gone) is drawn as faint as the fallen: out of play.
+            alpha: !hero.Alive || hero.Away ? FallenAlpha : invulnerable > 0 && Math.floor(invulnerable * BlinkRate) % 2 === 0 ? 0.25 : 1
         });
     }
 

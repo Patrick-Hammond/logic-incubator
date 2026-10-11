@@ -10,13 +10,21 @@
  *
  * A guest says hello first; only then does the host count them in and tell
  * them anything, so nothing reaches a guest before it's listening.
+ *
+ * Once the run has begun (`STARTED`), a guest whose connection goes - closed,
+ * or quiet for `QuietForMs` - tries to get back in (see
+ * `GuestLobbyOptions.reconnect`) for as long as the host keeps its hero
+ * (`HoldAwayMs`): a new place in the room, and a hello with the token its start
+ * gave it. The host's lobby asks the run (`SetRejoin`) and lets it back in as
+ * the hero it was (`rejoined`).
  */
 
 import { EventEmitter } from "eventemitter3";
-import RelaySession, { RelayEvents } from "@logic-incubator/lib/net/RelaySession";
+import RelaySession, { RelayEvents, RelayRefusedError } from "@logic-incubator/lib/net/RelaySession";
 import { RelayHost, RoomSeats } from "@logic-incubator/lib/net/RelayRooms";
 import type { LevelFile } from "../level/LevelFormat";
 import { NewSeed } from "../Random";
+import { HoldAwayMs } from "./HostSession";
 import { LevelHash, PackLevel, UnpackLevel } from "./LevelTransfer";
 import { CleanName, DecodeMessage, EncodeMessage, LobbyMessage, LobbySeat, NetVersion, StartLevel } from "./NetMessages";
 
@@ -29,8 +37,29 @@ export const LobbyEvents = {
     /** (start: LobbyStart) - the run begins: everything a machine needs to start the same level as the rest. */
     STARTED: "started",
     /** (reason: string) - the lobby is over before or after a start: see `LobbyClosedText`. Emitted once. */
-    CLOSED: "closed"
+    CLOSED: "closed",
+    /** () - a guest's, during the run: its connection has gone, and it's trying to get back in (see `GuestLobby.Reconnecting`). */
+    DROPPED: "dropped",
+    /** () - a guest's: it's back in the run after `DROPPED`, in the room as `Session` now. */
+    REJOINED: "rejoined"
 };
+
+/** How long a guest whose connection has gone keeps trying to get back into the run, in milliseconds - as long as the host keeps its hero. */
+export const ReconnectForMs = HoldAwayMs;
+/** How long a guest in a run may hear nothing from the room before it takes its connection for lost, in milliseconds - the host pings every second. */
+export const QuietForMs = 8000;
+/** The waits between a guest's tries to get back in, in milliseconds - the last over and over. */
+const RetryDelaysMs = [500, 1000, 2000, 4000];
+/** How long a guest back in the room waits for the host to let it back into the run before trying again, in milliseconds. */
+const RejoinAnswerMs = 5000;
+
+/** What a host's lobby asks of the run when a guest comes back into it (see `HostLobby.SetRejoin`) - its `HostSession`. */
+export interface RejoinHandler {
+    /** Whether the player of hero `index` may come back: they're not gone for good. */
+    CanRejoin(index: number): boolean;
+    /** The player of hero `index` is back, as peer `peer`. */
+    Rejoin(index: number, peer: number): void;
+}
 
 /** What every machine starts the run with - the same on each but for `you`. */
 export type LobbyStart = {
@@ -69,6 +98,12 @@ export function LobbyClosedText(reason: string): string {
             return "That game has already started.";
         case "full":
             return "That game is full.";
+        case "gone":
+            return "You were away too long.";
+        case "quiet":
+            return "Lost touch with the host.";
+        case "lost":
+            return "Lost the connection, and couldn't get back in.";
         default:
             return "Lost the connection (" + reason + ").";
     }
@@ -79,21 +114,27 @@ function SeatName(index: number): string {
     return "PLAYER " + (index + 1);
 }
 
+/** A random token for a guest to come back into a run with - unguessable enough to keep a stranger with the room code out of their seat. */
+function NewToken(): string {
+    let token = "";
+    while (token.length < 16) {
+        token += Math.random().toString(36).slice(2);
+    }
+    return token.slice(0, 16);
+}
+
 /** What the two lobbies share: the room, the seats, and leaving. */
 abstract class Lobby extends EventEmitter {
     protected seats: LobbySeat[] = [];
+    /** When anything last came from the room, by `Date.now`. */
+    protected heardAt = Date.now();
     private over = false;
+    /** What stops this listening to its session. */
+    private stops: Array<() => void> = [];
 
     constructor(protected session: RelaySession) {
         super();
-        session.on(RelayEvents.MESSAGE, (from: number, payload: Uint8Array) => {
-            const message = DecodeMessage(payload);
-            if (message && !this.over) {
-                this.OnMessage(from, message);
-            }
-        });
-        session.on(RelayEvents.PEER_LEFT, (peer: number) => this.OnPeerLeft(peer));
-        session.on(RelayEvents.CLOSED, (reason: string) => this.Close(reason));
+        this.Bind(session);
     }
 
     /** The room's code, for the host to share. */
@@ -128,10 +169,40 @@ abstract class Lobby extends EventEmitter {
     /** Leaves the room - which closes it for everyone, from the host. */
     Leave(): void {
         this.session.Leave();
+        // Its session may have closed already: a guest's whose connection went, trying to get back in.
+        this.Close("left");
     }
 
     protected abstract OnMessage(from: number, message: LobbyMessage): void;
     protected abstract OnPeerLeft(peer: number): void;
+
+    /** The session has closed, for `reason` (see `RelayEvents.CLOSED`): so does the lobby - unless a guest's tries to get back in. */
+    protected OnSessionClosed(reason: string): void {
+        this.Close(reason);
+    }
+
+    /** Listens to `session` - a guest's new place in the room, after its connection went - instead of the one before. */
+    protected Bind(session: RelaySession): void {
+        this.stops.splice(0).forEach(stop => stop());
+        this.session = session;
+        const message = (from: number, payload: Uint8Array) => {
+            this.heardAt = Date.now();
+            const decoded = DecodeMessage(payload);
+            if (decoded && !this.over) {
+                this.OnMessage(from, decoded);
+            }
+        };
+        const left = (peer: number) => this.OnPeerLeft(peer);
+        const closed = (reason: string) => this.OnSessionClosed(reason);
+        session.on(RelayEvents.MESSAGE, message);
+        session.on(RelayEvents.PEER_LEFT, left);
+        session.on(RelayEvents.CLOSED, closed);
+        this.stops.push(() => {
+            session.off(RelayEvents.MESSAGE, message);
+            session.off(RelayEvents.PEER_LEFT, left);
+            session.off(RelayEvents.CLOSED, closed);
+        });
+    }
 
     protected Send(to: number, message: LobbyMessage): void {
         this.session.Send(to, EncodeMessage(message));
@@ -153,13 +224,16 @@ abstract class Lobby extends EventEmitter {
     }
 }
 
-/** The host's lobby: lets guests in, keeps their picks, and starts the run. */
+/** The host's lobby: lets guests in, keeps their picks, starts the run, and lets a guest whose connection went back into it. */
 export class HostLobby extends Lobby {
     /** The start, once it's been made - guests who come after are turned away. */
     private start: StartLevel | null = null;
     private level: LevelFile | null = null;
     /** The level packed to send, made once when first needed. */
     private packed: Promise<Uint8Array> | null = null;
+    /** Each hero's token to come back into the run with, by slot, once it's begun - "" for the host's own. */
+    private tokens: string[] = [];
+    private rejoin: RejoinHandler | null = null;
 
     /** Hosts in the room `session` has opened (see `RelaySession.Host`), as the player called `name`. */
     constructor(session: RelaySession, name: string) {
@@ -187,8 +261,17 @@ export class HostLobby extends Lobby {
     }
 
     /**
+     * What decides whether a guest whose connection went may come back into the run, and hears that they have - the
+     * run's `HostSession` (see `CreateNetPlay`). Until there's one, or with null, a guest coming back is turned away.
+     */
+    SetRejoin(handler: RejoinHandler | null): void {
+        this.rejoin = handler;
+    }
+
+    /**
      * Starts the run - when `CanStart` - on `level`, with random numbers from `seed` (a new one by default): tells every
-     * guest, sends the level to them if it isn't the game's own, and emits `STARTED` here.
+     * guest, with a token of their own to come back with, sends the level to them if it isn't the game's own, and
+     * emits `STARTED` here.
      */
     async Start(level: HostLevel, seed: number = NewSeed()): Promise<LobbyStart> {
         if (!this.CanStart) {
@@ -197,7 +280,11 @@ export class HostLobby extends Lobby {
         const seats = this.seats.map(seat => ({ ...seat }));
         const start = this.start = { bundle: level.bundle, hash: LevelHash(level.file), sent: !level.shipped };
         this.level = level.file;
-        this.Guests().forEach(seat => this.Send(seat.peer, { t: "start", seed, level: start, seats }));
+        this.tokens = seats.map(seat => (seat.peer === RelayHost ? "" : NewToken()));
+        this.Guests().forEach(seat => {
+            const token = this.tokens[seats.findIndex(other => other.peer === seat.peer)];
+            this.Send(seat.peer, { t: "start", seed, level: start, seats, token });
+        });
         if (start.sent) {
             const packed = await this.Packed();
             this.Guests().forEach(seat => this.Send(seat.peer, { t: "level", packed }));
@@ -209,7 +296,10 @@ export class HostLobby extends Lobby {
 
     protected OnMessage(from: number, message: LobbyMessage): void {
         const seat = this.seats.find(other => other.peer === from);
-        if (message.t === "hello") {
+        if (message.t === "hello" && message.rejoin !== undefined && this.start) {
+            // Before anything else: back in the room, a guest may well have its old peer number again.
+            this.Rejoin(from, message.version, message.rejoin);
+        } else if (message.t === "hello") {
             if (seat) {
                 // Said twice: they've missed what was said, so say it again.
                 this.Send(from, { t: "lobby", seats: this.seats });
@@ -233,10 +323,32 @@ export class HostLobby extends Lobby {
     }
 
     protected OnPeerLeft(peer: number): void {
+        // Once the run has begun, a seat is kept: whoever had it may come back (see `Rejoin`).
+        if (this.start) {
+            return;
+        }
         const before = this.seats.length;
         this.seats = this.seats.filter(seat => seat.peer !== peer);
         if (this.seats.length !== before) {
             this.Changed();
+        }
+    }
+
+    /** Peer `from` says hello with the `token` a guest's start gave it: back in the run as that guest's hero, if the run will have them. */
+    private Rejoin(from: number, version: number, token: string): void {
+        const index = this.tokens.indexOf(token);
+        if (version !== NetVersion) {
+            this.Send(from, { t: "refused", reason: "version" });
+        } else if (index <= 0 || !this.rejoin) {
+            this.Send(from, { t: "refused", reason: "started" });
+        } else if (!this.rejoin.CanRejoin(index)) {
+            this.Send(from, { t: "refused", reason: "gone" });
+        } else {
+            this.seats = this.seats.map((seat, i) => (i === index ? { ...seat, peer: from } : seat));
+            // Told first, so it's listening as the run's catch-up comes.
+            this.Send(from, { t: "rejoined" });
+            this.rejoin.Rejoin(index, from);
+            this.emit(LobbyEvents.CHANGED);
         }
     }
 
@@ -268,14 +380,31 @@ export type GuestLobbyOptions = {
      * if it's the host's. The host's is sent whole when it isn't.
      */
     shippedLevel: (bundle: string | null) => Promise<LevelFile | undefined>;
+    /**
+     * A new place in the same room (`RelaySession.Join` with its `Code`), on a new connection - how a guest whose
+     * connection goes during the run gets back in. Undefined, and the lobby closes when the connection does.
+     */
+    reconnect?: () => Promise<RelaySession>;
 };
 
-/** A guest's lobby: says hello, shows what the host says, picks, and starts when the host does. */
+/** A guest's lobby: says hello, shows what the host says, picks, starts when the host does, and gets back into the run if its connection goes. */
 export class GuestLobby extends Lobby {
     /** The start the host sent, while its level is made ready. */
     private start: { seed: number; level: StartLevel; seats: LobbySeat[] } | null = null;
     /** Whether the level is coming whole from the host. */
     private awaitingLevel = false;
+    /** What the host's start gave to come back into the run with - null before then, or from a host that gave none. */
+    private token: string | null = null;
+    /** Whether the run has begun here (`STARTED`) - only then does it try to get back in when its connection goes. */
+    private begun = false;
+    /** This guest's hero, by slot, once the run has begun. */
+    private you = -1;
+    /** Whether the connection has gone, and it's trying to get back in. */
+    private reconnecting = false;
+    /** While a try to get back in waits for the host's answer: what takes it - "rejoined", a refusal's reason, or "lost". */
+    private answer: ((answer: string) => void) | null = null;
+    /** What stops it listening for the room going quiet. */
+    private watch: ReturnType<typeof setInterval> | null = null;
 
     /** Joins the lobby in the room `session` has joined (see `RelaySession.Join`). */
     constructor(session: RelaySession, private options: GuestLobbyOptions) {
@@ -293,6 +422,11 @@ export class GuestLobby extends Lobby {
         return !!this.start;
     }
 
+    /** Whether its connection has gone during the run and it's trying to get back in - see `DROPPED`, `REJOINED`. */
+    get Reconnecting(): boolean {
+        return this.reconnecting;
+    }
+
     /** Asks the host for this pick (a character id), or null to take it back. `Seats` shows it once the host has it. */
     Pick(character: string | null): void {
         if (this.IsOpen && !this.start) {
@@ -305,7 +439,9 @@ export class GuestLobby extends Lobby {
         if (from !== RelayHost) {
             return;
         }
-        if (message.t === "lobby" && !this.start) {
+        if (this.answer && (message.t === "rejoined" || message.t === "refused")) {
+            this.answer(message.t === "rejoined" ? "rejoined" : message.reason);
+        } else if (message.t === "lobby" && !this.start) {
             this.seats = message.seats;
             this.emit(LobbyEvents.CHANGED);
         } else if (message.t === "refused") {
@@ -313,6 +449,8 @@ export class GuestLobby extends Lobby {
         } else if (message.t === "start" && !this.start) {
             this.start = { seed: message.seed, level: message.level, seats: message.seats };
             this.seats = message.seats;
+            this.token = message.token || null;
+            this.you = message.seats.findIndex(seat => seat.peer === this.session.You);
             this.emit(LobbyEvents.STARTING);
             this.awaitingLevel = message.level.sent;
             if (!message.level.sent) {
@@ -329,6 +467,124 @@ export class GuestLobby extends Lobby {
 
     protected OnPeerLeft(_peer: number): void {
         // The host says how the lobby stands; the host leaving closes the room, and with it this.
+    }
+
+    /** Its connection has gone: during the run, it tries to get back in - else, or when it left, or the host did, it closes. */
+    protected OnSessionClosed(reason: string): void {
+        if (this.answer) {
+            // A try to get back in has lost its connection too.
+            this.answer("lost");
+        } else if (this.reconnecting) {
+            return;
+        } else if (reason === "left" || reason === "host-left" || !this.begun || !this.token || !this.options.reconnect || !this.IsOpen) {
+            this.Close(reason);
+        } else {
+            this.Reconnect();
+        }
+    }
+
+    protected Close(reason: string): void {
+        if (this.watch !== null) {
+            clearInterval(this.watch);
+            this.watch = null;
+        }
+        this.reconnecting = false;
+        if (this.answer) {
+            this.answer("lost");
+        }
+        super.Close(reason);
+    }
+
+    /** Takes the connection for lost if nothing comes from the room for `QuietForMs` - one that has died without closing. */
+    private WatchForQuiet(): void {
+        if (this.watch !== null || !this.options.reconnect) {
+            return;
+        }
+        this.heardAt = Date.now();
+        this.watch = setInterval(() => {
+            if (!this.reconnecting && Date.now() - this.heardAt > QuietForMs) {
+                this.session.Drop("quiet");
+            }
+        }, 1000);
+    }
+
+    /**
+     * Tries to get back into the run, after its connection went: a new place in the room, then a hello with its token -
+     * again and again, a little longer apart each time, for up to `ReconnectForMs`. Closes when it can't: the room is
+     * gone (`host-left`), the host won't have it back (its reason), or time's up (`lost`).
+     */
+    private async Reconnect(): Promise<void> {
+        const since = Date.now();
+        this.reconnecting = true;
+        this.emit(LobbyEvents.DROPPED);
+        for (let tries = 0; this.IsOpen; tries++) {
+            await new Promise(resolve => setTimeout(resolve, RetryDelaysMs[Math.min(tries, RetryDelaysMs.length - 1)]));
+            if (!this.IsOpen) {
+                return;
+            }
+            if (Date.now() - since >= ReconnectForMs) {
+                this.Close("lost");
+                return;
+            }
+            let session: RelaySession;
+            try {
+                session = await this.options.reconnect!();
+            } catch (error) {
+                if (error instanceof RelayRefusedError && error.reason === "no-room") {
+                    this.Close("host-left");
+                    return;
+                }
+                continue;
+            }
+            if (!this.IsOpen) {
+                session.Leave();
+                return;
+            }
+            const answer = await this.AskBack(session);
+            if (answer === "rejoined") {
+                return;
+            }
+            if (answer !== "lost") {
+                this.Close(answer);
+                return;
+            }
+        }
+    }
+
+    /**
+     * Says hello in `session` - a new place in the room - with its token, and waits for the host's answer: "rejoined"
+     * (and it's back), a refusal's reason, or "lost".
+     */
+    private AskBack(session: RelaySession): Promise<string> {
+        return new Promise<string>(resolve => {
+            const finish = (answer: string) => {
+                clearTimeout(timer);
+                if (this.answer === finish) {
+                    this.answer = null;
+                }
+                if (answer === "rejoined") {
+                    this.Back(session);
+                } else if (answer === "lost") {
+                    session.Leave();
+                }
+                resolve(answer);
+            };
+            const timer = setTimeout(() => finish("lost"), RejoinAnswerMs);
+            this.answer = finish;
+            this.Bind(session);
+            this.Send(RelayHost, { t: "hello", version: NetVersion, name: CleanName(this.options.name, ""), rejoin: this.token! });
+        });
+    }
+
+    /**
+     * Back in the run, as `session`. Said at once, as the host's answer comes - not a moment later - so the run is
+     * listening there for what the host sends straight after it (see `CreateNetPlay`).
+     */
+    private Back(session: RelaySession): void {
+        this.reconnecting = false;
+        this.heardAt = Date.now();
+        this.seats = this.seats.map((seat, i) => (i === this.you ? { ...seat, peer: session.You } : seat));
+        this.emit(LobbyEvents.REJOINED);
     }
 
     /** Plays this machine's own copy of the level if it's the host's - or asks for the host's. */
@@ -353,6 +609,8 @@ export class GuestLobby extends Lobby {
     private Begin(file: LevelFile): void {
         const start = this.start;
         if (start && this.IsOpen) {
+            this.begun = true;
+            this.WatchForQuiet();
             this.emit(LobbyEvents.STARTED, this.StartFor(start.seed, start.level.bundle, file, start.seats));
         }
     }

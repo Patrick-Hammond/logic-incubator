@@ -17,7 +17,7 @@ export const RelayEvents = {
     PEER_JOINED: "peer-joined",
     /** (peer: number) - someone has left it. */
     PEER_LEFT: "peer-left",
-    /** (reason: string) - this session is over: `"left"` (see `Leave`), `"host-left"`, or the connection's own reason for ending. Emitted once. */
+    /** (reason: string) - this session is over: `"left"` (see `Leave`), `"host-left"`, `Drop`'s reason, or the connection's own reason for ending. Emitted once. */
     CLOSED: "closed"
 };
 
@@ -117,6 +117,17 @@ export default class RelaySession extends EventEmitter {
     Leave(): void {
         if (!this.over) {
             this.Over("left");
+            this.transport.Close();
+        }
+    }
+
+    /**
+     * Lets go of a connection taken for lost - one that has gone quiet - without leaving the room as such: `CLOSED`
+     * hears `reason`, as it would the connection's own, so whoever is listening may try to get back in.
+     */
+    Drop(reason: string): void {
+        if (!this.over) {
+            this.Over(reason);
             this.transport.Close();
         }
     }

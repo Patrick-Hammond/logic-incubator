@@ -13,7 +13,7 @@ import { SeededRandom } from "../Random";
 import World from "../sim/World";
 import { NetTestLevel } from "./__fixtures__/NetTestLevel";
 import GuestSession from "./GuestSession";
-import HostSession, { WaitForGuestsMs } from "./HostSession";
+import HostSession, { AwayAfterMs, HoldAwayMs, WaitForGuestsMs } from "./HostSession";
 import type { LobbySeat } from "./NetMessages";
 import type { NetPlay } from "./NetPlay";
 
@@ -56,11 +56,14 @@ class Run {
     host!: Machine;
     guests: Machine[] = [];
     now = 0;
+    /** Machines that have stalled - nothing they do goes out, as a frozen tab's wouldn't. */
+    stalled = new Set<Machine>();
+    private relay!: LoopbackRelay;
     private seats: LobbySeat[] = [];
 
     /** Opens a room with `guests` guests in it, each line to the relay slowed by `lag` if given. */
     async Open(guests: number, lag?: (i: number) => Parameters<typeof WithLag>[1]): Promise<void> {
-        const relay = new LoopbackRelay();
+        const relay = this.relay = new LoopbackRelay();
         const hostRelay = await RelaySession.Host(relay.Connect(), "test");
         const guestRelays: RelaySession[] = [];
         for (let i = 0; i < guests; i++) {
@@ -73,6 +76,16 @@ class Run {
         const now = () => this.now;
         this.host = this.Machine(hostRelay, new HostSession(hostRelay, this.seats, { now }));
         this.guests = guestRelays.map(session => this.Machine(session, new GuestSession(session, this.seats, { now })));
+    }
+
+    /** Guest `guest` (from 0) is back in the room on a new connection, and the host's lobby has let it back into the run. */
+    async Rejoin(guest: number): Promise<void> {
+        const machine = this.guests[guest];
+        const joining = RelaySession.Join(this.relay.Connect(), "test", this.host.relay.Code);
+        await vi.advanceTimersByTimeAsync(10);
+        const session = machine.relay = await joining;
+        (machine.session as GuestSession).Rejoin(session);
+        (this.host.session as HostSession).Rejoin(guest + 1, session.You);
     }
 
     /** Starts the level on `machine`, as its `LEVEL_CREATED` would. */
@@ -107,13 +120,16 @@ class Run {
         for (let frame = 0; frame < frames; frame++) {
             this.now += StepMs;
             [this.host, ...this.guests].forEach((machine, hero) => {
+                if (this.stalled.has(machine)) {
+                    return;
+                }
                 const local: Array<IPlayerInput | undefined> = [];
                 local[hero] = input(hero, frame);
                 machine.session.Step(local);
             });
             await vi.advanceTimersByTimeAsync(StepMs);
             await Flush();
-            [this.host, ...this.guests].forEach(machine => machine.session.Frame(1));
+            [this.host, ...this.guests].forEach(machine => !this.stalled.has(machine) && machine.session.Frame(1));
         }
     }
 
@@ -218,11 +234,135 @@ describe("an online run", () => {
     it("takes a guest's hero out when they leave, on the host and every other guest", async () => {
         await run.Open(2);
         await run.BeginAll();
+        run.guests[0].session.End();
         run.guests[0].relay.Leave();
         await run.Frames(10, () => undefined);
         expect(run.host.world.Heroes[1].Gone).toBe(true);
         expect(run.guests[1].world.Heroes[1].Gone).toBe(true);
         expect(run.guests[1].world.Heroes[2].Gone).toBe(false);
+        expect((run.host.session as HostSession).CanRejoin(1)).toBe(false);
+        expect(run.host.session.Stats()).toContain("P1: LEFT");
+    });
+
+    it("holds the hero of a guest whose connection goes - away, where they stood - and takes them out once they've been gone too long", async () => {
+        await run.Open(2);
+        await run.BeginAll();
+        await run.Frames(30, hero => (hero === 1 ? Input(1, 1) : undefined));
+        run.guests[0].relay.Drop("lost");
+        await run.Frames(10, () => undefined);
+        expect(run.guests[0].session.Connected).toBe(false);
+        const host = run.host.session as HostSession;
+        expect(run.host.world.Heroes[1].Away).toBe(true);
+        const at = { x: run.host.world.Heroes[1].Position.x, y: run.host.world.Heroes[1].Position.y };
+        expect(run.host.world.Heroes[1].Gone).toBe(false);
+        expect(run.guests[1].world.Heroes[1].Away).toBe(true);
+        expect(run.host.world.Active.map(hero => hero.Index)).toEqual([0, 2]);
+        expect(host.CanRejoin(1)).toBe(true);
+        expect(host.Stats()).toContain("P1: GONE, HELD 60 S MORE");
+
+        await run.Frames(60, () => Input(1));
+        expect(run.host.world.Heroes[1].Position).toEqual(at);
+
+        run.now += HoldAwayMs;
+        await run.Frames(30, () => undefined);
+        expect(run.host.world.Heroes[1].Gone).toBe(true);
+        expect(run.guests[1].world.Heroes[1].Gone).toBe(true);
+        expect(host.CanRejoin(1)).toBe(false);
+    });
+
+    it("lets a guest whose connection went back in, caught up on what it missed, and plays on from where the host has them", async () => {
+        await run.Open(1);
+        await run.BeginAll();
+        const guest = run.guests[0];
+        await run.Frames(30, hero => (hero === 1 ? Input(1) : undefined));
+        await run.Frames(10, () => undefined);
+        guest.relay.Drop("lost");
+        // While it's gone, the host's hero takes the gold - and the guest's own, played on, goes nowhere.
+        await run.Frames(70, hero => (hero === 0 ? Input(0.6, 0.4) : Input(0, 1)));
+        expect(run.host.level.pickups).toEqual([]);
+        expect(guest.level.pickups).toHaveLength(1);
+
+        await run.Rejoin(0);
+        expect(guest.session.Connected).toBe(false);
+        await run.Frames(5, () => undefined);
+        expect(guest.session.Connected).toBe(true);
+        expect(guest.level.pickups).toEqual([]);
+        // Quietly: what it missed is past, so nothing tells the game it just happened.
+        expect(guest.events.filter(event => event[0] === PICKUP_COLLECTED)).toEqual([]);
+        expect((run.host.session as HostSession).Stats().join("\n")).not.toContain("GONE");
+
+        await run.Frames(60, hero => (hero === 1 ? Input(0, 1) : undefined));
+        await run.Frames(60, () => undefined);
+        expect(run.host.world.Heroes[1].Away).toBe(false);
+        expect(guest.world.Heroes[1].Away).toBe(false);
+        expect(guest.world.Heroes[1].Position.x).toBe(run.host.world.Heroes[1].Position.x);
+        expect(guest.world.Heroes[1].Position.y).toBe(run.host.world.Heroes[1].Position.y);
+        expect(run.host.world.Heroes[1].Position.y).toBeGreaterThan(TileSize * 2);
+        expect((guest.session as GuestSession).Prediction.Corrections).toBe(0);
+    });
+
+    it("starts the level over on a guest back to find the host has, and catches it up as it begins", async () => {
+        await run.Open(1);
+        await run.BeginAll();
+        const guest = run.guests[0];
+        guest.relay.Drop("lost");
+        await run.Frames(5, () => undefined);
+        run.host.session.Restart();
+        run.Begin(run.host);
+        // It plays on without waiting for a guest who isn't there.
+        await run.Frames(70, hero => (hero === 0 ? Input(0.6, 0.4) : undefined));
+        expect(run.host.level.pickups).toEqual([]);
+
+        await run.Rejoin(0);
+        await run.Frames(5, () => undefined);
+        expect(guest.restarts).toBe(1);
+        run.Begin(guest);
+        expect(guest.level.pickups).toEqual([]);
+        await run.Frames(60, hero => (hero === 1 ? Input(0, 1) : undefined));
+        await run.Frames(30, () => undefined);
+        expect(guest.world.Heroes[1].Position.y).toBe(run.host.world.Heroes[1].Position.y);
+        expect(run.host.world.Heroes[1].Position.y).toBeGreaterThan(TileSize * 2);
+    });
+
+    it("tells a guest back after the level ended how it ended - once - and where everyone is", async () => {
+        await run.Open(1);
+        await run.BeginAll();
+        const guest = run.guests[0];
+        guest.relay.Drop("lost");
+        await run.Frames(5, () => undefined);
+        run.host.world.Heroes[0].Damage(100);
+        await run.Frames(5, () => undefined);
+        expect(run.host.world.AllDown).toBe(true);
+        expect(guest.events).not.toContainEqual([ALL_PLAYERS_DIED]);
+
+        await run.Rejoin(0);
+        await run.Frames(5, () => undefined);
+        expect(guest.events.filter(event => event[0] === ALL_PLAYERS_DIED)).toHaveLength(1);
+        expect(guest.world.Heroes[0].Alive).toBe(false);
+
+        // Gone again and back: it has heard already.
+        guest.relay.Drop("lost");
+        await run.Frames(5, () => undefined);
+        await run.Rejoin(0);
+        await run.Frames(5, () => undefined);
+        expect(guest.events.filter(event => event[0] === ALL_PLAYERS_DIED)).toHaveLength(1);
+    });
+
+    it("takes the hero of a guest gone quiet out of play, and back in with their next input", async () => {
+        await run.Open(1);
+        await run.BeginAll();
+        const guest = run.guests[0];
+        run.stalled.add(guest);
+        await run.Frames(Math.ceil(AwayAfterMs / StepMs) + 10, () => undefined);
+        expect(run.host.world.Heroes[1].Away).toBe(true);
+        expect(run.host.session.Stats().join("\n")).toMatch(/P1: AWAY, NOTHING FOR 3 S/);
+        // Only out of play: their connection is still there.
+        expect((run.host.session as HostSession).CanRejoin(1)).toBe(true);
+
+        run.stalled.delete(guest);
+        await run.Frames(10, () => undefined);
+        expect(run.host.world.Heroes[1].Away).toBe(false);
+        expect(guest.world.Heroes[1].Away).toBe(false);
     });
 
     it("tells every guest when the last hero falls - with a snapshot at once, as nothing steps after", async () => {
