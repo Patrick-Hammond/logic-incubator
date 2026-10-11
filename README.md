@@ -12,8 +12,8 @@ packages, whose dependencies only point down (editor -> engine -> ui -> lib; the
   (`src/assets/`, `scripts/`), input, tweening, tilemap rendering, filters, online transports and the
   relay's room rules (`src/net/`); plus the HTML page the games are served in (`html/`)
 - `packages/engine` - `@logic-incubator/engine`: the top-down tile engine - level format and
-  loading, lighting and depth, heroes (one, a couch party, or players online), monsters and combat, the online lobby
-  (`src/net/`); plus the build plugin that keeps a game's `assets-meta.json` in step with its sprites (`scripts/`)
+  loading, lighting and depth, heroes (one, a couch party, or players online), monsters and combat, online play - the lobby
+  and the host's world shared with its guests (`src/net/`); plus the build plugin that keeps a game's `assets-meta.json` in step with its sprites (`scripts/`)
 - `packages/ui` - `@logic-incubator/ui`: a skinnable Pixi UI kit - widgets, keyboard / gamepad /
   pointer focus, and its own art, bitmap fonts and skin (the `ui` asset bundle, in `assets/ui/`); the
   engine's HUD is built from it

@@ -114,11 +114,19 @@ export class HeroView {
         this.Place(1);
     }
 
-    /** Places them for drawing `alpha` (0 to 1) of the way from where their last step started to where it ended. Call each frame after the steps, before anything reads where they're drawn. */
-    Place(alpha: number): void {
+    /**
+     * Places them for drawing `alpha` (0 to 1) of the way from where their last step started to where it ended - and
+     * `offset` pixels from there, if given (an online guest's hero, while a correction is drawn away). Call each frame
+     * after the steps, before anything reads where they're drawn.
+     */
+    Place(alpha: number, offset?: Vec2Like | null): void {
         const state = this.hero.State;
         Between(state.previous, state.position, alpha, this.drawPosition);
         Between(state.previousOrb, state.orb, alpha, this.drawOrb);
+        if (offset) {
+            this.drawPosition.Set(this.drawPosition.x + offset.x, this.drawPosition.y + offset.y);
+            this.drawOrb.Set(this.drawOrb.x + offset.x, this.drawOrb.y + offset.y);
+        }
     }
 
     private CreateSprite(name: string): AnimatedSprite {

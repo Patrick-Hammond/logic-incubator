@@ -21,3 +21,7 @@ export const GAME_RESUMED = "gameResumed";
 export const MONSTER_KILLED = "monsterKilled";
 /** `(spawner: Spawner)` - a spawner shot to pieces; its cells are open floor from now on. */
 export const SPAWNER_DESTROYED = "spawnerDestroyed";
+/** `(hero: number, tileX: number, tileY: number)` - a hero picked up everything lying on that cell (see `Level.CollectPickupsAt`). */
+export const PICKUP_COLLECTED = "pickupCollected";
+/** `(hero: number, tileX: number, tileY: number)` - a hero who fell (or left) dropped the keys they carried, all on that cell, for the others to pick up. */
+export const KEYS_DROPPED = "keysDropped";

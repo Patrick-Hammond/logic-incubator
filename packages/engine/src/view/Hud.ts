@@ -51,6 +51,8 @@ export default class Hud extends GameComponent {
     /** A party's rows and keys, made for the party's size (see `RenderHeroes`) - null for a lone hero. */
     private party: Container | null = null;
     private rows: HudHeroRow[] = [];
+    /** What heads each row, and whether it's a player at this machine - see `SetNames`. */
+    private names: ReadonlyArray<{name: string; own: boolean}> = [];
     private teamKeys: UiInventoryGrid | null = null;
     private shownTeamKeys = "";
     private teamKeyRing: KeyRing = {keys: []};
@@ -165,6 +167,15 @@ export default class Hud extends GameComponent {
      * Every hero, in slot order, the fallen included: one gets the lone hero's panel (`Render`); a party gets a row
      * each and the team's keys - every key any of them carries, which open their doors for all (see `World`).
      */
+    /**
+     * Heads the party's rows with these names (by slot) in place of "PLAYER n", marking out with `own` the players at
+     * this machine when some aren't - online, where each player sees their own row stand out. Kept until changed.
+     */
+    SetNames(names: ReadonlyArray<{name: string; own: boolean}>): void {
+        this.names = names;
+        this.rows.forEach((row, i) => this.NameRow(row, i));
+    }
+
     RenderHeroes(heroes: ReadonlyArray<HudHero & {Keys: KeyRing}>): void {
         if (heroes.length === 1) {
             const hero = heroes[0];
@@ -213,9 +224,17 @@ export default class Hud extends GameComponent {
         const spacing = Math.max(HudHeroRow.Height(theme) + 12, Math.floor(space));
         for (let i = 0; i < count; i++) {
             const row = new HudHeroRow(theme, i, width, this.heartsTextures);
+            this.NameRow(row, i);
             row.position.set(inner, Margin + i * spacing);
             party.addChild(row);
             this.rows.push(row);
+        }
+    }
+
+    private NameRow(row: HudHeroRow, index: number): void {
+        const named = this.names[index];
+        if (named) {
+            row.SetName(named.name, named.own);
         }
     }
 

@@ -51,6 +51,10 @@ export type Projectile = {
     owner: ProjectileOwner;
     /** The index of the hero who fired it - -1 for a monster's. */
     hero: number;
+    /** Online, the `seq` of the hero's input that fired it (see `IPlayerInput.seq`) - -1 for none: how a guest knows its own shots, which it draws ahead of the host's (see `Replica`). */
+    seq: number;
+    /** What it was fired as: the weapon's shot, or the monster's. */
+    setup: ShotSetup;
     damage: number;
     sprite: string;
     spriteAngle?: number;
@@ -68,7 +72,7 @@ export const ProjectileSize = 6;
 export const ContactInset = 2;
 
 /** Fired from `from` (a centre) along `direction` (any length - it's normalised). */
-export function CreateProjectile(from: Vec2Like, direction: Vec2Like, shot: ShotSetup, owner: ProjectileOwner, tileSize: number, id = 0, hero = -1): Projectile {
+export function CreateProjectile(from: Vec2Like, direction: Vec2Like, shot: ShotSetup, owner: ProjectileOwner, tileSize: number, id = 0, hero = -1, seq = -1): Projectile {
     const length = Math.sqrt(direction.x * direction.x + direction.y * direction.y) || 1;
     return {
         id,
@@ -80,6 +84,8 @@ export function CreateProjectile(from: Vec2Like, direction: Vec2Like, shot: Shot
         vy: (direction.y / length) * shot.speed,
         owner,
         hero,
+        seq,
+        setup: shot,
         damage: shot.damage,
         sprite: shot.sprite,
         spriteAngle: shot.spriteAngle,

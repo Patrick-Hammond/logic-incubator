@@ -13,7 +13,9 @@ import {WeaponDef} from "./level/entities/Projectiles";
 import Level from "./level/Level";
 import {LevelFile} from "./level/LevelFormat";
 import { MovingLight } from "./level/SceneLights";
+import type {NetPlay} from "./net/NetPlay";
 import World from "./sim/World";
+import type {EncounterView} from "./Encounter";
 import {Camera} from "./view/Camera";
 import Effects from "./view/Effects";
 import EntityRenderer from "./view/EntityRenderer";
@@ -47,6 +49,8 @@ export type HeroSlot = {
     sprite?: string;
     /** Their light spell: null for none, `PlayerSetup.lightSpell` when left out. */
     lightSpell?: LightSpell | null;
+    /** What their row in the HUD is headed - "PLAYER n" when left out. */
+    name?: string;
 };
 
 export type DungeonMainOptions = {
@@ -65,6 +69,13 @@ export type DungeonMainOptions = {
      * it, a new one each time.
      */
     seed?: () => number | undefined;
+    /**
+     * Online: the run this machine plays in - a `HostSession` or `GuestSession` (see `CreateNetPlay`) - asked for each
+     * time a level starts, like `seed`. The host's world is the run's: a guest's draws the host's snapshots and moves
+     * only its own hero ahead of them, and starts the level over only when the host does. Undefined, or without it,
+     * the level plays on this machine alone.
+     */
+    net?: () => NetPlay | undefined;
     /**
      * The level to play - asked for each time the scene starts, and again on every restart. A game
      * returns its own shipped level, or in a dev build the level editor's latest save.
@@ -135,6 +146,10 @@ export class DungeonMain extends GameComponent {
     /** Where the heroes the camera follows are drawn this frame, and the box round them - gathered into the same objects each frame. */
     private followed: Vec2Like[] = [];
     private partyBox = PartyBounds([]);
+    /** The online run this level is played in, as `net` gave it when the level started - null offline. */
+    private net: NetPlay | null = null;
+    /** Whether this visit shows the online run's numbers (`NetPlay.Stats`) - see `OnLevelCreated`. */
+    private watchingNet = false;
 
     constructor(private options: DungeonMainOptions) {
         super();
@@ -145,14 +160,24 @@ export class DungeonMain extends GameComponent {
         return this.effects;
     }
 
-    /** Whether play runs on: a level has started, and nothing - a pause, the party's end, a restart - holds it. */
+    /** Whether play runs on: a level has started, and nothing - a pause (offline), the party's end, a restart - holds it. */
     private get Running(): boolean {
-        return this.started && !this.paused && !this.waitingForRestart && !this.restarting && this.restartIn <= 0;
+        return this.started && (!this.paused || !!this.net) && !this.waitingForRestart && !this.restarting && this.restartIn <= 0;
     }
 
-    /** Whether play is stopped by `Pause`. */
+    /** Whether `Pause` is in force - online, where play goes on under it, the heroes played here just stand still. */
     get Paused(): boolean {
         return this.paused;
+    }
+
+    /** Whether this machine can start the level over (`Restart`): offline, or the host of an online run - a guest's starts over when the host's does. */
+    get CanRestart(): boolean {
+        return !this.net || this.net.IsHost;
+    }
+
+    /** The online run being played, if any - see `DungeonMainOptions.net`. */
+    get Net(): NetPlay | null {
+        return this.net;
     }
 
     /** Whether the level is over - every hero down, or one out - and waiting to be restarted (see `manualRestart`). */
@@ -160,7 +185,10 @@ export class DungeonMain extends GameComponent {
         return this.waitingForRestart;
     }
 
-    /** Stops play - nothing moves, shoots or spawns - until `Resume`. Does nothing before a level has started, or once it's over. */
+    /**
+     * Stops play - nothing moves, shoots or spawns - until `Resume`. Online the world plays on, as it's everyone's: only the
+     * heroes played here stop, and stand still until `Resume`. Does nothing before a level has started, or once it's over.
+     */
     Pause(): void {
         if (this.paused || !this.started || this.waitingForRestart || this.restarting || this.restartIn > 0) {
             return;
@@ -179,19 +207,13 @@ export class DungeonMain extends GameComponent {
 
     /**
      * Starts over now - the heroes, every one on their feet, the monsters, everything - as it does a moment after a
-     * level ends: with the level `level` hands back, which can be the next one after a way out was reached.
+     * level ends: with the level `level` hands back, which can be the next one after a way out was reached. Online,
+     * only the host can (see `CanRestart`), and starts it over for everyone.
      */
     Restart(): void {
-        if (!this.started || this.restarting || !this.level) {
-            return;
+        if (this.CanRestart) {
+            this.StartOver();
         }
-        if (this.paused) {
-            this.paused = false;
-            this.game.dispatcher.emit(GAME_RESUMED);
-        }
-        this.restarting = true;
-        this.waitingForRestart = false;
-        this.Reload();
     }
 
     protected OnInitialise(): void {
@@ -209,8 +231,14 @@ export class DungeonMain extends GameComponent {
 
         this.renderer = new EntityRenderer(camera, level);
         this.world = new World(level, {
-            emit: (event, ...args) => this.game.dispatcher.emit(event, ...args),
-            sizeFor: name => (AssetFactory.inst.Has(name) ? AssetFactory.inst.CreateTexture(name) : undefined)
+            emit: (event, ...args) => {
+                // The host sends what happens on to its guests.
+                if (this.net) {
+                    this.net.Record(event, args);
+                }
+                this.game.dispatcher.emit(event, ...args);
+            },
+            sizeFor: SizeOf
         });
 
         // Each bundle's metadata (collision, doors, light...) follows the bundle in and out.
@@ -237,6 +265,7 @@ export class DungeonMain extends GameComponent {
         this.views = [];
         this.controls = [];
         this.local = [];
+        this.net = null;
         this.level.Dispose();
         if (this.options.levelBundle && !this.game.assets.IsDestroyed) {
             // Lets go of the level's bundle (its textures go a frame later, once this scene has left the stage).
@@ -246,9 +275,9 @@ export class DungeonMain extends GameComponent {
         this.level = this.camera = this.world = this.renderer = this.hud = this.effects = this.levelAssets = undefined;
     }
 
-    /** Every hero is down, or one got out: hold still, then start over - with whatever level `level` hands back - shortly, or when told to. */
+    /** Every hero is down, or one got out: hold still, then start over - with whatever level `level` hands back - shortly, or when told to (always, for an online guest, whose host says when). */
     private OnLevelOver(): void {
-        if (this.options.manualRestart) {
+        if (this.options.manualRestart || !this.CanRestart) {
             this.waitingForRestart = true;
         } else {
             this.restartIn = RestartDelay;
@@ -278,12 +307,51 @@ export class DungeonMain extends GameComponent {
                 this.views.push(new HeroView(hero, sprite));
             }
         });
+        this.hud.SetNames(slots.map((slot, i) => ({ name: slot.name || "PLAYER " + (i + 1), own: !allHere && this.local[i] })));
         this.renderer.Reset();
         this.fixedStep.Reset();
         this.restartIn = 0;
         this.restarting = false;
         this.waitingForRestart = false;
         this.started = true;
+
+        const net = this.net = (this.options.net && this.options.net()) || null;
+        if (net) {
+            const dispatcher = this.game.dispatcher;
+            net.Begin({
+                world: this.world,
+                level: this.level,
+                emit: (event, ...args) => dispatcher.emit(event, ...args),
+                restart: () => this.StartOver(),
+                sizeFor: SizeOf
+            });
+            if (!this.watchingNet) {
+                // How the connection is doing, in a corner of the page, for the rest of this visit - a development build only.
+                this.watchingNet = true;
+                const close = this.debug.Watch("NET", () => (this.net ? this.net.Stats() : []));
+                this.Track(() => {
+                    close();
+                    this.watchingNet = false;
+                });
+            }
+        }
+    }
+
+    /** Starts the level over now - on every machine, from an online host. */
+    private StartOver(): void {
+        if (!this.started || this.restarting || !this.level) {
+            return;
+        }
+        if (this.paused) {
+            this.paused = false;
+            this.game.dispatcher.emit(GAME_RESUMED);
+        }
+        if (this.net && this.net.IsHost) {
+            this.net.Restart();
+        }
+        this.restarting = true;
+        this.waitingForRestart = false;
+        this.Reload();
     }
 
     /**
@@ -293,7 +361,17 @@ export class DungeonMain extends GameComponent {
      * drawn goes between the last two steps. `frames` is the ticker's delta, in 60ths of a second.
      */
     private OnUpdate(frames: number): void {
-        if (!this.started || this.paused || this.waitingForRestart) {
+        const net = this.net;
+        // Offline a pause stops the world; online it's everyone's, and plays on.
+        if (!this.started || (this.paused && !net)) {
+            return;
+        }
+        if (this.waitingForRestart) {
+            // Nothing moves under the end screen, but online the others are still connected, and one can leave.
+            if (net) {
+                net.Frame(frames);
+                this.hud.RenderHeroes(this.world.Heroes);
+            }
             return;
         }
         const seconds = this.game.ticker.deltaMS / 1000;
@@ -302,8 +380,7 @@ export class DungeonMain extends GameComponent {
             // Over: everything holds still for a moment, then until the level has started over.
             this.restartIn -= seconds;
             if (this.restartIn <= 0 && !this.restarting) {
-                this.restarting = true;
-                this.Reload();
+                this.StartOver();
             }
             return;
         }
@@ -311,17 +388,27 @@ export class DungeonMain extends GameComponent {
         const steps = this.fixedStep.Advance(seconds);
         // A step can stop play - the last hero falls, or one gets out - and none run after that.
         for (let i = 0; i < steps && this.Running; i++) {
-            this.world.Step(this.controls.map(control => (control ? control.Get() : undefined)), 1, StepSeconds);
+            // Paused (online), the heroes played here stand still.
+            const inputs = this.controls.map(control => (control && !this.paused ? control.Get() : undefined));
+            if (net) {
+                net.Step(inputs);
+            } else {
+                this.world.Step(inputs, 1, StepSeconds);
+            }
+        }
+        if (net) {
+            net.Frame(frames);
         }
         const alpha = this.fixedStep.Alpha;
-        this.views.forEach(view => view.Place(alpha));
+        this.views.forEach((view, i) => view.Place(alpha, net && net.DrawOffset(i)));
+        const entities = (net && net.Entities) || this.world.encounter;
 
         // Before the camera moves, since moving it draws the tiles.
         this.lightTime += seconds;
-        this.level.UpdateLights(this.lightTime, this.MovingLights(alpha));
+        this.level.UpdateLights(this.lightTime, this.MovingLights(entities, alpha));
         this.MoveCamera(frames, seconds);
 
-        this.renderer.Render(this.views, this.world.encounter, alpha);
+        this.renderer.Render(this.views, entities, alpha);
         if (this.world.Heroes.length) {
             this.hud.RenderHeroes(this.world.Heroes);
         }
@@ -340,14 +427,19 @@ export class DungeonMain extends GameComponent {
     /**
      * Keeps the camera on the heroes played here (every hero, if none is) who are still standing - centred on the
      * box round where they're drawn, zoomed out as far as it takes to show them all (see `PartyFrame`) and for the
-     * height the first of them stands at; on all of them, once they're all down. `frames` and `seconds` since the
-     * last display frame.
+     * height the first of them stands at. With all of those down it follows a teammate still standing (online, where
+     * the rest play on elsewhere), and with no one standing, where they fell. `frames` and `seconds` since the last
+     * display frame.
      */
     private MoveCamera(frames: number, seconds: number): void {
         const anyHere = this.local.some(here => here);
         const watched = (i: number) => !anyHere || this.local[i];
-        const anyStanding = this.views.some((view, i) => watched(i) && view.Hero.Alive);
-        const kept = (view: HeroView, i: number) => watched(i) && (view.Hero.Alive || !anyStanding);
+        const standing = (view: HeroView) => view.Hero.Alive;
+        let kept = (view: HeroView, i: number) => watched(i) && standing(view);
+        if (!this.views.some(kept)) {
+            const teammate = this.views.findIndex(standing);
+            kept = teammate >= 0 ? (_, i) => i === teammate : (view, i) => watched(i) && !view.Hero.Gone;
+        }
         const followed = this.followed;
         followed.length = 0;
         this.views.forEach((view, i) => {
@@ -373,8 +465,8 @@ export class DungeonMain extends GameComponent {
         return {width: this.camera.BaseViewWidth, height: this.camera.BaseViewHeight};
     }
 
-    /** The lights moving through the level this frame, where they're drawn (`alpha` between the last two steps): the torches the heroes carry, their mage-lights, and any shots that glow. */
-    private MovingLights(alpha: number): MovingLight[] {
+    /** The lights moving through the level this frame, where they're drawn (`alpha` between the last two steps): the torches the heroes carry, their mage-lights, and any of `entities`' shots that glow. */
+    private MovingLights(entities: EncounterView, alpha: number): MovingLight[] {
         const lights = this.movingLights;
         lights.length = 0;
         this.views.forEach(view => {
@@ -387,7 +479,7 @@ export class DungeonMain extends GameComponent {
                 lights.push(spell);
             }
         });
-        this.world.encounter.projectiles.forEach(projectile => {
+        entities.projectiles.forEach(projectile => {
             if (projectile.light && !projectile.dead) {
                 const x = projectile.px + (projectile.x - projectile.px) * alpha;
                 const y = projectile.py + (projectile.y - projectile.py) * alpha;
@@ -409,4 +501,9 @@ export class DungeonMain extends GameComponent {
             this.level.LoadLevel(file);
         }
     }
+}
+
+/** Pixel size of a sprite, or undefined if there's no such thing - what a monster's shootable box is sized from. */
+function SizeOf(name: string): {width: number; height: number} | undefined {
+    return AssetFactory.inst.Has(name) ? AssetFactory.inst.CreateTexture(name) : undefined;
 }

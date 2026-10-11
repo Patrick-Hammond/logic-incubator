@@ -62,7 +62,8 @@ configuration files and plugin interface. For explanations, examples and workflo
 [Fixed step and seeded random](#fixed-step-and-seeded-random) ·
 [Views](#views) ·
 [Player input](#player-input) ·
-[Online lobby](#online-lobby)
+[Online lobby](#online-lobby) ·
+[Online play](#online-play)
 
 **[ui](#ui)**
 [UiLayer and ThemeFor](#uilayer-and-themefor) ·
@@ -207,6 +208,7 @@ is noticed and harmless. Take the calls out before shipping anyway.
 | --- | --- |
 | `Drag(target: DisplayObject, options?: DragOptions): Cancel` | Makes any display object draggable, for positioning it by eye: press, drag, let go, and its position in its parent's space is logged as an object literal (`label: {x:640, y:360}`), ready to paste. Returns a function that stops it sooner. |
 | `Emitter(target: Emitter \| Emitter[], options?: EmitterPanelOptions): Cancel` | Opens a side panel for tuning a particle emitter while the game runs: its settings as controls, a picker for the particle image, and the config as JSON to copy out. See [Emitter panel](#emitter-panel). Returns a function that takes it out of the panel (the last one out closes it). |
+| `Watch(title: string, read: () => ReadonlyArray<string>): Cancel` | Keeps `read`'s lines on screen, under `title`, in a small DOM box over the page's top-left corner, read again every 250 ms (a `read` that throws shows its message instead). One box serves the page, a section per watch. Returns a function that takes the watch away sooner (the last one out removes the box). The box is `OpenWatch(title, read): Cancel` in `@logic-incubator/lib/debug/WatchPanel`, a no-op without a `document`. |
 
 ```ts
 this.debug.Drag(this._title);                                  // logs "Sprite: {x:640, y:360}" - or the object's `name` - on every drop
@@ -1186,8 +1188,11 @@ await relay.close();         // ends every connection and stops
 | `GAME_RESUMED` | `"gameResumed"` | - (`DungeonMain.Resume()` set it going again) |
 | `MONSTER_KILLED` | `"monsterKilled"` | `(type, x, y, hero)` - `hero` is whose shot killed it (-1 for none) |
 | `SPAWNER_DESTROYED` | `"spawnerDestroyed"` | `(spawner)` |
+| `PICKUP_COLLECTED` | `"pickupCollected"` | `(hero, tileX, tileY)` - a hero picked up what was on that cell |
+| `KEYS_DROPPED` | `"keysDropped"` | `(hero, tileX, tileY)` - a fallen hero's keys landed on that cell |
 
-`hero` is always a hero's slot, from 0 - their place in `DungeonMainOptions.heroes`.
+`hero` is always a hero's slot, from 0 - their place in `DungeonMainOptions.heroes`. On an online guest every one of these about play comes from
+the host's snapshots (see [Online play](#online-play)).
 
 ---
 
@@ -1208,6 +1213,7 @@ type HeroSlot = {
     input?: InputDevice | null;                           // what they're played with (default DefaultInput: the keyboard, or the first gamepad without it); null: played on another machine
     sprite?: string;                                      // the animation they're drawn with, in place of player.sprite
     lightSpell?: LightSpell | null;                       // null for none; left out, player.lightSpell
+    name?: string;                                        // what heads their row in the HUD; left out, "PLAYER n"
 };
 
 type DungeonMainOptions = {
@@ -1216,6 +1222,7 @@ type DungeonMainOptions = {
     level: () => LevelFile | undefined;                   // asked on every start and restart
     levelBundle?: () => string | undefined;               // the asset bundle the level plays in
     seed?: () => number | undefined;                      // what the level's random numbers start from, asked on every start and restart; undefined: a new one
+    net?: () => NetPlay | undefined;                      // online: the run this machine plays in (CreateNetPlay), asked on every start and restart; undefined: offline
     playerSprite?: () => string | undefined;              // a lone hero's animation, in place of player.sprite (only without heroes)
     playerLightSpell?: () => LightSpell | null | undefined;  // a lone hero's light spell: null for none, undefined to keep player.lightSpell (only without heroes)
     overlay?: (main: DungeonMain) => GameComponent;       // drawn over the HUD and kept with the scene: a pause menu, an end-of-level screen
@@ -1225,11 +1232,13 @@ type DungeonMainOptions = {
 new DungeonMain(options: DungeonMainOptions)
 
 main.Effects: Effects | undefined       // where a game plays particle effects; undefined until the scene is initialised
-main.Paused: boolean                    // play is stopped by Pause()
+main.Paused: boolean                    // Pause() is in force
 main.WaitingForRestart: boolean         // the level is over (everyone down, or a hero out), with manualRestart: everything holds still until Restart()
-main.Pause(): void                      // nothing moves, shoots or spawns until Resume(); emits GAME_PAUSED. Does nothing before a level has started or once it's over
+main.CanRestart: boolean                // Restart() does something: offline, or the host of an online run
+main.Net: NetPlay | null                // the online run being played, as net() gave it when the level started
+main.Pause(): void                      // nothing moves, shoots or spawns until Resume(); emits GAME_PAUSED. Online the world plays on: only the heroes played here stand still. Does nothing before a level has started or once it's over
 main.Resume(): void                     // emits GAME_RESUMED
-main.Restart(): void                    // starts over now, every hero on their feet, with whatever level() hands back (what happens by itself a moment after the end, without manualRestart)
+main.Restart(): void                    // starts over now, every hero on their feet, with whatever level() hands back (what happens by itself a moment after the end, without manualRestart); online, the host's starts it over on every machine, and a guest's does nothing
 ```
 
 `overlay` is how a game puts its own UI over the dungeon without the engine knowing what it is: it is called once, when the scene initialises, and what it
@@ -1243,8 +1252,17 @@ there is one hero, played with `DefaultInput`: `playerSprite` and `playerLightSp
 with (`player.sprite` when it returns `undefined`) and their light spell (`null` for none, `undefined` to keep `player.lightSpell`). A game's character
 select hands its picks to the scene through these.
 
-A hero whose `input` is `null` is played on another machine, in an online run: no `PlayerControl` is made for them, so here they get no input and
-stand still, and the camera leaves them out. The camera keeps to the heroes played on this machine - every hero, when none is.
+A hero whose `input` is `null` is played on another machine, in an online run: no `PlayerControl` is made for them, so here they get no input, and the
+camera leaves them out. The camera keeps to the heroes played on this machine - every hero, when none is - and while those are all down, follows the
+first teammate still standing (with no one standing, it stays on the fallen). `Hud.SetNames` heads each row with the slot's `name`, the rows played
+here in the skin's `focus` colour when the party is spread over machines.
+
+**Online** (`net`, see [Online play](#online-play)): each step hands the inputs to `NetPlay.Step` in place of `World.Step`, each frame calls
+`NetPlay.Frame` before drawing, draws each hero `NetPlay.DrawOffset(i)` from where they are, and draws the monsters and shots from `NetPlay.Entities`
+(a guest's copy of the host's) when it isn't null. Every event the world emits goes to `NetPlay.Record` as well as the dispatcher. On each
+`LEVEL_CREATED` it calls `NetPlay.Begin` with the world, the level, the dispatcher and a `restart` that starts the level over. A guest's level end
+always waits for the host (`CanRestart` is false), and while waiting it still calls `Frame` and draws the HUD, so a player leaving shows. In a development
+build it shows `NetPlay.Stats()` with `this.debug.Watch("NET", ...)` for the visit.
 
 With more than one hero all played here, the party shares the screen: the world holds them within a span of each other (`World.SetLeash(PartySpan(view))`),
 and the camera frames the box round the living heroes, zooming out to fit them (`PartyZoom`, down to `MinPartyZoom`) - see [World and heroes](#world-and-heroes).
@@ -1314,6 +1332,7 @@ type CollectedPickup = { value: PickupValue; sprite: string | null };    // spri
 | `DropPickup(x, y, value: PickupValue, sprite): Vec2Like` | Puts a pickup down - a fallen hero's keys: on that cell, or the nearest open floor (`IsFloor`) when it's a door or a wall, so it can't be shut away. Drawn as `sprite` on the top tile layer (nothing is drawn for `null`); collected like any other. Returns the cell it landed on. |
 | `UpdateLights(time, moving)` | Rebuilds `lightGrid` for `time` seconds of play, with `moving: MovingLight[]` cast where they are now (`SceneLights.Update`). Call once a frame, before the level is drawn. |
 | `UpdateDoors(tiles: Vec2Like[], canOpen?)` | Opens/closes doors by the tiles the living heroes stand on (call each step): a door is open while any of them is in one of its cells and `canOpen(door.lockId)` (with none given, every door does - so with the team's keys, an unlocked door always does), and shut once the last leaves. One that's open stays open while anyone is in it, even if the key went with a hero who fell (`DoorOpens`). Bumps `doorVersion` for each that changes. |
+| `SetDoorOpen(index, open)` | Opens or shuts `doors[index]` as it is - its sprite swapped, `doorVersion` bumped - whoever stands where: what an online guest does with the host's doors. Does nothing if it's already so. |
 | `UpdateVisibleRegions(tiles: Vec2Like[])` | Recomputes which regions are reachable through open doors from any of these tiles - what one hero sees, all see (call after `UpdateDoors`). |
 | `IsCellVisible(x, y): boolean` | |
 
@@ -1649,17 +1668,19 @@ type EncounterOptions = {
 
 | Member | |
 | --- | --- |
-| `monsters: Monster[]`, `projectiles: Projectile[]`, `spawners: SpawnerState[]`, `spawnerFlash: Map` | State. Each monster and shot has an `id`, unique in the encounter until the next `Reset`, and a monster's `previous` is where its `position` was before the last step. |
+| `monsters: Monster[]`, `projectiles: Projectile[]`, `spawners: SpawnerState[]`, `spawnerFlash: Map` | State. Each monster and shot has an `id`, unique in the encounter until the next `Reset`, and a monster's `previous` is where its `position` was before the last step. These four are `EncounterView`, what drawing them needs - an online guest's `Replica` is one too. |
 | `Flow: FlowField` | Walking distances as of the last `Update`. |
 | `Reset(seed?, heroes = 1)` | Starts over from the level's spawners (call on every `LEVEL_CREATED` - `World.Reset` does), with ids from 1 and its random numbers started again from `seed` (a new one if left out), unless the options brought their own `random`. The same seed, level and heroes' moves play out the same. Monsters' and spawners' hit points are multiplied by `PartyToughness(heroes)`, rounded up. |
 | `Seed` | What the random numbers started from at the last `Reset`. |
-| `Fire(from, direction, shot, owner, hero = -1)` | Adds a projectile; a hero's shot names them by slot (`hero`), which `MONSTER_KILLED` passes on. Heroes' shots pass through each other - there's no friendly fire. |
+| `Fire(from, direction, shot, owner, hero = -1, seq = -1)` | Adds a projectile; a hero's shot names them by slot (`hero`), which `MONSTER_KILLED` passes on, and by the `seq` of the input it was fired with (an online guest's own shot, which its stand-in waits for). Heroes' shots pass through each other - there's no friendly fire. Each `Projectile` keeps its `setup` (`ShotSetup`) and `seq`. |
 | `Update(dt, seconds, players: EncounterPlayer[])` | One step: `dt` in frames (movement; 1 at 60 a second), `seconds` for timers. Only the living among `players` count: the flow field leads to the nearest of them, each monster steers for (and faces, and shoots at) the nearest in a straight line, a touch or a shot hurts the first it reaches, and the dead take no more hits. With none alive, nothing moves. |
 
 Constants `MaxMonsters = 150`, `HitFlashTime = 0.15`, `ToughnessPerHero = 0.5`; `PartyToughness(heroes): number` - `1 + ToughnessPerHero * (heroes - 1)`:
 x1 for one hero, x1.5 for two, x2.5 for four - more bows for the same crowd, without more monsters than `MaxMonsters`. `EncounterLevel` and
 `EncounterPlayer` are the narrow interfaces it needs of `Level` and of a hero (`Hero`); `EncounterPlayer.Index` is the hero's slot, named in
-`PLAYER_DAMAGED` and `PLAYER_DIED`.
+`PLAYER_DAMAGED` and `PLAYER_DIED`. `EncounterView` is what's drawn of it - `{ monsters: MonsterLook[]; projectiles; spawners; spawnerFlash: { has } }`,
+read-only, with `MonsterLook` the parts of a `Monster` that `EntityRenderer` reads (`previous`, `position`, `def`, `moving`, `animTime`, `hitFlash`,
+`facingX`).
 
 **Closed doors.** A monster can't enter a closed door (`Level.IsDoorClosed`). The flow field treats those cells as blocked, so a monster behind one has no path to a hero (`DistanceAt` is `UNREACHABLE`: chasers hold still, wanderers keep wandering, and a spawner with an `activationRange` stays inactive); and the monsters' collider treats them as solid, so one steered at a door by a wander heading or another monster's push is stopped too. The field is recomputed when `Level.doorVersion` changes, not just when a hero changes cell. Spawn cells are never closed-door cells. A monster a door shuts on (its box overlaps a closed-door cell) is walked out of it, whichever side it's nearer, using a collider that doesn't count the door's cells as solid - it can neither be trapped in the door nor slip through to the heroes. The heroes are unaffected - standing in a door is what opens it, and while one does the monsters can come through.
 
@@ -1689,7 +1710,12 @@ world.Reset(setup: Pick<PlayerSetup, "hitPoints" | "weapons">, lightSpells: (Lig
 world.SetLeash(span: { width; height } | null): void   // in tiles; null lets the party roam
 world.TeamCanOpen(lockId): boolean     // unlocked, or a living hero carries its key
 world.IsLockedOut(x, y): boolean       // a closed door the team can't open - a wall to every hero
-world.Step(inputs: (IPlayerInput | undefined)[], dt, seconds): void
+world.Collider: MoveCollider           // what the heroes move against - an online guest moves its own with it
+world.Step(inputs: ReadonlyArray<HeroInput>, dt, seconds): void
+world.RemoveHero(index): void           // their player has left: Gone, out of play for good (keys dropped, and the level ends if no one's left standing)
+
+type HeroInput = IPlayerInput | ReadonlyArray<IPlayerInput> | undefined   // a list: several steps' worth for that hero, played in turn this step
+NoInput: IPlayerInput                   // standing still
 
 WarpDistance = 8                                              // tiles
 WarpTarget(hero, others: Hero[]): Hero | null                 // the nearest of others, if all are at least WarpDistance away
@@ -1702,15 +1728,16 @@ size (`Encounter.Reset(seed, heroes)`).
 
 `Step` runs one step of play, in this order:
 
-1. Each living hero, by slot, moves with `inputs[slot]` (standing still without one). One holding the warp control first jumps to the nearest other
-   living hero, if every one of them is at least `WarpDistance` tiles away. With a leash, the others' positions bound where they can go
-   (`LeashBoxFor`) and the edge stops them like a wall (`Leashed`).
+1. Each living hero, by slot, moves with `inputs[slot]` (standing still without one; a list of inputs moves them once for each, in order - an
+   online host catching up on a guest's inputs). One holding the warp control first jumps to the nearest other living hero, if every one of
+   them is at least `WarpDistance` tiles away. With a leash, the others' positions bound where they can go (`LeashBoxFor`) and the edge stops
+   them like a wall (`Leashed`).
 2. Doors open and shut by where the living heroes stand (`UpdateDoors`, with `TeamCanOpen`), and the regions they can see are recomputed together.
-3. Each picks up what's under them, in slot order, so the first there gets it.
+3. Each picks up what's under them, in slot order, so the first there gets it (`PICKUP_COLLECTED(hero, x, y)` when there was anything).
 4. A hero on an exit ends the level: `Completed` is set, `LEVEL_COMPLETED(hero)` emitted, and nothing else happens this step.
-5. Each fires the shot they took, if any (`Encounter.Fire` with their slot), and the encounter steps with the living heroes.
-6. A hero who fell this step drops every key they carried (`Level.DropPickup`), for the others to pick up. Once none is left standing, `AllDown` is
-   set and `ALL_PLAYERS_DIED` emitted.
+5. Each fires the shots they took, if any (`Encounter.Fire` with their slot and the input's `seq`), and the encounter steps with the living heroes.
+6. A hero who fell this step drops every key they carried (`Level.DropPickup`, then `KEYS_DROPPED(hero, x, y)` with the cell they landed on), for
+   the others to pick up. Once none is left standing, `AllDown` is set and `ALL_PLAYERS_DIED` emitted.
 
 Keys are the team's: a door opens for everyone if any living hero holds its key, and an open door never shuts on a hero in it, even if the key
 went with a hero who fell. There is no hero-to-hero collision.
@@ -1729,6 +1756,9 @@ hero.WarpTo(position): void                   // there at once (a top-left, in p
 hero.Step(input, dt, seconds, collider: MoveCollider): void   // StepPlayer
 hero.ApplyPickup(pickup), TakeShot(): Vec2Like | null, Damage(n): boolean
 hero.DropKeys(): HeldKey[]                    // every key they carry, leaving them none
+hero.Gone: boolean                            // their player has left an online run (Leave) - not Alive, and the HUD says LEFT
+hero.Leave(): void                            // out for good: no hit points, Gone until the next Reset
+hero.Writable: PlayerState                    // their state to write to - what an online guest copies the host's snapshots into
 ```
 
 `@logic-incubator/engine/sim/Leash` - the screen's edge on a shared screen: `type LeashBox = { minX, minY, maxX, maxY }` (where a hero's top-left
@@ -1766,10 +1796,10 @@ same seed on any machine (mulberry32); `NewSeed()` - a fresh 32-bit seed, differ
 | --- | --- | --- |
 | `Camera extends GameComponent` | `view/Camera` | `ViewRect`, `Scale`, `ScaledTileSize`, `Zoom`, `BaseViewWidth/Height`, `CurrentZ`, `EffectiveZoom` (the height zoom times `PartyZoom` - what the views scale by), `PartyZoom` (1, or less while a party is spread out); `Move(x, y)`, `CenterOn(x, y)`, `Follow(pixelX, pixelY, amount)`, `SetZ(z)`, `UpdateZoom(dt)`, `ZoomForParty(target, frames)` (eases `PartyZoom` towards `target` - from `PartyFrame.PartyZoom` - over `frames` 60ths of a second). Emits `CAMERA_MOVED`. `new Camera(cameraControl?)`. |
 | `TileMapView extends GameComponent` | `view/TileMap` | `new TileMapView(level, camera)`. Builds the tile layers, lit and banded by height, plus, in drawing order, the `GlowsLayer` (`"glows"`), `EntitiesLayer` (`"entities"`), `OrbsLayer` (`"orbs"`) and `ProjectilesLayer` (`"projectiles"`); `TileGD8Rotation(rotation, scaleX, scaleY)`. Each tile is drawn with its cell's corner light (`CellCornerLight`); a tile taller than a cell (a door, a statue) stands up, so like a figure it takes `FootLight` along its foot. A tile that gives off light gets a glow over its flame in its own band (`view/helpers/Glow`), at its light's strength that frame. Emits `LEVEL_CREATED`. |
-| `HeroView` | `view/HeroView` | How one hero looks. `new HeroView(hero: Hero, animation)`; `Hero` (the hero it draws), `DrawPosition` (where they're drawn this frame, between their last two steps), `Texture`; `Reset(hero)` (point it at a new level's hero - `DungeonMain` keeps one view per slot from level to level), `SetSprite(animation)` (draw them with another animation; a no-op for the one already in use), `Place(alpha)` (places them, and their mage-light, for drawing `alpha` of the way through their last step; call each frame after the steps), `Destroy()`. Their lights, as `MovingLight`s for `Level.UpdateLights` (null when they have none, and always once they've fallen), where they're drawn: `Light` (a torch they picked up, at their centre, dimming as it burns out) and `SpellLight` (their mage-light while it's lit, over the floor just behind them); `OrbPosition` is where the mage-light is drawn, floating and bobbing. |
+| `HeroView` | `view/HeroView` | How one hero looks. `new HeroView(hero: Hero, animation)`; `Hero` (the hero it draws), `DrawPosition` (where they're drawn this frame, between their last two steps), `Texture`; `Reset(hero)` (point it at a new level's hero - `DungeonMain` keeps one view per slot from level to level), `SetSprite(animation)` (draw them with another animation; a no-op for the one already in use), `Place(alpha, offset?)` (places them, and their mage-light, for drawing `alpha` of the way through their last step, `offset` pixels from there - an online guest's correction being drawn away; call each frame after the steps), `Destroy()`. Their lights, as `MovingLight`s for `Level.UpdateLights` (null when they have none, and always once they've fallen), where they're drawn: `Light` (a torch they picked up, at their centre, dimming as it burns out) and `SpellLight` (their mage-light while it's lit, over the floor just behind them); `OrbPosition` is where the mage-light is drawn, floating and bobbing. |
 | `Effects extends GameComponent` | `view/Effects` | `new Effects(camera)`; `Play(art, config, x, y): Emitter \| undefined` starts a particle effect at a position in world pixels (`art`: a sprite or animation name, `config`: an `EmitterConfig` or `OldEmitterConfig`; `undefined` after a one-off warning when `art` isn't loaded). Its layer sits in the camera root above the entities and shots, placed every frame like the entities layer (`view/helpers/EffectsPlacement`), and goes back on top on `LEVEL_CREATED`, which also drops the level's effects. Emitters update from `Tick` (only while shown); a finished one (not emitting, no particles) is destroyed, a continuous one runs until `emit = false`. `DungeonMain` attaches it - use `main.Effects`. |
-| `Hud extends GameComponent` | `view/Hud` | `new Hud(setup.hearts?)`; `RenderHeroes(heroes)` (every hero, in slot order, the fallen included: one gets the lone hero's panel, as `Render`; a party gets a `HudHeroRow` each, spread down the panel, and the team's keys at the bottom - every key any of them carries); `Render(health, gold, weaponIcon, inventory, keys, spell?)` (the lone hero's panel: hearts, gold, weapon, inventory, keys and `spell`, their `LightSpellState`, shown under the keys as a bar - the skin's `mp` bar, if it has one - and READY, LIT or RECHARGING with the seconds left; null or left out hides it). Built from the UI kit (a `UiPanel`, a `UiIconRow` of hearts, `UiItemSlot`s and `UiInventoryGrid`s, `UiText`) in the skin of the loaded `ui` bundle - the game must load it first. Hearts are the game's own pictures when `setup.hearts` gives them (enlarged 3x, 2x in a party's rows), else the skin's. The keys panel shows each key's sprite and its id. Warns once per missing sprite. |
-| `HudHeroRow extends Container` | `view/HudHeroRow` | One hero's row when a party plays: PLAYER n (and DOWN, the row dimmed, once they've fallen) and their hearts, their weapon slot, gold and light spell bar, and a strip of the items they carry. `new HudHeroRow(theme, index, rowWidth, heartTextures?)`, `Render(hero: HudHero)` (redraws only what changed), `static Height(theme)`. Also exports `type HudHero` (what a row reads of a `Hero`), `SpellStatusText(spell)`, `FitScale(texture, box)` and `TextureOf(name)`, which `Hud` shares. |
+| `Hud extends GameComponent` | `view/Hud` | `new Hud(setup.hearts?)`; `RenderHeroes(heroes)` (every hero, in slot order, the fallen included: one gets the lone hero's panel, as `Render`; a party gets a `HudHeroRow` each, spread down the panel, and the team's keys at the bottom - every key any of them carries); `Render(health, gold, weaponIcon, inventory, keys, spell?)` (the lone hero's panel: hearts, gold, weapon, inventory, keys and `spell`, their `LightSpellState`, shown under the keys as a bar - the skin's `mp` bar, if it has one - and READY, LIT or RECHARGING with the seconds left; null or left out hides it). `SetNames(names: { name; own }[])` heads each row (in slot order) with `name` in place of PLAYER n, in the skin's `focus` colour for `own` - the players at this machine - and `muted` for the rest; rows made later take them too. Built from the UI kit (a `UiPanel`, a `UiIconRow` of hearts, `UiItemSlot`s and `UiInventoryGrid`s, `UiText`) in the skin of the loaded `ui` bundle - the game must load it first. Hearts are the game's own pictures when `setup.hearts` gives them (enlarged 3x, 2x in a party's rows), else the skin's. The keys panel shows each key's sprite and its id. Warns once per missing sprite. |
+| `HudHeroRow extends Container` | `view/HudHeroRow` | One hero's row when a party plays: PLAYER n or `SetName(name, own)`'s (and DOWN, the row dimmed, once they've fallen - LEFT once their player has gone) and their hearts, their weapon slot, gold and light spell bar, and a strip of the items they carry. `new HudHeroRow(theme, index, rowWidth, heartTextures?)`, `Render(hero: HudHero)` (redraws only what changed), `static Height(theme)`. Also exports `type HudHero` (what a row reads of a `Hero`), `SpellStatusText(spell)`, `FitScale(texture, box)` and `TextureOf(name)`, which `Hud` shares. |
 | `EntityRenderer` | `view/EntityRenderer` | `new EntityRenderer(camera, level)`; `Reset()` (call on `LEVEL_CREATED`), `Render(heroes: HeroView[], encounter, alpha = 1)` (each hero where their view was last `Place`d - a fallen one faint, a ghost where they fell; monsters and shots `alpha` of the way through their last step). Draws a glow under the figures for each hero's torch and each glowing shot, and the mage-lights - a glow with a bright core - over them. |
 | `GlowLayer extends Container` | `view/GlowLayer` | Glows added onto what's beneath them, from a pool of sprites: `Begin()`, `Add(x, y, look, pixelsPerTile)` per glow, `End()`. `CreateGlowTexture()` makes the soft white texture they're drawn with (the caller destroys it). |
 | `Glow` | `view/helpers/Glow` | Pure: `GlowTextureSize`, `GlowRadius` (1.25 tiles), `GlowStrength` (0.3), `GlowFlameY` (0.3 - a lit tile's glow sits this far down its art), `OrbCoreRadius`; `GlowPixels(size)` (premultiplied white, fading like `LightFalloff`), `type GlowLook = { tint, alpha, radius }`, `LookOfGlow(rgb, scale, out)` (the light's colour at full saturation, stronger the brighter it is, swelling a little as it flickers), `LookOfOrbCore(rgb, scale, out)` (small, pale and nearly opaque). |
@@ -1785,6 +1815,7 @@ interface IPlayerInput {
     aimX: number;         // the right stick's horizontal component (0 from keyboard): sets facing
     casting: boolean;     // L, or the gamepad's Y (top face) button: calls up the hero's light spell
     warping?: boolean;    // K, or the gamepad's X (left face) button: a hero far from the rest of the party joins the nearest (see World)
+    seq?: number;         // online: which of its player's inputs this is, from 1 (see Online play)
 }
 type InputDevice = { keyboard?: boolean; pad?: number };   // the keyboard, a gamepad by its browser index (from 0), or both
 const DefaultInput: InputDevice = { keyboard: true, pad: 0 };
@@ -1812,7 +1843,7 @@ same level onto every machine, and the host's and guests' lobbies. All pure.
 `@logic-incubator/engine/net/NetMessages` - a kind byte, then JSON (a `level`'s body is its bytes).
 
 ```ts
-NetVersion = 1;     // a guest on another is refused ("version"); raise it whenever a message changes
+NetVersion = 2;     // a guest on another is refused ("version"); raise it whenever a message changes - this file's or PlayMessages'
 NameLength = 12;
 
 type LobbySeat = { peer: number; name: string; character: string | null };   // host's seat first; character: a game's id, null while choosing
@@ -1859,6 +1890,7 @@ LobbyClosedText(reason): string    // "The host has left." / "That game has alre
 // Both
 lobby.Code: string;  lobby.Seats: ReadonlyArray<LobbySeat>;  lobby.Mine: LobbySeat | undefined
 lobby.IsHost: boolean;  lobby.IsOpen: boolean;  lobby.Leave(): void
+lobby.Session: RelaySession             // the room - what play goes on in once the run has begun (CreateNetPlay)
 
 new HostLobby(session: RelaySession, name: string)      // in the room session opened
 host.Pick(character: string | null): void             // the host's own; not after the start
@@ -1884,6 +1916,88 @@ How it runs:
   to every guest right after the start, unasked. Either way the guest emits `STARTED` with the level in hand.
 - The host leaving closes the room (`CLOSED` with `host-left` at every guest); `Leave` closes with `left`; a lost connection closes with its
   reason. A lobby is done with after `CLOSED`.
+
+## Online play
+
+`@logic-incubator/engine/net/...` - playing the run the lobby started: the host's world is the run's, each guest draws it and moves its own hero
+ahead of it. All pure. A game makes one with `CreateNetPlay` on `STARTED` and hands it to `DungeonMain` (`DungeonMainOptions.net`), which
+drives it - see [DungeonMain](#dungeonmain).
+
+### NetPlay
+
+`@logic-incubator/engine/net/NetPlay`
+
+```ts
+CreateNetPlay(lobby: HostLobby | GuestLobby, start: LobbyStart, options?: PlaySessionOptions): NetPlay   // a HostSession or a GuestSession, in lobby.Session
+type PlaySessionOptions = { now?: () => number };   // this machine's clock in ms - performance.now by default
+
+interface NetPlay {
+    readonly IsHost: boolean;
+    readonly You: number;                           // the hero played here (this machine's seat)
+    readonly Entities: EncounterView | null;        // what to draw of monsters, shots and spawners: null on the host (its own encounter), the Replica on a guest
+    Begin(context: NetLevelContext): void;          // a level has started here (every LEVEL_CREATED)
+    Step(local: ReadonlyArray<IPlayerInput | undefined>): void;   // one step; local[i]: hero i's input, read on this machine
+    Frame(frames: number): void;                    // one display frame, before drawing
+    DrawOffset(index: number): Vec2Like | null;     // how far from where they are hero `index` is drawn (a guest's own, while a correction is drawn away)
+    Record(event: string, args: ReadonlyArray<unknown>): void;    // an event the world emitted - the host sends it on
+    Restart(): void;                                // the host starts the level over, for everyone; a guest's does nothing
+    Stats(): string[];                              // lines for a developer's eye (round trip, snapshot sizes, corrections...)
+    End(): void;                                    // stops listening and sending - on leaving the run
+}
+
+type NetLevelContext = {
+    world: World;                                   // just Reset - stepped by the host, copied into by a guest
+    level: NetLevel;                                // a WorldLevel with doors and SetDoorOpen (Level is one)
+    emit: (event: string, ...args: unknown[]) => void;   // the dispatcher a guest emits the host's events on
+    restart: () => void;                            // starts the level over here - a guest's, when the host's does
+    sizeFor: (name: string) => { width: number; height: number } | undefined;
+};
+```
+
+### HostSession and GuestSession
+
+`@logic-incubator/engine/net/HostSession`, `GuestSession` - both `extends PlaySession` (`net/PlaySession`: listens to the session's messages and
+departures, answers pings and pings its peers once a second, keeping each one's round trip; `BytesText(bytes)` and `ByteRate` for `Stats`).
+
+| | Host | Guest |
+| --- | --- | --- |
+| `Begin` | Waits for every guest still in the room to say it has the level ready (an empty input message), or `WaitForGuestsMs` (10 s); departed heroes are removed again. | A new `Replica` from the level's spawners; sends "ready"; plays any snapshots that came before it. |
+| `Step` | Each guest's hero plays its waiting inputs (`RemoteInput.Take`), this machine's hero its own; `World.Step`; a snapshot every `SnapshotEvery` (3) steps and as the level ends. | Its own hero steps ahead (`Prediction.Step`); a shot it fires flies at once as a stand-in; sends the last `InputsSent` (3) inputs. |
+| `Frame` | Pings. | Pings; moves the `PlayClock` on; samples the `Replica`; puts the other heroes where they were at that moment; settles the correction; updates what's seen. |
+| `Record` | Turns the engine's events into `NetEvent`s for the next snapshot. | - |
+| `Restart` | The next round: tells every guest, forgets their inputs. | - (a `restart` message calls `restart`) |
+| A peer leaves | `World.RemoveHero` and a snapshot at once. | (the host leaving closes the lobby) |
+
+`HostSession.Round`, `Playing` (every guest ready); `GuestSession.Prediction`, `Playing`, `DrawnTick`.
+
+### Messages
+
+`@logic-incubator/engine/net/PlayMessages` - bytes, kinds 16-20 after the lobby's (`EncodePlay(message, writer?)`, `DecodePlay(bytes): PlayMessage | null`):
+
+```ts
+type InputMessage = { t: "input"; round: number; inputs: IPlayerInput[] };   // guest -> host: the newest few, numbered (seq); none: "ready"
+type Snapshot = { t: "snapshot"; round; tick; heroes: HeroSnapshot[]; monsters: MonsterSnapshot[]; projectiles: ProjectileSnapshot[];
+                  doors: boolean[]; flashing: number[]; events: NetEvent[] };   // host -> every guest
+type RestartMessage = { t: "restart"; round: number };                      // host -> every guest
+type PingMessage = { t: "ping" | "pong"; id: number };
+type NetEvent = pickup | keys | spawner | killed | damaged | died | all-died | completed | shot   // the engine's events, and a new kind of shot's setup
+
+QuantiseInput(input, seq): IPlayerInput   // what the host will have of it: each axis to 1/127 - a guest steps its own hero with this, so both agree
+```
+
+An input is 4 bytes (each axis a signed byte, flags). A hero's position, speed and timers are 64-bit floats, so a guest's hero lands exactly where
+the host's is; monsters and shots are quarter pixels (16 bits each). `round` (a byte) counts the host's restarts: anything from another round is
+ignored.
+
+### Guest pieces
+
+| Module | |
+| --- | --- |
+| `RemoteInput` | The host's queue of one guest's inputs, by `seq`: `Receive(inputs)`, `Take(): IPlayerInput[]` (the next one, none while it hasn't come, two once more than `MaxWaiting` (4) are waiting; past 30 waiting it skips a lost one), `Acked` (the last played), `Waiting`, `Started`, `Reset()`. |
+| `PlayClock` | Which of the host's steps a guest draws: `DrawDelayMs` (100) behind the newest, trusting the quickest arrivals and moving smoothly when that changes. `Observe(tick, nowMs)` for each snapshot, `Advance(nowMs, frames)` each frame, `Tick` (fractional), `Started`, `Reset()`. |
+| `Replica` | The guest's copy of the host's monsters, shots and spawners - an `EncounterView`. `new Replica({ you, sizeFor })`; `Reset(spawners)`, `AddShot(index, setup)`, `Push(snapshot)` (keeps the last 20), `Sample(tick, frames)` (each monster and shot between the snapshots either side of `tick`, carried on up to 6 steps past the newest), `HeroAt(index, tick): HeroMoment \| null`, `Newest`. This machine's own shots are stand-ins from the moment they're fired (`Fire(from, direction, setup, seq)`, `StepStandIns(isBlocked)`), stopped by walls and by monsters as drawn, until the host's copy has gone or the host played that input without one. |
+| `Prediction` | The guest's own hero, ahead of the host: `Step(hero, input, others, collider)` numbers and plays an input, kept until the host has played it; `Reconcile(hero, snapshot, others, collider)` starts from the host's word and plays the rest again, leaving the difference in `Offset`, which `Settle(frames)` draws away (or jumps, past two tiles); `Corrections` (differences over half a pixel), `LastError`, `Pending`, `Recent(n)`, `Reset()`. |
+| `HeroSync` | `HeroSnapshotOf(hero, ack)` and `ApplyHeroSnapshot(hero, snapshot)` (everything but where they stand, which the caller places). |
 
 ---
 

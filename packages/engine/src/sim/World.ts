@@ -15,12 +15,13 @@ import { Vec2, Vec2Like } from "@logic-incubator/lib/math/Geometry";
 import { TileSize } from "../Constants";
 import type { PlayerSetup } from "../DungeonMain";
 import Encounter, { EncounterLevel, EncounterOptions } from "../Encounter";
-import { ALL_PLAYERS_DIED, LEVEL_COMPLETED } from "../Events";
+import { ALL_PLAYERS_DIED, KEYS_DROPPED, LEVEL_COMPLETED, PICKUP_COLLECTED } from "../Events";
 import type { IPlayerInput } from "../input/PlayerControl";
 import type { CollectedPickup } from "../level/Level";
 import { LightSpell } from "../level/entities/LightSpell";
 import { PickupValue } from "../level/entities/Pickups";
 import TileCollision from "../level/TileCollision";
+import type { MoveCollider } from "../view/helpers/PlayerMovement";
 import Hero from "./Hero";
 import { LeashBoxFor, Leashed } from "./Leash";
 
@@ -43,7 +44,14 @@ const StartSpread = 6;
 export const WarpDistance = 8;
 
 /** What a hero who has no input this step does: nothing. */
-const NoInput: IPlayerInput = { direction: new Vec2(), firing: false, aimX: 0, casting: false };
+export const NoInput: IPlayerInput = { direction: new Vec2(), firing: false, aimX: 0, casting: false };
+
+/**
+ * What one hero is given for a step (see `World.Step`): an input; undefined, to stand still; or a list of inputs,
+ * each a step of their own - none to hold them where they are, timers and all, as an online host does while a
+ * guest's next input is still on its way, and two to catch up once it's come (see `RemoteInput`).
+ */
+export type HeroInput = IPlayerInput | ReadonlyArray<IPlayerInput> | undefined;
 
 /** The hero standing nearest `hero`, if every one of `others` is at least `WarpDistance` tiles away - null otherwise, or with none. */
 export function WarpTarget(hero: Hero, others: ReadonlyArray<Hero>): Hero | null {
@@ -129,6 +137,11 @@ export default class World {
         return this.completed;
     }
 
+    /** What keeps a hero out of walls, and out of doors the team can't open - for an online guest moving its own hero ahead of the host (see `Prediction`). */
+    get Collider(): MoveCollider {
+        return this.collision;
+    }
+
     /**
      * Starts the level over (call on every `LEVEL_CREATED`) with one hero per entry of `lightSpells` - each
      * with that light spell, if any, and `setup`'s hit points and weapons - placed together at the level's
@@ -172,48 +185,77 @@ export default class World {
     }
 
     /**
-     * One step of play: each living hero moves with their input (by slot - a hero without one stands still),
-     * or warps if they asked to and may (see `WarpDistance`); the doors and what the team can see follow
-     * where they stand, each picks up what's under them (in slot order, so the first there gets it) and
-     * fires; then the encounter. A hero on a way out ends the level there and then. `dt` in frames (1 at 60
-     * a second), `seconds` for timers.
+     * One step of play: each living hero moves with their input (by slot - see `HeroInput`), or warps if they
+     * asked to and may (see `WarpDistance`); the doors and what the team can see follow where they stand, each
+     * picks up what's under them (in slot order, so the first there gets it - `PICKUP_COLLECTED`) and fires;
+     * then the encounter. A hero on a way out ends the level there and then. `dt` in frames (1 at 60 a second),
+     * `seconds` for timers.
      */
-    Step(inputs: ReadonlyArray<IPlayerInput | undefined>, dt: number, seconds: number): void {
+    Step(inputs: ReadonlyArray<HeroInput>, dt: number, seconds: number): void {
         if (this.allDown || this.completed) {
             return;
         }
         const living = this.Living;
+        const shots: Array<{ hero: Hero; from: Vec2Like; direction: Vec2Like; seq: number }> = [];
         living.forEach(hero => {
-            const input = inputs[hero.Index] || NoInput;
+            const given = inputs[hero.Index];
+            const list: ReadonlyArray<IPlayerInput> = IsInputList(given) ? given : [given || NoInput];
             const others = living.filter(other => other !== hero);
-            const to = input.warping ? WarpTarget(hero, others) : null;
-            if (to) {
-                hero.WarpTo(to.Position);
-            }
-            const box = this.leash && LeashBoxFor(others.map(other => other.Position), this.leash);
-            hero.Step(input, dt, seconds, box ? Leashed(this.collision, box) : this.collision);
+            list.forEach(input => {
+                const to = input.warping ? WarpTarget(hero, others) : null;
+                if (to) {
+                    hero.WarpTo(to.Position);
+                }
+                const box = this.leash && LeashBoxFor(others.map(other => other.Position), this.leash);
+                hero.Step(input, dt, seconds, box ? Leashed(this.collision, box) : this.collision);
+                // Taken as it's fired: a hero given two steps at once can fire in each.
+                const shot = hero.TakeShot();
+                if (shot) {
+                    shots.push({ hero, from: hero.Centre, direction: shot, seq: input.seq === undefined ? -1 : input.seq });
+                }
+            });
         });
 
         const tiles = living.map(hero => hero.Tile);
         this.level.UpdateDoors(tiles, lock => this.TeamCanOpen(lock));
         this.level.UpdateVisibleRegions(tiles);
-        living.forEach((hero, i) => this.level.CollectPickupsAt(tiles[i].x, tiles[i].y).forEach(pickup => hero.ApplyPickup(pickup)));
+        living.forEach((hero, i) => {
+            const collected = this.level.CollectPickupsAt(tiles[i].x, tiles[i].y);
+            if (collected.length) {
+                collected.forEach(pickup => hero.ApplyPickup(pickup));
+                this.options.emit(PICKUP_COLLECTED, hero.Index, tiles[i].x, tiles[i].y);
+            }
+        });
         const out = living.find((hero, i) => this.level.IsExit(tiles[i].x, tiles[i].y));
         if (out) {
             this.completed = true;
             this.options.emit(LEVEL_COMPLETED, out.Index);
             return;
         }
-        living.forEach(hero => {
-            const shot = hero.TakeShot();
-            if (shot) {
-                this.encounter.Fire(hero.Centre, shot, hero.EquippedWeapon.shot, "player", hero.Index);
-            }
-        });
+        shots.forEach(shot => this.encounter.Fire(shot.from, shot.direction, shot.hero.EquippedWeapon.shot, "player", shot.hero.Index, shot.seq));
 
         this.encounter.Update(dt, seconds, living);
+        this.CheckFallen();
+    }
 
-        // Whatever felled them - a monster this step, or a hit landed from outside it.
+    /**
+     * Takes hero `index` out of play, for good this level - their player has left an online game (see
+     * `Hero.Leave`). They count as down: the keys they carried drop where they stood, and with no one else
+     * standing the level is over.
+     */
+    RemoveHero(index: number): void {
+        const hero = this.heroes[index];
+        if (!hero || hero.Gone) {
+            return;
+        }
+        hero.Leave();
+        if (!this.allDown && !this.completed) {
+            this.CheckFallen();
+        }
+    }
+
+    /** Deals with every hero who has fallen since the last look - whatever felled them - and ends the level if none is left standing. */
+    private CheckFallen(): void {
         this.heroes.forEach((hero, i) => {
             if (!hero.Alive && !this.fallen[i]) {
                 this.fallen[i] = true;
@@ -226,9 +268,18 @@ export default class World {
         }
     }
 
-    /** A hero has just fallen: the keys they carried drop where they fell, for the others to pick up. */
+    /** A hero has just fallen: the keys they carried drop where they fell, for the others to pick up (`KEYS_DROPPED`). */
     private Fall(hero: Hero): void {
         const tile = hero.Tile;
-        hero.DropKeys().forEach(key => this.level.DropPickup(tile.x, tile.y, { kind: "key", id: key.id }, key.sprite));
+        const keys = hero.DropKeys();
+        let cell: Vec2Like = tile;
+        keys.forEach(key => (cell = this.level.DropPickup(tile.x, tile.y, { kind: "key", id: key.id }, key.sprite)));
+        if (keys.length) {
+            this.options.emit(KEYS_DROPPED, hero.Index, cell.x, cell.y);
+        }
     }
+}
+
+function IsInputList(input: HeroInput): input is ReadonlyArray<IPlayerInput> {
+    return Array.isArray(input);
 }

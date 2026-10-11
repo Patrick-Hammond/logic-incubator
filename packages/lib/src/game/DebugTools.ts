@@ -1,5 +1,6 @@
 import type { DisplayObject } from "pixi.js";
 import { EmitterPanelOptions, OpenEmitterPanel } from "../debug/EmitterPanel";
+import { OpenWatch } from "../debug/WatchPanel";
 import type { Emitter } from "../particles";
 import { DragObject, DragOptions } from "../utils/DragObject";
 import type { Cancel } from "./Timing";
@@ -33,13 +34,15 @@ export default class DebugTools {
     /**
      * `own` registers a cleanup to run when the owning component is destroyed (`GameComponent.Own`);
      * `enabled` says whether the helpers are on - asked at each call; `openEmitterPanel` is what `Emitter` opens;
-     * `screen` is the size of the game's screen, if known - the emitter panel starts a new kill area around it.
+     * `screen` is the size of the game's screen, if known - the emitter panel starts a new kill area around it;
+     * `openWatch` is what `Watch` opens.
      */
     constructor(
         private own: (dispose: Cancel) => void,
         private enabled: () => boolean = () => true,
         private openEmitterPanel: (target: Emitter | Emitter[], options?: EmitterPanelOptions) => Cancel = OpenEmitterPanel,
-        private screen: () => { width: number; height: number } | undefined = () => undefined
+        private screen: () => { width: number; height: number } | undefined = () => undefined,
+        private openWatch: (title: string, read: () => ReadonlyArray<string>) => Cancel = OpenWatch
     ) {}
 
     /**
@@ -86,6 +89,25 @@ export default class DebugTools {
             return NoOp;
         }
         const close = this.openEmitterPanel(target, { screen: this.screen(), ...options });
+        this.own(close);
+        return close;
+    }
+
+    /**
+     * Keeps a few lines of numbers on screen while the game runs - in a small box over the page's top-left corner, read
+     * again four times a second. For anything worth watching as it changes: a connection's round trip, how many monsters
+     * are about.
+     *
+     *     this.debug.Watch("NET", () => ["RTT " + rtt + " ms", "SNAPSHOT " + bytes + " B"]);
+     *
+     * One box serves the page: each watch is a section of it, under its `title`.
+     * Returns a function that takes it away sooner than the component's destruction.
+     */
+    Watch(title: string, read: () => ReadonlyArray<string>): Cancel {
+        if (!this.Allowed()) {
+            return NoOp;
+        }
+        const close = this.openWatch(title, read);
         this.own(close);
         return close;
     }
