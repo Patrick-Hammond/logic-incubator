@@ -64,6 +64,14 @@ export default class Prediction {
     }
 
     /**
+     * Lets go of the inputs the host hasn't played - after the connection went, when the host never had them and
+     * starts its count again from the next. The numbering carries on.
+     */
+    Forget(): void {
+        this.pending = [];
+    }
+
+    /**
      * One step of `hero` with `input`, numbered and kept - the numbered input is what to send. A fallen hero doesn't
      * move, but their inputs still go, so the host's count of them keeps up. `others` are the heroes they could warp
      * to, as drawn; `collider` the world's.

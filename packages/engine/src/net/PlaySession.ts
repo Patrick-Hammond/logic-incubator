@@ -33,7 +33,7 @@ export default abstract class PlaySession implements NetPlay {
     protected now: () => number;
     private writer = new ByteWriter(1024);
     private stops: Array<() => void> = [];
-    private ended = false;
+    protected ended = false;
     private pingId = 0;
     private pingAt = -Infinity;
     /** When each ping still unanswered went, by peer and id (`"2:17"`). */
@@ -44,21 +44,17 @@ export default abstract class PlaySession implements NetPlay {
     constructor(protected session: RelaySession, protected seats: ReadonlyArray<LobbySeat>, options: PlaySessionOptions = {}) {
         this.now = options.now || (() => performance.now());
         this.You = seats.findIndex(seat => seat.peer === session.You);
-        const message = (from: number, payload: Uint8Array) => {
-            const decoded = this.ended ? null : DecodePlay(payload);
-            if (decoded) {
-                this.Receive(from, decoded, payload.length);
-            }
-        };
-        const left = (peer: number) => !this.ended && this.PeerLeft(peer);
-        session.on(RelayEvents.MESSAGE, message);
-        session.on(RelayEvents.PEER_LEFT, left);
-        this.stops.push(() => session.off(RelayEvents.MESSAGE, message), () => session.off(RelayEvents.PEER_LEFT, left));
+        this.Listen(session);
     }
 
     /** Whether it has ended - `End`, or the room closing. */
     get Ended(): boolean {
         return this.ended || !this.session.IsOpen;
+    }
+
+    /** Whether this machine is in touch with the run - always, on the host, until it ends. */
+    get Connected(): boolean {
+        return !this.Ended;
     }
 
     abstract Begin(context: NetLevelContext): void;
@@ -84,6 +80,22 @@ export default abstract class PlaySession implements NetPlay {
             this.context = null;
             this.stops.splice(0).forEach(stop => stop());
         }
+    }
+
+    /** Listens to `session` for messages of play, and for peers leaving - instead of any it listened to before. */
+    protected Listen(session: RelaySession): void {
+        this.stops.splice(0).forEach(stop => stop());
+        this.session = session;
+        const message = (from: number, payload: Uint8Array) => {
+            const decoded = this.ended ? null : DecodePlay(payload);
+            if (decoded) {
+                this.Receive(from, decoded, payload.length);
+            }
+        };
+        const left = (peer: number) => !this.ended && this.PeerLeft(peer);
+        session.on(RelayEvents.MESSAGE, message);
+        session.on(RelayEvents.PEER_LEFT, left);
+        this.stops.push(() => session.off(RelayEvents.MESSAGE, message), () => session.off(RelayEvents.PEER_LEFT, left));
     }
 
     /** A message of play from peer `from`, `bytes` long. Pings are answered here; the rest are the session's own. */

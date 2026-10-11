@@ -437,7 +437,8 @@ export class DungeonMain extends GameComponent {
         const standing = (view: HeroView) => view.Hero.Alive;
         let kept = (view: HeroView, i: number) => watched(i) && standing(view);
         if (!this.views.some(kept)) {
-            const teammate = this.views.findIndex(standing);
+            // One in play: an away teammate stands still.
+            const teammate = this.views.findIndex(view => standing(view) && !view.Hero.Away);
             kept = teammate >= 0 ? (_, i) => i === teammate : (view, i) => watched(i) && !view.Hero.Gone;
         }
         const followed = this.followed;

@@ -7,7 +7,7 @@
  */
 
 /** The version of these messages: a guest on another is turned away (`refused`, "version"). Raise it whenever a message changes. */
-export const NetVersion = 2;
+export const NetVersion = 3;
 
 /** The most characters a player's name keeps. */
 export const NameLength = 12;
@@ -21,8 +21,8 @@ export type LobbySeat = {
     character: string | null;
 };
 
-/** Why the host turned a guest away. */
-export type RefusedReason = "version" | "started" | "full";
+/** Why the host turned a guest away: another version; a run already going (or a `rejoin` it doesn't know); no seat left; or one coming back too late. */
+export type RefusedReason = "version" | "started" | "full" | "gone";
 
 /** The level a run plays, as the start names it. */
 export type StartLevel = {
@@ -35,22 +35,30 @@ export type StartLevel = {
 };
 
 export type LobbyMessage =
-    /** Guest to host, on joining: who they are, and what they speak. */
-    | { t: "hello"; version: number; name: string }
+    /**
+     * Guest to host, on joining: who they are, and what they speak - and, coming back into a run after their
+     * connection went, the `token` their `start` gave them.
+     */
+    | { t: "hello"; version: number; name: string; rejoin?: string }
     /** Host to guest: not in this game - they leave. */
     | { t: "refused"; reason: RefusedReason }
     /** Host to each guest, whenever anything in the lobby changes: everyone, in seat order. */
     | { t: "lobby"; seats: LobbySeat[] }
     /** Guest to host: the character they've picked, or null to take it back. */
     | { t: "pick"; character: string | null }
-    /** Host to each guest: the run begins - this level, these random numbers, these heroes (in hero order). */
-    | { t: "start"; seed: number; level: StartLevel; seats: LobbySeat[] }
+    /**
+     * Host to each guest: the run begins - this level, these random numbers, these heroes (in hero order) - and a
+     * `token` of that guest's own, to come back into the run with if their connection goes.
+     */
+    | { t: "start"; seed: number; level: StartLevel; seats: LobbySeat[]; token?: string }
     /** Guest to host: its copy of the level isn't the host's - send it whole. */
     | { t: "need-level" }
     /** Host to guest: the level, packed (see `PackLevel`). */
-    | { t: "level"; packed: Uint8Array };
+    | { t: "level"; packed: Uint8Array }
+    /** Host to a guest who said hello with a `rejoin` token it knows: they're back in the run, as the hero they were. */
+    | { t: "rejoined" };
 
-const Kinds: { [t: string]: number } = { hello: 1, refused: 2, lobby: 3, pick: 4, start: 5, "need-level": 6, level: 7 };
+const Kinds: { [t: string]: number } = { hello: 1, refused: 2, lobby: 3, pick: 4, start: 5, "need-level": 6, level: 7, rejoined: 8 };
 const KindNames: string[] = [];
 Object.keys(Kinds).forEach(name => (KindNames[Kinds[name]] = name));
 
@@ -95,8 +103,16 @@ export function DecodeMessage(bytes: Uint8Array): LobbyMessage | null {
         return null;
     }
     switch (t) {
-        case "hello":
-            return typeof fields.version === "number" && typeof fields.name === "string" ? { t, version: fields.version, name: fields.name } : null;
+        case "hello": {
+            if (typeof fields.version !== "number" || typeof fields.name !== "string" || (fields.rejoin !== undefined && !IsToken(fields.rejoin))) {
+                return null;
+            }
+            const hello: LobbyMessage = { t, version: fields.version, name: fields.name };
+            if (fields.rejoin !== undefined) {
+                hello.rejoin = fields.rejoin;
+            }
+            return hello;
+        }
         case "refused":
             return typeof fields.reason === "string" ? { t, reason: fields.reason } : null;
         case "lobby":
@@ -106,10 +122,19 @@ export function DecodeMessage(bytes: Uint8Array): LobbyMessage | null {
         case "start": {
             const level = fields.level;
             const valid = typeof fields.seed === "number" && IsSeats(fields.seats) && level && typeof level.hash === "string"
-                && typeof level.sent === "boolean" && (level.bundle === null || typeof level.bundle === "string");
-            return valid ? { t, seed: fields.seed, seats: fields.seats, level: { bundle: level.bundle, hash: level.hash, sent: level.sent } } : null;
+                && typeof level.sent === "boolean" && (level.bundle === null || typeof level.bundle === "string")
+                && (fields.token === undefined || IsToken(fields.token));
+            if (!valid) {
+                return null;
+            }
+            const start: LobbyMessage = { t, seed: fields.seed, seats: fields.seats, level: { bundle: level.bundle, hash: level.hash, sent: level.sent } };
+            if (fields.token !== undefined) {
+                start.token = fields.token;
+            }
+            return start;
         }
         case "need-level":
+        case "rejoined":
             return { t };
         default:
             return null;
@@ -121,6 +146,10 @@ export function CleanName(name: string, fallback: string): string {
     const printable = name.split("").filter(ch => ch >= " " && ch !== "\u007f").join("");
     const clean = printable.replace(/\s+/g, " ").trim().slice(0, NameLength).trim();
     return clean || fallback;
+}
+
+function IsToken(value: unknown): value is string {
+    return typeof value === "string" && value.length > 0 && value.length <= 64;
 }
 
 function IsCharacter(value: unknown): value is string | null {

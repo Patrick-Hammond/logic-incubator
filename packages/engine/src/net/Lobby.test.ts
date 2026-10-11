@@ -1,9 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LoopbackRelay } from "@logic-incubator/lib/net/Loopback";
 import RelaySession from "@logic-incubator/lib/net/RelaySession";
+import type { Transport } from "@logic-incubator/lib/net/Transport";
 import type { LevelFile } from "../level/LevelFormat";
-import { GuestLobby, HostLobby, LobbyClosedText, LobbyEvents, LobbyStart } from "./Lobby";
-import { EncodeMessage, NetVersion } from "./NetMessages";
+import { GuestLobby, HostLobby, LobbyClosedText, LobbyEvents, LobbyStart, QuietForMs, ReconnectForMs } from "./Lobby";
+import { DecodeMessage, EncodeMessage, NetVersion } from "./NetMessages";
+import { CreateNetPlay } from "./NetPlay";
 
 /** Lets every message already on its way arrive, and what they set off - packing a level included. */
 async function Settle(): Promise<void> {
@@ -193,5 +195,179 @@ describe("HostLobby and GuestLobby", () => {
         expect(hostClosed).toEqual(["left"]);
         expect(samClosed).toEqual(["host-left"]);
         expect(LobbyClosedText(samClosed[0])).toBe("The host has left.");
+    });
+});
+
+describe("a guest whose connection goes during the run", () => {
+    beforeEach(() => {
+        vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    /** Lets what's on its way arrive, `ms` on. */
+    async function Wait(ms = 10): Promise<void> {
+        await vi.advanceTimersByTimeAsync(ms);
+    }
+
+    /**
+     * A run under way between a host and Sam, whose connections to the relay are kept to cut. The host's lobby
+     * asks `run` whether a guest may come back, as a `HostSession` would be asked.
+     */
+    async function Running(reconnect?: (relay: LoopbackRelay, code: string) => Promise<RelaySession>) {
+        const relay = new LoopbackRelay();
+        const lines: Transport[] = [];
+        const connect = () => {
+            const line = relay.Connect();
+            lines.push(line);
+            return line;
+        };
+        const host = new HostLobby(await RelaySession.Host(relay.Connect(), "dungeon"), "Hostess");
+        const run = { allowed: true, rejoined: [] as Array<[number, number]> };
+        host.SetRejoin({ CanRejoin: () => run.allowed, Rejoin: (index, peer) => run.rejoined.push([index, peer]) });
+        const tries = { count: 0 };
+        const sam = new GuestLobby(await RelaySession.Join(connect(), "dungeon", host.Code), {
+            name: "Sam",
+            shippedLevel: async () => Shipped,
+            reconnect: () => {
+                tries.count++;
+                return reconnect ? reconnect(relay, host.Code) : RelaySession.Join(connect(), "dungeon", host.Code);
+            }
+        });
+        await Wait();
+        host.Pick("witch");
+        sam.Pick("warlock");
+        await Wait();
+        const started = NextStart(sam);
+        const hostStart = await host.Start({ bundle: "level1", file: Shipped, shipped: true });
+        await Wait();
+        const samStart = await started;
+        const events: string[] = [];
+        [LobbyEvents.DROPPED, LobbyEvents.REJOINED, LobbyEvents.CLOSED].forEach(name => sam.on(name, (reason?: string) => events.push(reason ? name + " " + reason : name)));
+        return { relay, host, sam, hostStart, samStart, run, tries, events, cut: () => lines[lines.length - 1].Close() };
+    }
+
+    it("gets back into the room, says hello with the token its start gave it, and is let back in as the hero it was", async () => {
+        const { host, sam, run, events, cut } = await Running();
+        const before = sam.Session;
+        let changed = 0;
+        host.on(LobbyEvents.CHANGED, () => changed++);
+        cut();
+        await Wait();
+        expect(events).toEqual([LobbyEvents.DROPPED]);
+        expect(sam.Reconnecting).toBe(true);
+        expect(sam.IsOpen).toBe(true);
+
+        await Wait(600);
+        expect(events).toEqual([LobbyEvents.DROPPED, LobbyEvents.REJOINED]);
+        expect(sam.Reconnecting).toBe(false);
+        expect(sam.Session).not.toBe(before);
+        expect(sam.Session.IsOpen).toBe(true);
+        expect(run.rejoined).toEqual([[1, sam.Session.You]]);
+        expect(host.Seats[1]).toEqual({ peer: sam.Session.You, name: "Sam", character: "warlock" });
+        expect(sam.Mine).toEqual(host.Seats[1]);
+        expect(changed).toBe(1);
+    });
+
+    it("moves the run to its new place in the room in time to hear what the host sends straight after letting it back", async () => {
+        const { host, sam, hostStart, samStart, cut } = await Running();
+        const hostPlay = CreateNetPlay(host, hostStart);
+        const samPlay = CreateNetPlay(sam, samStart);
+        cut();
+        await Wait();
+        expect(samPlay.Connected).toBe(false);
+        await Wait(600);
+        // Connected again only once the host's catch-up, sent with its answer, has come.
+        expect(samPlay.Connected).toBe(true);
+        hostPlay.End();
+        samPlay.End();
+    });
+
+    it("keeps trying, further apart, while the relay can't be reached - and gives up once the host has let its hero go", async () => {
+        const { sam, tries, events, cut } = await Running(() => Promise.reject(new Error("No network.")));
+        cut();
+        await Wait();
+        await Wait(500 + 1000 + 2000);
+        expect(tries.count).toBe(3);
+        await Wait(ReconnectForMs);
+        expect(events).toEqual([LobbyEvents.DROPPED, LobbyEvents.CLOSED + " lost"]);
+        expect(LobbyClosedText("lost")).toBe("Lost the connection, and couldn't get back in.");
+        expect(sam.IsOpen).toBe(false);
+        expect(sam.Reconnecting).toBe(false);
+        const count = tries.count;
+        await Wait(10000);
+        expect(tries.count).toBe(count);
+    });
+
+    it("closes when the host won't have it back, or the room has gone", async () => {
+        const away = await Running();
+        away.run.allowed = false;
+        away.cut();
+        await Wait(600);
+        expect(away.events).toEqual([LobbyEvents.DROPPED, LobbyEvents.CLOSED + " gone"]);
+        expect(LobbyClosedText("gone")).toBe("You were away too long.");
+        expect(away.run.rejoined).toEqual([]);
+
+        const left = await Running();
+        left.cut();
+        await Wait();
+        left.host.Leave();
+        await Wait(600);
+        expect(left.events).toEqual([LobbyEvents.DROPPED, LobbyEvents.CLOSED + " host-left"]);
+    });
+
+    it("turns away a hello with a token it never gave, or before there's a run to come back to", async () => {
+        const { relay, host } = await Running();
+        const stranger = await RelaySession.Join(relay.Connect(), "dungeon", host.Code);
+        const heard: Array<{ t: string }> = [];
+        stranger.on("message", (_from: number, payload: Uint8Array) => heard.push(DecodeMessage(payload)!));
+        stranger.Send(0, EncodeMessage({ t: "hello", version: NetVersion, name: "Mallory", rejoin: "not-a-token" }));
+        await Wait();
+        expect(heard).toEqual([{ t: "refused", reason: "started" }]);
+
+        host.SetRejoin(null);
+        const sam = new GuestLobby(await RelaySession.Join(relay.Connect(), "dungeon", host.Code), { name: "Sam", shippedLevel: async () => Shipped });
+        const closed = Closed(sam);
+        await Wait();
+        expect(closed).toEqual(["started"]);
+    });
+
+    it("takes a connection that has gone quiet for lost, and gets back in", async () => {
+        const { events } = await Running();
+        // The host's session pings every second; with nothing at all, the line is taken for dead.
+        await Wait(QuietForMs - 1000);
+        expect(events).toEqual([]);
+        await Wait(2000);
+        expect(events).toEqual([LobbyEvents.DROPPED]);
+        expect(LobbyClosedText("quiet")).toBe("Lost touch with the host.");
+        await Wait(600);
+        expect(events).toEqual([LobbyEvents.DROPPED, LobbyEvents.REJOINED]);
+    });
+
+    it("doesn't try to get back in when it leaves, or before the run has begun", async () => {
+        const { sam, tries, events } = await Running();
+        sam.Leave();
+        await Wait(5000);
+        expect(events).toEqual([LobbyEvents.CLOSED + " left"]);
+        expect(tries.count).toBe(0);
+
+        const relay = new LoopbackRelay();
+        const host = new HostLobby(await RelaySession.Host(relay.Connect(), "dungeon"), "Hostess");
+        const line = relay.Connect();
+        const kit = new GuestLobby(await RelaySession.Join(line, "dungeon", host.Code), {
+            name: "Kit",
+            shippedLevel: async () => Shipped,
+            reconnect: () => Promise.reject(new Error("never asked"))
+        });
+        const dropped: number[] = [];
+        kit.on(LobbyEvents.DROPPED, () => dropped.push(1));
+        const closed = Closed(kit);
+        await Wait();
+        line.Close();
+        await Wait(5000);
+        expect(dropped).toEqual([]);
+        expect(closed).toEqual(["closed"]);
     });
 });

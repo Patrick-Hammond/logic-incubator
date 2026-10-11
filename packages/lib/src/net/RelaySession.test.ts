@@ -83,6 +83,28 @@ describe("RelaySession", () => {
         expect(guest.IsOpen).toBe(false);
     });
 
+    it("lets go of a connection taken for lost, with its own reason, and the others hear the guest has gone", async () => {
+        const relay = new LoopbackRelay();
+        const host = await RelaySession.Host(relay.Connect(), "dungeon");
+        const transport = relay.Connect();
+        const guest = await RelaySession.Join(transport, "dungeon", host.Code);
+        const left: number[] = [];
+        const closed: string[] = [];
+        host.on(RelayEvents.PEER_LEFT, (peer: number) => left.push(peer));
+        guest.on(RelayEvents.CLOSED, (reason: string) => closed.push(reason));
+        guest.Drop("quiet");
+        guest.Drop("again");
+        await Settle();
+        expect(closed).toEqual(["quiet"]);
+        expect(guest.IsOpen).toBe(false);
+        expect(transport.IsOpen).toBe(false);
+        expect(left).toEqual([1]);
+
+        // The room is still there to come back to - on a new connection, in the seat that was freed.
+        const back = await RelaySession.Join(relay.Connect(), "dungeon", host.Code);
+        expect(back.You).toBe(1);
+    });
+
     it("ends every guest's session when the host leaves", async () => {
         const relay = new LoopbackRelay();
         const host = await RelaySession.Host(relay.Connect(), "dungeon");

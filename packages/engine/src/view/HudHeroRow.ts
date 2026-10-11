@@ -10,7 +10,7 @@ import {LightSpellState, LightSpellStatusOf} from "../level/entities/LightSpell"
 import type Hero from "../sim/Hero";
 
 /** What a HUD row shows of a hero - `Hero` has it all. */
-export type HudHero = Pick<Hero, "Alive" | "Gone" | "Health" | "Gold" | "EquippedWeapon" | "Inventory" | "Spell">;
+export type HudHero = Pick<Hero, "Alive" | "Gone" | "Away" | "Health" | "Gold" | "EquippedWeapon" | "Inventory" | "Spell">;
 
 /** The hearts' pictures, if the game has its own (see `PlayerSetup.hearts`). */
 export type HeartTextures = {full: Texture; half: Texture; empty: Texture};
@@ -28,7 +28,7 @@ const ItemGap = 4;
 const SpellBar = "mp";
 const SpellBarWidth = 110;
 const Gap = 10;
-/** How solid a fallen hero's row is drawn. */
+/** How solid the row of a hero who is down, away or gone is drawn. */
 const FallenAlpha = 0.4;
 
 /** What a light spell's state reads as: READY, or LIT / RECHARGING and the seconds left. */
@@ -134,7 +134,8 @@ export default class HudHeroRow extends Container {
         this.RenderWeapon(hero.EquippedWeapon.icon);
         this.RenderItems(hero.Inventory.slots);
         this.RenderSpell(hero.Spell);
-        const status = hero.Gone ? "LEFT" : hero.Alive ? "" : "DOWN";
+        // Online, a player who has left, or whose connection has gone for now, says more than how their hero is.
+        const status = hero.Gone ? "LEFT" : hero.Away ? "AWAY" : hero.Alive ? "" : "DOWN";
         if (status !== this.shown.status) {
             this.shown.status = status;
             this.alpha = status ? FallenAlpha : 1;

@@ -6,7 +6,9 @@
  * the keys they carried and the rest play on; when none is left standing it
  * emits `ALL_PLAYERS_DIED`. The first to reach a way out ends the level for
  * everyone (`LEVEL_COMPLETED`). On a shared screen the party is held within one
- * screen (`SetLeash`), and a hero far from the rest can warp to them. No camera
+ * screen (`SetLeash`), and a hero far from the rest can warp to them. Online, a
+ * hero whose player's connection has gone is away (`SetAway`): out of play,
+ * standing where they were, until their player is back. No camera
  * and no sprites - `DungeonMain` draws it. Pure - no pixi - so it runs under the
  * plain node test runner.
  */
@@ -127,7 +129,12 @@ export default class World {
         return this.heroes.filter(hero => hero.Alive);
     }
 
-    /** Whether every hero has fallen. */
+    /** The heroes in play: standing, and not away (see `SetAway`) - in slot order. */
+    get Active(): Hero[] {
+        return this.heroes.filter(hero => hero.Alive && !hero.Away);
+    }
+
+    /** Whether every hero has fallen - or every one still standing is away. */
     get AllDown(): boolean {
         return this.allDown;
     }
@@ -185,7 +192,7 @@ export default class World {
     }
 
     /**
-     * One step of play: each living hero moves with their input (by slot - see `HeroInput`), or warps if they
+     * One step of play: each hero in play (`Active`) moves with their input (by slot - see `HeroInput`), or warps if they
      * asked to and may (see `WarpDistance`); the doors and what the team can see follow where they stand, each
      * picks up what's under them (in slot order, so the first there gets it - `PICKUP_COLLECTED`) and fires;
      * then the encounter. A hero on a way out ends the level there and then. `dt` in frames (1 at 60 a second),
@@ -195,7 +202,8 @@ export default class World {
         if (this.allDown || this.completed) {
             return;
         }
-        const living = this.Living;
+        // Only those in play: one who is away neither moves, nor picks up, nor is gone for by the monsters.
+        const living = this.Active;
         const shots: Array<{ hero: Hero; from: Vec2Like; direction: Vec2Like; seq: number }> = [];
         living.forEach(hero => {
             const given = inputs[hero.Index];
@@ -254,7 +262,22 @@ export default class World {
         }
     }
 
-    /** Deals with every hero who has fallen since the last look - whatever felled them - and ends the level if none is left standing. */
+    /**
+     * Takes hero `index` out of play while their player's connection is gone (`away`), or puts them back in (see
+     * `Hero.Away`) - the host's world, online. With no one else in play, the level is over, as if all had fallen.
+     */
+    SetAway(index: number, away: boolean): void {
+        const hero = this.heroes[index];
+        if (!hero || hero.Gone || hero.Away === away) {
+            return;
+        }
+        hero.SetAway(away);
+        if (away && !this.allDown && !this.completed) {
+            this.CheckFallen();
+        }
+    }
+
+    /** Deals with every hero who has fallen since the last look - whatever felled them - and ends the level if none is left in play. */
     private CheckFallen(): void {
         this.heroes.forEach((hero, i) => {
             if (!hero.Alive && !this.fallen[i]) {
@@ -262,7 +285,7 @@ export default class World {
                 this.Fall(hero);
             }
         });
-        if (!this.Living.length) {
+        if (!this.Active.length) {
             this.allDown = true;
             this.options.emit(ALL_PLAYERS_DIED);
         }

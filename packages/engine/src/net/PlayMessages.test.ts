@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { Vec2 } from "@logic-incubator/lib/math/Geometry";
 import type { IPlayerInput } from "../input/PlayerControl";
 import { DecodeMessage, EncodeMessage } from "./NetMessages";
-import { DecodePlay, EncodePlay, HeroSnapshot, QuantiseInput, Snapshot } from "./PlayMessages";
+import { DecodePlay, EncodePlay, HeroSnapshot, IsLastingEvent, QuantiseInput, Snapshot } from "./PlayMessages";
 
 function Input(x: number, y: number, extra: Partial<IPlayerInput> = {}): IPlayerInput {
     return { direction: new Vec2(x, y), firing: false, aimX: 0, casting: false, ...extra };
@@ -10,6 +10,7 @@ function Input(x: number, y: number, extra: Partial<IPlayerInput> = {}): IPlayer
 
 const Hero: HeroSnapshot = {
     gone: false,
+    away: false,
     x: 123.25,
     y: 456.5,
     vx: 0.5,
@@ -34,7 +35,7 @@ function SnapshotOf(changes: Partial<Snapshot> = {}): Snapshot {
         t: "snapshot",
         round: 3,
         tick: 9001,
-        heroes: [Hero, { ...Hero, gone: true, facingX: 1, spellLit: null, spellRecharging: 4, carried: null, orbX: 0, orbY: 0, orbTime: 0, ack: 0 }],
+        heroes: [Hero, { ...Hero, gone: true, facingX: 1, spellLit: null, spellRecharging: 4, carried: null, orbX: 0, orbY: 0, orbTime: 0, ack: 0 }, { ...Hero, away: true }],
         monsters: [
             { id: 7, type: 2, x: 100.25, y: 200.75, facingX: -1, moving: true, hit: false },
             { id: 65535, type: 0, x: 0, y: 3000, facingX: 1, moving: false, hit: true }
@@ -87,7 +88,7 @@ describe("EncodePlay and DecodePlay", () => {
         expect(DecodePlay(EncodePlay({ t: "input", round: 2, inputs: [] }))).toEqual({ t: "input", round: 2, inputs: [] });
     });
 
-    it("carry a snapshot: heroes, monsters to a quarter pixel, shots, doors, flashing spawners and every kind of event", () => {
+    it("carry a snapshot: heroes (gone or away), monsters to a quarter pixel, shots, doors, flashing spawners and every kind of event", () => {
         const snapshot = SnapshotOf();
         expect(DecodePlay(EncodePlay(snapshot))).toEqual(snapshot);
     });
@@ -108,6 +109,14 @@ describe("EncodePlay and DecodePlay", () => {
         expect(DecodePlay(EncodePlay({ t: "restart", round: 4 }))).toEqual({ t: "restart", round: 4 });
         expect(DecodePlay(EncodePlay({ t: "ping", id: 300 }))).toEqual({ t: "ping", id: 300 });
         expect(DecodePlay(EncodePlay({ t: "pong", id: 65535 }))).toEqual({ t: "pong", id: 65535 });
+    });
+
+    it("carry a guest leaving, and catching one up that's back: the round, and what lastingly happened in it", () => {
+        expect(DecodePlay(EncodePlay({ t: "leave" }))).toEqual({ t: "leave" });
+        const lasting = SnapshotOf().events.filter(IsLastingEvent);
+        expect(lasting.map(event => event.e)).toEqual(["pickup", "keys", "spawner", "shot"]);
+        expect(DecodePlay(EncodePlay({ t: "catch-up", round: 255, events: lasting }))).toEqual({ t: "catch-up", round: 255, events: lasting });
+        expect(DecodePlay(EncodePlay({ t: "catch-up", round: 0, events: [] }))).toEqual({ t: "catch-up", round: 0, events: [] });
     });
 
     it("are told apart from the lobby's messages both ways", () => {

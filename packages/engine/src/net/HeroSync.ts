@@ -17,6 +17,7 @@ export function HeroSnapshotOf(hero: Hero, ack: number): HeroSnapshot {
     const lit = spell && spell.lit;
     return {
         gone: hero.Gone,
+        away: hero.Away,
         x: state.position.x,
         y: state.position.y,
         vx: state.velocity.x,
@@ -46,6 +47,7 @@ export function ApplyHeroSnapshot(hero: Hero, snapshot: HeroSnapshot): void {
     if (snapshot.gone && !hero.Gone) {
         hero.Leave();
     }
+    hero.SetAway(snapshot.away);
     const state = hero.Writable;
     state.velocity.Set(snapshot.vx, snapshot.vy);
     state.facingX = snapshot.facingX;

@@ -7,12 +7,15 @@
  * `Prediction`). What happened in between - pickups, keys dropped, spawners
  * destroyed, doors - it does to its own level as it's told, and it passes on
  * the host's events (see Events.ts) as its own, so a HUD, sounds or an end
- * screen hear of them as they would offline. Pure - no pixi - so it runs under
- * the plain node test runner.
+ * screen hear of them as they would offline. If its connection goes, its hero
+ * stands still until it's back in the room (`Rejoin`, from its lobby); the host
+ * then says what it missed (`catch-up`) before anything else. Pure - no pixi -
+ * so it runs under the plain node test runner.
  */
 
 import type { Vec2Like } from "@logic-incubator/lib/math/Geometry";
 import { RelayHost } from "@logic-incubator/lib/net/RelayRooms";
+import type RelaySession from "@logic-incubator/lib/net/RelaySession";
 import type { EncounterView } from "../Encounter";
 import { ALL_PLAYERS_DIED, KEYS_DROPPED, LEVEL_COMPLETED, MONSTER_KILLED, PICKUP_COLLECTED, PLAYER_DAMAGED, PLAYER_DIED, SPAWNER_DESTROYED } from "../Events";
 import type { IPlayerInput } from "../input/PlayerControl";
@@ -21,7 +24,7 @@ import { NoInput } from "../sim/World";
 import { ApplyHeroSnapshot } from "./HeroSync";
 import type { NetLevelContext } from "./NetPlay";
 import PlaySession, { ByteRate, BytesText } from "./PlaySession";
-import type { NetEvent, PlayMessage, Snapshot } from "./PlayMessages";
+import { CatchUpMessage, IsLastingEvent, NetEvent, PlayMessage, Snapshot } from "./PlayMessages";
 import PlayClock from "./PlayClock";
 import Prediction from "./Prediction";
 import Replica from "./Replica";
@@ -40,6 +43,14 @@ export default class GuestSession extends PlaySession {
     private clock = new PlayClock();
     private restart: (() => void) | null = null;
     private received = new ByteRate();
+    /** Whether it's back in the room after its connection went, and waiting to hear what it missed - nothing else is played till then. */
+    private catchingUp = false;
+    /** What it missed, heard before its level was ready to take it - done as the level begins. */
+    private missed: CatchUpMessage | null = null;
+    /** How many lasting events (see `IsLastingEvent`) have been done to this level - where a `catch-up` picks up from. */
+    private lasting = 0;
+    /** Whether this level's end (`all-died`, `completed`) has been heard - a `catch-up` doesn't say it twice. */
+    private over = false;
 
     /** The copy of the host's encounter - null until a level has begun. */
     get Entities(): EncounterView | null {
@@ -61,6 +72,25 @@ export default class GuestSession extends PlaySession {
         return !!this.context && this.clock.Started;
     }
 
+    /** Whether it's in touch with the host: not while its connection is gone, nor until it's heard what it missed. */
+    get Connected(): boolean {
+        return !this.Ended && !this.catchingUp;
+    }
+
+    /**
+     * Back in the room after its connection went, as `session` (see `GuestLobby`): play goes on from there once the host
+     * has said what it missed. Inputs the host never had are let go - the host's word on where the hero stands wins.
+     */
+    Rejoin(session: RelaySession): void {
+        if (this.ended) {
+            return;
+        }
+        this.Listen(session);
+        this.catchingUp = true;
+        this.queued = [];
+        this.prediction.Forget();
+    }
+
     Begin(context: NetLevelContext): void {
         this.context = context;
         this.restart = context.restart;
@@ -68,8 +98,15 @@ export default class GuestSession extends PlaySession {
         this.replica.Reset(context.world.encounter.spawners);
         this.prediction.Reset();
         this.clock.Reset();
+        this.lasting = 0;
+        this.over = false;
         // No inputs yet - just that this machine has the level ready.
         this.Send(RelayHost, { t: "input", round: this.round, inputs: [] });
+        const missed = this.missed;
+        this.missed = null;
+        if (missed && missed.round === this.round) {
+            this.CatchUp(missed);
+        }
         const queued = this.queued.filter(snapshot => snapshot.round === this.round);
         this.queued = [];
         queued.forEach(snapshot => this.Apply(snapshot));
@@ -78,7 +115,8 @@ export default class GuestSession extends PlaySession {
     Step(local: ReadonlyArray<IPlayerInput | undefined>): void {
         const context = this.context;
         const replica = this.replica;
-        if (!context || !replica || !this.clock.Started) {
+        // With its connection gone, its hero stands still: the host would never play what it did.
+        if (!context || !replica || !this.clock.Started || !this.Connected) {
             return;
         }
         const world = context.world;
@@ -120,11 +158,19 @@ export default class GuestSession extends PlaySession {
             state.previousOrb.Copy(state.orb);
         });
         this.prediction.Settle(frames);
-        const living = world.Living;
-        // With no one standing, what was last seen stays seen - as the host's does.
-        if (living.length) {
-            context.level.UpdateVisibleRegions(living.map(hero => hero.Tile));
+        const active = world.Active;
+        // With no one in play, what was last seen stays seen - as the host's does.
+        if (active.length) {
+            context.level.UpdateVisibleRegions(active.map(hero => hero.Tile));
         }
+    }
+
+    /** It's leaving the run: the host is told, so the hero goes at once rather than being kept for it to come back. */
+    End(): void {
+        if (!this.Ended) {
+            this.Send(RelayHost, { t: "leave" });
+        }
+        super.End();
     }
 
     DrawOffset(index: number): Vec2Like | null {
@@ -150,6 +196,14 @@ export default class GuestSession extends PlaySession {
         if (from !== RelayHost) {
             return;
         }
+        if (message.t === "catch-up") {
+            this.Missed(message);
+            return;
+        }
+        if (this.catchingUp) {
+            // From before the host knew it was back: what's in them comes with the catch-up.
+            return;
+        }
         if (message.t === "snapshot") {
             this.received.Add(bytes, this.now());
             if (message.round !== this.round) {
@@ -170,6 +224,47 @@ export default class GuestSession extends PlaySession {
                 }
             }
         }
+    }
+
+    /** What it missed while its connection was gone: the round now, and everything lasting done in it. */
+    private Missed(message: CatchUpMessage): void {
+        if (!this.catchingUp) {
+            return;
+        }
+        this.catchingUp = false;
+        if (message.round !== this.round) {
+            // The host has started the level over meanwhile: so does this machine, then catches up as it begins.
+            this.round = message.round;
+            this.missed = message;
+            if (this.context) {
+                this.context = null;
+                if (this.restart) {
+                    this.restart();
+                }
+            }
+        } else if (this.context) {
+            this.CatchUp(message);
+        } else {
+            this.missed = message;
+        }
+    }
+
+    /**
+     * Does to this level what lastingly happened in it that it hasn't yet done - quietly, as it's past - and, if it has
+     * ended meanwhile, ends it here too, as it still is.
+     */
+    private CatchUp(message: CatchUpMessage): void {
+        const done = this.lasting;
+        let index = 0;
+        message.events.forEach(event => {
+            if (!IsLastingEvent(event)) {
+                if (!this.over) {
+                    this.Happened(event);
+                }
+            } else if (index++ >= done) {
+                this.Happened(event, true);
+            }
+        });
     }
 
     /** A snapshot of this round: what happened, the doors, then the world to draw - and this machine's hero put right. */
@@ -199,11 +294,15 @@ export default class GuestSession extends PlaySession {
         }
     }
 
-    /** Does on this machine what the host says happened, and tells the game, as the host's world told it. */
-    private Happened(event: NetEvent): void {
+    /** Does on this machine what the host says happened, and tells the game, as the host's world told it - unless it's `past`, caught up with. */
+    private Happened(event: NetEvent, past = false): void {
         const context = this.context!;
-        const { world, level, emit } = context;
+        const { world, level } = context;
+        const emit = past ? () => undefined : context.emit;
         const hero = "hero" in event ? world.Heroes[event.hero] : undefined;
+        if (IsLastingEvent(event)) {
+            this.lasting++;
+        }
         switch (event.e) {
             case "pickup":
                 if (hero) {
@@ -236,9 +335,11 @@ export default class GuestSession extends PlaySession {
                 emit(PLAYER_DIED, event.hero);
                 break;
             case "all-died":
+                this.over = true;
                 emit(ALL_PLAYERS_DIED);
                 break;
             case "completed":
+                this.over = true;
                 emit(LEVEL_COMPLETED, event.hero);
                 break;
             case "shot":
@@ -247,9 +348,9 @@ export default class GuestSession extends PlaySession {
         }
     }
 
-    /** The heroes standing besides this machine's, as drawn - who it could warp to. */
+    /** The heroes in play besides this machine's, as drawn - who it could warp to, as the host's world sees it. */
     private Others() {
         const world = this.context!.world;
-        return world.Living.filter(hero => hero.Index !== this.You);
+        return world.Active.filter(hero => hero.Index !== this.You);
     }
 }
