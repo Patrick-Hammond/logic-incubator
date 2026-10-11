@@ -209,14 +209,20 @@ export default class Level {
      * even if the key went with a hero who fell - it never shuts on someone.
      */
     UpdateDoors(tiles: ReadonlyArray<Vec2Like>, canOpen: (lockId: number) => boolean = () => true): void {
-        this.doors.forEach(door => {
-            const open = DoorOpens(door, tiles, canOpen);
-            if (open !== door.isOpen) {
-                door.isOpen = open;
-                door.tile.texture = AssetFactory.inst.CreateTexture(open ? door.openSprite : door.closedSprite);
-                this.doorVersion++;
-            }
-        });
+        this.doors.forEach((door, index) => this.SetDoorOpen(index, DoorOpens(door, tiles, canOpen)));
+    }
+
+    /**
+     * Opens or shuts door `index` (of `doors`) as it's told, whoever stands where - for an online guest, whose doors
+     * do what the host's snapshots say (see `GuestSession`). Does nothing if it already is.
+     */
+    SetDoorOpen(index: number, open: boolean): void {
+        const door = this.doors[index];
+        if (door && open !== door.isOpen) {
+            door.isOpen = open;
+            door.tile.texture = AssetFactory.inst.CreateTexture(open ? door.openSprite : door.closedSprite);
+            this.doorVersion++;
+        }
     }
 
     /**

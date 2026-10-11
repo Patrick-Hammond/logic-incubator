@@ -488,7 +488,7 @@ Helpers (all `protected`):
 | `this.ListenWhileShown(emitter, event, fn)` | Subscribes at every Show and unsubscribes at every Hide - no "am I visible" guard needed. |
 | `this.Tick(fn)` | Calls `fn(dt)` every frame, only while shown. |
 | `this.WhileShown(on, off)` | `on()` now if shown and on every Show; `off()` on every Hide. |
-| `this.debug` | Development helpers (development builds only): `this.debug.Drag(displayObject)` to position something by dragging it, `this.debug.Emitter(emitter)` to tune a particle emitter in-game. See "Positioning things by dragging" and "Tuning a particle emitter in-game" below. |
+| `this.debug` | Development helpers (development builds only): `this.debug.Drag(displayObject)` to position something by dragging it, `this.debug.Emitter(emitter)` to tune a particle emitter in-game, `this.debug.Watch(title, read)` to keep a few numbers on screen. See "Positioning things by dragging", "Tuning a particle emitter in-game" and "Watching numbers as the game runs" below. |
 
 #### `Own`, `WhileShown` and `Track`
 
@@ -659,6 +659,21 @@ this.debug.Emitter(torches, { label: "torches" });      // one set of controls d
 - Give it emitters that share a config as an **array** to tune them together; call it again for an unrelated emitter and the panel lists both.
 - It is a panel over the page, not part of the canvas: it stays visible in fullscreen, and what you type in it never reaches the game's keyboard.
 - Development builds only, like `Drag` (see above); take the call out before shipping.
+
+#### Watching numbers as the game runs
+
+`this.debug.Watch(title, read)` keeps a few lines on screen while the game runs, in a small box over the page's top-left corner: `read` is
+called four times a second and returns the lines.
+
+```ts
+this.Track(this.debug.Watch("MONSTERS", () => ["ALIVE " + world.encounter.monsters.length]));   // gone at the next Hide
+```
+
+- One box serves the page: each watch is a section of it, under its title. The last one closed takes the box away.
+- It closes when the component is destroyed, or sooner with the function it returns. A `read` that throws shows the error in its place.
+- It is part of the page, not the canvas, so it stays in fullscreen and doesn't take the pointer. The dungeon uses it to show how an
+  online run's connection is doing ([9.3.2](#932-playing-online)).
+- Development builds only, like `Drag`.
 
 ### 4.3 `SceneManager`
 
@@ -1633,8 +1648,8 @@ What changes with more than one hero:
 - **Getting out.** The first hero to step onto an `exit` cell ([9.5](#95-the-level-file)) ends the level for everyone
   (`LEVEL_COMPLETED(hero)`); every hero, fallen or not, starts the next one on their feet. To move on to another level, have
   `level` (and `levelBundle`) return it once you hear `LEVEL_COMPLETED`.
-- **The HUD** shows a row per hero - PLAYER n, hearts, weapon, gold, light spell and items, dimmed with DOWN once they fall -
-  and the team's keys at the bottom.
+- **The HUD** shows a row per hero - PLAYER n (or the `HeroSlot`'s `name`), hearts, weapon, gold, light spell and items, dimmed with
+  DOWN once they fall (LEFT once an online player has gone) - and the team's keys at the bottom.
 - **Events** about one hero name them by slot, from 0: their place in what `heroes` returned.
 
 There is no friendly fire and no bumping into each other. Everyone starts on the level's `player-start` cell or the open floor
@@ -1667,22 +1682,31 @@ host.Pick("witch");
 guest.Pick("warlock");
 beginButton.on("activate", () => host.CanStart && host.Start({ bundle: "level1", file: game.assets.Data("level1.level"), shipped: true }));
 
-// On every machine, from its own lobby (host or guest): the same start, but for `you`, this machine's seat.
+// On every machine, from its own lobby (host or guest): the same start, but for `you`, this machine's seat -
+// and the run played from it, listening from now on.
 let online: LobbyStart | null = null;
+let play: NetPlay | null = null;
 lobby.on(LobbyEvents.STARTED, (start: LobbyStart) => {
     online = start;
+    play = CreateNetPlay(lobby, start);                            // engine/net/NetPlay
     game.sceneManager.ShowScene(Scenes.GAME);
 });
 
 new DungeonMain({
     player: PlayerSetup,
     level: () => (online ? online.level : game.assets.Data("level1.level")),
-    seed: () => (online ? online.seed : undefined),               // the same monsters on every machine
+    seed: () => (online ? online.seed : undefined),               // the same start on every machine
+    net: () => play || undefined,                                  // the host's world is the run's
     heroes: () => online ? online.seats.map((seat, i) => ({
         input: i === online!.you ? DefaultInput : null,            // null: played on another machine
         sprite: CharacterById(seat.character).run,
+        name: seat.name,                                           // heads their row in the HUD
     })) : undefined,                                               // undefined: one hero, played here
 });
+
+// Leaving: end the run and the lobby, which tells the others.
+play.End();
+lobby.Leave();
 ```
 
 Both lobbies emit `CHANGED` whenever someone joins, picks or leaves (redraw from `Seats`), `STARTED` with the start, and `CLOSED` when
@@ -1699,8 +1723,35 @@ it's over; a guest's also emits `STARTING` while the level is made ready.
   A guest who leaves frees their seat. Once the run has started, latecomers are turned away (`started`), as is a guest on another
   `NetVersion` (`version`).
 
-Play itself isn't shared yet: each machine runs its own copy of the level from the same start, so the heroes of the others stand where
-they started. Sharing play - the host's world sent to the guests, their inputs sent back - is the next step.
+**Playing.** The host's machine runs the run: its world is the only one that moves monsters, lands hits and opens doors. `CreateNetPlay`
+gives the host a `HostSession` and each guest a `GuestSession`, and `DungeonMain` plays through whichever it was given (`net`):
+
+- **Guests send inputs.** Each step a guest sends its hero's input - numbered, the last three in each message, so one lost message costs
+  nothing - and the host plays them as they come, in order. A hero whose next input hasn't arrived stands still; once more than four are
+  waiting, the host plays two a step to catch up.
+- **The host sends snapshots**, 20 a second (every third step), to everyone: every hero (position, hearts, gold, weapon, light spell,
+  torch, the last input it played), every monster and shot, which doors are open, and what happened since the last one - pickups, kills,
+  hits, keys dropped, the level's end. A guest emits those as the engine's own events on its dispatcher, so
+  sounds and an overlay work the same on every machine. About 150 bytes each for two players, about 3 KB a second.
+- **A guest draws the others a moment behind.** It draws the host's world 100 ms behind the newest snapshot (`PlayClock`), between the
+  two snapshots either side, so the monsters and the other heroes move smoothly through a late or lost message (`Replica`).
+- **A guest's own hero moves at once.** It steps its own hero with the same code the host runs (`Prediction`), keeps the inputs the host
+  hasn't played yet, and when a snapshot says where the host has it, starts from there and plays them again. When both agree - nearly
+  always - nothing shows; a difference is drawn away over a few frames, or jumped if it's more than two tiles. Its own shots fly from the
+  moment they're fired, and the host's copy takes over.
+- **Each screen follows its own hero**, and while that hero is down, a teammate still standing.
+- **The menu doesn't pause.** The run is everyone's, so opening the pause menu online only stands this player's hero still
+  (`DungeonMain.Pause`).
+- **The level's end is the host's.** When every hero is down, or one gets out, the host chooses: its `Restart()` starts the level over on
+  every machine. A guest can't (`CanRestart` is false); its end screen waits for the host, and it can leave.
+- **Leaving.** A guest who leaves (or whose connection goes) is out of the run: their hero is gone (LEFT in the HUD) on every machine,
+  and the run plays on without them. The host leaving ends it for everyone - each guest's lobby closes with `host-left`.
+- **Seeing how it's going.** In a development build an online run shows a small box (`DebugTools.Watch`, [4.2](#42-gamecomponent-the-lifecycle)):
+  the round trip to the host, each snapshot's size and the bytes a second, how far behind the guest draws, how many times its own hero
+  has been corrected, and on the host how many inputs are waiting for each guest. `in-dungeons-we-dwell`'s `?lag=150&loss=2` slows its
+  connection down to try it ([15.4](#154-testing-without-a-server)).
+
+Play messages (`engine/net/PlayMessages`) are bytes, kinds 16 to 20, alongside the lobby's; `NetVersion` covers both.
 
 ### 9.4 Monsters
 
@@ -1889,8 +1940,11 @@ All on `game.dispatcher`; the constants are in `@logic-incubator/engine/Events`:
 | `LEVEL_COMPLETED` | `(hero)` | A hero stepped onto an `exit`: the level is over, and the next start (whatever `level` returns then) brings every hero back. |
 | `MONSTER_KILLED` | `(type, x, y, hero)` | A monster died (pixel position), killed by that hero's shot (-1 if by none). |
 | `SPAWNER_DESTROYED` | `(spawner)` | A spawner was shot to pieces. |
+| `PICKUP_COLLECTED` | `(hero, tileX, tileY)` | A hero picked up what was on that cell (gold, a key, a weapon...). |
+| `KEYS_DROPPED` | `(hero, tileX, tileY)` | A fallen hero's keys landed on that cell, for the others to pick up. |
 
-`hero` is the hero's slot, from 0 - their place in what `heroes` returned; a lone hero is 0.
+`hero` is the hero's slot, from 0 - their place in what `heroes` returned; a lone hero is 0. On an online guest these come from the
+host's snapshots ([9.3.2](#932-playing-online)), a moment after they happened there.
 
 ```ts
 this.Listen(this.game.dispatcher, MONSTER_KILLED, (type: string, x: number, y: number) => this.SpawnLoot(x, y));
@@ -2468,7 +2522,8 @@ browser (host)  --WebSocket-->  relay  <--WebSocket--  browser (guest)
 - A **`RelaySession`** is one machine's place in a room: `Send(to, bytes)` to a peer by number (the host is 0), `Broadcast(bytes)`, and
   events for messages, peers joining and leaving, and the end.
 - Messages are bytes: `ByteWriter` and `ByteReader` pack numbers and text, little-endian. A game puts a kind byte first and versions its
-  messages (the dungeon's are `engine/net/NetMessages`: JSON for the lobby's few small ones).
+  messages (the dungeon's are `engine/net/NetMessages`: JSON for the lobby's few small ones, and `engine/net/PlayMessages`: packed bytes
+  for inputs and snapshots).
 
 ### 15.2 Running the relay
 
@@ -2520,4 +2575,4 @@ guest.Send(0, new ByteWriter().U8(1).String("hello").ToBytes());
 
 `WithLag(transport, { delayMs, jitterMs, lossChance })` slows a connection down - each message, each way, in order, now and then held up
 as if lost and sent again - to try play over a slow line. `in-dungeons-we-dwell` wraps its connection in it for `?lag=150` on the page's
-address.
+address (milliseconds each way), and `?loss=2` (percent of messages lost).

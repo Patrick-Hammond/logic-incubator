@@ -101,7 +101,19 @@ export type Monster = {
     dead: boolean;
 };
 
-export default class Encounter {
+/** What drawing a monster takes - see `EncounterView`. */
+export type MonsterLook = Pick<Monster, "previous" | "position" | "def" | "moving" | "animTime" | "hitFlash" | "facingX">;
+
+/** What `EntityRenderer` draws of the monsters, shots and spawners: an `Encounter`, or an online guest's copy of the host's (see `Replica`). */
+export interface EncounterView {
+    readonly monsters: ReadonlyArray<MonsterLook>;
+    readonly projectiles: ReadonlyArray<Projectile>;
+    readonly spawners: ReadonlyArray<SpawnerState>;
+    /** The spawners showing they've been hit. */
+    readonly spawnerFlash: { has(state: SpawnerState): boolean };
+}
+
+export default class Encounter implements EncounterView {
     monsters: Monster[] = [];
     projectiles: Projectile[] = [];
     spawners: SpawnerState[] = [];
@@ -224,9 +236,9 @@ export default class Encounter {
         return this.flow;
     }
 
-    /** Fires a shot from `from` (a centre, in pixels) along `direction` - a hero's names them by `hero`, their index. */
-    Fire(from: Vec2Like, direction: Vec2Like, shot: ShotSetup, owner: ProjectileOwner, hero = -1): void {
-        this.projectiles.push(CreateProjectile(from, direction, shot, owner, TileSize, this.nextId++, hero));
+    /** Fires a shot from `from` (a centre, in pixels) along `direction` - a hero's names them by `hero`, their index, and online by `seq`, the input that fired it. */
+    Fire(from: Vec2Like, direction: Vec2Like, shot: ShotSetup, owner: ProjectileOwner, hero = -1, seq = -1): void {
+        this.projectiles.push(CreateProjectile(from, direction, shot, owner, TileSize, this.nextId++, hero, seq));
     }
 
     /**

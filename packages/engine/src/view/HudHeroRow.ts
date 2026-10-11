@@ -10,7 +10,7 @@ import {LightSpellState, LightSpellStatusOf} from "../level/entities/LightSpell"
 import type Hero from "../sim/Hero";
 
 /** What a HUD row shows of a hero - `Hero` has it all. */
-export type HudHero = Pick<Hero, "Alive" | "Health" | "Gold" | "EquippedWeapon" | "Inventory" | "Spell">;
+export type HudHero = Pick<Hero, "Alive" | "Gone" | "Health" | "Gold" | "EquippedWeapon" | "Inventory" | "Spell">;
 
 /** The hearts' pictures, if the game has its own (see `PlayerSetup.hearts`). */
 export type HeartTextures = {full: Texture; half: Texture; empty: Texture};
@@ -71,11 +71,14 @@ export default class HudHeroRow extends Container {
     private spellBar: UiProgressBar | null = null;
     private spellText: BitmapText;
     private items: Sprite[] = [];
-    private shown = {hearts: "", gold: -1, weapon: "", items: "", spell: "", alive: true};
+    private shown = {hearts: "", gold: -1, weapon: "", items: "", spell: "", status: ""};
+    /** Who they are, as the heading says. */
+    private playerName: string;
 
-    constructor(private theme: UiTheme, private index: number, private rowWidth: number, private heartTextures: HeartTextures | undefined) {
+    constructor(private theme: UiTheme, index: number, private rowWidth: number, private heartTextures: HeartTextures | undefined) {
         super();
-        this.heading = CreateText(theme, "PLAYER " + (index + 1), {colour: "muted"});
+        this.playerName = "PLAYER " + (index + 1);
+        this.heading = CreateText(theme, this.playerName, {colour: "muted"});
         this.addChild(this.heading);
 
         const top = Math.ceil(this.heading.textHeight) + Gap;
@@ -131,11 +134,19 @@ export default class HudHeroRow extends Container {
         this.RenderWeapon(hero.EquippedWeapon.icon);
         this.RenderItems(hero.Inventory.slots);
         this.RenderSpell(hero.Spell);
-        if (hero.Alive !== this.shown.alive) {
-            this.shown.alive = hero.Alive;
-            this.alpha = hero.Alive ? 1 : FallenAlpha;
-            this.heading.text = "PLAYER " + (this.index + 1) + (hero.Alive ? "" : "  DOWN");
+        const status = hero.Gone ? "LEFT" : hero.Alive ? "" : "DOWN";
+        if (status !== this.shown.status) {
+            this.shown.status = status;
+            this.alpha = status ? FallenAlpha : 1;
+            this.RenderHeading();
         }
+    }
+
+    /** Heads the row with `name` in place of "PLAYER n" - in the skin's `focus` colour for `own`, the player at this machine, among others who aren't. */
+    SetName(name: string, own: boolean): void {
+        this.playerName = name;
+        this.heading.tint = this.theme.Colour(own ? "focus" : "muted");
+        this.RenderHeading();
     }
 
     destroy(options?: {children?: boolean; texture?: boolean; baseTexture?: boolean}): void {
@@ -225,6 +236,10 @@ export default class HudHeroRow extends Container {
         if (this.spellBar) {
             this.spellBar.Value = fill;
         }
+    }
+
+    private RenderHeading(): void {
+        this.heading.text = this.playerName + (this.shown.status ? "  " + this.shown.status : "");
     }
 
     private ShowSpell(visible: boolean): void {

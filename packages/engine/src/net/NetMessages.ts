@@ -2,12 +2,12 @@
  * The dungeon's messages between players' machines, as they travel through
  * the relay (see lib's `RelaySession`): a byte for the kind, then the body -
  * JSON for the lobby's few small messages, bytes for a level. Play itself
- * (inputs, snapshots) joins them in a later version. Pure - no pixi - so it
- * runs under the plain node test runner.
+ * (inputs, snapshots) has kinds of its own, in `PlayMessages`. Pure - no pixi -
+ * so it runs under the plain node test runner.
  */
 
 /** The version of these messages: a guest on another is turned away (`refused`, "version"). Raise it whenever a message changes. */
-export const NetVersion = 1;
+export const NetVersion = 2;
 
 /** The most characters a player's name keeps. */
 export const NameLength = 12;

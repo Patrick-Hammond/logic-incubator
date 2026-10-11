@@ -23,6 +23,11 @@ export interface IPlayerInput {
     casting: boolean;
     /** Whether the warp control is held this frame - K on keyboard, a gamepad's X (its left face button) - which takes a hero far from the rest of the party to the nearest of them (see `World`). */
     warping?: boolean;
+    /**
+     * Online, which of a guest's inputs this is, counting up from 1 - the host says which it has played up to, and the
+     * guest puts its own hero right from there (see `GuestSession`). Left out offline, and for the host's own hero.
+     */
+    seq?: number;
 }
 
 /** What one hero is played with: the keyboard, a gamepad (by its browser index, from 0), or either - the keyboard wins while any key is down. */

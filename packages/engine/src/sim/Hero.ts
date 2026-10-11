@@ -21,6 +21,8 @@ import { BoxCentre, CentreTile, MoveCollider } from "../view/helpers/PlayerMovem
 
 export default class Hero implements EncounterPlayer {
     private state: PlayerState;
+    /** Whether their player has left an online game - see `Leave`. */
+    private gone = false;
 
     /** `Index` is their slot, from 0; `setup` is what every hero starts a level with. */
     constructor(readonly Index: number, private setup: Pick<PlayerSetup, "hitPoints" | "weapons">) {
@@ -34,6 +36,19 @@ export default class Hero implements EncounterPlayer {
 
     get Alive(): boolean {
         return !IsDead(this.state.health);
+    }
+
+    /** Whether their player has left the online game they were in (see `Leave`) - out of play, and not drawn. */
+    get Gone(): boolean {
+        return this.gone;
+    }
+
+    /**
+     * Their state, to change in place - for an online guest, whose heroes move as the host's snapshots say (see
+     * `GuestSession`) rather than by steps of their own. Everything else goes through the hero.
+     */
+    get Writable(): PlayerState {
+        return this.state;
     }
 
     /** Top-left of their one-tile collision box, in pixels, as of their last step. */
@@ -88,6 +103,13 @@ export default class Hero implements EncounterPlayer {
     /** Back to the start of a level, on tile `start`: full health, the setup's weapons, `lightSpell` if any, nothing collected. */
     Reset(start: Vec2Like, lightSpell?: LightSpell): void {
         this.state = CreatePlayerState(this.setup, start, lightSpell);
+        this.gone = false;
+    }
+
+    /** Their player has left the online game: they're out of play - down, as far as the rest of the party goes - and no longer drawn. */
+    Leave(): void {
+        this.gone = true;
+        this.state.health.hitPoints = 0;
     }
 
     /** Puts them at `position` (a top-left, in pixels) at once - nothing drawn between - their mage-light, if lit, moving with them. */

@@ -101,6 +101,11 @@ abstract class Lobby extends EventEmitter {
         return this.session.Code;
     }
 
+    /** The room on the relay - which play goes on in once the run has begun (see `CreateNetPlay`). */
+    get Session(): RelaySession {
+        return this.session;
+    }
+
     /** Everyone in the lobby, the host first. */
     get Seats(): ReadonlyArray<LobbySeat> {
         return this.seats;

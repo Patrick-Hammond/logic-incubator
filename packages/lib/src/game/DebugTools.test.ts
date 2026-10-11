@@ -148,3 +148,33 @@ describe("Emitter", () => {
         expect(warn).toHaveBeenCalledTimes(1);
     });
 });
+
+describe("Watch", () => {
+    const read = () => ["RTT 80 ms"];
+
+    it("opens a watch with its title and lines, and registers closing it with the component", () => {
+        const close = vi.fn();
+        const openWatch = vi.fn(() => close);
+        const own = vi.fn();
+
+        const returned = new DebugTools(own, () => true, undefined, undefined, openWatch).Watch("NET", read);
+
+        expect(openWatch).toHaveBeenCalledWith("NET", read);
+        expect(returned).toBe(close);
+        expect(own).toHaveBeenCalledWith(close);
+    });
+
+    it("does nothing in a production build: no watch, nothing to clean up, and one warning", () => {
+        const openWatch = vi.fn(() => () => undefined);
+        const own = vi.fn();
+        const tools = new DebugTools(own, () => false, undefined, undefined, openWatch);
+
+        const close = tools.Watch("NET", read);
+        tools.Watch("NET", read);
+
+        expect(openWatch).not.toHaveBeenCalled();
+        expect(own).not.toHaveBeenCalled();
+        expect(() => close()).not.toThrow();
+        expect(warn).toHaveBeenCalledTimes(1);
+    });
+});

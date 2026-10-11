@@ -3,7 +3,7 @@ import {CompositeTilemap} from "@logic-incubator/lib/tilemap";
 import AssetFactory from "@logic-incubator/lib/loading/AssetFactory";
 import {Vec2Like} from "@logic-incubator/lib/math/Geometry";
 import { TileSize } from "../Constants";
-import Encounter from "../Encounter";
+import type {EncounterView} from "../Encounter";
 import {Between} from "../FixedStep";
 import MonsterRoster from "../level/entities/MonsterRoster";
 import {Projectile} from "../level/entities/Projectiles";
@@ -89,8 +89,11 @@ export default class EntityRenderer {
         this.sprites = [];
     }
 
-    /** Draws the heroes (where each view was last `Place`d) and everything in the encounter `alpha` (0 to 1) of the way between their last two steps. */
-    Render(heroes: ReadonlyArray<HeroView>, encounter: Encounter, alpha = 1): void {
+    /**
+     * Draws the heroes (where each view was last `Place`d - but not one whose player has left) and everything in the
+     * encounter `alpha` (0 to 1) of the way between their last two steps.
+     */
+    Render(heroes: ReadonlyArray<HeroView>, encounter: EncounterView, alpha = 1): void {
         if (!this.glows || !this.entities || !this.orbs || !this.projectiles) {
             return;
         }
@@ -105,7 +108,7 @@ export default class EntityRenderer {
 
         this.AddSpawners(encounter, origin);
         this.AddMonsters(encounter, origin, alpha);
-        heroes.forEach(hero => this.AddHero(hero, origin));
+        heroes.forEach(hero => !hero.Hero.Gone && this.AddHero(hero, origin));
 
         drawables.sort((a, b) => a.feet - b.feet);
         this.entities.clear();
@@ -120,7 +123,7 @@ export default class EntityRenderer {
         this.RenderGlows(heroes, encounter, origin, alpha);
     }
 
-    private AddSpawners(encounter: Encounter, origin: {x: number; y: number}): void {
+    private AddSpawners(encounter: EncounterView, origin: {x: number; y: number}): void {
         const name = MonsterRoster.inst.SpawnerSprite;
         const frames = name != null ? this.Frames(name) : [];
         if (!frames.length) {
@@ -149,7 +152,7 @@ export default class EntityRenderer {
         });
     }
 
-    private AddMonsters(encounter: Encounter, origin: {x: number; y: number}, alpha: number): void {
+    private AddMonsters(encounter: EncounterView, origin: {x: number; y: number}, alpha: number): void {
         encounter.monsters.forEach(m => {
             const position = Between(m.previous, m.position, alpha, this.at);
             const tile = CentreTile(position);
@@ -195,7 +198,7 @@ export default class EntityRenderer {
         });
     }
 
-    private RenderProjectiles(encounter: Encounter, origin: {x: number; y: number}, alpha: number): void {
+    private RenderProjectiles(encounter: EncounterView, origin: {x: number; y: number}, alpha: number): void {
         const projectiles = encounter.projectiles;
         while (this.sprites.length < projectiles.length) {
             const sprite = new Sprite(Texture.EMPTY);
@@ -223,7 +226,7 @@ export default class EntityRenderer {
      * cast it, so a shot fired since has none until the next frame - and each hero's mage-light, a glow with a
      * bright core where it floats.
      */
-    private RenderGlows(heroes: ReadonlyArray<HeroView>, encounter: Encounter, origin: {x: number; y: number}, alpha: number): void {
+    private RenderGlows(heroes: ReadonlyArray<HeroView>, encounter: EncounterView, origin: {x: number; y: number}, alpha: number): void {
         this.glows.Begin();
         heroes.forEach(hero => {
             const carried = hero.Light;
