@@ -23,10 +23,13 @@ export default class UiItemSlot extends UiControl {
     private readonly skin: SlotSkin;
     private readonly frames = new Map<string, NineSlice>();
     private readonly icon = new Sprite();
+    /** What an empty slot shows of what goes in it (a helmet's outline in the helmet slot). */
+    private readonly placeholder = new Sprite();
     private readonly badge: BitmapText;
     private current: NineSlice | null = null;
     private item: SlotItem | null = null;
     private selected = false;
+    private hasPlaceholder = false;
 
     constructor(private readonly theme: UiTheme, variant: string) {
         super();
@@ -36,7 +39,8 @@ export default class UiItemSlot extends UiControl {
         }
         this.skin = skin;
         this.badge = CreateText(theme, "", { font: skin.countFont, colour: skin.countColour });
-        this.addChild(this.icon, this.badge);
+        this.placeholder.visible = false;
+        this.addChild(this.placeholder, this.icon, this.badge);
         this.SetHitSize(skin.size, skin.size);
         this.Redraw();
     }
@@ -48,6 +52,16 @@ export default class UiItemSlot extends UiControl {
 
     get Item(): SlotItem | null {
         return this.item;
+    }
+
+    /** What the slot shows while it is empty - a frame of the skin's bundle (`slot_icon_helmet`), drawn at its own size in the middle - or nothing (null). */
+    SetPlaceholder(frame: string | null): void {
+        if (frame) {
+            this.placeholder.texture = this.theme.Texture(frame);
+            this.placeholder.position.set(Math.floor((this.skin.size - this.placeholder.texture.width) / 2), Math.floor((this.skin.size - this.placeholder.texture.height) / 2));
+        }
+        this.hasPlaceholder = !!frame;
+        this.Refresh();
     }
 
     /** Puts an item in the slot, or empties it (null). */
@@ -98,6 +112,7 @@ export default class UiItemSlot extends UiControl {
         } else {
             this.icon.visible = false;
         }
+        this.placeholder.visible = this.hasPlaceholder && !this.item;
         const count = this.item && this.item.label ? this.item.label : this.item && this.item.count !== undefined && this.item.count > 1 ? String(this.item.count) : "";
         this.badge.text = count;
         this.badge.visible = !!count;

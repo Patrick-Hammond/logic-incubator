@@ -1,704 +1,1242 @@
 {
-	"bar_fill_amber": {
-		"width": 4,
-		"height": 14
+	"ability_frame": {
+		"width": 56,
+		"height": 56
 	},
-	"bar_fill_blue": {
-		"width": 4,
-		"height": 14
+	"bar_gold_fill": {
+		"width": 116,
+		"height": 8
 	},
-	"bar_fill_green": {
-		"width": 4,
-		"height": 14
+	"bar_hp_fill": {
+		"width": 116,
+		"height": 8
 	},
-	"bar_fill_red": {
-		"width": 4,
-		"height": 14
-	},
-	"bar_track": {
-		"width": 170,
-		"height": 22,
+	"bar_hp_track": {
+		"width": 128,
+		"height": 16,
 		"insets": {
 			"left": 6,
-			"top": 6,
+			"top": 0,
 			"right": 6,
-			"bottom": 6
+			"bottom": 0
 		}
 	},
-	"border_chain_cap_l": {
+	"bar_mp_fill": {
+		"width": 116,
+		"height": 4
+	},
+	"bar_mp_track": {
+		"width": 128,
+		"height": 12,
+		"insets": {
+			"left": 6,
+			"top": 0,
+			"right": 6,
+			"bottom": 0
+		}
+	},
+	"bar_xp_fill": {
+		"width": 116,
+		"height": 8
+	},
+	"border_separator_cap_l": {
 		"width": 24,
-		"height": 30
+		"height": 14
 	},
-	"border_chain_cap_r": {
+	"border_separator_cap_r": {
 		"width": 24,
-		"height": 30
+		"height": 14
 	},
-	"border_chain_centre": {
-		"width": 36,
-		"height": 30
+	"border_separator_centre": {
+		"width": 24,
+		"height": 14
 	},
-	"border_chain_mid": {
-		"width": 15,
-		"height": 30
+	"border_separator_light_cap_l": {
+		"width": 24,
+		"height": 14
 	},
-	"border_dotted_cap_l": {
-		"width": 16,
-		"height": 26
+	"border_separator_light_cap_r": {
+		"width": 24,
+		"height": 14
 	},
-	"border_dotted_cap_r": {
-		"width": 16,
-		"height": 26
+	"border_separator_light_centre": {
+		"width": 24,
+		"height": 14
 	},
-	"border_dotted_centre": {
-		"width": 52,
-		"height": 26
+	"border_separator_light_mid": {
+		"width": 2,
+		"height": 14
 	},
-	"border_dotted_mid": {
-		"width": 1,
-		"height": 26
+	"border_separator_mid": {
+		"width": 2,
+		"height": 14
 	},
-	"border_double_cap_l": {
-		"width": 12,
-		"height": 29
+	"btn_close_disabled": {
+		"width": 26,
+		"height": 26,
+		"insets": {
+			"left": 8,
+			"top": 8,
+			"right": 8,
+			"bottom": 8
+		}
 	},
-	"border_double_cap_r": {
-		"width": 12,
-		"height": 29
+	"btn_close_hover": {
+		"width": 26,
+		"height": 26,
+		"insets": {
+			"left": 8,
+			"top": 8,
+			"right": 8,
+			"bottom": 8
+		}
 	},
-	"border_double_centre": {
-		"width": 54,
-		"height": 29
+	"btn_close_normal": {
+		"width": 26,
+		"height": 26,
+		"insets": {
+			"left": 8,
+			"top": 8,
+			"right": 8,
+			"bottom": 8
+		}
 	},
-	"border_double_mid": {
-		"width": 1,
-		"height": 29
-	},
-	"border_thin_cap_l": {
-		"width": 12,
-		"height": 17
-	},
-	"border_thin_cap_r": {
-		"width": 12,
-		"height": 17
-	},
-	"border_thin_centre": {
-		"width": 18,
-		"height": 17
-	},
-	"border_thin_mid": {
-		"width": 1,
-		"height": 17
+	"btn_close_pressed": {
+		"width": 26,
+		"height": 26,
+		"insets": {
+			"left": 8,
+			"top": 8,
+			"right": 8,
+			"bottom": 8
+		}
 	},
 	"btn_confirm_disabled": {
-		"width": 167,
-		"height": 52,
+		"width": 32,
+		"height": 32,
 		"insets": {
-			"left": 12,
-			"top": 12,
-			"right": 12,
-			"bottom": 12
-		}
-	},
-	"btn_confirm_hover": {
-		"width": 167,
-		"height": 52,
-		"insets": {
-			"left": 12,
-			"top": 12,
-			"right": 12,
-			"bottom": 12
-		}
-	},
-	"btn_confirm_normal": {
-		"width": 167,
-		"height": 52,
-		"insets": {
-			"left": 12,
-			"top": 12,
-			"right": 12,
-			"bottom": 12
-		}
-	},
-	"btn_confirm_pressed": {
-		"width": 167,
-		"height": 52,
-		"insets": {
-			"left": 12,
-			"top": 12,
-			"right": 12,
-			"bottom": 12
-		}
-	},
-	"btn_danger_disabled": {
-		"width": 186,
-		"height": 52,
-		"insets": {
-			"left": 12,
-			"top": 12,
-			"right": 12,
-			"bottom": 12
-		}
-	},
-	"btn_danger_hover": {
-		"width": 186,
-		"height": 52,
-		"insets": {
-			"left": 12,
-			"top": 12,
-			"right": 12,
-			"bottom": 12
-		}
-	},
-	"btn_danger_normal": {
-		"width": 186,
-		"height": 52,
-		"insets": {
-			"left": 12,
-			"top": 12,
-			"right": 12,
-			"bottom": 12
-		}
-	},
-	"btn_danger_pressed": {
-		"width": 186,
-		"height": 52,
-		"insets": {
-			"left": 12,
-			"top": 12,
-			"right": 12,
-			"bottom": 12
-		}
-	},
-	"btn_icon_disabled": {
-		"width": 46,
-		"height": 49,
-		"insets": {
-			"left": 12,
-			"top": 12,
-			"right": 12,
-			"bottom": 12
-		}
-	},
-	"btn_icon_hover": {
-		"width": 46,
-		"height": 49,
-		"insets": {
-			"left": 12,
-			"top": 12,
-			"right": 12,
-			"bottom": 12
-		}
-	},
-	"btn_icon_normal": {
-		"width": 46,
-		"height": 49,
-		"insets": {
-			"left": 12,
-			"top": 12,
-			"right": 12,
-			"bottom": 12
-		}
-	},
-	"btn_icon_pressed": {
-		"width": 46,
-		"height": 49,
-		"insets": {
-			"left": 12,
-			"top": 12,
-			"right": 12,
-			"bottom": 12
-		}
-	},
-	"btn_primary_disabled": {
-		"width": 161,
-		"height": 47,
-		"insets": {
-			"left": 12,
-			"top": 12,
-			"right": 12,
-			"bottom": 12
-		}
-	},
-	"btn_primary_hover": {
-		"width": 167,
-		"height": 52,
-		"insets": {
-			"left": 12,
-			"top": 12,
-			"right": 12,
-			"bottom": 12
-		}
-	},
-	"btn_primary_normal": {
-		"width": 186,
-		"height": 52,
-		"insets": {
-			"left": 12,
-			"top": 12,
-			"right": 12,
-			"bottom": 12
-		}
-	},
-	"btn_primary_pressed": {
-		"width": 186,
-		"height": 48,
-		"insets": {
-			"left": 12,
-			"top": 12,
-			"right": 12,
-			"bottom": 12
-		}
-	},
-	"btn_secondary_disabled": {
-		"width": 206,
-		"height": 42,
-		"insets": {
-			"left": 12,
-			"top": 10,
-			"right": 12,
-			"bottom": 10
-		}
-	},
-	"btn_secondary_hover": {
-		"width": 206,
-		"height": 42,
-		"insets": {
-			"left": 12,
-			"top": 10,
-			"right": 12,
-			"bottom": 10
-		}
-	},
-	"btn_secondary_normal": {
-		"width": 206,
-		"height": 42,
-		"insets": {
-			"left": 12,
-			"top": 10,
-			"right": 12,
-			"bottom": 10
-		}
-	},
-	"btn_secondary_pressed": {
-		"width": 206,
-		"height": 42,
-		"insets": {
-			"left": 12,
-			"top": 10,
-			"right": 12,
-			"bottom": 10
-		}
-	},
-	"btn_small_disabled": {
-		"width": 138,
-		"height": 37,
-		"insets": {
-			"left": 10,
-			"top": 10,
-			"right": 10,
-			"bottom": 10
-		}
-	},
-	"btn_small_hover": {
-		"width": 138,
-		"height": 37,
-		"insets": {
-			"left": 10,
-			"top": 10,
-			"right": 10,
-			"bottom": 10
-		}
-	},
-	"btn_small_normal": {
-		"width": 138,
-		"height": 37,
-		"insets": {
-			"left": 10,
-			"top": 10,
-			"right": 10,
-			"bottom": 10
-		}
-	},
-	"btn_small_pressed": {
-		"width": 138,
-		"height": 37,
-		"insets": {
-			"left": 10,
-			"top": 10,
-			"right": 10,
-			"bottom": 10
-		}
-	},
-	"checkbox_off": {
-		"width": 28,
-		"height": 29
-	},
-	"checkbox_off_disabled": {
-		"width": 28,
-		"height": 29
-	},
-	"checkbox_off_hover": {
-		"width": 28,
-		"height": 29
-	},
-	"checkbox_on": {
-		"width": 28,
-		"height": 28
-	},
-	"checkbox_on_disabled": {
-		"width": 30,
-		"height": 26
-	},
-	"checkbox_on_hover": {
-		"width": 28,
-		"height": 28
-	},
-	"dialogue": {
-		"width": 285,
-		"height": 135,
-		"insets": {
-			"left": 16,
-			"top": 16,
-			"right": 16,
+			"left": 6,
+			"top": 4,
+			"right": 6,
 			"bottom": 16
 		}
 	},
-	"dialogue_arrow": {
-		"width": 19,
-		"height": 15
+	"btn_confirm_hover": {
+		"width": 32,
+		"height": 32,
+		"insets": {
+			"left": 6,
+			"top": 4,
+			"right": 6,
+			"bottom": 16
+		}
+	},
+	"btn_confirm_normal": {
+		"width": 32,
+		"height": 32,
+		"insets": {
+			"left": 6,
+			"top": 4,
+			"right": 6,
+			"bottom": 16
+		}
+	},
+	"btn_confirm_pressed": {
+		"width": 32,
+		"height": 32,
+		"insets": {
+			"left": 4,
+			"top": 6,
+			"right": 4,
+			"bottom": 4
+		}
+	},
+	"btn_danger_disabled": {
+		"width": 32,
+		"height": 32,
+		"insets": {
+			"left": 6,
+			"top": 4,
+			"right": 6,
+			"bottom": 16
+		}
+	},
+	"btn_danger_hover": {
+		"width": 32,
+		"height": 32,
+		"insets": {
+			"left": 6,
+			"top": 4,
+			"right": 6,
+			"bottom": 16
+		}
+	},
+	"btn_danger_normal": {
+		"width": 32,
+		"height": 32,
+		"insets": {
+			"left": 6,
+			"top": 4,
+			"right": 6,
+			"bottom": 16
+		}
+	},
+	"btn_danger_pressed": {
+		"width": 32,
+		"height": 32,
+		"insets": {
+			"left": 4,
+			"top": 6,
+			"right": 4,
+			"bottom": 4
+		}
+	},
+	"btn_icon_disabled": {
+		"width": 48,
+		"height": 50,
+		"insets": {
+			"left": 14,
+			"top": 14,
+			"right": 14,
+			"bottom": 16
+		}
+	},
+	"btn_icon_hover": {
+		"width": 48,
+		"height": 50,
+		"insets": {
+			"left": 14,
+			"top": 14,
+			"right": 14,
+			"bottom": 16
+		}
+	},
+	"btn_icon_normal": {
+		"width": 48,
+		"height": 50,
+		"insets": {
+			"left": 14,
+			"top": 14,
+			"right": 14,
+			"bottom": 16
+		}
+	},
+	"btn_icon_pressed": {
+		"width": 48,
+		"height": 50,
+		"insets": {
+			"left": 14,
+			"top": 14,
+			"right": 14,
+			"bottom": 16
+		}
+	},
+	"btn_primary_disabled": {
+		"width": 32,
+		"height": 32,
+		"insets": {
+			"left": 6,
+			"top": 4,
+			"right": 6,
+			"bottom": 16
+		}
+	},
+	"btn_primary_hover": {
+		"width": 32,
+		"height": 32,
+		"insets": {
+			"left": 6,
+			"top": 4,
+			"right": 6,
+			"bottom": 16
+		}
+	},
+	"btn_primary_normal": {
+		"width": 32,
+		"height": 32,
+		"insets": {
+			"left": 6,
+			"top": 4,
+			"right": 6,
+			"bottom": 16
+		}
+	},
+	"btn_primary_pressed": {
+		"width": 32,
+		"height": 32,
+		"insets": {
+			"left": 4,
+			"top": 6,
+			"right": 4,
+			"bottom": 4
+		}
+	},
+	"btn_reset_disabled": {
+		"width": 26,
+		"height": 26,
+		"insets": {
+			"left": 8,
+			"top": 8,
+			"right": 8,
+			"bottom": 8
+		}
+	},
+	"btn_reset_hover": {
+		"width": 26,
+		"height": 26,
+		"insets": {
+			"left": 8,
+			"top": 8,
+			"right": 8,
+			"bottom": 8
+		}
+	},
+	"btn_reset_normal": {
+		"width": 26,
+		"height": 26,
+		"insets": {
+			"left": 8,
+			"top": 8,
+			"right": 8,
+			"bottom": 8
+		}
+	},
+	"btn_reset_pressed": {
+		"width": 26,
+		"height": 26,
+		"insets": {
+			"left": 8,
+			"top": 8,
+			"right": 8,
+			"bottom": 8
+		}
+	},
+	"btn_validate_disabled": {
+		"width": 26,
+		"height": 26,
+		"insets": {
+			"left": 8,
+			"top": 8,
+			"right": 8,
+			"bottom": 8
+		}
+	},
+	"btn_validate_hover": {
+		"width": 26,
+		"height": 26,
+		"insets": {
+			"left": 8,
+			"top": 8,
+			"right": 8,
+			"bottom": 8
+		}
+	},
+	"btn_validate_normal": {
+		"width": 26,
+		"height": 26,
+		"insets": {
+			"left": 8,
+			"top": 8,
+			"right": 8,
+			"bottom": 8
+		}
+	},
+	"btn_validate_pressed": {
+		"width": 26,
+		"height": 26,
+		"insets": {
+			"left": 8,
+			"top": 8,
+			"right": 8,
+			"bottom": 8
+		}
+	},
+	"checkbox_off_disabled": {
+		"width": 32,
+		"height": 20
+	},
+	"checkbox_off_hover": {
+		"width": 32,
+		"height": 20
+	},
+	"checkbox_off_normal": {
+		"width": 32,
+		"height": 20
+	},
+	"checkbox_on_disabled": {
+		"width": 32,
+		"height": 20
+	},
+	"checkbox_on_hover": {
+		"width": 32,
+		"height": 20
+	},
+	"checkbox_on_normal": {
+		"width": 32,
+		"height": 20
+	},
+	"cursor_attack": {
+		"width": 32,
+		"height": 32
+	},
+	"cursor_default": {
+		"width": 32,
+		"height": 32
+	},
+	"cursor_pointer": {
+		"width": 32,
+		"height": 32
+	},
+	"cursor_pressed": {
+		"width": 32,
+		"height": 32
 	},
 	"field_disabled": {
-		"width": 350,
-		"height": 34,
+		"width": 96,
+		"height": 40,
 		"insets": {
-			"left": 12,
-			"top": 12,
-			"right": 12,
-			"bottom": 12
+			"left": 6,
+			"top": 8,
+			"right": 6,
+			"bottom": 8
 		}
 	},
 	"field_focused": {
-		"width": 350,
-		"height": 34,
+		"width": 96,
+		"height": 40,
 		"insets": {
-			"left": 12,
-			"top": 12,
-			"right": 12,
-			"bottom": 12
+			"left": 6,
+			"top": 8,
+			"right": 6,
+			"bottom": 8
 		}
 	},
 	"field_normal": {
-		"width": 350,
-		"height": 34,
+		"width": 96,
+		"height": 40,
 		"insets": {
-			"left": 12,
-			"top": 12,
-			"right": 12,
-			"bottom": 12
+			"left": 6,
+			"top": 8,
+			"right": 6,
+			"bottom": 8
 		}
+	},
+	"hud_player": {
+		"width": 232,
+		"height": 88
+	},
+	"hud_player_energy": {
+		"width": 116,
+		"height": 4
+	},
+	"hud_player_health": {
+		"width": 140,
+		"height": 8
 	},
 	"icon_arrow_down": {
 		"width": 32,
-		"height": 34
+		"height": 32
 	},
 	"icon_arrow_left": {
-		"width": 34,
+		"width": 32,
 		"height": 32
 	},
 	"icon_arrow_right": {
-		"width": 34,
+		"width": 32,
 		"height": 32
 	},
 	"icon_arrow_up": {
 		"width": 32,
-		"height": 34
-	},
-	"icon_close": {
-		"width": 28,
 		"height": 32
 	},
-	"icon_gear": {
-		"width": 34,
-		"height": 30
-	},
-	"icon_heart_empty": {
-		"width": 26,
-		"height": 26
-	},
-	"icon_heart_full": {
-		"width": 26,
-		"height": 24
-	},
-	"icon_heart_half": {
-		"width": 26,
-		"height": 26
-	},
-	"icon_music": {
-		"width": 28,
-		"height": 32
-	},
-	"icon_orb_empty": {
-		"width": 27,
-		"height": 25
-	},
-	"icon_orb_full": {
-		"width": 24,
-		"height": 24
-	},
-	"icon_pause": {
-		"width": 27,
-		"height": 27
-	},
-	"icon_speaker": {
+	"icon_bestiary": {
 		"width": 32,
 		"height": 32
 	},
-	"panel_plain": {
-		"width": 277,
-		"height": 182,
+	"icon_heart_empty": {
+		"width": 36,
+		"height": 32
+	},
+	"icon_heart_full": {
+		"width": 36,
+		"height": 32
+	},
+	"icon_heart_half": {
+		"width": 36,
+		"height": 32
+	},
+	"icon_help": {
+		"width": 32,
+		"height": 32
+	},
+	"icon_info": {
+		"width": 32,
+		"height": 32
+	},
+	"icon_locked": {
+		"width": 32,
+		"height": 32
+	},
+	"icon_medals": {
+		"width": 32,
+		"height": 32
+	},
+	"icon_menu": {
+		"width": 32,
+		"height": 32
+	},
+	"icon_quests": {
+		"width": 32,
+		"height": 32
+	},
+	"icon_settings": {
+		"width": 32,
+		"height": 32
+	},
+	"key_0": {
+		"width": 32,
+		"height": 32
+	},
+	"key_1": {
+		"width": 32,
+		"height": 32
+	},
+	"key_2": {
+		"width": 32,
+		"height": 32
+	},
+	"key_3": {
+		"width": 32,
+		"height": 32
+	},
+	"key_4": {
+		"width": 32,
+		"height": 32
+	},
+	"key_5": {
+		"width": 32,
+		"height": 32
+	},
+	"key_6": {
+		"width": 32,
+		"height": 32
+	},
+	"key_7": {
+		"width": 32,
+		"height": 32
+	},
+	"key_8": {
+		"width": 32,
+		"height": 32
+	},
+	"key_9": {
+		"width": 32,
+		"height": 32
+	},
+	"key_a": {
+		"width": 32,
+		"height": 32
+	},
+	"key_alt": {
+		"width": 64,
+		"height": 32
+	},
+	"key_b": {
+		"width": 32,
+		"height": 32
+	},
+	"key_c": {
+		"width": 32,
+		"height": 32
+	},
+	"key_ctrl": {
+		"width": 64,
+		"height": 32
+	},
+	"key_d": {
+		"width": 32,
+		"height": 32
+	},
+	"key_e": {
+		"width": 32,
+		"height": 32
+	},
+	"key_enter": {
+		"width": 96,
+		"height": 32
+	},
+	"key_f": {
+		"width": 32,
+		"height": 32
+	},
+	"key_g": {
+		"width": 32,
+		"height": 32
+	},
+	"key_h": {
+		"width": 32,
+		"height": 32
+	},
+	"key_i": {
+		"width": 32,
+		"height": 32
+	},
+	"key_j": {
+		"width": 32,
+		"height": 32
+	},
+	"key_k": {
+		"width": 32,
+		"height": 32
+	},
+	"key_l": {
+		"width": 32,
+		"height": 32
+	},
+	"key_m": {
+		"width": 32,
+		"height": 32
+	},
+	"key_n": {
+		"width": 32,
+		"height": 32
+	},
+	"key_o": {
+		"width": 32,
+		"height": 32
+	},
+	"key_p": {
+		"width": 32,
+		"height": 32
+	},
+	"key_q": {
+		"width": 32,
+		"height": 32
+	},
+	"key_r": {
+		"width": 32,
+		"height": 32
+	},
+	"key_s": {
+		"width": 32,
+		"height": 32
+	},
+	"key_shift": {
+		"width": 64,
+		"height": 32
+	},
+	"key_space": {
+		"width": 64,
+		"height": 32
+	},
+	"key_t": {
+		"width": 32,
+		"height": 32
+	},
+	"key_tab": {
+		"width": 64,
+		"height": 32
+	},
+	"key_u": {
+		"width": 32,
+		"height": 32
+	},
+	"key_v": {
+		"width": 32,
+		"height": 32
+	},
+	"key_w": {
+		"width": 32,
+		"height": 32
+	},
+	"key_x": {
+		"width": 32,
+		"height": 32
+	},
+	"key_y": {
+		"width": 32,
+		"height": 32
+	},
+	"key_z": {
+		"width": 32,
+		"height": 32
+	},
+	"mouse_left": {
+		"width": 32,
+		"height": 32
+	},
+	"mouse_right": {
+		"width": 32,
+		"height": 32
+	},
+	"mouse_wheel": {
+		"width": 32,
+		"height": 32
+	},
+	"name_plate": {
+		"width": 160,
+		"height": 32,
 		"insets": {
-			"left": 16,
-			"top": 16,
-			"right": 16,
-			"bottom": 16
+			"left": 44,
+			"top": 0,
+			"right": 44,
+			"bottom": 0
 		}
 	},
-	"portrait_frame": {
-		"width": 54,
-		"height": 52,
+	"pad_a": {
+		"width": 32,
+		"height": 32
+	},
+	"pad_a_pressed": {
+		"width": 32,
+		"height": 32
+	},
+	"pad_b": {
+		"width": 32,
+		"height": 32
+	},
+	"pad_b_pressed": {
+		"width": 32,
+		"height": 32
+	},
+	"pad_dpad": {
+		"width": 32,
+		"height": 32
+	},
+	"pad_dpad_d": {
+		"width": 32,
+		"height": 32
+	},
+	"pad_dpad_l": {
+		"width": 32,
+		"height": 32
+	},
+	"pad_dpad_r": {
+		"width": 32,
+		"height": 32
+	},
+	"pad_dpad_u": {
+		"width": 32,
+		"height": 32
+	},
+	"pad_l": {
+		"width": 32,
+		"height": 32
+	},
+	"pad_l2": {
+		"width": 32,
+		"height": 32
+	},
+	"pad_l2_pressed": {
+		"width": 32,
+		"height": 32
+	},
+	"pad_l_pressed": {
+		"width": 32,
+		"height": 32
+	},
+	"pad_r": {
+		"width": 32,
+		"height": 32
+	},
+	"pad_r2": {
+		"width": 32,
+		"height": 32
+	},
+	"pad_r2_pressed": {
+		"width": 32,
+		"height": 32
+	},
+	"pad_r_pressed": {
+		"width": 32,
+		"height": 32
+	},
+	"pad_x": {
+		"width": 32,
+		"height": 32
+	},
+	"pad_x_pressed": {
+		"width": 32,
+		"height": 32
+	},
+	"pad_y": {
+		"width": 32,
+		"height": 32
+	},
+	"pad_y_pressed": {
+		"width": 32,
+		"height": 32
+	},
+	"panel_carved": {
+		"width": 96,
+		"height": 96,
 		"insets": {
-			"left": 8,
-			"top": 8,
-			"right": 8,
+			"left": 2,
+			"top": 4,
+			"right": 2,
+			"bottom": 2
+		}
+	},
+	"panel_carved_light": {
+		"width": 96,
+		"height": 96,
+		"insets": {
+			"left": 2,
+			"top": 4,
+			"right": 2,
+			"bottom": 2
+		}
+	},
+	"panel_plain": {
+		"width": 96,
+		"height": 96,
+		"insets": {
+			"left": 24,
+			"top": 24,
+			"right": 24,
+			"bottom": 24
+		}
+	},
+	"panel_raised": {
+		"width": 96,
+		"height": 96,
+		"insets": {
+			"left": 4,
+			"top": 6,
+			"right": 4,
 			"bottom": 8
 		}
 	},
-	"radio_off": {
-		"width": 25,
-		"height": 29
+	"panel_raised_light": {
+		"width": 96,
+		"height": 96,
+		"insets": {
+			"left": 4,
+			"top": 6,
+			"right": 4,
+			"bottom": 8
+		}
 	},
 	"radio_off_disabled": {
-		"width": 25,
-		"height": 29
+		"width": 16,
+		"height": 16
 	},
 	"radio_off_hover": {
-		"width": 25,
-		"height": 29
+		"width": 16,
+		"height": 16
 	},
-	"radio_on": {
-		"width": 24,
-		"height": 29
+	"radio_off_normal": {
+		"width": 16,
+		"height": 16
 	},
 	"radio_on_disabled": {
-		"width": 24,
-		"height": 25
+		"width": 16,
+		"height": 16
 	},
 	"radio_on_hover": {
-		"width": 24,
-		"height": 29
+		"width": 16,
+		"height": 16
 	},
-	"scroll_thumb_disabled": {
-		"width": 138,
-		"height": 37,
-		"insets": {
-			"left": 10,
-			"top": 10,
-			"right": 10,
-			"bottom": 10
-		}
+	"radio_on_normal": {
+		"width": 16,
+		"height": 16
 	},
-	"scroll_thumb_hover": {
-		"width": 138,
-		"height": 37,
-		"insets": {
-			"left": 10,
-			"top": 10,
-			"right": 10,
-			"bottom": 10
-		}
+	"skill_health": {
+		"width": 48,
+		"height": 48
 	},
-	"scroll_thumb_normal": {
-		"width": 138,
-		"height": 37,
-		"insets": {
-			"left": 10,
-			"top": 10,
-			"right": 10,
-			"bottom": 10
-		}
+	"skill_health_locked": {
+		"width": 48,
+		"height": 48
 	},
-	"scroll_thumb_pressed": {
-		"width": 138,
-		"height": 37,
-		"insets": {
-			"left": 10,
-			"top": 10,
-			"right": 10,
-			"bottom": 10
-		}
+	"skill_inventory": {
+		"width": 48,
+		"height": 48
 	},
-	"scroll_track": {
-		"width": 22,
-		"height": 170,
-		"insets": {
-			"left": 6,
-			"top": 6,
-			"right": 6,
-			"bottom": 6
-		}
+	"skill_inventory_locked": {
+		"width": 48,
+		"height": 48
+	},
+	"skill_link_locked": {
+		"width": 8,
+		"height": 8
+	},
+	"skill_link_unlocked": {
+		"width": 8,
+		"height": 8
+	},
+	"skill_ring_locked": {
+		"width": 16,
+		"height": 16
+	},
+	"skill_ring_unlocked": {
+		"width": 16,
+		"height": 16
+	},
+	"skill_selected": {
+		"width": 52,
+		"height": 52
+	},
+	"skill_stat_boost": {
+		"width": 48,
+		"height": 48
+	},
+	"skill_stat_boost_locked": {
+		"width": 48,
+		"height": 48
+	},
+	"skill_strength": {
+		"width": 48,
+		"height": 48
+	},
+	"skill_strength_locked": {
+		"width": 48,
+		"height": 48
 	},
 	"slider_thumb_disabled": {
-		"width": 24,
-		"height": 32
+		"width": 26,
+		"height": 18
 	},
 	"slider_thumb_hover": {
-		"width": 24,
-		"height": 32
+		"width": 26,
+		"height": 18
 	},
 	"slider_thumb_normal": {
-		"width": 24,
-		"height": 32
+		"width": 26,
+		"height": 18
 	},
 	"slider_thumb_pressed": {
-		"width": 24,
-		"height": 32
+		"width": 26,
+		"height": 18
+	},
+	"slider_thumb_v_disabled": {
+		"width": 18,
+		"height": 26
+	},
+	"slider_thumb_v_hover": {
+		"width": 18,
+		"height": 26
+	},
+	"slider_thumb_v_normal": {
+		"width": 18,
+		"height": 26
+	},
+	"slider_thumb_v_pressed": {
+		"width": 18,
+		"height": 26
 	},
 	"slider_track": {
-		"width": 170,
-		"height": 22,
+		"width": 96,
+		"height": 14,
 		"insets": {
-			"left": 6,
-			"top": 6,
-			"right": 6,
-			"bottom": 6
+			"left": 32,
+			"top": 0,
+			"right": 32,
+			"bottom": 0
+		}
+	},
+	"slider_track_v": {
+		"width": 14,
+		"height": 96,
+		"insets": {
+			"left": 0,
+			"top": 32,
+			"right": 0,
+			"bottom": 32
 		}
 	},
 	"slot_disabled": {
-		"width": 54,
-		"height": 52,
+		"width": 40,
+		"height": 40,
 		"insets": {
-			"left": 8,
-			"top": 8,
-			"right": 8,
-			"bottom": 8
-		}
-	},
-	"slot_empty": {
-		"width": 54,
-		"height": 52,
-		"insets": {
-			"left": 8,
-			"top": 8,
-			"right": 8,
-			"bottom": 8
+			"left": 2,
+			"top": 4,
+			"right": 2,
+			"bottom": 2
 		}
 	},
 	"slot_hover": {
-		"width": 54,
-		"height": 52,
+		"width": 40,
+		"height": 40,
 		"insets": {
-			"left": 8,
-			"top": 8,
-			"right": 8,
-			"bottom": 8
+			"left": 2,
+			"top": 4,
+			"right": 2,
+			"bottom": 2
+		}
+	},
+	"slot_icon_boots": {
+		"width": 32,
+		"height": 32
+	},
+	"slot_icon_chestplate": {
+		"width": 32,
+		"height": 32
+	},
+	"slot_icon_helmet": {
+		"width": 32,
+		"height": 32
+	},
+	"slot_icon_leggings": {
+		"width": 32,
+		"height": 32
+	},
+	"slot_icon_ring": {
+		"width": 32,
+		"height": 32
+	},
+	"slot_icon_shield": {
+		"width": 32,
+		"height": 32
+	},
+	"slot_icon_sword": {
+		"width": 32,
+		"height": 32
+	},
+	"slot_normal": {
+		"width": 40,
+		"height": 40,
+		"insets": {
+			"left": 2,
+			"top": 4,
+			"right": 2,
+			"bottom": 2
 		}
 	},
 	"slot_selected": {
-		"width": 54,
-		"height": 52,
+		"width": 40,
+		"height": 40,
 		"insets": {
-			"left": 8,
-			"top": 8,
-			"right": 8,
-			"bottom": 8
+			"left": 2,
+			"top": 4,
+			"right": 2,
+			"bottom": 2
 		}
 	},
+	"status_armor": {
+		"width": 20,
+		"height": 20
+	},
+	"status_blood": {
+		"width": 20,
+		"height": 20
+	},
+	"status_boost": {
+		"width": 20,
+		"height": 20
+	},
+	"status_energy": {
+		"width": 20,
+		"height": 20
+	},
+	"status_fire": {
+		"width": 20,
+		"height": 20
+	},
+	"status_health": {
+		"width": 20,
+		"height": 20
+	},
+	"status_shield": {
+		"width": 20,
+		"height": 20
+	},
+	"status_skull": {
+		"width": 20,
+		"height": 20
+	},
+	"status_speed": {
+		"width": 20,
+		"height": 20
+	},
+	"status_strength": {
+		"width": 20,
+		"height": 20
+	},
+	"status_time": {
+		"width": 20,
+		"height": 20
+	},
+	"status_weapon": {
+		"width": 20,
+		"height": 20
+	},
+	"stick_l_d": {
+		"width": 32,
+		"height": 32
+	},
+	"stick_l_l": {
+		"width": 32,
+		"height": 32
+	},
+	"stick_l_r": {
+		"width": 32,
+		"height": 32
+	},
+	"stick_l_u": {
+		"width": 32,
+		"height": 32
+	},
+	"stick_r_d": {
+		"width": 32,
+		"height": 32
+	},
+	"stick_r_l": {
+		"width": 32,
+		"height": 32
+	},
+	"stick_r_r": {
+		"width": 32,
+		"height": 32
+	},
+	"stick_r_u": {
+		"width": 32,
+		"height": 32
+	},
 	"tab_active": {
-		"width": 107,
-		"height": 38,
+		"width": 54,
+		"height": 54,
 		"insets": {
-			"left": 12,
-			"top": 12,
-			"right": 12,
-			"bottom": 12
+			"left": 18,
+			"top": 18,
+			"right": 20,
+			"bottom": 0
 		}
 	},
 	"tab_disabled": {
-		"width": 62,
-		"height": 36,
+		"width": 50,
+		"height": 42,
 		"insets": {
-			"left": 10,
-			"top": 10,
-			"right": 10,
-			"bottom": 10
+			"left": 14,
+			"top": 14,
+			"right": 16,
+			"bottom": 0
 		}
 	},
 	"tab_hover": {
-		"width": 62,
-		"height": 36,
+		"width": 50,
+		"height": 42,
 		"insets": {
-			"left": 10,
-			"top": 10,
-			"right": 10,
-			"bottom": 10
+			"left": 14,
+			"top": 14,
+			"right": 16,
+			"bottom": 0
 		}
 	},
 	"tab_inactive": {
-		"width": 62,
-		"height": 36,
+		"width": 50,
+		"height": 42,
 		"insets": {
-			"left": 10,
-			"top": 10,
-			"right": 10,
-			"bottom": 10
+			"left": 14,
+			"top": 14,
+			"right": 16,
+			"bottom": 0
 		}
 	},
-	"toast_bad": {
-		"width": 248,
-		"height": 67,
+	"tab_side_active": {
+		"width": 54,
+		"height": 54,
 		"insets": {
-			"left": 16,
-			"top": 16,
-			"right": 16,
+			"left": 0,
+			"top": 18,
+			"right": 18,
+			"bottom": 20
+		}
+	},
+	"tab_side_disabled": {
+		"width": 42,
+		"height": 50,
+		"insets": {
+			"left": 0,
+			"top": 14,
+			"right": 14,
 			"bottom": 16
 		}
 	},
-	"toast_good": {
-		"width": 248,
-		"height": 62,
+	"tab_side_hover": {
+		"width": 42,
+		"height": 50,
 		"insets": {
-			"left": 16,
-			"top": 16,
-			"right": 16,
+			"left": 0,
+			"top": 14,
+			"right": 14,
 			"bottom": 16
 		}
 	},
-	"tooltip": {
-		"width": 212,
-		"height": 106,
+	"tab_side_inactive": {
+		"width": 42,
+		"height": 50,
 		"insets": {
-			"left": 16,
-			"top": 16,
-			"right": 16,
+			"left": 0,
+			"top": 14,
+			"right": 14,
 			"bottom": 16
 		}
 	},
-	"tooltip_tail_down": {
-		"width": 23,
-		"height": 12
+	"tier_1": {
+		"width": 10,
+		"height": 14
 	},
-	"tooltip_tail_up": {
-		"width": 23,
-		"height": 12
+	"tier_1_locked": {
+		"width": 10,
+		"height": 14
+	},
+	"tier_2": {
+		"width": 14,
+		"height": 14
+	},
+	"tier_2_locked": {
+		"width": 14,
+		"height": 14
+	},
+	"tier_3": {
+		"width": 18,
+		"height": 14
+	},
+	"tier_3_locked": {
+		"width": 18,
+		"height": 14
+	},
+	"tier_4": {
+		"width": 16,
+		"height": 14
+	},
+	"tier_4_locked": {
+		"width": 16,
+		"height": 14
+	},
+	"tier_5": {
+		"width": 10,
+		"height": 14
+	},
+	"tier_5_locked": {
+		"width": 10,
+		"height": 14
+	},
+	"tier_plus": {
+		"width": 14,
+		"height": 14
+	},
+	"tier_plus_locked": {
+		"width": 14,
+		"height": 14
+	},
+	"tile_marker_0": {
+		"width": 96,
+		"height": 96
+	},
+	"tile_marker_1": {
+		"width": 96,
+		"height": 96
 	},
 	"window_title": {
-		"width": 190,
-		"height": 37,
+		"width": 160,
+		"height": 40,
 		"insets": {
-			"left": 12,
-			"top": 12,
-			"right": 12,
-			"bottom": 12
+			"left": 44,
+			"top": 0,
+			"right": 44,
+			"bottom": 0
 		}
 	}
 }

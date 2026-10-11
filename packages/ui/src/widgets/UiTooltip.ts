@@ -12,14 +12,15 @@ export type TooltipContent = {
 };
 
 /**
- * A tooltip: a small framed note with an optional title and wrapped text, and a tail pointing at the thing it describes. It sits above that thing if there is room, below it
+ * A tooltip: a small framed note with an optional title and wrapped text, and (for a skin that draws one) a tail pointing at the thing it describes. It sits above that thing if there is room, below it
  * otherwise, and stays inside the bounds. Put it in the topmost layer, then either `ShowFor` something yourself or `Attach` it to a control, which shows it after the pointer
  * has rested there for the skin's delay (or at once when the control takes keyboard focus) and hides it when the pointer leaves or presses.
  */
 export default class UiTooltip extends Container {
     private readonly skin: TooltipSkin;
     private readonly measure: (text: string) => number;
-    private readonly tails: { down: Sprite; up: Sprite };
+    /** The pointers, for a skin that draws them. */
+    private readonly tails: { down: Sprite; up: Sprite } | null;
     private frame: NineSlice | null = null;
     private readonly body = new Container();
     private timer: ReturnType<typeof setTimeout> | null = null;
@@ -33,8 +34,9 @@ export default class UiTooltip extends Container {
         }
         this.skin = skin;
         this.measure = CreateMeasure(theme, skin.textFont);
-        this.tails = { down: new Sprite(theme.Texture(skin.tailDown)), up: new Sprite(theme.Texture(skin.tailUp)) };
-        this.addChild(this.body, this.tails.down, this.tails.up);
+        this.tails = skin.tailDown && skin.tailUp ? { down: new Sprite(theme.Texture(skin.tailDown)), up: new Sprite(theme.Texture(skin.tailUp)) } : null;
+        this.addChild(this.body);
+        if (this.tails) this.addChild(this.tails.down, this.tails.up);
         this.visible = false;
         // A tooltip is a picture; it never takes the pointer from what is under it.
         this.interactiveChildren = false;
@@ -56,11 +58,13 @@ export default class UiTooltip extends Container {
         this.Build(content);
         const place = this.PlaceFor(target, parent, bounds);
         this.position.set(place.x, place.y);
-        this.tails.down.visible = !place.below;
-        this.tails.up.visible = place.below;
-        const tail = place.below ? this.tails.up : this.tails.down;
-        const overlap = this.theme.Metric("tailOverlap", 2);
-        tail.position.set(place.tailX - Math.floor(tail.texture.width / 2), place.below ? -(tail.texture.height - overlap) : this.frame ? this.frame.SliceHeight - overlap : 0);
+        if (this.tails) {
+            this.tails.down.visible = !place.below;
+            this.tails.up.visible = place.below;
+            const tail = place.below ? this.tails.up : this.tails.down;
+            const overlap = this.theme.Metric("tailOverlap", 2);
+            tail.position.set(place.tailX - Math.floor(tail.texture.width / 2), place.below ? -(tail.texture.height - overlap) : this.frame ? this.frame.SliceHeight - overlap : 0);
+        }
         this.visible = true;
     }
 
@@ -147,7 +151,7 @@ export default class UiTooltip extends Container {
             { width: frame.SliceWidth, height: frame.SliceHeight },
             room,
             this.skin.gap,
-            this.tails.down.texture.height - this.theme.Metric("tailOverlap", 2),
+            this.tails ? this.tails.down.texture.height - this.theme.Metric("tailOverlap", 2) : 0,
             this.theme.Metric("tailMargin", 12)
         );
     }

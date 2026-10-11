@@ -7,7 +7,7 @@ import UiPanel from "./UiPanel";
 import { CreateText } from "./UiText";
 
 /**
- * A window: a panel with a title on a pill across its top edge and a close button in its corner. What goes in it is added to `content`, which sits inside the panel's padding and
+ * A window: a panel with a title on a plate across its top edge and a close button in its corner. What goes in it is added to `content`, which sits inside the panel's padding and
  * below the title. Emits `close` when the close button is pressed - what closing means (destroying it, hiding it, popping a focus scope) is the owner's.
  */
 export default class UiWindow extends Container {
@@ -30,7 +30,7 @@ export default class UiWindow extends Container {
         const pillWidth = Math.min(WindowWidth, Math.ceil(label.textWidth) + skin.titlePadding * 2);
         const pill = new NineSlice(theme.Texture(skin.title.frame), skin.title, pillWidth, skin.titleHeight);
         pill.position.set(Math.floor((WindowWidth - pillWidth) / 2), -skin.titleOffset);
-        label.position.set(pill.x + Math.floor((pillWidth - label.textWidth) / 2), pill.y + Math.floor((skin.titleHeight - label.textHeight) / 2));
+        label.position.set(pill.x + Math.floor((pillWidth - label.textWidth) / 2), pill.y + Math.floor((skin.titleHeight - label.textHeight) / 2) - (skin.titleRaise || 0));
         this.addChild(pill, label);
 
         if (skin.close) {
@@ -45,6 +45,16 @@ export default class UiWindow extends Container {
         const p = theme.skin.panels[skin.panel].padding;
         this.content.position.set(p.left, p.top + hanging);
         this.addChild(this.content);
+    }
+
+    /** How tall a window of a skin's variant has to be for `inner` pixels of room for its content (inside the panel's padding and below the title): a window sized to what it holds. */
+    static HeightFor(theme: UiTheme, variant: string, inner: number): number {
+        const skin = theme.skin.windows && theme.skin.windows[variant];
+        if (!skin) {
+            throw new Error(`The "${theme.skin.name}" skin has no window "${variant}".`);
+        }
+        const p = theme.skin.panels[skin.panel].padding;
+        return inner + p.top + p.bottom + Math.max(0, skin.titleHeight - skin.titleOffset);
     }
 
     /** The close button, if the window has one (to register it for focus). */

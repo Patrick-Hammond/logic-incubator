@@ -1890,7 +1890,8 @@ How it runs:
 # ui
 
 `@logic-incubator/ui` - a skinnable Pixi UI kit: widgets, keyboard / gamepad / pointer focus navigation, and the asset bundle (art, bitmap fonts, a skin) they are drawn from. Depends on `lib` only
-(`engine` and `editor` may use it; it never imports them). Sizes are in UI pixels, which the skin makes `scale` screen pixels each (1 in the game skin). Methods are PascalCase like the rest.
+(`engine` and `editor` may use it; it never imports them). Sizes are in UI pixels, which the skin makes `scale` screen pixels each (1 in the game skin, whose art - the Tiny Dungeons UI pack - is enlarged 2x when it is imported). Methods
+are PascalCase like the rest.
 
 ## UiLayer and ThemeFor
 
@@ -1914,7 +1915,7 @@ How it runs:
 | `focus: FocusManager` | `Focused`, `FocusVisible`, `Focus(id \| null)`, `Move(direction)`, `PushScope/PopScope`, `ConfigureScope(options, id?)` (`{ wrap?, onCancel?, onTab?, initial? }` - `onCancel` of the root scope is what cancel does with nothing open: a game's pause), `Subscribe(listener)`. |
 | `Register(control, options?): () => void` | Makes a `UiControl` focusable: `{ id?, scope?, neighbours?, scroll? }`. Hovering focuses it (no ring), the arrows move to the nearest enabled one in that direction, accept presses it. `scroll` scrolls that `UiScrollView` to a control moved to. Returns what undoes it; destroying the control does too. |
 | `PushScope(id, options?)` / `PopScope(id)` | A modal takes over focus and cancel until it is popped; focus goes back to what had it. Register a modal's controls first (with `scope: id`), then push, so the first can be focused at once when the keyboard or pad is in use. |
-| `Track(widget: { Update(ms) }): () => void` | Calls `widget.Update(ms)` every frame while the system is active (dialogue typing, toasts, a text field's caret). |
+| `Track(widget: { Update(ms) }): () => void` | Calls `widget.Update(ms)` every frame while the system is active (dialogue typing, toasts, a text field's caret, a tile marker). |
 | `RegisterScroll(view): () => void` | The mouse wheel scrolls `view` while the pointer is over it. |
 | `BindTabs(tabs, scope?)` | The tab keys (Q and E, the pad's shoulder buttons) step through a `UiTabs`. |
 | `SetActive(active)` / `Destroy()` | Whether it listens (a scene's UI shouldn't answer keys while another scene is up); tear-down. |
@@ -1928,43 +1929,64 @@ shoulder buttons step tabs. Held directions repeat (350 ms, then every 120 ms).
 
 | Member | Meaning |
 | --- | --- |
-| `Skin` | `{ name, bundle, scale, metrics?, fonts, colours, buttons, panels, borderStyles, bars, checkboxes?, radios?, sliders?, scrollbars?, tabs?, fields?, slots?, tooltips?, dialogues?, toasts?, windows?, iconRows?, menus? }` - each a record of named variants. `assets/ui/data/skin.json` is the game skin; `ParseSkin` turns its `"#rrggbb"` colours into numbers. |
-| `Skin.metrics` | Spacings no frame or font sets, by name, in UI pixels: `iconGap`, `lineGap`, `slotGap`, `scrollGap`, `scrollMargin`, `scrollStep`, `caretWidth`, `caretMargin`, `tailMargin`, `tailOverlap`, `slide`, `bob`, `ringGap`, `ringThickness`. A skin may leave any out. |
+| `Skin` | `{ name, bundle, scale, metrics?, fonts, colours, buttons, panels, borderStyles, bars, checkboxes?, radios?, sliders?, scrollbars?, tabs?, fields?, slots?, tooltips?, dialogues?, toasts?, windows?, iconRows?, menus?, selectors?, cursors?, playerFrames?, abilities?, skillTrees?, tileMarkers? }` - each a record of named variants. `assets/ui/data/skin.json` is the game skin; `ParseSkin` turns its `"#rrggbb"` colours into numbers. |
+| `NineSliceSkin` | `{ frame, insets, edges?, centre?, outset? }`: `edges` and `centre` are `"stretch"` or `"tile"`; `outset` draws the frame beyond the widget's box (a selected tab standing proud) without changing its size. |
+| Optional parts | `BarSkin.fillMode: "tile"` repeats a patterned fill; `SliderSkin.vertical` and `ScrollbarSkin.horizontal` are art for the other axis (without them the widget is turned on its side); `ScrollbarSkin.trackThickness` (a rail thinner than the grip) and `thumbLength` (a fixed grip); `TabSkin.width` (tabs of one size) and `vertical` (a column of side tabs); `TooltipSkin.tailDown`/`tailUp` are optional; `DialogueSkin.portraitBeside`, `portraitPadding`, `portraitOverlap` and `nameFrame`, `nameHeight`, `namePadding`, `nameInset`, `nameOffset`, `nameRaise` (a name plate across the box's top); `WindowSkin.titleRaise`, and `close.icon` is optional (a button whose art is the glyph). |
+| `Skin.metrics` | Spacings no frame or font sets, by name, in UI pixels: `iconGap`, `lineGap`, `slotGap`, `scrollGap`, `scrollMargin`, `scrollStep`, `caretWidth`, `caretMargin`, `tailMargin`, `tailOverlap`, `slide`, `bob`, `ringGap`, `ringThickness`, `statusGap`. A skin may leave any out. |
 | `LoadSkin(assets, bundle = "ui"): Skin` | The data asset `<bundle>.skin`, parsed, with each nine-slice's insets taken from `<bundle>.frames` (the frame index the art tools write) unless the skin gives them. |
 | `GameUiAssets(assets, bundle): UiAssets` | The skin's frames and fonts as the game's loaded bundle has them. |
-| `ValidateLoadedSkin(skin, assets): string[]` / `ValidateSkin` | What is wrong with a skin: a missing frame or font, an inset that leaves nothing of its frame. Empty when fine. |
-| `new UiTheme(skin, assets, host?)` | `Scale`, `Texture(frame)`, `FontName(key)`, `FontSize(key)`, `Colour(name)`, `Metric(name, fallback)`; `host` is `{ view: HTMLCanvasElement }` (only `UiTextInput` needs it). |
+| `ValidateLoadedSkin(skin, assets): string[]` / `ValidateSkin` | What is wrong with a skin: a missing frame or font, an inset that leaves nothing of its frame, a pointer's hot spot outside its picture, a tooltip with one tail. Empty when fine. |
+| `new UiTheme(skin, assets, host?)` | `Scale`, `Texture(frame)`, `HasTexture(frame)`, `FontName(key)`, `FontSize(key)`, `Colour(name)`, `Metric(name, fallback)`; `host` is `{ view: HTMLCanvasElement }` (only `UiTextInput` needs it). |
+
+## UiCursor
+
+`@logic-incubator/ui/UiCursor` - the skin's mouse pointers (`Skin.cursors`: `{ frame, x, y }` with the hot spot) on the canvas, as CSS cursors enlarged to the UI's pixel size.
+
+| Member | Meaning |
+| --- | --- |
+| `new UiCursor(theme, view, host)` | `host` is Pixi's interaction manager (`game.interactionManager`): its cursor modes show the skin's `default`, `pointer` (over anything with `buttonMode`) and `pressed` (while a button is held over it); any other pointer the skin has shows over a display object whose `cursor` is its name. Redrawn when the page resizes the canvas. |
+| `Default: string` | The pointer where nothing asks for another: `"default"`, or another of the skin's (`"attack"` over the dungeon). |
+| `Destroy()` | The browser's pointer back. |
+| `CursorScale(uiScale, shownWidth, canvasWidth)`, `CursorCss(url, cursor, scale)` | Pure: the whole-number size a pointer is drawn at, and its CSS value. |
 
 ## Widgets
 
-`@logic-incubator/ui/widgets/<Name>`. Every widget is built from a theme and a skin variant (`new UiSlider(theme, "default", 280, options)`) and sizes itself from the skin. A `UiControl` is a `Container` with
+`@logic-incubator/ui/widgets/<Name>`. Every widget is built from a theme and a skin variant (`new UiSlider(theme, "default", 140, options)`) and sizes itself from the skin. A `UiControl` is a `Container` with
 hover / pressed / disabled / focused states (`Enabled`, `Focused`, `State`, `Activate()`); its events are Pixi events: `activate` (a press completed by pointer or accept - not `click`, which Pixi emits itself),
 `focuschange`, `destroyed`. Pixi 5.2.1 doesn't announce a destroyed object, so `UiControl` and `UiScrollView` emit `destroyed` themselves; destroying a panel, window, menu or grid destroys what is in it.
 
 | Widget | Constructor and members | Events |
 | --- | --- | --- |
-| `UiButton extends UiControl` | `(theme, variant, text, { width?, height?, icon? })`; `ButtonWidth`, `ButtonHeight`, `SetLabel(text)`. Variants: primary, secondary, small, danger, confirm, icon. | `activate` |
+| `UiButton extends UiControl` | `(theme, variant, text, { width?, height?, icon? })`; `ButtonWidth`, `ButtonHeight`, `SetLabel(text)`. Variants: primary, secondary, small, danger, confirm, icon (with an `icon`), and close, reset, validate (the pack's round buttons, drawn with their glyph). | `activate` |
 | `UiMenu` | `(theme, variant, labels, width?)` - a column of buttons; `Buttons`, `MenuWidth`, `MenuHeight`. | `activate (index, button)` |
-| `UiCheckbox`, `UiRadio` (+ `UiRadioGroup`) | `(theme, variant, label, checked = false)`; `Checked`. A group makes exactly one radio chosen: `new UiRadioGroup(radios, selected)`, `Selected`, `Select(i)`. | `change (checked)`; group: `change (radio, index)` |
-| `UiSlider` | `(theme, variant, length, { min, max, step, value, vertical })`; `Value`. Takes the arrows along its axis when focused. | `change (value)` |
-| `UiTabs` | `(theme, variant, labels, selected = 0)`; `Tabs`, `Selected`, `Select(i, notify?)`, `Step(-1 \| 1)`, `OnChange(listener)`. The page each tab stands for is the screen's. | via `OnChange` |
-| `UiScrollbar`, `UiScrollView` | `UiScrollView(theme, scrollbarVariant \| null, width, height)`: add to `content`, then `MeasureContent()`; `Scroll`, `ScrollTo`, `ScrollBy`, `EnsureVisible(item)`, `ContentWidth`, `Scrollable`. The view clips to its size. | `scrolled` |
+| `UiCheckbox`, `UiRadio` (+ `UiRadioGroup`) | `(theme, variant, label, checked = false)`; `Checked`. The game skin draws a checkbox as a switch. A group makes exactly one radio chosen: `new UiRadioGroup(radios, selected)`, `Selected`, `Select(i)`. | `change (checked)`; group: `change (radio, index)` |
+| `UiSlider` | `(theme, variant, length, { min, max, step, value, vertical })`; `Value`, `SliderWidth`, `SliderHeight`. Takes the arrows along its axis when focused. | `change (value)` |
+| `UiSelector extends UiControl` | `(theme, variant, width, choices, { selected?, wrap? })` - a choice with an arrow either side; `Selected`, `Value`, `SetChoices(choices, selected?)`, `SelectorHeight`. Pressing an arrow (or left / right when focused) steps; accept steps on; without `wrap` the arrow at an end is dimmed. | `change (index, choice)` |
+| `UiTabs` | `(theme, variant, contents, options \| selected = 0)`: `contents` are labels or `{ icon }`; options `{ selected?, mirror? }` (`mirror` flips side tabs to hang off a panel's left edge). `Tabs`, `Selected`, `Select(i, notify?)`, `Step(-1 \| 1)`, `OnChange(listener)`, `StripWidth`, `StripHeight`. The skin's `side` tabs are a column. | via `OnChange` |
+| `UiScrollbar`, `UiScrollView` | `UiScrollbar(theme, variant, length, { horizontal? })`: `SetMetrics(content, viewport)`, `Scroll`. `UiScrollView(theme, scrollbarVariant \| null, width, height)`: add to `content`, then `MeasureContent()`; `Scroll`, `ScrollTo`, `ScrollBy`, `EnsureVisible(item)`, `ContentWidth`, `Scrollable`. The view clips to its size. | bar: `scroll`; view: `scrolled` |
 | `UiTextInput extends UiControl` | `(theme, variant, width, { placeholder?, maxLength?, allowed?: RegExp, label?, value? })`; `Value`, `Editing`, `Edit(index?)`, `EndEdit()`; `Track` it. A transparent native `<input>` over the field does the editing (IME, undo, clipboard are the browser's) and keeps typed keys from `game.keyboard`. Enter submits, Escape cancels. | `change (value)`, `submit`, `cancel`, `blur` |
-| `UiItemSlot extends UiControl`, `UiInventoryGrid` | `UiItemSlot(theme, variant)`: `SetItem({ texture, count?, label? } \| null)`, `Selected`, `SlotSize`; small art is enlarged by whole numbers to fill the slot. `UiInventoryGrid(theme, variant, columns, rows, gap?)`: `Slots`, `SetItems(items)`, `Select(i)`, `Selected`. | grid: `select (index)` |
+| `UiItemSlot extends UiControl`, `UiInventoryGrid` | `UiItemSlot(theme, variant)`: `SetItem({ texture, count?, label? } \| null)`, `SetPlaceholder(frame \| null)` (what an empty slot shows: `slot_icon_helmet`), `Selected`, `SlotSize`; small art is enlarged by whole numbers to fill the slot. `UiInventoryGrid(theme, variant, columns, rows, gap?)`: `Slots`, `SetItems(items)`, `Select(i)`, `Selected`. | grid: `select (index)` |
 | `UiIconRow` | `(theme, variant, count, { textures?, scale?, gap? })` - hearts, orbs; `SetValue(value, max)`, `RowWidth`, `RowHeight`. `textures` are the game's own pictures in place of the skin's. | |
-| `UiProgressBar` | `(theme, kind, width, value = 0)`; `Value` (0 to 1). Kinds: hp, mp, xp, gold. | |
-| `UiPanel`, `UiWindow`, `UiBorder` | `UiPanel(theme, variant, width, height)`: add to `content`, `InnerWidth`, `InnerHeight`, `Resize`. `UiWindow(theme, variant, width, height, title)`: a panel with a title pill and a close button (`CloseButton`), `content`, `InnerWidth`. `UiBorder(theme, style, width)`: an ornamental line (thin, double, chain, dotted); `LineHeight`, `Resize`. | window: `close` |
+| `UiProgressBar` | `(theme, kind, width, value = 0)`; `Value` (0 to 1), `BarWidth`, `BarHeight`. Kinds: hp, mp, xp, gold. | |
+| `UiPanel`, `UiWindow`, `UiBorder` | `UiPanel(theme, variant, width, height)`: add to `content`, `InnerWidth`, `InnerHeight`, `PanelWidth`, `Resize`; variants plain, ornate, carved, carved_light, raised, raised_light. `UiWindow(theme, variant, width, height, title)`: a panel with a title plate and a close button (`CloseButton`), `content`, `InnerWidth`, `InnerHeight`; `UiWindow.HeightFor(theme, variant, inner)` is the height that leaves `inner` for the content. `UiBorder(theme, style, width)`: an ornamental line (separator, separator_light); `LineHeight`, `Resize`. | window: `close` |
 | `UiTooltip` | `(theme, variant)`; put it in the topmost layer. `Attach(target, content \| () => content): () => void` shows it after the skin's `delay` of the pointer resting (at once on keyboard focus) and hides it on leave or press; `ShowFor(target, { title?, text? }, bounds?)`, `Hide()`. | |
-| `UiDialogue extends UiControl` | `(theme, variant, width, height)`; `Say({ speaker?, text, portrait? })`, `Done`, `Skip()`; `Track` it. A press while typing shows the rest, a press after that emits `advance`. | `advance` |
+| `UiDialogue extends UiControl` | `(theme, variant, width, height)`; `Say({ speaker?, text, portrait? })`, `Done`, `Skip()`; `Track` it. A press while typing shows the rest, a press after that emits `advance`. The game skin stands the portrait's frame beside the box and puts the name on a plate across its top, both standing above the box. | `advance` |
 | `UiToastHost` | `(theme, variant, max = 4)`; `Push({ title, text?, kind?, seconds? }): () => void` (dismisses it), `Count`, `HostWidth`; `Track` it. A press dismisses a toast; the rest wait their turn. | |
-| `NineSlice`, `UiText` | `NineSlice(texture, { insets, edges?, centre? }, width, height)`: whole-pixel nine-slice `Resize`. `CreateText(theme, text, { font?, colour?, align?, maxWidth? })`, `CreateMeasure(theme, font?)`: bitmap text drawn at the skin font's size. | |
+| `UiPlayerFrame` | `(theme, variant)` - a character's HUD frame: `SetPortrait(texture \| null)`, `Health`, `Energy` (0 to 1), `SetStatuses(frames)`, `FrameWidth`, `FrameHeight`. | |
+| `UiAbilitySlot` | `(theme, variant, icon?, glyph?)` - an ability in its frame with a prompt above: `SetIcon(texture \| null)`, `SetGlyph(frame, fallback?)`, `GlyphPressed`, `Cooldown` (1 just used, 0 ready), `SlotWidth`, `SlotHeight`. | |
+| `UiStatusRow` | `(theme, statuses?, gap?)` - status icons in a row: `SetStatuses(frames)` (the same list again does nothing), `RowWidth`. | |
+| `UiInputGlyph` | `(theme, glyph, { fallback? })` - a button prompt: `SetGlyph(glyph, fallback?)`, `Pressed` (the `_pressed` look where there is one), `GlyphWidth`, `GlyphHeight`; a glyph the bundle lacks is written as text. | |
+| `UiSkillTree`, `UiSkillNode extends UiControl` | `UiSkillTree(theme, variant, { skills: [{ id, x, y, icon, tier?, unlocked? }], rings?: [{ id, x, y, unlocked? }], links: [[id, id]] })` - skills and rings in grid cells, links straight between them, lit when both ends are unlocked. `Skills` (to register), `Selected`, `Select(id)`, `IsUnlocked(id)`, `SetUnlocked(id, unlocked)`, `TreeWidth`, `TreeHeight`. A node: `Id`, `Unlocked`, `Selected`; its locked look is its icon's name with `_locked`, its badge `tier_<tier>`. | tree: `select (id)` |
+| `UiTileMarker` (a `Sprite`) | `(theme, variant)` - brackets pulsing round a tile: `SetTile(x, y)` (the tile's top-left in its parent's pixels), `Update(ms)`, `Restart()`. | |
+| `NineSlice`, `UiText` | `NineSlice(texture, { insets, edges?, centre?, outset? }, width, height)`: whole-pixel nine-slice `Resize`, `SliceWidth`, `SliceHeight` (the box, not the outset). `CreateText(theme, text, { font?, colour?, align?, maxWidth? })`, `CreateMeasure(theme, font?)`: bitmap text drawn at the skin font's size. | |
 
 ## Pure rules
 
-Plain-Node modules the widgets are built on, each with unit tests: `geometry/SliceRects`, `geometry/BorderRects`, `widgets/ButtonLook`, `BarMath`, `SliderMath`, `ScrollMath`, `TextInputModel`, `Typewriter`
-(`Typewriter`, `WrapText`), `TooltipPlacement`, `ToastQueue`, `IconStates`, and `input/` `UiAction`, `KeyMap`, `PadMap`, `InputRepeater`, `UiInputCore`, `FocusManager`.
+Plain-Node modules the widgets are built on, each with unit tests: `geometry/SliceRects`, `geometry/BorderRects`, `widgets/ButtonLook`, `BarMath`, `SliderMath`, `SelectorMath` (`StepChoice`), `ScrollMath`,
+`TextInputModel`, `Typewriter` (`Typewriter`, `WrapText`), `TooltipPlacement`, `ToastQueue`, `IconStates`, `InputGlyphs` (`KeyGlyph`, `PadButtonGlyph`, `DpadGlyph`, `StickGlyph`, `MouseGlyph`,
+`PressedGlyph`), `SkillTreeLayout` (`NodeRect`, `LinkRect`, `TreeSize`), and `input/` `UiAction`, `KeyMap`, `PadMap`, `InputRepeater`, `UiInputCore`, `FocusManager`.
 
-The package's art tools (`packages/ui/tools`, run by plain node) are described in its README: extracting the art from the mockups, seeding derived states, the Aseprite template and slicer.
+The package's art tools (`packages/ui/tools`, run by plain node) are described in its README: importing the Tiny Dungeons pack (`import-pack.mjs`), the Aseprite template and slicer, and the font converter.
 
 ---
 

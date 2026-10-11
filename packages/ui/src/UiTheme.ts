@@ -74,6 +74,16 @@ export default class UiTheme {
         return this.assets.Texture(frame);
     }
 
+    /** Whether the skin's bundle has a picture called this (a prompt's pressed look, say, which not every prompt has). */
+    HasTexture(frame: string): boolean {
+        try {
+            this.assets.Texture(frame);
+            return true;
+        } catch {
+            return false;
+        }
+    }
+
     /** The name `BitmapText` knows the skin's font `key` (`body`, `heading`) by. */
     FontName(key: string): string {
         return this.assets.FontName(this.Font(key).id);

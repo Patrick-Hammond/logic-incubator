@@ -1,7 +1,10 @@
 # UI art in Aseprite
 
 The UI atlas as one Aseprite sprite: every frame is a *slice* named as the skin names it (`btn_primary_normal`...), on an 8-pixel grid. Draw in the slices, slice the sprite back
-into the game's atlas with one command. One pixel here is one screen pixel (the UI is drawn at 1x on the 1280x720 canvas).
+into the game's atlas with one command. One pixel here is one screen pixel (the UI is drawn at 1x on the 1280x720 canvas, and the pack's art is stored enlarged 2x, so draw in 2x2 blocks to keep its grain).
+
+The art comes from the Tiny Dungeons UI pack (`design/Tiny Dungeons - UI Pack`), which `tools/import-pack.mjs` turns into the atlas. Editing the pack's own files and
+importing again is the simpler round trip; this template is for drawing over the atlas as a whole. Once you edit here, don't import the pack again: it rewrites the sprites.
 
 1. **Start** (once). Open `ui-template.png` in Aseprite, then run `ui-template.lua` (File > Scripts > Open Scripts Folder, put the script there, Rescan, run it). It adds the
    slices (with nine-patch centres) and saves `ui.aseprite` beside the template. `ui-template-guide.png` is a map: each piece numbered, with a legend of names, sizes and nine-patch insets.

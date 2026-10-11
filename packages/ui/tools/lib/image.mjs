@@ -628,3 +628,91 @@ export function JoinColumns(left, right, split) {
     }
     return out;
 }
+
+/** The image mirrored across its top-left to bottom-right diagonal: a horizontal piece made vertical with its light still coming from the top-left (a turn would move it). */
+export function Transpose(img) {
+    const out = CreateImage(img.height, img.width);
+    for (let y = 0; y < img.height; y++) {
+        for (let x = 0; x < img.width; x++) {
+            out.data.set(img.data.subarray((y * img.width + x) * 4, (y * img.width + x) * 4 + 4), (x * out.width + y) * 4);
+        }
+    }
+    return out;
+}
+
+/** A copy with some colours swapped for others: `pairs` maps "#rrggbb" to "#rrggbb"; other colours, and alpha, are left alone. */
+export function Recolour(img, pairs) {
+    const hex = value => [1, 3, 5].map(i => parseInt(value.slice(i, i + 2), 16));
+    const map = new Map(Object.keys(pairs).map(from => [hex(from).join(","), hex(pairs[from])]));
+    const out = { width: img.width, height: img.height, data: new Uint8Array(img.data) };
+    for (let i = 0; i < out.data.length; i += 4) {
+        if (out.data[i + 3] === 0) continue;
+        const to = map.get(out.data[i] + "," + out.data[i + 1] + "," + out.data[i + 2]);
+        if (to) out.data.set(to, i);
+    }
+    return out;
+}
+
+/**
+ * Nine-slice insets that stretch a frame without changing how it looks: the middle is the longest run of identical columns (and of identical rows), which can be
+ * repeated as far as wanted, and the insets are what is either side of it. Where no two neighbouring columns (rows) match, the middle is the single middle one.
+ */
+export function AutoInsets(img) {
+    const same = (a, b, length, at) => {
+        for (let i = 0; i < length; i++) {
+            const p = at(a, i), q = at(b, i);
+            for (let c = 0; c < 4; c++) if (img.data[p + c] !== img.data[q + c]) return false;
+        }
+        return true;
+    };
+    const run = (count, length, at) => {
+        let best = { start: Math.floor((count - 1) / 2), end: Math.floor((count - 1) / 2) };
+        let start = 0;
+        for (let i = 1; i <= count; i++) {
+            if (i < count && same(i - 1, i, length, at)) continue;
+            if (i - 1 - start > best.end - best.start) best = { start, end: i - 1 };
+            start = i;
+        }
+        return best;
+    };
+    const columns = run(img.width, img.height, (x, y) => (y * img.width + x) * 4);
+    const rows = run(img.height, img.width, (y, x) => (y * img.width + x) * 4);
+    return { left: columns.start, top: rows.start, right: img.width - 1 - columns.end, bottom: img.height - 1 - rows.end };
+}
+
+function ToHsl(r, g, b) {
+    r /= 255;
+    g /= 255;
+    b /= 255;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b);
+    const l = (max + min) / 2;
+    if (max === min) return { h: 0, s: 0, l };
+    const d = max - min;
+    const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    const h = (max === r ? (g - b) / d + (g < b ? 6 : 0) : max === g ? (b - r) / d + 2 : (r - g) / d + 4) * 60;
+    return { h, s, l };
+}
+
+function FromHsl(h, s, l) {
+    const c = (1 - Math.abs(2 * l - 1)) * s;
+    const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+    const m = l - c / 2;
+    const [r, g, b] = h < 60 ? [c, x, 0] : h < 120 ? [x, c, 0] : h < 180 ? [0, c, x] : h < 240 ? [0, x, c] : h < 300 ? [x, 0, c] : [c, 0, x];
+    return [r, g, b].map(v => Math.max(0, Math.min(255, Math.round((v + m) * 255))));
+}
+
+/**
+ * A copy with its near-greys turned towards a hue: each colour with saturation at most `within` that is grey or blue-ish (hue 190 to 290) keeps its lightness, takes `hue`,
+ * and is given the saturation `saturation(lightness)` says (lightness and saturation 0 to 1). How a slate palette is made violet while its reds, greens, cream - and
+ * an already-saturated near-black - stay as they are. Alpha is untouched.
+ */
+export function TintNeutrals(img, hue, saturation, within = 0.35) {
+    const out = { width: img.width, height: img.height, data: new Uint8Array(img.data) };
+    for (let i = 0; i < out.data.length; i += 4) {
+        if (out.data[i + 3] === 0) continue;
+        const { h, s, l } = ToHsl(out.data[i], out.data[i + 1], out.data[i + 2]);
+        if (s > within || (s >= 0.12 && (h < 190 || h > 290))) continue;
+        out.data.set(FromHsl(hue, saturation(l), l), i);
+    }
+    return out;
+}

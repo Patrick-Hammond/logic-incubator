@@ -114,10 +114,11 @@ logic-incubator/
       src/                   DungeonMain, level/, sim/ (World, Hero), view/, input/, net/ (the online lobby), Events, Constants
       scripts/               asset-meta-plugin.js (a build plugin)
     ui/
-      src/                   skin/ (skin file, validation), widgets/, input/ (keys, pad, focus), UiLayer, UiTheme
+      src/                   skin/ (skin file, validation), widgets/, input/ (keys, pad, focus), UiLayer, UiTheme, UiCursor
       assets/ui/             the kit's art, bitmap fonts and skin, as an asset bundle
+      design/                the Tiny Dungeons UI pack the art comes from
       art/                   the Aseprite template for the art
-      tools/                 the art tools (extract, seed, slice) - plain Node
+      tools/                 the art tools (import the pack, template, slice) - plain Node
     editor/
       src/                   DungeonEditor, stores, views, map generators
       assets/editor/         the editor's icons and bitmap font, as an asset bundle
@@ -2354,8 +2355,9 @@ it was loaded with `LoadBundle` (pinned). `game.assets.Stats()` shows each bundl
 
 ## 14. The UI kit
 
-`@logic-incubator/ui` is a skinnable Pixi UI kit: buttons, menus, windows, sliders, checkboxes, tabs, scroll views, text fields, inventory slots, tooltips, dialogue boxes, toasts, progress bars and icon rows, with
-keyboard, gamepad and mouse navigation that works the same on all of them. It depends on `lib` only; the engine's HUD is built from it. Signatures are in the [API reference](api-reference.md#ui).
+`@logic-incubator/ui` is a skinnable Pixi UI kit: buttons, menus, windows, sliders, switches, choice selectors, tabs, scroll views, text fields, inventory slots, tooltips, dialogue boxes,
+toasts, progress bars and icon rows; HUD pieces, button prompts, a skill tree, mouse pointers and a tile marker; with keyboard, gamepad and mouse navigation that works the same on all
+of them. It depends on `lib` only; the engine's HUD is built from it. The game skin is the Tiny Dungeons UI pack, enlarged 2x. Signatures are in the [API reference](api-reference.md#ui).
 
 ### 14.1 Setting a game up
 
@@ -2383,10 +2385,13 @@ class TitleScreen extends GameComponent {
 
 A layer's input listens only while its scene is shown. A layer made with `new UiLayer({ input: false })` just shows things (the HUD).
 
+Sizes given to widgets are **UI pixels**, which the skin's `scale` multiplies - 1 in the game skin, so they are screen pixels (its art is enlarged instead, see 14.3). A position
+worked out from the canvas (`GameWidth / theme.Scale`) is in UI pixels too.
+
 ### 14.2 Focus, modals and the pause menu
 
 Registered controls form the focus order: the first arrow, d-pad or stick press focuses the first, then each moves to the nearest enabled one in that direction (wrapping at the ends), accept presses it,
-and a ring is drawn round the focused control while the keyboard or pad is in use (the pointer moving hides it; hovering still focuses). A slider takes left and right itself.
+and a ring is drawn round the focused control while the keyboard or pad is in use (the pointer moving hides it; hovering still focuses). A slider and a selector take left and right themselves.
 
 A modal - an options window, a pause menu - registers its controls in a scope of its own and pushes it; only those can be reached, cancel (Escape, B) runs the scope's `onCancel`, and focus goes back when it is popped:
 
@@ -2398,21 +2403,48 @@ ui.PopScope("options");
 ```
 
 What cancel does with nothing open is the root scope's `onCancel` - `ui.focus.ConfigureScope({ onCancel: () => OpenPause() })` is how `in-dungeons-we-dwell` pauses (Escape, B or the pad's Start).
-Anything that animates (a dialogue typing, toasts, a text field's caret) is given to `ui.Track(widget)`; the mouse wheel is given to a scroll view with `ui.RegisterScroll(view)`.
+Anything that animates (a dialogue typing, toasts, a text field's caret, a tile marker) is given to `ui.Track(widget)`; the mouse wheel is given to a scroll view with `ui.RegisterScroll(view)`.
+A window sized to what it holds asks `UiWindow.HeightFor(theme, variant, contentHeight)` for its height.
 
 ### 14.3 Skins, scale and the art
 
-Nothing in a widget fixes a size, colour, font or frame: it comes from the skin (`assets/ui/data/skin.json`): the `scale` (whole screen pixels per UI pixel - 1 for the game skin, so art pixels are screen pixels),
-the fonts (the game's `wonky_*` bitmap fonts, drawn at their native size), colours, each widget's frames and padding, and `metrics` for the few spacings no frame says. A different skin - 2x, or a compact one for tools -
-re-dresses the same widgets.
+Nothing in a widget fixes a size, colour, font or frame: it comes from the skin (`assets/ui/data/skin.json`): the `scale` (whole screen pixels per UI pixel - 1 for the game skin), the fonts
+(the game's `wonky_*` bitmap fonts, drawn at their own size, plus `subtitle`, `wonky_medium` at 40 for a name that needs room round it), colours, each widget's frames and padding, and `metrics` for the few spacings no frame says. A different skin - one drawn at 2x,
+or a compact one for tools - re-dresses the same widgets. Optional parts let a skin say more than the widget's basics: a frame drawn
+beyond its box (`outset` - the selected tab standing proud), a fill that repeats its pattern (`fillMode: "tile"`), separate art for a vertical slider or a horizontal scrollbar, a fixed-size
+scrollbar grip (`thumbLength`), a dialogue's portrait beside the box and a name plate across its top.
 
-The art is **full-size nine-slice frames**: a whole button, a whole panel, with each frame's corner insets recorded in `data/frames.json`; the game stretches the edges and middle to fit. (They can be cut down to a corner,
-an edge strip and a flat middle later to save space.) `packages/ui/art/` has an Aseprite template of every frame, laid out on one sheet with a slice per piece; draw there, then run
-`node packages/ui/tools/slice-sheet.mjs --aseprite=<Aseprite.exe> packages/ui/art/ui.aseprite` to write the sprites and `frames.json` back. Run `npm run assets` in the game after changing art so the atlas is rebuilt.
+The art is the **Tiny Dungeons UI pack** (`packages/ui/design/Tiny Dungeons - UI Pack`). It is drawn for a 480x270 screen, so `node packages/ui/tools/import-pack.mjs` enlarges every piece
+2x with nearest-neighbour scaling (each pixel a 2x2 block, never smoothed; `--scale=N` for another size) as it builds the bundle's sprites and `data/frames.json`: it copies the pieces, finds each stretchable frame's nine-slice insets from the art (the longest run of identical columns and rows is what stretches), and
+derives the looks the pack doesn't draw - hover and disabled states, a focused field, a selected slot, the vertical slider track, top-edge tabs, green and amber bar fills, hearts and radio
+rings. It also turns the pack's slate greys violet to match the game's first UI - each keeps its lightness and takes hue 245 (`--hue=<0-359>`, or `--hue=none` for the pack's
+own) - and makes the window's title plate taller so its title has room round it. To change the art, edit the pack's files and import again, then run `npm run assets` in the game so the atlas is rebuilt. `packages/ui/art/` also has an Aseprite template of the
+whole atlas (`slice-sheet.mjs` writes it back) for drawing over everything at once - after which the pack shouldn't be imported again, as that rewrites the sprites.
 
 ### 14.4 The gallery
 
-`in-dungeons-we-dwell` has a `UiGallery` scene (`#ui` on the dev build's address; Q and E change page) that shows every widget in the current skin - the place to look at a skin or art change, and the best reference for how each widget is used.
+`in-dungeons-we-dwell` has a `UiGallery` scene (`#ui` on the dev build's address; Q and E change page) that shows every widget in the current skin on four pages - basics, controls, game
+pieces and the HUD (the player frame, abilities, prompts, the pack's skill tree, the tile marker and the pointers) - the place to look at a skin or art change, and the best reference for how
+each widget is used.
+
+### 14.5 The pack's other pieces
+
+Beyond the widgets the game's screens use, the kit has a component for each of the pack's other pieces, ready for when the game wants them:
+
+- **`UiSelector`** - a choice stepped through with arrows either side of it (the pack's settings rows: language, screen size). Left and right step it when it has focus; it emits `change`.
+- **`UiCursor`** - the skin's mouse pointers on the canvas in place of the browser's: `new UiCursor(theme, game.view, game.interactionManager)`. It shows `default`, `pointer` over anything
+  pressable, `pressed` while the button is held, and any other pointer the skin has (`attack`) over a display object whose `cursor` is that name - or everywhere with `cursor.Default = "attack"`.
+  They are CSS cursors, so they never lag the mouse. `Destroy()` gives the browser's back.
+- **`UiInputGlyph`** - a button prompt (`key_e`, `pad_a`, `stick_l_u`, `mouse_left`), shown pressed with `Pressed`. `InputGlyphs` gives the prompt for a key code (`KeyGlyph`), a pad button
+  (`PadButtonGlyph`), the d-pad, a stick or a mouse button; a control the art doesn't draw comes back null, and a glyph the bundle lacks is written out as text.
+- **`UiPlayerFrame`** - a character's corner of the HUD: portrait, health and energy troughs (fractions, 0 to 1) and status icons.
+- **`UiAbilitySlot`** - an ability's icon in its frame, its button prompt above and a shade while it recharges (`Cooldown`, 1 to 0).
+- **`UiStatusRow`** - a row of status icons (`status_fire`, `status_shield`...), set every frame without cost.
+- **`UiSkillTree`** - skills on a grid joined through rings by straight links, each lit when both its ends are unlocked: `new UiSkillTree(theme, "default", { skills, rings, links })`,
+  `SetUnlocked(id, true)`, and a `select` event when a skill is pressed. Skills sit in the middle of grid cells (the skin's `cell`); a link turns only at a ring.
+- **`UiTileMarker`** - the brackets that pulse round the tile under the pointer; it goes in the map's own layer (`SetTile(x, y)` in its pixels) and is driven by `Update(ms)`.
+- **Equipment slots** - `slot.SetPlaceholder("slot_icon_helmet")` shows what goes in an empty slot.
+- **Side tabs** - `new UiTabs(theme, "side", [{ icon: "icon_settings" }, ...], { mirror: true })` hangs icon tabs down a panel's left edge (without `mirror`, its right).
 
 ---
 
