@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-Shared source for small browser games, built on **pixi.js 5.2.1** (pinned; the legacy `Loader`/`interaction` APIs, not pixi 6+). It is a library, not an application: there is nothing to build or run here and nothing is published. Games check this repo out beside their own (`../in-dungeons-we-dwell` uses lib + engine + editor + ui, `../catgrab` uses lib only) and compile it from source through `@logic-incubator/*` path aliases. `README.md` is a short overview; `docs/user-guide.md` and `docs/api-reference.md` are the detailed reference.
+Shared source for small browser games, built on **pixi.js 5.2.1** (pinned; the legacy `Loader`/`interaction` APIs, not pixi 6+). It is a library, not an application: apart from the relay server (`relay/`, below) there is nothing to build or run here and nothing is published. Games check this repo out beside their own (`../in-dungeons-we-dwell` uses lib + engine + editor + ui, `../catgrab` uses lib only) and compile it from source through `@logic-incubator/*` path aliases. `README.md` is a short overview; `docs/user-guide.md` and `docs/api-reference.md` are the detailed reference.
 
 ## Commands
 
@@ -19,8 +19,8 @@ npx vitest run packages/lib/src/game/GameComponent.test.ts -t "Track" # tests wh
 ```
 
 - `npm run lint` is **not clean at the moment** (about 16 errors and 8 warnings in older code, e.g. `tilemap/`); lint the folder you changed (`npx eslint packages/lib/src/debug`) and don't add to the pile.
-- A fresh git worktree has no `node_modules`: run `npm ci` in it before tsc, tests or eslint.
-- Tests are picked up from `packages/*/src/**/*.test.ts`, `packages/*/scripts/**/*.test.ts` and `packages/*/tools/**/*.test.mjs`.
+- A fresh git worktree has no `node_modules`: run `npm ci` in it before tsc, tests or eslint, and `npm ci --prefix relay` too (the relay has its own lock; without it `relay/server.test.mjs` fails on the missing `ws`). CI does both.
+- Tests are picked up from `packages/*/src/**/*.test.ts`, `packages/*/scripts/**/*.test.ts`, `packages/*/tools/**/*.test.mjs` and `relay/**/*.test.mjs`.
 - The asset build (`packages/lib/scripts/build-assets.js`, flags `--check --production --clean --report`) takes a **game's** `assets.config.json`, so it is run from a game, not here. `packages/ui/tools/*.mjs` are art tools run with plain node (see `packages/ui/README.md`).
 - To see a change in a browser, start a game's dev server: `.claude/launch.json` has `in-dungeons-we-dwell-dev` (port 4202) and `catgrab-dev` (port 4203). Those games compile the **main checkout** of this repo, not a worktree, so a worktree's edits don't reach them until merged there. After a lib change, also run the games' tests and a dev build (`npm run build` in each).
 
@@ -34,10 +34,12 @@ editor -> engine -> ui -> lib        (the editor also uses ui directly)
 
 `eslint.config.js` enforces this with `no-restricted-imports` per package (and bans relative imports into another package), so **that file is the source of truth**. The README, `docs/README.md` and the user guide describe all four (the user guide's chapter 14 is the UI kit).
 
-- `lib` - game framework: `Game`, `GameComponent`, `SceneManager`, the asset system (`src/assets`) and its Node build (`scripts/`), input (`io/`), tweening, vendored tilemap and particles, debug tools (`debug/`), small utilities. Also `html/`, the page the games are served in.
+- `lib` - game framework: `Game`, `GameComponent`, `SceneManager`, the asset system (`src/assets`) and its Node build (`scripts/`), input (`io/`), tweening, vendored tilemap and particles, debug tools (`debug/`), online play (`net/`: `Transport` and its WebSocket, loopback and lag-simulating forms, `ByteWriter`/`ByteReader`, the relay's room rules and `RelaySession`), small utilities. Also `html/`, the page the games are served in.
 - `ui` - skinnable widget kit (buttons, panels, menus, sliders...) plus keyboard/gamepad/mouse focus navigation, with its own `ui` asset bundle (`assets/ui`). Pure rules (`ButtonLook`, `SliderMath`, `FocusManager`...) are kept apart from the pixi widgets.
-- `engine` - top-down tile dungeon engine. It **owns the level format** (`level/LevelFormat.ts`); the editor only writes it. `DungeonMain` is the `GameComponent` that composes `Level` (pure data and rules) with the views in `view/`, driven by option callbacks from the game.
+- `engine` - top-down tile dungeon engine. It **owns the level format** (`level/LevelFormat.ts`); the editor only writes it. `DungeonMain` is the `GameComponent` that composes `Level` (pure data and rules) with the views in `view/`, driven by option callbacks from the game. `net/` is the online lobby (`HostLobby`/`GuestLobby`, its messages, and sending a level across).
 - `editor` - the level editor and a sprite editor, wired into development builds only. Its panels and dialogs are DOM, not pixi (`src/ui/dom`, `FormDialog`); `EditorComponent` gives its pieces shared static stores. Its icons and font are the `editor` asset bundle (`assets/editor`).
+
+`relay/` at the root is not a workspace: a standalone Node (>= 22.18) package with `ws` as its only dependency and its own `package-lock.json` (un-ignored in `.gitignore`), so the root lock and its pixi pins are untouched. `server.mjs` is the server; `Dockerfile` builds from the repo root (`docker build -f relay/Dockerfile .`). It is linted by its own block in `eslint.config.js`. It is hosted on Fly.io (`relay/fly.toml`), deployed by `.github/workflows/relay.yml` on pushes to master that touch it; it must stay one machine (`--ha=false`), because rooms live in memory.
 
 The `@logic-incubator/*` mapping lives in **three** places that must agree: `tsconfig.json` `paths`, `vitest.config.mts` `resolve.alias`, and each game's own tsconfig/webpack/vitest config. A new package or folder needs all of them plus the lint rules.
 
@@ -52,6 +54,8 @@ The `@logic-incubator/*` mapping lives in **three** places that must agree: `tsc
 **Vendored pixi code.** `lib/src/tilemap` (from `@pixi/tilemap` 3.2.1) and `lib/src/particles` (from `pixi-particles` 4.3.1) are owned forks with changes of their own (per-tile tint and flicker, bug fixes; `killRect`, a ticker argument). Each has a `README.md` listing what differs from upstream: update it when you change the fork. Edit them in place rather than patching `node_modules`.
 
 **Pinned pixi tree.** Root `package.json` `overrides` pin every `@pixi/*` package to 5.2.1, because a second copy of `@pixi/core` breaks the renderer. If you add a pixi sub-package, add it to the overrides too. Shader files (`.frag`/`.vert`) and their ambient `.d.ts` come in through the games' tsconfig `include`.
+
+**Online play** (`lib/src/net`, `engine/src/net`, `relay/`; user guide 9.3.2 and chapter 15). The relay's rules are `lib/src/net/RelayRooms.ts`, which `relay/server.mjs` imports **as TypeScript**, with Node stripping the types; the in-memory `LoopbackRelay` the tests use runs the same file. So that file must import nothing and use only erasable syntax (no enums, no parameter properties, no namespaces). The relay only matches room codes and forwards bytes; the lobby protocol (`engine/net/NetMessages.ts`, versioned by `NetVersion`) is between browsers, with the host's as the authority.
 
 **Debug tools** (`lib/src/game/DebugTools.ts`, `lib/src/debug/`). `this.debug.Drag(obj)` and `this.debug.Emitter(emitter)` on a `GameComponent` are DOM-based and dev-only (gated on `!assets.IsReady || assets.IsDev`); in a production build they do nothing but log a one-time warning, so calls left in are harmless but should be removed before shipping.
 

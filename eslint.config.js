@@ -31,6 +31,15 @@ module.exports = tseslint.config(
     rules: { '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }] }
   },
   {
+    // The relay server (ES modules, run by plain node 22.18+): a standalone program with its own package.json, not a workspace.
+    files: ['relay/**/*.mjs'],
+    languageOptions: {
+      sourceType: 'module',
+      globals: { ...NODE_GLOBALS, setInterval: 'readonly', clearInterval: 'readonly', fetch: 'readonly', WebSocket: 'readonly', globalThis: 'readonly' }
+    },
+    rules: { '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }] }
+  },
+  {
     files: ['**/*.ts', '**/*.tsx'],
     rules: {
       // TypeScript's own checker handles undefined identifiers.

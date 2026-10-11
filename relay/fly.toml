@@ -1,0 +1,36 @@
+# The relay on Fly.io (https://fly.io): one small machine, behind Fly's TLS, at wss://logic-incubator-relay.fly.dev.
+# Deployed from the repo root, since the image needs packages/lib's RelayRooms.ts (see .github/workflows/relay.yml):
+#   flyctl deploy . --config relay/fly.toml --dockerfile relay/Dockerfile --ignorefile relay/Dockerfile.dockerignore --ha=false
+# --ha=false matters: rooms live in the relay's memory, so a second machine would put a host and their guests apart.
+
+app = "logic-incubator-relay"
+primary_region = "lhr"
+
+[env]
+  PORT = "8787"
+  # The pages allowed to connect, comma-separated: the games on GitHub Pages (the published editor is under the same origin).
+  ALLOWED_ORIGINS = "https://patrick-hammond.github.io"
+
+[http_service]
+  internal_port = 8787
+  force_https = true
+  # Stopped when no one is connected, started again by the next connection (a second or two): an open game's sockets keep it up.
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [http_service.concurrency]
+    type = "connections"
+    soft_limit = 800
+    hard_limit = 1000
+
+  [[http_service.checks]]
+    grace_period = "10s"
+    interval = "30s"
+    timeout = "5s"
+    method = "GET"
+    path = "/health"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"

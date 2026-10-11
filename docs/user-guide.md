@@ -20,13 +20,15 @@ input, tweening, the dungeon engine and the level editor, with worked examples. 
 12. [Conventions and working on the workspace](#12-conventions-and-working-on-the-workspace)
 13. [Troubleshooting](#13-troubleshooting)
 14. [The UI kit](#14-the-ui-kit)
+15. [Networking and the relay](#15-networking-and-the-relay)
 
 ---
 
 ## 1. What logic-incubator is
 
-logic-incubator is the shared code that small browser games are built on. It is **not an application**: there is
-nothing to run in this repository. It is an npm workspace of four packages whose dependencies only point down:
+logic-incubator is the shared code that small browser games are built on. It is **not an application**: apart from the
+relay online games meet through, there is nothing to run in this repository. It is an npm workspace of four packages whose
+dependencies only point down:
 
 ```
 editor  ->  engine  ->  ui  ->  lib        (the editor may use ui too)
@@ -40,6 +42,9 @@ editor  ->  engine  ->  ui  ->  lib        (the editor may use ui too)
 | `packages/editor` | `@logic-incubator/editor/...` | A browser level editor for the engine's level format, with its own icons and font. |
 
 A game that only needs the framework (a puzzle game, say) uses `lib`. A dungeon crawler uses all four (the engine's HUD is drawn with the UI kit).
+
+Beside the packages, `relay/` is the one thing here that runs as a server: the small Node program online players meet through ([chapter 15](#15-networking-and-the-relay)).
+It isn't a workspace - it has its own `package.json` and lock.
 
 ### How games consume it
 
@@ -101,11 +106,12 @@ logic-incubator/
         tilemap/             vendored @pixi/tilemap with per-tile and per-corner tint, and flicker
         particles/           vendored pixi-particles: the particle Emitter
         colour/              colour transforms on 0xRRGGBB numbers: Darken, ShiftHue
+        net/                 online play: transports (WebSocket, in memory), the lag simulator, bytes, the relay's rules, RelaySession
         math/ patterns/ algorithms/ datastructures/ utils/ filters/
       scripts/               build-assets.js and its modules: the asset build (plain Node)
       html/                  index.template + index.styles.css the games are served in
     engine/
-      src/                   DungeonMain, level/, view/, input/, Events, Constants
+      src/                   DungeonMain, level/, sim/ (World, Hero), view/, input/, net/ (the online lobby), Events, Constants
       scripts/               asset-meta-plugin.js (a build plugin)
     ui/
       src/                   skin/ (skin file, validation), widgets/, input/ (keys, pad, focus), UiLayer, UiTheme
@@ -115,6 +121,7 @@ logic-incubator/
     editor/
       src/                   DungeonEditor, stores, views, map generators
       assets/editor/         the editor's icons and bitmap font, as an asset bundle
+  relay/                     the relay server (Node + ws, its own package.json), its tests and Dockerfile
 ```
 
 ---
@@ -1632,6 +1639,68 @@ What changes with more than one hero:
 There is no friendly fire and no bumping into each other. Everyone starts on the level's `player-start` cell or the open floor
 nearest it. The UI kit's menus (and so a pause menu) answer the keyboard and the first gamepad only.
 
+#### 9.3.2 Playing online
+
+Online, up to four players each play on their own machine, meeting in a **lobby** at the relay ([chapter 15](#15-networking-and-the-relay)).
+The engine's `HostLobby` and `GuestLobby` (`engine/net/Lobby`) are that lobby: who's in, who they picked, and the start - the level, the
+random numbers and the heroes every machine plays. The game draws it (in `in-dungeons-we-dwell`, the character select screen) and starts
+`DungeonMain` from it.
+
+```ts
+import RelaySession from "@logic-incubator/lib/net/RelaySession";
+import WebSocketTransport from "@logic-incubator/lib/net/WebSocketTransport";
+import { GuestLobby, HostLobby, LobbyEvents, LobbyStart } from "@logic-incubator/engine/net/Lobby";
+
+// The host opens a room and gets a code to share...
+const host = new HostLobby(await RelaySession.Host(await WebSocketTransport.Connect(relayUrl), "my-game"), "Ada");
+host.Code;                                    // "KXQTB"
+
+// ...a guest joins with it, saying which level is its own copy of the game's
+const guest = new GuestLobby(await RelaySession.Join(await WebSocketTransport.Connect(relayUrl), "my-game", "kxqtb"), {
+    name: "Sam",
+    shippedLevel: async bundle => { await game.assets.Acquire(bundle); return game.assets.Data(bundle + ".level"); },
+});
+
+// Each picks - picking is being ready. Once everyone has (host.CanStart), the host begins.
+host.Pick("witch");
+guest.Pick("warlock");
+beginButton.on("activate", () => host.CanStart && host.Start({ bundle: "level1", file: game.assets.Data("level1.level"), shipped: true }));
+
+// On every machine, from its own lobby (host or guest): the same start, but for `you`, this machine's seat.
+let online: LobbyStart | null = null;
+lobby.on(LobbyEvents.STARTED, (start: LobbyStart) => {
+    online = start;
+    game.sceneManager.ShowScene(Scenes.GAME);
+});
+
+new DungeonMain({
+    player: PlayerSetup,
+    level: () => (online ? online.level : game.assets.Data("level1.level")),
+    seed: () => (online ? online.seed : undefined),               // the same monsters on every machine
+    heroes: () => online ? online.seats.map((seat, i) => ({
+        input: i === online!.you ? DefaultInput : null,            // null: played on another machine
+        sprite: CharacterById(seat.character).run,
+    })) : undefined,                                               // undefined: one hero, played here
+});
+```
+
+Both lobbies emit `CHANGED` whenever someone joins, picks or leaves (redraw from `Seats`), `STARTED` with the start, and `CLOSED` when
+it's over; a guest's also emits `STARTING` while the level is made ready.
+
+- **The same level.** A game's own level - `shipped: true` - is named by its bundle and `LevelHash`: each guest plays its own copy if the
+  hash matches, and is sent the host's whole if it doesn't (another version of the game, say). Anything else - a dev build's editor level
+  - is sent whole to everyone as the run starts, gzipped (`PackLevel`). So a host can play their editor save with friends.
+- **The same random numbers.** The start carries a seed; `DungeonMainOptions.seed` hands it to the level's `Encounter`, so every machine
+  spawns the same monsters, in the same places.
+- **Your hero.** A `HeroSlot` with `input: null` is a hero played on another machine: nothing here moves them, and the camera keeps to the
+  heroes played here. A party spread over machines isn't held within one screen.
+- **Leaving.** The host leaving closes the room - every guest's lobby emits `CLOSED` with `host-left` (`LobbyClosedText` puts it in words).
+  A guest who leaves frees their seat. Once the run has started, latecomers are turned away (`started`), as is a guest on another
+  `NetVersion` (`version`).
+
+Play itself isn't shared yet: each machine runs its own copy of the level from the same start, so the heroes of the others stand where
+they started. Sharing play - the host's world sent to the guests, their inputs sent back - is the next step.
+
 ### 9.4 Monsters
 
 The engine knows no monsters: the game loads a **roster** before the editor or a level is created.
@@ -2344,3 +2413,79 @@ an edge strip and a flat middle later to save space.) `packages/ui/art/` has an 
 ### 14.4 The gallery
 
 `in-dungeons-we-dwell` has a `UiGallery` scene (`#ui` on the dev build's address; Q and E change page) that shows every widget in the current skin - the place to look at a skin or art change, and the best reference for how each widget is used.
+
+---
+
+## 15. Networking and the relay
+
+`lib/net` is what online play travels on, for any game; the relay is the server players meet through. Signatures are in the
+[API reference](api-reference.md#net). The dungeon's lobby on top of it is [9.3.2](#932-playing-online).
+
+### 15.1 How the pieces fit
+
+```
+browser (host)  --WebSocket-->  relay  <--WebSocket--  browser (guest)
+   RelaySession                rooms by code              RelaySession
+   HostLobby                   (passes bytes along)       GuestLobby
+```
+
+- A **`Transport`** carries whole messages, in order, between two ends: `WebSocketTransport` in a browser, `LoopbackPair` in memory.
+  What sits on top sees only the interface, so a direct WebRTC connection can be added later without changing it.
+- The **relay** puts players with the same five-letter room code together - one host and up to three guests - and passes their messages
+  along. It holds no game rules and runs no game: the host's browser does.
+- A **`RelaySession`** is one machine's place in a room: `Send(to, bytes)` to a peer by number (the host is 0), `Broadcast(bytes)`, and
+  events for messages, peers joining and leaving, and the end.
+- Messages are bytes: `ByteWriter` and `ByteReader` pack numbers and text, little-endian. A game puts a kind byte first and versions its
+  messages (the dungeon's are `engine/net/NetMessages`: JSON for the lobby's few small ones).
+
+### 15.2 Running the relay
+
+The relay is `relay/` at the root of this repo: a Node program (22.18 or newer) with `ws` as its only dependency. It isn't a workspace,
+so it has its own `package.json` and lock.
+
+```
+cd relay
+npm install
+npm start                       # ws://localhost:8787 - PORT, HOST, ALLOWED_ORIGINS, MAX_ROOMS in the environment
+```
+
+Its rules are `packages/lib/src/net/RelayRooms.ts`, which `server.mjs` imports as it is: Node strips the types. That is why that file
+imports nothing and uses only TypeScript that strips away (no enums, no parameter properties) - and why the browser's `LoopbackRelay`,
+running the same file, can't disagree with the server. `server.mjs` adds the sockets, a ping every 15 s that drops connections which
+stopped answering (freeing their seat), and `GET /health` (`{ ok, rooms, peers }`).
+
+The relay's tests (`relay/server.test.mjs`) start real servers and connect with Node's own WebSocket, and run with the rest under `npm test`
+once `npm install` has been run in `relay/` (CI does `npm ci --prefix relay`).
+
+### 15.3 Deploying it
+
+A page served over `https` (GitHub Pages) can only open `wss://` connections, so the deployed relay needs TLS - which hosts that run a
+Docker image give you. The image is built from the repo root, since the relay's rules live in `packages/lib`:
+
+```
+docker build -f relay/Dockerfile -t relay .
+docker run -p 8787:8787 -e ALLOWED_ORIGINS=https://you.github.io relay
+```
+
+`ALLOWED_ORIGINS` (comma-separated) turns away pages from anywhere else; left out, any page may connect. A game is built pointing at its
+relay - `in-dungeons-we-dwell` reads `RELAY_URL` when it's built, and `?relay=wss://...` on the page's address overrides it.
+
+The relay the published games use runs on Fly.io, set up by `relay/fly.toml` and deployed by `.github/workflows/relay.yml` whenever master
+changes it (the repository secret `FLY_API_TOKEN` lets it in). Rooms are kept in the relay's memory, so it must run as **one** machine -
+a second would put a host and their guests on different ones. `relay/README.md` has the first-time setup.
+
+### 15.4 Testing without a server
+
+`LoopbackRelay` is a relay in memory, with the real one's rules: each `Connect()` is a new connection to it. Messages arrive a moment after
+they're sent (a promise callback), so let them through before checking - `await new Promise(r => setTimeout(r, 0))` - or wait for the event.
+
+```ts
+const relay = new LoopbackRelay();
+const host = await RelaySession.Host(relay.Connect(), "my-game");
+const guest = await RelaySession.Join(relay.Connect(), "my-game", host.Code);
+guest.Send(0, new ByteWriter().U8(1).String("hello").ToBytes());
+```
+
+`WithLag(transport, { delayMs, jitterMs, lossChance })` slows a connection down - each message, each way, in order, now and then held up
+as if lost and sent again - to try play over a slow line. `in-dungeons-we-dwell` wraps its connection in it for `?lag=150` on the page's
+address.

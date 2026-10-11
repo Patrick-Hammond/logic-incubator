@@ -3,22 +3,26 @@
 code microbes.. microdes
 
 **Documentation: [`docs/`](docs/README.md)** - a [user guide](docs/user-guide.md) (setup, a first game, scenes, assets,
-input, the dungeon engine, the UI kit, the level editor, testing) and an [API reference](docs/api-reference.md).
+input, the dungeon engine, the UI kit, the level editor, networking, testing) and an [API reference](docs/api-reference.md).
 
-The shared code the games build on - there's nothing to run here. An npm workspace of four
+The shared code the games build on - apart from the relay below, there's nothing to run here. An npm workspace of four
 packages, whose dependencies only point down (editor -> engine -> ui -> lib; the editor may use `ui` too):
 
 - `packages/lib` - `@logic-incubator/lib`: game framework, asset bundles and their build
-  (`src/assets/`, `scripts/`), input, tweening, tilemap rendering, filters; plus the HTML page the
-  games are served in (`html/`)
+  (`src/assets/`, `scripts/`), input, tweening, tilemap rendering, filters, online transports and the
+  relay's room rules (`src/net/`); plus the HTML page the games are served in (`html/`)
 - `packages/engine` - `@logic-incubator/engine`: the top-down tile engine - level format and
-  loading, lighting and depth, heroes (one, or a couch party), monsters and combat; plus the build plugin that keeps a
-  game's `assets-meta.json` in step with its sprites (`scripts/`)
+  loading, lighting and depth, heroes (one, a couch party, or players online), monsters and combat, the online lobby
+  (`src/net/`); plus the build plugin that keeps a game's `assets-meta.json` in step with its sprites (`scripts/`)
 - `packages/ui` - `@logic-incubator/ui`: a skinnable Pixi UI kit - widgets, keyboard / gamepad /
   pointer focus, and its own art, bitmap fonts and skin (the `ui` asset bundle, in `assets/ui/`); the
   engine's HUD is built from it
 - `packages/editor` - `@logic-incubator/editor`: the level editor, and its own icons and font
   (the `editor` asset bundle, in `assets/editor/`)
+
+Beside them, `relay/` is the server online players meet through: a small Node program (`ws` its only dependency) that
+puts players with the same room code together and passes their messages along. It isn't a workspace and has its own
+lock - see [`relay/README.md`](relay/README.md) and chapter 15 of the user guide.
 
 Packages import each other by name (`@logic-incubator/lib/...`), mapped to their `src` folders in
 `tsconfig.json`; lint rules stop an import going the wrong way, or reaching into another package
@@ -53,4 +57,4 @@ sprite frames in `sprites/<sheet>/` are packed into an atlas at build time (no p
   its sounds and fonts out of pixi's process-wide tables.
 - **Sound** is opt-in: `Init(url, { sound: new PixiSoundAdapter() })` - only that file imports pixi-sound.
 
-`npm install` once, then `npm test` and `npm run lint` cover it here.
+`npm install` once (and `npm install --prefix relay` for the relay's tests), then `npm test` and `npm run lint` cover it here.

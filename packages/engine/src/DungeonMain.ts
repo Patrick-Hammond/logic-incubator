@@ -38,8 +38,11 @@ export type PlayerSetup = {
 
 /** One hero in a level and who plays them - see `DungeonMainOptions.heroes`. */
 export type HeroSlot = {
-    /** What they're played with - the keyboard or the first gamepad without it. */
-    input?: InputDevice;
+    /**
+     * What they're played with - the keyboard or the first gamepad without it. Null for a hero played on another
+     * machine, in an online run: nothing here moves them, and this screen's camera leaves them out (see `heroes`).
+     */
+    input?: InputDevice | null;
     /** The animation they're drawn with - `PlayerSetup.sprite` without it. */
     sprite?: string;
     /** Their light spell: null for none, `PlayerSetup.lightSpell` when left out. */
@@ -51,9 +54,17 @@ export type DungeonMainOptions = {
     /**
      * Who plays - one slot per hero, in order (the first is hero 0) - asked for each time a level starts,
      * like `level`. Undefined, or without it, there's one hero, played with the keyboard or the first
-     * gamepad, drawn and lit as `playerSprite` and `playerLightSpell` say.
+     * gamepad, drawn and lit as `playerSprite` and `playerLightSpell` say. The camera keeps to the heroes
+     * played on this machine (all of them, when none is), and a party all on this screen is held to what
+     * fits on it.
      */
     heroes?: () => ReadonlyArray<HeroSlot> | undefined;
+    /**
+     * The seed the level's random numbers start from (see `Encounter.Reset`), asked for each time a level
+     * starts, like `level` - how an online run's machines all spawn the same monsters. Undefined, or without
+     * it, a new one each time.
+     */
+    seed?: () => number | undefined;
     /**
      * The level to play - asked for each time the scene starts, and again on every restart. A game
      * returns its own shipped level, or in a dev build the level editor's latest save.
@@ -96,8 +107,10 @@ export class DungeonMain extends GameComponent {
     private level: Level | undefined;
 
     private camera: Camera | undefined;
-    /** Each hero's controls, by slot - remade as each level starts, from `heroes`. */
-    private controls: PlayerControl[] = [];
+    /** Each hero's controls, by slot - remade as each level starts, from `heroes`; null for one played on another machine. */
+    private controls: Array<PlayerControl | null> = [];
+    /** By slot: whether that hero is played on this machine - the ones the camera keeps to. */
+    private local: boolean[] = [];
     /** Each hero's looks, by slot - kept from level to level, and pointed at that level's heroes. */
     private views: HeroView[] = [];
     private world: World | undefined;
@@ -223,6 +236,7 @@ export class DungeonMain extends GameComponent {
         this.views.forEach(view => view.Destroy());
         this.views = [];
         this.controls = [];
+        this.local = [];
         this.level.Dispose();
         if (this.options.levelBundle && !this.game.assets.IsDestroyed) {
             // Lets go of the level's bundle (its textures go a frame later, once this scene has left the stage).
@@ -245,10 +259,13 @@ export class DungeonMain extends GameComponent {
     private OnLevelCreated(): void {
         const setup = this.options.player;
         const slots = this.Slots();
-        this.world.Reset(setup, slots.map(slot => (slot.lightSpell === undefined ? setup.lightSpell : slot.lightSpell || undefined)));
-        // A party shares one screen, so it's held to what fits on it.
-        this.world.SetLeash(slots.length > 1 ? PartySpan(this.BaseView()) : null);
-        this.controls = slots.map(slot => new PlayerControl(slot.input || DefaultInput));
+        const seed = this.options.seed && this.options.seed();
+        this.world.Reset(setup, slots.map(slot => (slot.lightSpell === undefined ? setup.lightSpell : slot.lightSpell || undefined)), seed);
+        this.local = slots.map(slot => slot.input !== null);
+        // A party sharing one screen is held to what fits on it; one spread over machines isn't.
+        const allHere = this.local.every(here => here);
+        this.world.SetLeash(slots.length > 1 && allHere ? PartySpan(this.BaseView()) : null);
+        this.controls = slots.map(slot => (slot.input === null ? null : new PlayerControl(slot.input || DefaultInput)));
         // Views are kept from level to level, so a hero's animation isn't remade on every restart.
         this.views.splice(slots.length).forEach(view => view.Destroy());
         this.world.Heroes.forEach((hero, i) => {
@@ -294,7 +311,7 @@ export class DungeonMain extends GameComponent {
         const steps = this.fixedStep.Advance(seconds);
         // A step can stop play - the last hero falls, or one gets out - and none run after that.
         for (let i = 0; i < steps && this.Running; i++) {
-            this.world.Step(this.controls.map(control => control.Get()), 1, StepSeconds);
+            this.world.Step(this.controls.map(control => (control ? control.Get() : undefined)), 1, StepSeconds);
         }
         const alpha = this.fixedStep.Alpha;
         this.views.forEach(view => view.Place(alpha));
@@ -321,23 +338,27 @@ export class DungeonMain extends GameComponent {
     }
 
     /**
-     * Keeps the camera on the heroes still standing - centred on the box round where they're drawn, zoomed out
-     * as far as it takes to show them all (see `PartyFrame`) and for the height the first of them stands at;
-     * on everyone, once they're all down. `frames` and `seconds` since the last display frame.
+     * Keeps the camera on the heroes played here (every hero, if none is) who are still standing - centred on the
+     * box round where they're drawn, zoomed out as far as it takes to show them all (see `PartyFrame`) and for the
+     * height the first of them stands at; on all of them, once they're all down. `frames` and `seconds` since the
+     * last display frame.
      */
     private MoveCamera(frames: number, seconds: number): void {
-        const anyStanding = this.views.some(view => view.Hero.Alive);
+        const anyHere = this.local.some(here => here);
+        const watched = (i: number) => !anyHere || this.local[i];
+        const anyStanding = this.views.some((view, i) => watched(i) && view.Hero.Alive);
+        const kept = (view: HeroView, i: number) => watched(i) && (view.Hero.Alive || !anyStanding);
         const followed = this.followed;
         followed.length = 0;
-        this.views.forEach(view => {
-            if (view.Hero.Alive || !anyStanding) {
+        this.views.forEach((view, i) => {
+            if (kept(view, i)) {
                 followed.push(view.DrawPosition);
             }
         });
         if (!followed.length) {
             return;
         }
-        const first = this.views.find(view => view.Hero.Alive || !anyStanding);
+        const first = this.views.find(kept);
         const tile = first.Hero.Tile;
         this.camera.SetZ(this.level.HeightAt(tile.x, tile.y));
         this.camera.UpdateZoom(seconds);

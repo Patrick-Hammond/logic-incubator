@@ -1,0 +1,42 @@
+name: Deploy the relay
+
+# Publishes relay/ to Fly.io (relay/fly.toml) when a push to master changes it - or its rules in packages/lib - and when run by hand.
+# Needs the repository secret FLY_API_TOKEN (a deploy token: `fly tokens create deploy -a logic-incubator-relay`); without it the
+# run says so and stops, rather than failing every push.
+on:
+  push:
+    branches: [master]
+    paths:
+      - relay/**
+      - packages/lib/src/net/RelayRooms.ts
+      - .github/workflows/relay.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: relay-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+    steps:
+      - name: Check for the Fly token
+        if: env.FLY_API_TOKEN == ''
+        run: echo "::notice::FLY_API_TOKEN isn't set, so the relay wasn't deployed. See relay/README.md."
+
+      - uses: actions/checkout@v7
+        if: env.FLY_API_TOKEN != ''
+
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+        if: env.FLY_API_TOKEN != ''
+
+      # From the repo root, which is the image's build context (see relay/Dockerfile). --ha=false keeps it to one machine: rooms are
+      # held in memory, so every player has to reach the same one.
+      - name: Deploy
+        if: env.FLY_API_TOKEN != ''
+        run: flyctl deploy . --config relay/fly.toml --dockerfile relay/Dockerfile --ignorefile relay/Dockerfile.dockerignore --ha=false --remote-only
