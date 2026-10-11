@@ -35,7 +35,11 @@ const GROUPS = [
     { title: "TABS", match: /^tab_/, colour: [96, 196, 196] },
     { title: "TEXT FIELDS", match: /^field_/, colour: [196, 128, 96] },
     { title: "INVENTORY SLOTS", match: /^slot_/, colour: [128, 196, 96] },
-    { title: "ICONS", match: /^icon_/, colour: [196, 96, 176] }
+    { title: "ICONS", match: /^(icon_|status_)/, colour: [196, 96, 176] },
+    { title: "HUD", match: /^(hud_|ability_)/, colour: [96, 128, 196] },
+    { title: "POINTERS", match: /^(cursor_|tile_marker_)/, colour: [196, 196, 96] },
+    { title: "BUTTON PROMPTS", match: /^(key_|pad_|stick_|mouse_)/, colour: [176, 128, 96] },
+    { title: "SKILL TREE", match: /^(skill_|tier_)/, colour: [128, 96, 196] }
 ];
 
 const read = file => {
@@ -139,7 +143,8 @@ writeFileSync(
 const font = LoadFont(join(uiDir, "assets/ui/fonts/wonky_small.fnt"));
 const LEGEND_COLUMN = SHEET_WIDTH * GUIDE_SCALE;
 const legendLines = placed.length;
-const legendRows = Math.ceil(legendLines / 3);
+const LEGEND_COLUMNS = 3;
+const legendRows = Math.ceil(legendLines / LEGEND_COLUMNS);
 const guide = CreateImage(SHEET_WIDTH * GUIDE_SCALE, height * GUIDE_SCALE + legendRows * font.lineHeight + 40, [18, 20, 34, 255]);
 for (let y = 0; y < height * GUIDE_SCALE; y++) {
     for (let x = 0; x < guide.width; x++) {
@@ -155,14 +160,17 @@ placed.forEach((p, i) => {
 placed.forEach((p, i) => {
     const insets = frames[p.name] && frames[p.name].insets;
     const text = `${i + 1} ${p.name}  ${p.width}x${p.height}${insets ? "  9: " + [insets.left, insets.top, insets.right, insets.bottom].join(",") : ""}`;
-    DrawText(guide, font, text, (i % 3) * (LEGEND_COLUMN / 3) + 12, height * GUIDE_SCALE + 20 + Math.floor(i / 3) * font.lineHeight, [210, 210, 235]);
+    DrawText(guide, font, text, (i % LEGEND_COLUMNS) * (LEGEND_COLUMN / LEGEND_COLUMNS) + 12, height * GUIDE_SCALE + 20 + Math.floor(i / LEGEND_COLUMNS) * font.lineHeight, [210, 210, 235]);
 });
 write(join(artDir, "ui-template-guide.png"), guide);
 
 writeFileSync(join(artDir, "README.md"), `# UI art in Aseprite
 
 The UI atlas as one Aseprite sprite: every frame is a *slice* named as the skin names it (\`btn_primary_normal\`...), on an 8-pixel grid. Draw in the slices, slice the sprite back
-into the game's atlas with one command. One pixel here is one screen pixel (the UI is drawn at 1x on the 1280x720 canvas).
+into the game's atlas with one command. One pixel here is one screen pixel (the UI is drawn at 1x on the 1280x720 canvas, and the pack's art is stored enlarged 2x, so draw in 2x2 blocks to keep its grain).
+
+The art comes from the Tiny Dungeons UI pack (\`design/Tiny Dungeons - UI Pack\`), which \`tools/import-pack.mjs\` turns into the atlas. Editing the pack's own files and
+importing again is the simpler round trip; this template is for drawing over the atlas as a whole. Once you edit here, don't import the pack again: it rewrites the sprites.
 
 1. **Start** (once). Open \`ui-template.png\` in Aseprite, then run \`ui-template.lua\` (File > Scripts > Open Scripts Folder, put the script there, Rescan, run it). It adds the
    slices (with nine-patch centres) and saves \`ui.aseprite\` beside the template. \`ui-template-guide.png\` is a map: each piece numbered, with a legend of names, sizes and nine-patch insets.

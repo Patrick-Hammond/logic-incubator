@@ -20,6 +20,11 @@ export type NineSliceSkin = {
     /** The four edges; stretched by default. */
     edges?: SliceMode;
     centre?: SliceMode;
+    /**
+     * How far the frame is drawn beyond the widget's box on each side: a selected tab that stands taller than the others, or a highlight round a slot. The widget's size, and
+     * where its content sits, don't change.
+     */
+    outset?: Insets;
 };
 
 export type ButtonState = "normal" | "hover" | "pressed" | "disabled" | "focused";
@@ -67,8 +72,10 @@ export type BarSkin = {
     track: NineSliceSkin;
     /** The track's height in UI pixels: its frame is a small nine-slice source, so its own height says nothing about the bar's. */
     height: number;
-    /** The fill: a picture stretched to the filled width. */
+    /** The fill: a picture stretched (or repeated) to the filled width. */
     fill: string;
+    /** "tile" repeats the fill's picture along the bar - for a fill with a pattern, which stretching would smear; stretched by default. */
+    fillMode?: SliceMode;
     /** Where the fill sits inside the track. */
     fillPadding: Insets;
 };
@@ -99,28 +106,44 @@ export type ToggleSkin = {
     textColour: StateColours;
 };
 
-export type SliderSkin = {
+/** A slider's art along one axis: the track (stretched along it) and the thumb (a picture at its own size). */
+export type SliderAxisSkin = {
     track: NineSliceSkin;
     /** The track's thickness (its length is the slider's). */
     thickness: number;
     thumb: FrameStates;
+};
+
+export type SliderSkin = SliderAxisSkin & {
     /** A picture stretched from the start of the track to the thumb, if the track fills as it goes. */
     fill?: string;
     fillPadding?: Insets;
+    /** The art of a vertical slider; without it a vertical slider is the horizontal one turned on its side. */
+    vertical?: SliderAxisSkin;
 };
 
-export type ScrollbarSkin = {
-    /** How wide a vertical scrollbar is (how tall a horizontal one). */
-    thickness: number;
+/** A scrollbar's art along one axis: the track, and the thumb in each state. */
+export type ScrollbarAxisSkin = {
     track: NineSliceSkin;
     thumb: { normal: NineSliceSkin } & Partial<Record<Exclude<ButtonState, "normal">, NineSliceSkin>>;
-    /** The shortest the thumb gets, however much there is to scroll. */
-    minThumb: number;
-    /** The arrow buttons at the ends, if it has them: a button variant, and the glyph frames. */
-    arrows?: { button: string; up: string; down: string; left: string; right: string };
 };
 
-/** A row of tabs: the look of each state, and how a label sits in a tab. */
+export type ScrollbarSkin = ScrollbarAxisSkin & {
+    /** How wide a vertical scrollbar is (how tall a horizontal one). */
+    thickness: number;
+    /** The track's own thickness, centred in the bar's, when it is thinner than the thumb (a rail for a grip); the bar's by default. */
+    trackThickness?: number;
+    /** The shortest the thumb gets, however much there is to scroll. */
+    minThumb: number;
+    /** A thumb this long whatever is in view - a grip rather than a gauge of how much shows; by default it is as long as the share of the content in view. */
+    thumbLength?: number;
+    /** The arrow buttons at the ends, if it has them: a button variant, and the glyph frames. */
+    arrows?: { button: string; up: string; down: string; left: string; right: string };
+    /** The art of a horizontal scrollbar; without it a horizontal bar is the vertical one turned on its side. */
+    horizontal?: ScrollbarAxisSkin;
+};
+
+/** A row (or column) of tabs: the look of each state, and how a label or icon sits in a tab. */
 export type TabSkin = {
     states: { inactive: NineSliceSkin; active: NineSliceSkin; hover?: NineSliceSkin; disabled?: NineSliceSkin };
     padding: Insets;
@@ -129,7 +152,11 @@ export type TabSkin = {
     /** Between neighbouring tabs. */
     gap: number;
     height: number;
+    /** A fixed width, for tabs of one size whatever they hold; by default the label's (or icon's) width and the padding, at least `minWidth`. */
+    width?: number;
     minWidth?: number;
+    /** Tabs down the side of a panel rather than along its top: the strip is a column. */
+    vertical?: boolean;
 };
 
 /** A text field: its frame in each state, how its text sits, and the colours of its text, placeholder, caret and selection. */
@@ -158,9 +185,9 @@ export type SlotSkin = {
 export type TooltipSkin = {
     frame: NineSliceSkin;
     padding: Insets;
-    /** The pointer when the tooltip is above what it points at (it points down), and below it. */
-    tailDown: string;
-    tailUp: string;
+    /** The pointer when the tooltip is above what it points at (it points down), and below it; a tooltip without them is just the note. */
+    tailDown?: string;
+    tailUp?: string;
     /** Between the tooltip's tail and what it points at. */
     gap: number;
     /** Lines wrap at this width. */
@@ -179,8 +206,27 @@ export type DialogueSkin = {
     portraitFrame: NineSliceSkin;
     /** The portrait's width and height. */
     portraitSize: number;
-    /** Between the portrait and the text. */
+    /**
+     * Whether the portrait's frame stands beside the box, on its left and as tall as it needs, rather than inside it; the box then starts where the frame ends, less
+     * `portraitOverlap` (the box tucks under the frame's edge).
+     */
+    portraitBeside?: boolean;
+    /** Room between the portrait's frame and the picture, when the frame stands beside the box. */
+    portraitPadding?: number;
+    portraitOverlap?: number;
+    /** Between the portrait and the text, when the portrait is inside the box. */
     gap: number;
+    /** A plate the speaker's name sits on, across the box's top edge (like a window's title); without it the name is the first line of the text. */
+    nameFrame?: NineSliceSkin;
+    /**
+     * The plate's height, the room each side of the name in it, how far its left end is from the box's left edge, how far above the box's top edge its top is, and how far the
+     * name sits above the middle of the plate.
+     */
+    nameHeight?: number;
+    namePadding?: number;
+    nameInset?: number;
+    nameOffset?: number;
+    nameRaise?: number;
     nameFont: string;
     nameColour: number;
     bodyFont: string;
@@ -205,20 +251,23 @@ export type ToastSkin = {
     seconds: number;
 };
 
-/** A window: a panel with a title pill across its top edge and, if it has one, a close button. */
+/** A window: a panel with a title plate across its top edge and, if it has one, a close button. */
 export type WindowSkin = {
     /** The panel variant it is built on. */
     panel: string;
     title: NineSliceSkin;
-    /** The pill's height (its frame is a small nine-slice source, so its own height says nothing about the pill's). */
+    /** The plate's height (its frame is a small nine-slice source, so its own height says nothing about the plate's). */
     titleHeight: number;
     titleFont: string;
     titleColour: number;
-    /** Room each side of the title text inside the pill. */
+    /** Room each side of the title text inside the plate. */
     titlePadding: number;
-    /** How far the pill sits above (negative: below) the panel's top edge. */
+    /** How far the plate sits above (negative: below) the panel's top edge. */
     titleOffset: number;
-    close?: { button: string; icon: string; offset: { x: number; y: number } };
+    /** How far the title text sits above the middle of the plate (a plate whose lower rows are its base). */
+    titleRaise?: number;
+    /** A button variant, the glyph drawn in it (none for a button whose art is the glyph), and where it sits from the top-right corner. */
+    close?: { button: string; icon?: string; offset: { x: number; y: number } };
 };
 
 /** A row of icons standing for an amount: hearts, orbs. */
@@ -226,6 +275,73 @@ export type IconRowSkin = { full: string; half?: string; empty: string; gap: num
 
 /** A column of buttons. */
 export type MenuSkin = { button: string; gap: number };
+
+/** A choice stepped through with arrows either side of it (a language, a screen size): the arrows' pictures, and how the value is written between them. */
+export type SelectorSkin = {
+    left: string;
+    right: string;
+    font: string;
+    /** The value's colour in each state (`disabled` also dims the arrows). */
+    textColour: StateColours;
+    /** The arrows' tint in each state; an arrow at the end of the choices (when they don't go round) is drawn `disabled`. */
+    arrowColour: StateColours;
+    /** Room between an arrow and the value. */
+    gap: number;
+    /** How far an arrow nudges outwards while it is pressed. */
+    nudge?: number;
+};
+
+/** A mouse pointer: its picture, and the pixel in it that points (from its top-left). */
+export type CursorSkin = { frame: string; x: number; y: number };
+
+/** A bar inside a fixed frame (`PlayerFrameSkin`): the fill's picture, where its left end sits in the frame, and its length when full (the picture's width by default). */
+export type FrameBarSkin = { fill: string; x: number; y: number; width?: number };
+
+/** A HUD frame for one character: a picture with a box for their portrait and troughs for their health and energy, and a row of status icons. */
+export type PlayerFrameSkin = {
+    frame: string;
+    /** Where the portrait goes in the frame (it is drawn centred in this box, behind the frame). */
+    portrait: { x: number; y: number; width: number; height: number };
+    health: FrameBarSkin;
+    energy?: FrameBarSkin;
+    /** Where the first status icon goes, and the room between them. */
+    statuses: { x: number; y: number; gap: number };
+};
+
+/** An ability on the HUD: a frame round its icon, with the button that uses it shown above. */
+export type AbilitySkin = {
+    frame: string;
+    /** Room between the frame's edge and the icon's box. */
+    iconInset: number;
+    /** Between the frame's top and the button prompt above it. */
+    glyphGap: number;
+    /** The shade drawn over the icon while the ability recharges (colour and opacity). */
+    cooldownColour: number;
+    cooldownAlpha: number;
+};
+
+/** A skill tree: skills on a grid, joined by links through junction rings. */
+export type SkillTreeSkin = {
+    /** The grid's pitch: skills and rings sit at the middle of their cells. */
+    cell: number;
+    /** A skill's picture is this size (and its locked look the same). */
+    nodeSize: number;
+    /** Drawn round the selected skill, `selectedOutset` beyond it on every side. */
+    selected: string;
+    selectedOutset: number;
+    rings: { locked: string; unlocked: string };
+    /** A link's picture (stretched along it) and its thickness. */
+    links: { locked: string; unlocked: string };
+    linkThickness: number;
+    /** Between a ring and the links that meet it. */
+    ringGap: number;
+    /** A skill's tier badge (`tier_2`) and its locked look (`tier_2_locked`) are frames with this prefix; it sits at the skill's bottom-right corner, `tierInset` in. */
+    tierPrefix: string;
+    tierInset: number;
+};
+
+/** The marker that pulses round a tile under the pointer: its frames (played in a loop), how long each shows, and where the tile sits in a frame (its top-left). */
+export type TileMarkerSkin = { frames: string[]; frameMs: number; tileX: number; tileY: number };
 
 export type Skin = {
     name: string;
@@ -236,7 +352,7 @@ export type Skin = {
     /**
      * Spacings the widgets use that no frame or font says (a gap between a title and its text, the focus ring's thickness, a slide distance), in UI pixels. A widget asks for one
      * by name with `UiTheme.Metric` and has a default for a skin that leaves it out: iconGap, lineGap, slotGap, scrollGap, scrollMargin, scrollStep, caretWidth, caretMargin,
-     * tailMargin, tailOverlap, slide, bob, ringGap, ringThickness.
+     * tailMargin, tailOverlap, slide, bob, ringGap, ringThickness, statusGap.
      */
     metrics?: Record<string, number>;
     fonts: Record<string, FontSkin>;
@@ -259,6 +375,13 @@ export type Skin = {
     windows?: Record<string, WindowSkin>;
     iconRows?: Record<string, IconRowSkin>;
     menus?: Record<string, MenuSkin>;
+    selectors?: Record<string, SelectorSkin>;
+    /** Mouse pointers by what they are for: `default`, `pointer` (over something pressable), `pressed`, and a game's own (`attack`). */
+    cursors?: Record<string, CursorSkin>;
+    playerFrames?: Record<string, PlayerFrameSkin>;
+    abilities?: Record<string, AbilitySkin>;
+    skillTrees?: Record<string, SkillTreeSkin>;
+    tileMarkers?: Record<string, TileMarkerSkin>;
 };
 
 export function InsetsWidth(insets: Insets): number {

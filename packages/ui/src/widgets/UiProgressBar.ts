@@ -1,14 +1,17 @@
-import { Container, Sprite } from "pixi.js";
+import { Container, Sprite, TilingSprite } from "pixi.js";
 import { BarSkin } from "../skin/Skin";
 import UiTheme from "../UiTheme";
 import { FillWidth } from "./BarMath";
 import NineSlice from "./NineSlice";
 
-/** A bar (health, mana, experience...): a track with a fill that grows inside it. `Value` is the fraction filled, 0 to 1. */
+/**
+ * A bar (health, mana, experience...): a track with a fill that grows inside it. `Value` is the fraction filled, 0 to 1. A fill with a pattern (the skin's `fillMode: "tile"`) is
+ * repeated from the left rather than stretched, so the pattern keeps its size and a part-full bar shows the first part of it.
+ */
 export default class UiProgressBar extends Container {
     private readonly skin: BarSkin;
     private readonly track: NineSlice;
-    private readonly fill: Sprite;
+    private readonly fill: Sprite | TilingSprite;
     private value = 0;
     private readonly size: { width: number; height: number };
 
@@ -21,9 +24,11 @@ export default class UiProgressBar extends Container {
         this.skin = skin;
         this.size = { width, height: skin.height };
         this.track = new NineSlice(theme.Texture(skin.track.frame), skin.track, width, skin.height);
-        this.fill = new Sprite(theme.Texture(skin.fill));
+        const texture = theme.Texture(skin.fill);
+        const fillHeight = skin.height - skin.fillPadding.top - skin.fillPadding.bottom;
+        this.fill = skin.fillMode === "tile" ? new TilingSprite(texture, texture.width, fillHeight) : new Sprite(texture);
         this.fill.position.set(skin.fillPadding.left, skin.fillPadding.top);
-        this.fill.height = skin.height - skin.fillPadding.top - skin.fillPadding.bottom;
+        this.fill.height = fillHeight;
         this.addChild(this.track, this.fill);
         this.Value = value;
     }

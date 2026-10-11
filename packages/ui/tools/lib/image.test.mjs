@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BorderColour, BoxDownsample, BuildNineSlice, Composite, CreateImage, Crop, Dim, DownsampleMode, DownsampleNearest, Quantise, RemoveBackground, RenderNineSlice, TilePeriod, UpscaleNearest } from "./image.mjs";
+import { AutoInsets, BorderColour, BoxDownsample, BuildNineSlice, Composite, CreateImage, Crop, Dim, DownsampleMode, DownsampleNearest, Quantise, Recolour, RemoveBackground, RenderNineSlice, TilePeriod, TintNeutrals, Transpose, UpscaleNearest } from "./image.mjs";
 
 const px = (img, x, y) => Array.from(img.data.subarray((y * img.width + x) * 4, (y * img.width + x) * 4 + 4));
 const set = (img, x, y, rgba) => img.data.set(rgba, (y * img.width + x) * 4);
@@ -239,5 +239,72 @@ describe("TilePeriod", () => {
     it("takes the shortest repeat, not a multiple of it", () => {
         const links = strip(120, x => (x % 6 < 2 ? [255, 255, 255, 255] : [0, 0, 0, 255]));
         expect(TilePeriod(links, 0, 120, 32)).toBe(6);
+    });
+});
+
+describe("Transpose", () => {
+    it("mirrors across the diagonal: a pixel at (x, y) lands at (y, x)", () => {
+        const img = solid(3, 2, [0, 0, 0, 255]);
+        set(img, 2, 0, [9, 9, 9, 255]);
+        set(img, 0, 1, [5, 5, 5, 255]);
+        const out = Transpose(img);
+        expect([out.width, out.height]).toEqual([2, 3]);
+        expect(px(out, 0, 2)).toEqual([9, 9, 9, 255]);
+        expect(px(out, 1, 0)).toEqual([5, 5, 5, 255]);
+    });
+});
+
+describe("Recolour", () => {
+    it("swaps the colours it is given and leaves the rest, and alpha, alone", () => {
+        const img = solid(2, 1, [0x12, 0x0a, 0x1a, 128]);
+        set(img, 1, 0, [1, 2, 3, 255]);
+        const out = Recolour(img, { "#120a1a": "#feffe5" });
+        expect(px(out, 0, 0)).toEqual([0xfe, 0xff, 0xe5, 128]);
+        expect(px(out, 1, 0)).toEqual([1, 2, 3, 255]);
+        expect(px(img, 0, 0)).toEqual([0x12, 0x0a, 0x1a, 128]);
+    });
+});
+
+describe("AutoInsets", () => {
+    it("stretches the longest run of identical columns and rows", () => {
+        // A 7x5 frame with a 1-pixel border and a plain middle: columns 1-5 and rows 1-3 are each alike.
+        const img = solid(7, 5, [0, 0, 0, 255]);
+        for (let y = 1; y < 4; y++) for (let x = 1; x < 6; x++) set(img, x, y, [50, 50, 50, 255]);
+        expect(AutoInsets(img)).toEqual({ left: 1, top: 1, right: 1, bottom: 1 });
+    });
+
+    it("keeps a corner's detail out of the stretch", () => {
+        const img = solid(6, 3, [0, 0, 0, 255]);
+        set(img, 1, 0, [9, 9, 9, 255]);
+        expect(AutoInsets(img)).toMatchObject({ left: 2, right: 0 });
+    });
+
+    it("takes the middle column when no two neighbours match", () => {
+        const img = solid(5, 1, [0, 0, 0, 255]);
+        for (let x = 0; x < 5; x++) set(img, x, 0, [x * 10, 0, 0, 255]);
+        expect(AutoInsets(img)).toMatchObject({ left: 2, right: 2 });
+    });
+});
+
+describe("TintNeutrals", () => {
+    const hexPixels = hexes => {
+        const img = CreateImage(hexes.length, 1);
+        hexes.forEach((hex, i) => set(img, i, 0, [1, 3, 5].map(k => parseInt(hex.slice(k, k + 2), 16)).concat(255)));
+        return img;
+    };
+
+    it("turns slate greys to the hue, keeping their lightness, and gives them the saturation asked for", () => {
+        const out = TintNeutrals(hexPixels(["#9da5ae"]), 245, () => 0.45);
+        const [r, g, b] = px(out, 0, 0);
+        expect(b).toBeGreaterThan(r);
+        expect(r).toBeGreaterThan(g);
+        // Lightness is (max + min) / 2 of the original: (174 + 157) / 2.
+        expect(Math.abs((Math.max(r, g, b) + Math.min(r, g, b)) / 2 - (174 + 157) / 2)).toBeLessThanOrEqual(1);
+    });
+
+    it("leaves colours alone - reds, greens, cream, and a near-black that is already saturated", () => {
+        const colours = ["#cc1825", "#439d40", "#feffe5", "#120a1a"];
+        const out = TintNeutrals(hexPixels(colours), 245, () => 0.45);
+        colours.forEach((hex, i) => expect(px(out, i, 0).slice(0, 3)).toEqual([1, 3, 5].map(k => parseInt(hex.slice(k, k + 2), 16))));
     });
 });

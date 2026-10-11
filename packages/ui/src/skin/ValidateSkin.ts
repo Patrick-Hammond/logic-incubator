@@ -127,11 +127,19 @@ export function ValidateSkin(skin: Skin, lookup: SkinLookup): string[] {
         slice(`${where}.track`, slider.track);
         pictures(`${where}.thumb`, slider.thumb);
         if (slider.fill) frame(`${where}.fill`, slider.fill);
+        if (slider.vertical) {
+            slice(`${where}.vertical.track`, slider.vertical.track);
+            pictures(`${where}.vertical.thumb`, slider.vertical.thumb);
+        }
     });
 
     each("scrollbars", skin.scrollbars, (where, bar) => {
         slice(`${where}.track`, bar.track);
         slices(`${where}.thumb`, bar.thumb);
+        if (bar.horizontal) {
+            slice(`${where}.horizontal.track`, bar.horizontal.track);
+            slices(`${where}.horizontal.thumb`, bar.horizontal.thumb);
+        }
         if (bar.arrows) {
             exists(`${where}.arrows.button`, "button", skin.buttons[bar.arrows.button], bar.arrows.button);
             (["up", "down", "left", "right"] as const).forEach(direction => frame(`${where}.arrows.${direction}`, bar.arrows && bar.arrows[direction]));
@@ -155,8 +163,9 @@ export function ValidateSkin(skin: Skin, lookup: SkinLookup): string[] {
 
     each("tooltips", skin.tooltips, (where, tip) => {
         slice(`${where}.frame`, tip.frame);
-        frame(`${where}.tailDown`, tip.tailDown);
-        frame(`${where}.tailUp`, tip.tailUp);
+        if (!tip.tailDown !== !tip.tailUp) note(where, "give both tails (tailDown and tailUp) or neither");
+        if (tip.tailDown) frame(`${where}.tailDown`, tip.tailDown);
+        if (tip.tailUp) frame(`${where}.tailUp`, tip.tailUp);
         font(where + ".titleFont", tip.titleFont);
         font(where + ".textFont", tip.textFont);
     });
@@ -164,6 +173,7 @@ export function ValidateSkin(skin: Skin, lookup: SkinLookup): string[] {
     each("dialogues", skin.dialogues, (where, dialogue) => {
         slice(`${where}.frame`, dialogue.frame);
         slice(`${where}.portraitFrame`, dialogue.portraitFrame);
+        if (dialogue.nameFrame) slice(`${where}.nameFrame`, dialogue.nameFrame);
         frame(`${where}.arrow`, dialogue.arrow);
         font(where + ".nameFont", dialogue.nameFont);
         font(where + ".bodyFont", dialogue.bodyFont);
@@ -184,7 +194,7 @@ export function ValidateSkin(skin: Skin, lookup: SkinLookup): string[] {
         font(where + ".titleFont", window.titleFont);
         if (window.close) {
             exists(`${where}.close.button`, "button", skin.buttons[window.close.button], window.close.button);
-            frame(`${where}.close.icon`, window.close.icon);
+            if (window.close.icon) frame(`${where}.close.icon`, window.close.icon);
         }
     });
 
@@ -195,6 +205,47 @@ export function ValidateSkin(skin: Skin, lookup: SkinLookup): string[] {
     });
 
     each("menus", skin.menus, (where, menu) => exists(`${where}.button`, "button", skin.buttons[menu.button], menu.button));
+
+    each("selectors", skin.selectors, (where, selector) => {
+        frame(`${where}.left`, selector.left);
+        frame(`${where}.right`, selector.right);
+        font(where + ".font", selector.font);
+    });
+
+    each("cursors", skin.cursors, (where, cursor) => {
+        const size = frame(`${where}.frame`, cursor.frame);
+        if (size && (cursor.x < 0 || cursor.y < 0 || cursor.x >= size.width || cursor.y >= size.height)) {
+            note(where, `the hot spot ${cursor.x},${cursor.y} is outside the ${size.width}x${size.height} picture`);
+        }
+    });
+
+    each("playerFrames", skin.playerFrames, (where, player) => {
+        frame(`${where}.frame`, player.frame);
+        frame(`${where}.health.fill`, player.health.fill);
+        if (player.energy) frame(`${where}.energy.fill`, player.energy.fill);
+    });
+
+    each("abilities", skin.abilities, (where, ability) => {
+        const size = frame(`${where}.frame`, ability.frame);
+        if (size && ability.iconInset * 2 >= Math.min(size.width, size.height)) {
+            note(where, `iconInset ${ability.iconInset} leaves no room for the icon in the ${size.width}x${size.height} frame`);
+        }
+    });
+
+    each("skillTrees", skin.skillTrees, (where, tree) => {
+        frame(`${where}.selected`, tree.selected);
+        frame(`${where}.rings.locked`, tree.rings.locked);
+        frame(`${where}.rings.unlocked`, tree.rings.unlocked);
+        frame(`${where}.links.locked`, tree.links.locked);
+        frame(`${where}.links.unlocked`, tree.links.unlocked);
+        if (!(tree.cell > 0)) note(where, `cell must be more than 0, not ${tree.cell}`);
+    });
+
+    each("tileMarkers", skin.tileMarkers, (where, marker) => {
+        if (!marker.frames.length) note(where, "it has no frames");
+        marker.frames.forEach((name, i) => frame(`${where}.frames.${i}`, name));
+        if (!(marker.frameMs > 0)) note(where, `frameMs must be more than 0, not ${marker.frameMs}`);
+    });
 
     return problems;
 }

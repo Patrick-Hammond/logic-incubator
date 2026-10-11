@@ -7,7 +7,11 @@ export type NineSliceOptions = {
     /** How the four edges fill their room (stretched by default). */
     edges?: SliceMode;
     centre?: SliceMode;
+    /** How far the frame is drawn beyond its box on each side (see `NineSliceSkin.outset`): the size asked for, and `SliceWidth`, are the box's. */
+    outset?: Insets;
 };
+
+const NO_OUTSET: Insets = { left: 0, top: 0, right: 0, bottom: 0 };
 
 const EDGES: SlicePart[] = ["top", "bottom", "left", "right"];
 
@@ -51,20 +55,21 @@ export default class NineSlice extends Container {
         return this.heightValue;
     }
 
-    /** Draws the frame at this size (raised to what the corners need). */
+    /** Draws the frame at this size (raised to what the corners need), and its outset beyond that. */
     Resize(width: number, height: number): void {
-        const slices = SliceRects(this.frameSize, this.options.insets, { width, height });
+        const out = this.options.outset || NO_OUTSET;
+        const slices = SliceRects(this.frameSize, this.options.insets, { width: width + out.left + out.right, height: height + out.top + out.bottom });
         const placed = new Map<SlicePart, Slice>();
         slices.forEach(slice => placed.set(slice.part, slice));
-        this.widthValue = Math.max(...slices.map(s => s.dst.x + s.dst.width));
-        this.heightValue = Math.max(...slices.map(s => s.dst.y + s.dst.height));
+        this.widthValue = Math.max(...slices.map(s => s.dst.x + s.dst.width)) - out.left - out.right;
+        this.heightValue = Math.max(...slices.map(s => s.dst.y + s.dst.height)) - out.top - out.bottom;
         this.parts.forEach((display, part) => {
             const slice = placed.get(part);
             display.visible = !!slice;
             if (!slice) {
                 return;
             }
-            display.position.set(slice.dst.x, slice.dst.y);
+            display.position.set(slice.dst.x - out.left, slice.dst.y - out.top);
             display.width = slice.dst.width;
             display.height = slice.dst.height;
         });

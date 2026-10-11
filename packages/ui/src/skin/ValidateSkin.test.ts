@@ -86,4 +86,41 @@ describe("ValidateSkin", () => {
         s.scale = 0;
         expect(ValidateSkin(s, lookup)[0]).toMatch(/scale must be a whole number/);
     });
+
+    it("checks a tooltip has both tails or neither", () => {
+        const s = skin();
+        const tip = { frame: slice("panel", 6), padding: { left: 1, top: 1, right: 1, bottom: 1 }, gap: 1, maxWidth: 50, titleFont: "body", titleColour: 1, textFont: "body", textColour: 1, delay: 1 };
+        s.tooltips = { plain: tip, half: { ...tip, tailDown: "fill" } };
+        expect(ValidateSkin(s, lookup)).toEqual(["tooltips.half: give both tails (tailDown and tailUp) or neither"]);
+    });
+
+    it("checks the art of a vertical slider and a horizontal scrollbar, when the skin has it", () => {
+        const s = skin();
+        s.sliders = { default: { track: slice("track", 2), thickness: 4, thumb: { normal: "fill" }, vertical: { track: slice("track", 2), thickness: 4, thumb: { normal: "gone" } } } };
+        s.scrollbars = { default: { thickness: 4, track: slice("track", 2), thumb: { normal: slice("track", 2) }, minThumb: 4, horizontal: { track: slice("lost", 2), thumb: { normal: slice("track", 2) } } } };
+        expect(ValidateSkin(s, lookup)).toEqual([
+            'sliders.default.vertical.thumb.normal: there is no frame "gone" in the "ui" bundle',
+            'scrollbars.default.horizontal.track: there is no frame "lost" in the "ui" bundle'
+        ]);
+    });
+
+    it("checks a pointer's hot spot is inside its picture", () => {
+        const s = skin();
+        s.cursors = { default: { frame: "fill", x: 0, y: 0 }, pointer: { frame: "fill", x: 2, y: 1 } };
+        expect(ValidateSkin(s, lookup)).toEqual(["cursors.pointer: the hot spot 2,1 is outside the 2x6 picture"]);
+    });
+
+    it("checks the HUD pieces' frames, an ability's room for its icon, a skill tree's grid and a tile marker's frames", () => {
+        const s = skin();
+        s.playerFrames = { default: { frame: "panel", portrait: { x: 0, y: 0, width: 4, height: 4 }, health: { fill: "fill", x: 0, y: 0 }, energy: { fill: "nope", x: 0, y: 0 }, statuses: { x: 0, y: 0, gap: 1 } } };
+        s.abilities = { default: { frame: "track", iconInset: 5, glyphGap: 1, cooldownColour: 0, cooldownAlpha: 0.5 } };
+        s.skillTrees = { default: { cell: 0, nodeSize: 4, selected: "panel", selectedOutset: 1, rings: { locked: "fill", unlocked: "fill" }, links: { locked: "fill", unlocked: "fill" }, linkThickness: 2, ringGap: 1, tierPrefix: "t_", tierInset: 1 } };
+        s.tileMarkers = { default: { frames: [], frameMs: 100, tileX: 0, tileY: 0 } };
+        expect(ValidateSkin(s, lookup)).toEqual([
+            'playerFrames.default.energy.fill: there is no frame "nope" in the "ui" bundle',
+            "abilities.default: iconInset 5 leaves no room for the icon in the 10x10 frame",
+            "skillTrees.default: cell must be more than 0, not 0",
+            "tileMarkers.default: it has no frames"
+        ]);
+    });
 });
