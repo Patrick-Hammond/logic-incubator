@@ -26,8 +26,11 @@ export const RelayHost = 0;
 export const RelayBroadcast = 255;
 /** Peers in a room, the host included. */
 export const RoomSeats = 4;
-/** What a room code is made of: consonants only, so no code spells a word. */
-export const RoomCodeLetters = "BCDFGHJKLMNPQRSTVWXZ";
+/**
+ * What a room code is made of: consonants only, so no code spells a word, and none that a blocky pixel font draws like
+ * another letter or a digit (B 8, D O, S 5, V U, Z 2), so a code read off a screen is typed as it was meant.
+ */
+export const RoomCodeLetters = "CFGHJKLMNPQRTWX";
 export const RoomCodeLength = 5;
 
 /** Why a request was refused. */

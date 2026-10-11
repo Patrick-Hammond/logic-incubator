@@ -1069,7 +1069,7 @@ abstract class TransportBase implements Transport   // the listener bookkeeping;
 
 ```ts
 RelayVersion = 1;  RelayHost = 0;  RelayBroadcast = 255;  RoomSeats = 4;
-RoomCodeLetters = "BCDFGHJKLMNPQRSTVWXZ";  RoomCodeLength = 5;
+RoomCodeLetters = "CFGHJKLMNPQRTWX";  RoomCodeLength = 5;
 
 type RelayError = "bad-request" | "version" | "no-room" | "room-full" | "busy";
 type RelayRequest = { t: "host"; v: number; game: string } | { t: "join"; v: number; game: string; code: string };
@@ -1082,7 +1082,7 @@ interface RelayConnection { Text(text): void; Bytes(bytes): void; Closed(): void
 new RelayRooms({ random = Math.random, maxRooms = 1000 }?)
 rooms.Connect(link: RelayLink): RelayConnection
 rooms.RoomCount: number;  rooms.PeerCount: number
-NormaliseRoomCode(text): string      // " bcd-fg " -> "BCDFG"; "" if it can't be a code
+NormaliseRoomCode(text): string      // " cfg-hj " -> "CFGHJ"; "" if it can't be a code
 ParseRequest(text): RelayRequest | null
 ```
 
@@ -1097,7 +1097,8 @@ The protocol, on one connection:
 3. Notices, as text: `peer-joined` and `peer-left` to everyone else in the room. When the host leaves, every guest gets `closed`
    (`host-left`) and the relay closes their connections; the room is gone.
 
-Codes are five consonants, drawn at random, never one that's open.
+Codes are five consonants, drawn at random, never one that's open. The letters leave out any a blocky pixel font draws like another
+letter or a digit (B, D, S, V, Z), so a code read off the screen is typed as it was meant.
 
 ### RelaySession
 

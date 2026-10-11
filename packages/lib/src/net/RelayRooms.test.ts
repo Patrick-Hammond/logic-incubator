@@ -62,8 +62,8 @@ describe("RelayRooms", () => {
         // The first draw repeats the first room's code; the second must not use it.
         const draws = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.5, 0.5, 0.5, 0.5, 0.5];
         const rooms = new RelayRooms({ random: () => draws.shift()! });
-        expect(Host(rooms).code).toBe("BBBBB");
-        expect(Host(rooms).code).toBe("NNNNN");
+        expect(Host(rooms).code).toBe("CCCCC");
+        expect(Host(rooms).code).toBe("MMMMM");
     });
 
     it("seats guests 1 to 3, telling each who's there and the rest who came", () => {
@@ -171,9 +171,11 @@ describe("RelayRooms", () => {
 
 describe("NormaliseRoomCode", () => {
     it("takes any case, spaces and dashes, and nothing that can't be a code", () => {
-        expect(NormaliseRoomCode(" bcd-fg ")).toBe("BCDFG");
-        expect(NormaliseRoomCode("BCDF")).toBe("");
-        expect(NormaliseRoomCode("ABCDE")).toBe("");
+        expect(NormaliseRoomCode(" cfg-hj ")).toBe("CFGHJ");
+        expect(NormaliseRoomCode("CFGH")).toBe("");
+        expect(NormaliseRoomCode("ACFGH")).toBe("");
+        // Letters that read as others in a pixel font are never in a code.
+        expect(NormaliseRoomCode("CFGHV")).toBe("");
     });
 });
 
