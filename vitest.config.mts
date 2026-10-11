@@ -17,6 +17,6 @@ export default defineConfig({
         environment: "node",
         // The type-level tests build a whole TypeScript program (about 3 s alone), which the default 5 s can't survive when the rest of the suite is running beside it.
         testTimeout: 30000,
-        include: ["packages/*/src/**/*.{test,spec}.ts", "packages/*/scripts/**/*.{test,spec}.ts", "packages/*/tools/**/*.{test,spec}.mjs"],
+        include: ["packages/*/src/**/*.{test,spec}.ts", "packages/*/scripts/**/*.{test,spec}.ts", "packages/*/tools/**/*.{test,spec}.mjs", "relay/**/*.{test,spec}.mjs"],
     },
 });

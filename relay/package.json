@@ -1,0 +1,16 @@
+{
+  "name": "@logic-incubator/relay",
+  "version": "1.0.0",
+  "private": true,
+  "description": "The WebSocket relay online games meet through: rooms by code, bytes passed along, no game rules.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "start": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON server.mjs"
+  },
+  "dependencies": {
+    "ws": "^8.21.3"
+  }
+}

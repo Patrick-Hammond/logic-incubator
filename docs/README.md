@@ -1,11 +1,11 @@
 # logic-incubator documentation
 
 logic-incubator is the shared code that small browser games are built on: a game framework (`lib`), a top-down dungeon
-engine (`engine`), a UI kit (`ui`) and a level editor (`editor`). Games check this repository out beside their own and compile it from source.
+engine (`engine`), a UI kit (`ui`) and a level editor (`editor`), plus the relay server online players meet through (`relay/`). Games check this repository out beside their own and compile it from source.
 
 | Document | Read it when |
 | --- | --- |
-| [User guide](user-guide.md) | You are building (or maintaining) a game on logic-incubator. It explains the concepts, walks through a first game, and covers scenes and components, the asset system, input, tweening, the dungeon engine, the level editor and testing - with working code. |
+| [User guide](user-guide.md) | You are building (or maintaining) a game on logic-incubator. It explains the concepts, walks through a first game, and covers scenes and components, the asset system, input, tweening, the dungeon engine, the level editor, networking and testing - with working code. |
 | [API reference](api-reference.md) | You need an exact signature, option, event or file format: every public class, function and type in the four packages, plus the asset build tool's command line, configuration files and plugin interface. |
 
 ## Where to start
@@ -15,6 +15,7 @@ engine (`engine`), a UI kit (`ui`) and a level editor (`editor`). Games check th
 - **Writing a scene**: [User guide, chapter 4](user-guide.md#4-games-scenes-and-components) - the component lifecycle.
 - **Making a dungeon game**: [chapters 9 and 10](user-guide.md#9-the-dungeon-engine) - monsters, levels, `assets-meta.json`, the editor.
 - **Building menus and a HUD**: [the UI kit](user-guide.md#14-the-ui-kit) - widgets, focus and gamepad navigation, skins and the art workflow.
+- **Playing online**: [the online lobby](user-guide.md#932-playing-online) and [networking and the relay](user-guide.md#15-networking-and-the-relay) - transports, room codes, running and deploying the relay.
 - **Drawing the art**: [the sprite editor](user-guide.md#106-the-sprite-editor) - pixel editing, 256-colour palettes with alpha, a channel mixer and animation frames, inside the level editor.
 - **Something is broken**: [Troubleshooting](user-guide.md#13-troubleshooting) and the [asset diagnostics table](user-guide.md#513-diagnostics).
 
@@ -23,8 +24,8 @@ engine (`engine`), a UI kit (`ui`) and a level editor (`editor`). Games check th
 Two games in sibling repositories show every pattern in working form:
 
 - **cat-grab** - `lib` only: scenes, a loading screen, one asset bundle with a pre-packed sprite sheet and a bitmap font.
-- **in-dungeons-we-dwell** - `lib` + `engine` + `editor`: per-level bundles, sound, typed data files, a title/character-select front end, and the
-  level editor wired in for development builds only.
+- **in-dungeons-we-dwell** - `lib` + `engine` + `editor`: per-level bundles, sound, typed data files, a title/character-select front end, couch and online
+  co-op, and the level editor wired in for development builds only.
 
 ## Conventions used in these documents
 

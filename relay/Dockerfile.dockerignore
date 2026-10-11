@@ -1,0 +1,7 @@
+# The build sends only what the image needs, not the whole repo (the Dockerfile too, for builders that read it from the context).
+**
+!relay/Dockerfile
+!relay/package.json
+!relay/package-lock.json
+!relay/server.mjs
+!packages/lib/src/net/RelayRooms.ts

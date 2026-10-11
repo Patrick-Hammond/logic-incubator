@@ -40,7 +40,8 @@ configuration files and plugin interface. For explanations, examples and workflo
 [Patterns, algorithms, data structures](#patterns-algorithms-data-structures) ·
 [Utils and filters](#utils-and-filters) ·
 [Tilemap](#tilemap) ·
-[Particles](#particles)
+[Particles](#particles) ·
+[Net](#net)
 
 **[engine](#engine)**
 [Constants and events](#constants-and-events) ·
@@ -60,7 +61,8 @@ configuration files and plugin interface. For explanations, examples and workflo
 [World and heroes](#world-and-heroes) ·
 [Fixed step and seeded random](#fixed-step-and-seeded-random) ·
 [Views](#views) ·
-[Player input](#player-input)
+[Player input](#player-input) ·
+[Online lobby](#online-lobby)
 
 **[ui](#ui)**
 [UiLayer and ThemeFor](#uilayer-and-themefor) ·
@@ -1010,6 +1012,146 @@ Exports: `Emitter`, `EmitterConfig`, `OldEmitterConfig`, `Particle`, `AnimatedPa
 `LinkedListContainer extends Container` keeps its children as a linked list instead of an array, so adding and removing particles is cheap; it
 does not fill `children`. Use it as an emitter's `parent` when there are many.
 
+## Net
+
+`@logic-incubator/lib/net/...` - what online play travels on: a binary writer and reader, the `Transport` connections carry
+messages over, the relay's rules and the client side of them. All pure; the relay server itself is `relay/` at the repo root
+(see the [user guide](user-guide.md#15-networking-and-the-relay)).
+
+### Bytes
+
+`@logic-incubator/lib/net/Bytes` - little-endian. `ByteWriter` grows as it goes; every method but `ToBytes` returns the writer, to chain.
+
+```ts
+new ByteWriter(capacity = 64)
+writer.U8(v) / U16(v) / U32(v) / I8(v) / I16(v) / I32(v) / F32(v) / F64(v) / Bool(v)
+writer.String(text)          // UTF-8 after a u16 byte length; RangeError past 65535 bytes
+writer.Bytes(bytes)          // after a u32 length
+writer.Raw(bytes)            // no length: for the end of a message, read back with Rest()
+writer.Length: number;  writer.Clear(): this   // starts again, keeping the room made
+writer.ToBytes(): Uint8Array // a copy, safe to send or keep
+
+new ByteReader(bytes: Uint8Array)   // reads a view of bytes, from its byteOffset
+reader.U8() ... F64(), Bool(), String(), Bytes() (a copy), Rest() (a view of what's left)
+reader.Remaining: number;  reader.AtEnd: boolean
+```
+
+Reading past the end throws `RangeError`, so a short or garbled message never passes for a good one.
+
+### Transport
+
+`@logic-incubator/lib/net/Transport` - a connection carrying whole messages, in order, between two ends.
+
+```ts
+type Message = string | Uint8Array;
+
+interface Transport {
+    readonly IsOpen: boolean;
+    Send(message: Message): void;                                // does nothing once closed
+    OnMessage(listener: (message: Message) => void): () => void; // returns what stops it
+    OnClose(listener: (reason: string) => void): () => void;     // once, at either end's close or a lost connection
+    Close(): void;                                               // both ends hear of it; safe twice
+}
+
+abstract class TransportBase implements Transport   // the listener bookkeeping; subclasses call Deliver(message) and End(reason)
+```
+
+| Module | |
+| --- | --- |
+| `WebSocketTransport` (default export) | `static Connect(url, { timeoutMs = 10000, create? }): Promise<WebSocketTransport>` - resolves once open; rejects with an `Error` if it can't connect or there's no answer in time. `create(url)` makes the socket (`new WebSocket(url)` by default; a test passes a `WebSocketLike`). Asks for binary as `arraybuffer`; text arrives as a string, binary as a `Uint8Array`. `Close()` ends this end at once. `CloseReason(code, reason)` turns a close event into words: the reason given, else `closed`, `going away`, `connection lost` (1006) or `closed (code)`. |
+| `Loopback` | `LoopbackPair(): [Transport, Transport]` - two ends joined in memory; a message arrives a moment after `Send` (a promise callback, never during it), as a copy. `new LoopbackRelay(options?: RelayRoomsOptions)` - a relay in memory with the real one's rules: `Connect(): Transport` is a new connection to it; `rooms` is its `RelayRooms`. |
+| `Lag` | `WithLag(transport, lag): Transport` - the lag simulator. `lag`: `{ delayMs, jitterMs = 0, lossChance = 0, lossDelayMs = 200, random = Math.random }`. Each message, each way, waits `delayMs` plus up to `jitterMs`; a `lossChance` share also waits `lossDelayMs`, as if lost and sent again - holding up those behind it, since messages stay in order. One lagged end adds twice the delay to a round trip. Closing it sends what's queued first; a close from the other end arrives after what was sent before it. |
+
+### Relay rooms and protocol
+
+`@logic-incubator/lib/net/RelayRooms` - the relay's whole rule set, bar the sockets. It imports nothing and uses only TypeScript Node can strip
+(no enums, no parameter properties), because the relay server runs this file directly.
+
+```ts
+RelayVersion = 1;  RelayHost = 0;  RelayBroadcast = 255;  RoomSeats = 4;
+RoomCodeLetters = "BCDFGHJKLMNPQRSTVWXZ";  RoomCodeLength = 5;
+
+type RelayError = "bad-request" | "version" | "no-room" | "room-full" | "busy";
+type RelayRequest = { t: "host"; v: number; game: string } | { t: "join"; v: number; game: string; code: string };
+type RelayNotice = { t: "hosted"; code; you: 0 } | { t: "joined"; code; you; peers: number[] } | { t: "peer-joined"; peer }
+                 | { t: "peer-left"; peer } | { t: "error"; error: RelayError } | { t: "closed"; reason: "host-left" };
+
+interface RelayLink { SendText(text): void; SendBytes(bytes): void; Close(): void }   // a connection, as the rooms reach it
+interface RelayConnection { Text(text): void; Bytes(bytes): void; Closed(): void }  // what they're told of it
+
+new RelayRooms({ random = Math.random, maxRooms = 1000 }?)
+rooms.Connect(link: RelayLink): RelayConnection
+rooms.RoomCount: number;  rooms.PeerCount: number
+NormaliseRoomCode(text): string      // " bcd-fg " -> "BCDFG"; "" if it can't be a code
+ParseRequest(text): RelayRequest | null
+```
+
+The protocol, on one connection:
+
+1. The first message is a text frame, JSON: a `host` request opens a room for that `game`; a `join` request joins the room with that code
+   (any case) - only for the same `game`. The answer is `hosted` (the host is peer 0) or `joined` (peer 1 to 3, with who's already there),
+   or `error` and the connection closed: `version` for another `RelayVersion`, `no-room`, `room-full` (four already), `busy` (`maxRooms`
+   open), `bad-request`.
+2. Then bytes: a binary frame `[to][payload...]` reaches peer `to` - or everyone else for `RelayBroadcast` - as `[from][payload...]`.
+   Bytes for an empty seat, for the sender itself, or before a room, are dropped. Text frames after joining are ignored (kept for later versions).
+3. Notices, as text: `peer-joined` and `peer-left` to everyone else in the room. When the host leaves, every guest gets `closed`
+   (`host-left`) and the relay closes their connections; the room is gone.
+
+Codes are five consonants, drawn at random, never one that's open.
+
+### RelaySession
+
+`@logic-incubator/lib/net/RelaySession` - default export `class RelaySession extends EventEmitter` (eventemitter3, so a component can `Listen`).
+
+```ts
+static Host(transport, game: string, { timeoutMs = 10000 }?): Promise<RelaySession>
+static Join(transport, game: string, code: string, { timeoutMs = 10000 }?): Promise<RelaySession>
+// both reject with RelayRefusedError (reason: RelayError, message: RefusalText(reason)), or an Error if the
+// connection ends or the relay doesn't answer - closing the transport
+
+session.Code: string;  session.You: number;  session.IsHost: boolean;  session.IsOpen: boolean
+session.Peers: ReadonlyArray<number>      // everyone else in the room, in peer order
+session.Send(to: number, payload: Uint8Array): void
+session.Broadcast(payload: Uint8Array): void
+session.Leave(): void                    // closes the connection - and the room, from the host
+
+RelayEvents = { MESSAGE: "message", PEER_JOINED: "peer-joined", PEER_LEFT: "peer-left", CLOSED: "closed" }
+// message (from: number, payload: Uint8Array) · peer-joined (peer) · peer-left (peer)
+// closed (reason: "left" | "host-left" | the connection's own reason) - once; every listener is dropped after it
+RefusalText(reason: RelayError): string   // "There's no game with that code." ...
+```
+
+The session is made in the same moment as the relay's answer, so it hears everything after it. Listen to it before your next `await`.
+
+### Relay server
+
+`relay/server.mjs` at the repo root (Node 22.18 or newer, not a workspace). `npm start --prefix relay` runs it from the environment;
+tests and other programs can start one themselves:
+
+```js
+import { StartRelay } from "../relay/server.mjs";
+
+const relay = await StartRelay({
+    port: 8787,              // 0 for any free port
+    host: undefined,         // every interface
+    heartbeatMs: 15000,      // a connection that misses a ping between two of these is dropped
+    maxPayload: 1048576,     // largest message, in bytes
+    maxRooms: 1000,          // more and hosting is refused as "busy"
+    origins: [],             // page origins allowed to connect; none listed for any
+    log: message => {}
+});
+relay.port;  relay.rooms;    // the RelayRooms it runs
+await relay.close();         // ends every connection and stops
+```
+
+| Environment | Option |
+| --- | --- |
+| `PORT`, `HOST`, `MAX_ROOMS` | `port`, `host`, `maxRooms` |
+| `ALLOWED_ORIGINS` | `origins`, comma-separated - matched as browsers send them, so case and a trailing `/` don't matter |
+
+`GET /health` answers `{ "ok": true, "rooms": n, "peers": n }`; any other plain HTTP request gets a 404. `relay/fly.toml` and
+`.github/workflows/relay.yml` deploy it to Fly.io as one machine (see `relay/README.md`).
+
 ---
 
 # engine
@@ -1062,7 +1204,7 @@ type PlayerSetup = {
 };
 
 type HeroSlot = {
-    input?: InputDevice;                                  // what they're played with (default DefaultInput: the keyboard, or the first gamepad without it)
+    input?: InputDevice | null;                           // what they're played with (default DefaultInput: the keyboard, or the first gamepad without it); null: played on another machine
     sprite?: string;                                      // the animation they're drawn with, in place of player.sprite
     lightSpell?: LightSpell | null;                       // null for none; left out, player.lightSpell
 };
@@ -1072,6 +1214,7 @@ type DungeonMainOptions = {
     heroes?: () => ReadonlyArray<HeroSlot> | undefined;   // who plays, one slot per hero (hero 0 first), asked on every start and restart; none or empty: one hero
     level: () => LevelFile | undefined;                   // asked on every start and restart
     levelBundle?: () => string | undefined;               // the asset bundle the level plays in
+    seed?: () => number | undefined;                      // what the level's random numbers start from, asked on every start and restart; undefined: a new one
     playerSprite?: () => string | undefined;              // a lone hero's animation, in place of player.sprite (only without heroes)
     playerLightSpell?: () => LightSpell | null | undefined;  // a lone hero's light spell: null for none, undefined to keep player.lightSpell (only without heroes)
     overlay?: (main: DungeonMain) => GameComponent;       // drawn over the HUD and kept with the scene: a pause menu, an end-of-level screen
@@ -1099,8 +1242,12 @@ there is one hero, played with `DefaultInput`: `playerSprite` and `playerLightSp
 with (`player.sprite` when it returns `undefined`) and their light spell (`null` for none, `undefined` to keep `player.lightSpell`). A game's character
 select hands its picks to the scene through these.
 
-With more than one hero, the party shares the screen: the world holds them within a span of each other (`World.SetLeash(PartySpan(view))`), and the
-camera frames the box round the living heroes, zooming out to fit them (`PartyZoom`, down to `MinPartyZoom`) - see [World and heroes](#world-and-heroes).
+A hero whose `input` is `null` is played on another machine, in an online run: no `PlayerControl` is made for them, so here they get no input and
+stand still, and the camera leaves them out. The camera keeps to the heroes played on this machine - every hero, when none is.
+
+With more than one hero all played here, the party shares the screen: the world holds them within a span of each other (`World.SetLeash(PartySpan(view))`),
+and the camera frames the box round the living heroes, zooming out to fit them (`PartyZoom`, down to `MinPartyZoom`) - see [World and heroes](#world-and-heroes).
+A party spread over machines isn't held together.
 
 Play runs in fixed steps of `StepSeconds` (1/60 s - see [Fixed step and seeded random](#fixed-step-and-seeded-random)), as many each
 display frame as its time calls for, and none after a step that ends the level. A step reads every hero's controls (`PlayerControl.Get`, in slot
@@ -1108,10 +1255,11 @@ order) and hands them to `World.Step`, which moves the heroes, opens doors, upda
 once a frame, it places each hero for drawing between their last two steps (`HeroView.Place(alpha)`), calls `Level.UpdateLights` with the seconds
 played so far and the lights that move - each hero's carried torch (`HeroView.Light`) and mage-light while it's lit (`HeroView.SpellLight`), and every
 live shot with a `light`, keyed by the shot, all where they're drawn - and moves the camera: `SetZ` for the height under the first living hero,
-`UpdateZoom`, `ZoomForParty` and `Follow` the centre of the box round the living heroes where they're drawn (everyone, once all are down; after the
+`UpdateZoom`, `ZoomForParty` and `Follow` the centre of the box round the living heroes played here, where they're drawn (all of those, once they're down; after the
 lights, since moving the camera draws the tiles; the pull is the same per second at any frame rate). Last it draws the figures
 (`EntityRenderer.Render(views, encounter, alpha)`) and the HUD (`Hud.RenderHeroes`). Each level start re-seeds the encounter's random numbers
-(`World.Reset`, which calls `Encounter.Reset`).
+(`World.Reset`, which calls `Encounter.Reset`) from `seed()` - a new seed when it's left out or returns `undefined`, so an online run's machines,
+given the host's seed, spawn the same monsters.
 
 Lifecycle: `OnInitialise` builds the `Level`, attaches `Camera`, `TileMapView`, `Effects` (into the camera) and `Hud`, creates the `EntityRenderer` and
 the `World`, binds asset metadata (`BindAssetMetadata`) and listens for `LEVEL_CREATED`, `ALL_PLAYERS_DIED` and `LEVEL_COMPLETED`. `OnShow` and each
@@ -1643,13 +1791,98 @@ const DefaultInput: InputDevice = { keyboard: true, pad: 0 };
 new PlayerControl(device: InputDevice = DefaultInput);   Get(): IPlayerInput        // a shared object, refilled
 ```
 
-`DungeonMain` makes one `PlayerControl` per hero, for their `HeroSlot.input`, and hands what each reads to `World.Step` every step; no hero
-reads a device itself.
+`DungeonMain` makes one `PlayerControl` per hero, for their `HeroSlot.input` (none for a hero whose `input` is `null`, who gets no input), and hands
+what each reads to `World.Step` every step; no hero reads a device itself.
 
 Keyboard: arrows or WASD, Space, L, K. Gamepad: left stick moves, right stick fires/aims, Y casts, X warps. A device with both reads the gamepad
 only while no key is down. Give each couch player their own device - `{ keyboard: true }` for one, `{ pad: n }` for each of the others - so no
 two read the same one.
 `@logic-incubator/engine/input/StickInput`: `IsStickPushed(stick: Vec2Like | null): boolean` - a stick at rest is non-null but zero.
+
+---
+
+## Online lobby
+
+`@logic-incubator/engine/net/...` - the dungeon's side of online play, on a `RelaySession` ([Net](#net)): the lobby messages, getting the
+same level onto every machine, and the host's and guests' lobbies. All pure.
+
+### Messages
+
+`@logic-incubator/engine/net/NetMessages` - a kind byte, then JSON (a `level`'s body is its bytes).
+
+```ts
+NetVersion = 1;     // a guest on another is refused ("version"); raise it whenever a message changes
+NameLength = 12;
+
+type LobbySeat = { peer: number; name: string; character: string | null };   // host's seat first; character: a game's id, null while choosing
+type RefusedReason = "version" | "started" | "full";
+type StartLevel = { bundle: string | null; hash: string; sent: boolean };      // sent: the host sends the level whole after the start
+
+type LobbyMessage =
+    | { t: "hello"; version: number; name: string }                  // guest -> host, first
+    | { t: "refused"; reason: RefusedReason }                        // host -> guest
+    | { t: "lobby"; seats: LobbySeat[] }                             // host -> each guest let in, on every change
+    | { t: "pick"; character: string | null }                        // guest -> host
+    | { t: "start"; seed: number; level: StartLevel; seats: LobbySeat[] }   // host -> each guest
+    | { t: "need-level" }                                            // guest -> host: my copy isn't yours
+    | { t: "level"; packed: Uint8Array };                            // host -> guest: PackLevel's bytes
+
+EncodeMessage(message): Uint8Array
+DecodeMessage(bytes): LobbyMessage | null      // null for an unknown kind, garbled JSON or missing fields
+CleanName(name, fallback): string             // control characters out, spaces squeezed, cut to NameLength; fallback if empty
+```
+
+### Level transfer
+
+`@logic-incubator/engine/net/LevelTransfer`
+
+| Function | |
+| --- | --- |
+| `LevelHash(file: LevelFile): string` | FNV-1a over the level's JSON, and the JSON's length: `"9f3c01a2-339012"`. The same level parsed from the same file hashes the same on any machine. |
+| `PackLevel(file): Promise<Uint8Array>` | A format byte, then the JSON gzipped (`CompressionStream`), or plain where a browser has no `CompressionStream`. Level 1's 339 KB packs to a few tens of KB. |
+| `UnpackLevel(packed): Promise<LevelFile>` | Back again; rejects for bytes that aren't a packed level file. |
+
+### HostLobby and GuestLobby
+
+`@logic-incubator/engine/net/Lobby` - eventemitter3s, so a component can `Listen` to them.
+
+```ts
+LobbyEvents = { CHANGED: "changed", STARTING: "starting", STARTED: "started", CLOSED: "closed" }
+// changed () - Seats changed · starting () - a guest's: the host has started, the level is being made ready
+// started (start: LobbyStart) · closed (reason: string) - once; see LobbyClosedText
+
+type LobbyStart = { seed: number; bundle: string | null; level: LevelFile; seats: LobbySeat[]; you: number };   // you: this machine's index in seats
+type HostLevel = { bundle: string | null; file: LevelFile; shipped: boolean };   // shipped: the game's own, which every copy has in bundle
+LobbyClosedText(reason): string    // "The host has left." / "That game has already started." / "Lost the connection (...)." ...
+
+// Both
+lobby.Code: string;  lobby.Seats: ReadonlyArray<LobbySeat>;  lobby.Mine: LobbySeat | undefined
+lobby.IsHost: boolean;  lobby.IsOpen: boolean;  lobby.Leave(): void
+
+new HostLobby(session: RelaySession, name: string)      // in the room session opened
+host.Pick(character: string | null): void             // the host's own; not after the start
+host.CanStart: boolean                                // everyone has picked, and it hasn't started
+host.Started: boolean
+host.Start(level: HostLevel, seed = NewSeed()): Promise<LobbyStart>   // rejects unless CanStart
+
+new GuestLobby(session: RelaySession, { name: string; shippedLevel: (bundle: string | null) => Promise<LevelFile | undefined> })
+guest.Pick(character: string | null): void            // asks the host; Seats shows it once the host has it
+guest.Joined: boolean                                 // the host has let this guest in (Mine is set)
+guest.Started: boolean                                // the host has started; the level may still be on its way
+```
+
+How it runs:
+
+- A guest says `hello` as its lobby is made; the host seats it (in peer order, its name cleaned, `PLAYER n` if empty) and from then on sends
+  it `lobby` with every seat whenever anything changes - to each guest let in, never as a broadcast, so a guest still saying hello hears
+  nothing early. Refused: another `NetVersion`, a run already started, or four seats taken. A guest who leaves loses their seat.
+- **Picking is being ready.** `CanStart` once every seat has a character; the host's `Start` sends `start` (seed, level, seats) to each guest
+  and emits `STARTED` itself.
+- **The level.** For a `shipped` level, a guest asks its `shippedLevel(bundle)` for its own copy and plays it if `LevelHash` matches;
+  otherwise it sends `need-level` and the host sends that guest the level, packed. A level that isn't shipped - an editor level - is sent
+  to every guest right after the start, unasked. Either way the guest emits `STARTED` with the level in hand.
+- The host leaving closes the room (`CLOSED` with `host-left` at every guest); `Leave` closes with `left`; a lost connection closes with its
+  reason. A lobby is done with after `CLOSED`.
 
 ---
 
