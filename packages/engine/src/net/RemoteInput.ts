@@ -13,7 +13,11 @@ import type { IPlayerInput } from "../input/PlayerControl";
 
 /** How many inputs may wait before they're played two a step to catch up - about 70 ms' worth. */
 export const MaxWaiting = 4;
-/** How many may wait behind one that never came before it's given up on - half a second's worth. Over the relay nothing is lost, so only a guest that skipped one gets here. */
+/**
+ * How many may wait behind one that never came before it's given up on - half a second's worth. Over the relay nothing
+ * is lost, and on a direct link each input comes again with the next few (`InputsSent`), so only a guest that skipped
+ * one, or a long run of losses, gets here.
+ */
 const MaxGap = 30;
 
 export default class RemoteInput {

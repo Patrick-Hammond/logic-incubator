@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { LoopbackRelay } from "@logic-incubator/lib/net/Loopback";
-import RelaySession from "@logic-incubator/lib/net/RelaySession";
+import { LoopbackLinks, LoopbackRelay } from "@logic-incubator/lib/net/Loopback";
+import { RelayHost } from "@logic-incubator/lib/net/RelayRooms";
+import RelaySession, { RelayJoinOptions } from "@logic-incubator/lib/net/RelaySession";
 import type { Transport } from "@logic-incubator/lib/net/Transport";
 import type { LevelFile } from "../level/LevelFormat";
 import { GuestLobby, HostLobby, LobbyClosedText, LobbyEvents, LobbyStart, QuietForMs, ReconnectForMs } from "./Lobby";
@@ -214,9 +215,10 @@ describe("a guest whose connection goes during the run", () => {
 
     /**
      * A run under way between a host and Sam, whose connections to the relay are kept to cut. The host's lobby
-     * asks `run` whether a guest may come back, as a `HostSession` would be asked.
+     * asks `run` whether a guest may come back, as a `HostSession` would be asked. Every session is opened with
+     * `options` - direct links, say.
      */
-    async function Running(reconnect?: (relay: LoopbackRelay, code: string) => Promise<RelaySession>) {
+    async function Running(reconnect?: (relay: LoopbackRelay, code: string) => Promise<RelaySession>, options: RelayJoinOptions = {}) {
         const relay = new LoopbackRelay();
         const lines: Transport[] = [];
         const connect = () => {
@@ -224,16 +226,16 @@ describe("a guest whose connection goes during the run", () => {
             lines.push(line);
             return line;
         };
-        const host = new HostLobby(await RelaySession.Host(relay.Connect(), "dungeon"), "Hostess");
+        const host = new HostLobby(await RelaySession.Host(relay.Connect(), "dungeon", options), "Hostess");
         const run = { allowed: true, rejoined: [] as Array<[number, number]> };
         host.SetRejoin({ CanRejoin: () => run.allowed, Rejoin: (index, peer) => run.rejoined.push([index, peer]) });
         const tries = { count: 0 };
-        const sam = new GuestLobby(await RelaySession.Join(connect(), "dungeon", host.Code), {
+        const sam = new GuestLobby(await RelaySession.Join(connect(), "dungeon", host.Code, options), {
             name: "Sam",
             shippedLevel: async () => Shipped,
             reconnect: () => {
                 tries.count++;
-                return reconnect ? reconnect(relay, host.Code) : RelaySession.Join(connect(), "dungeon", host.Code);
+                return reconnect ? reconnect(relay, host.Code) : RelaySession.Join(connect(), "dungeon", host.Code, options);
             }
         });
         await Wait();
@@ -369,5 +371,58 @@ describe("a guest whose connection goes during the run", () => {
         await Wait(5000);
         expect(dropped).toEqual([]);
         expect(closed).toEqual(["closed"]);
+    });
+
+    it("takes its direct link to the host failing for lost, as what was on its way may be, and gets back in - linked again", async () => {
+        const links = new LoopbackLinks();
+        const { host, sam, events } = await Running(undefined, { links: links.Make });
+        const before = sam.Session;
+        expect(before.LinkTo(RelayHost)).toBe("direct");
+        expect(host.Session.LinkTo(before.You)).toBe("direct");
+        links.CutAll();
+        await Wait();
+        expect(events).toEqual([LobbyEvents.DROPPED]);
+        expect(LobbyClosedText("link")).toBe("Lost the direct link to the host.");
+        await Wait(600);
+        expect(events).toEqual([LobbyEvents.DROPPED, LobbyEvents.REJOINED]);
+        expect(sam.Session).not.toBe(before);
+        expect(sam.Session.LinkTo(RelayHost)).toBe("direct");
+        expect(host.Session.LinkTo(sam.Session.You)).toBe("direct");
+    });
+
+    it("carries on by the relay when its link never opens", async () => {
+        const { sam, events } = await Running(undefined, { links: new LoopbackLinks({ unreachable: true }).Make, linkTimeoutMs: 2000 });
+        expect(sam.Session.LinkTo(RelayHost)).toBe("linking");
+        await Wait(2000);
+        expect(sam.Session.LinkTo(RelayHost)).toBe("relay");
+        expect(events).toEqual([]);
+    });
+
+    it("carries on by the relay when its link fails before the run, and starts as usual", async () => {
+        const links = new LoopbackLinks();
+        const relay = new LoopbackRelay();
+        const host = new HostLobby(await RelaySession.Host(relay.Connect(), "dungeon", { links: links.Make }), "Hostess");
+        const kit = new GuestLobby(await RelaySession.Join(relay.Connect(), "dungeon", host.Code, { links: links.Make }), {
+            name: "Kit",
+            shippedLevel: async () => Shipped,
+            reconnect: () => Promise.reject(new Error("never asked"))
+        });
+        const dropped: number[] = [];
+        kit.on(LobbyEvents.DROPPED, () => dropped.push(1));
+        const closed = Closed(kit);
+        await Wait();
+        expect(kit.Session.LinkTo(RelayHost)).toBe("direct");
+        links.CutAll();
+        await Wait();
+        expect(kit.Session.LinkTo(RelayHost)).toBe("relay");
+        host.Pick("witch");
+        kit.Pick("warlock");
+        await Wait();
+        const started = NextStart(kit);
+        await host.Start({ bundle: "level1", file: Shipped, shipped: true });
+        await Wait();
+        expect((await started).seats.map(seat => seat.character)).toEqual(["witch", "warlock"]);
+        expect(dropped).toEqual([]);
+        expect(closed).toEqual([]);
     });
 });

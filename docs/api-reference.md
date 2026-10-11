@@ -1017,7 +1017,7 @@ does not fill `children`. Use it as an emitter's `parent` when there are many.
 ## Net
 
 `@logic-incubator/lib/net/...` - what online play travels on: a binary writer and reader, the `Transport` connections carry
-messages over, the relay's rules and the client side of them. All pure; the relay server itself is `relay/` at the repo root
+messages over, direct links between peers, the relay's rules and the client side of them. All pure; the relay server itself is `relay/` at the repo root
 (see the [user guide](user-guide.md#15-networking-and-the-relay)).
 
 ### Bytes
@@ -1061,8 +1061,45 @@ abstract class TransportBase implements Transport   // the listener bookkeeping;
 | Module | |
 | --- | --- |
 | `WebSocketTransport` (default export) | `static Connect(url, { timeoutMs = 10000, create? }): Promise<WebSocketTransport>` - resolves once open; rejects with an `Error` if it can't connect or there's no answer in time. `create(url)` makes the socket (`new WebSocket(url)` by default; a test passes a `WebSocketLike`). Asks for binary as `arraybuffer`; text arrives as a string, binary as a `Uint8Array`. `Close()` ends this end at once. `CloseReason(code, reason)` turns a close event into words: the reason given, else `closed`, `going away`, `connection lost` (1006) or `closed (code)`. |
-| `Loopback` | `LoopbackPair(): [Transport, Transport]` - two ends joined in memory; a message arrives a moment after `Send` (a promise callback, never during it), as a copy. `new LoopbackRelay(options?: RelayRoomsOptions)` - a relay in memory with the real one's rules: `Connect(): Transport` is a new connection to it; `rooms` is its `RelayRooms`. |
-| `Lag` | `WithLag(transport, lag): Transport` - the lag simulator. `lag`: `{ delayMs, jitterMs = 0, lossChance = 0, lossDelayMs = 200, random = Math.random }`. Each message, each way, waits `delayMs` plus up to `jitterMs`; a `lossChance` share also waits `lossDelayMs`, as if lost and sent again - holding up those behind it, since messages stay in order. One lagged end adds twice the delay to a round trip. Closing it sends what's queued first; a close from the other end arrives after what was sent before it. |
+| `Loopback` | `LoopbackPair(): [Transport, Transport]` - two ends joined in memory; a message arrives a moment after `Send` (a promise callback, never during it), as a copy. `new LoopbackRelay(options?: RelayRoomsOptions)` - a relay in memory with the real one's rules: `Connect(): Transport` is a new connection to it; `rooms` is its `RelayRooms`. `new LoopbackLinks(options?)` - direct links in memory (see [Direct links](#direct-links)): `Make` is the `LinkMaker` to give every session in a room; the links find each other by their signals, as WebRTC's do. `options` (`{ unreachable?, fastLoss = 0, random = Math.random }`, changeable as it runs): `unreachable` links never open; `fastLoss` is the share of fast-lane messages lost. `links` is every link made; `CutAll()` fails every open one at both ends (the relay is left be). |
+| `Lag` | `WithLag(transport, lag): Transport` - the lag simulator. `lag`: `{ delayMs, jitterMs = 0, lossChance = 0, lossDelayMs = 200, random = Math.random }`. Each message, each way, waits `delayMs` plus up to `jitterMs`; a `lossChance` share also waits `lossDelayMs`, as if lost and sent again - holding up those behind it, since messages stay in order. One lagged end adds twice the delay to a round trip. Closing it sends what's queued first; a close from the other end arrives after what was sent before it. `WithLinkLag(link, lag): PeerLink` - the same for a direct link: its reliable lane as `WithLag`, its fast lane each message on its own delay (so one can overtake another), and a `lossChance` share lost outright. Setting the link up isn't slowed. |
+
+### Direct links
+
+`@logic-incubator/lib/net/PeerLink` - a direct connection between two peers of a room, alongside the relay, with two lanes: the reliable
+lane (whole and in order, as the relay) and the fast lane (may lose a message or deliver it out of order, never holding up the ones
+behind). `RelaySession` sets them up and sends by them ([RelaySession](#relaysession)); a game only chooses the `LinkMaker`.
+
+```ts
+interface PeerLink {
+    readonly IsOpen: boolean;                                    // both lanes open, from OnOpen until it closes
+    Send(payload: Uint8Array, fast: boolean): void;              // does nothing unless open
+    Signal(signal: string): void;                                // a signal from the other end's link
+    OnSignal(listener: (signal: string) => void): () => void;    // signals to pass to the other end: an offer, an answer, addresses
+    OnOpen(listener: () => void): () => void;                    // once
+    OnMessage(listener: (payload: Uint8Array, fast: boolean) => void): () => void;
+    OnClose(listener: (reason: string) => void): () => void;     // once: closed at either end, failed, or never got going
+    Close(): void;                                               // safe twice
+}
+type LinkMaker = (offer: boolean) => PeerLink;                  // offer: the end that starts it (a guest's, to the host)
+type LinkState = "relay" | "linking" | "direct";
+abstract class PeerLinkBase implements PeerLink                  // the listener bookkeeping; subclasses call Emit(signal), Opened(), Deliver(payload, fast), End(reason)
+```
+
+`@logic-incubator/lib/net/WebRtcLink` - default export `class WebRtcLink extends PeerLinkBase`, a link between two browsers.
+
+```ts
+new WebRtcLink(offer: boolean, { iceServers = [{ urls: StunServers }], peerConnection = RTCPeerConnection }?)
+WebRtcLink.Supported: boolean          // the page has RTCPeerConnection
+StunServers = ["stun:stun.l.google.com:19302", "stun:stun.cloudflare.com:3478"]
+PieceBytes = 16384                      // the most the reliable lane sends at once; longer messages go in pieces and are put back together
+```
+
+Two data channels agreed beforehand at both ends (`negotiated`, ids 0 and 1): the reliable lane ordered and resending, the fast lane
+unordered with `maxRetransmits: 0`. The offering end sends its offer as soon as it's made; the other answers; both send each address
+they find (addresses that come before the description wait for it). Signals are JSON text. It ends (`OnClose`) when either channel
+closes (`closed`), the connection fails (`failed`), or setting up throws (`couldn't offer: ...`). No TURN server: when two machines
+can't reach each other it never opens, and `RelaySession` gives up on it.
 
 ### Relay rooms and protocol
 
@@ -1107,26 +1144,42 @@ letter or a digit (B, D, S, V, Z), so a code read off the screen is typed as it 
 `@logic-incubator/lib/net/RelaySession` - default export `class RelaySession extends EventEmitter` (eventemitter3, so a component can `Listen`).
 
 ```ts
-static Host(transport, game: string, { timeoutMs = 10000 }?): Promise<RelaySession>
-static Join(transport, game: string, code: string, { timeoutMs = 10000 }?): Promise<RelaySession>
+static Host(transport, game: string, options?: RelayJoinOptions): Promise<RelaySession>
+static Join(transport, game: string, code: string, options?: RelayJoinOptions): Promise<RelaySession>
 // both reject with RelayRefusedError (reason: RelayError, message: RefusalText(reason)), or an Error if the
 // connection ends or the relay doesn't answer - closing the transport
+type RelayJoinOptions = {
+    timeoutMs?: number;          // for the relay's answer - 10000
+    links?: LinkMaker;           // direct links (see Direct links): a guest links to the host as it joins; the host answers. Both ends need it
+    linkTimeoutMs?: number;      // how long a link may take to open before the relay carries everything - LinkTimeoutMs (10000)
+};
 
 session.Code: string;  session.You: number;  session.IsHost: boolean;  session.IsOpen: boolean
 session.Peers: ReadonlyArray<number>      // everyone else in the room, in peer order
-session.Send(to: number, payload: Uint8Array): void
-session.Broadcast(payload: Uint8Array): void
+session.Send(to: number, payload: Uint8Array, fast = false): void   // by the open link to `to`, else the relay; `fast`: the link's fast lane
+session.Broadcast(payload: Uint8Array, fast = false): void          // one copy by the relay - or each peer its own way, once any is linked
+session.LinkTo(peer: number): LinkState  // "direct" once the link is open and switched to, "linking" while it's set up, else "relay"
 session.Leave(): void                    // closes the connection - and the room, from the host
 session.Drop(reason: string): void       // lets go of a connection taken for lost (gone quiet): closes it as Leave does,
                                          // but CLOSED hears `reason`, so a listener can get back in on a new one
 
-RelayEvents = { MESSAGE: "message", PEER_JOINED: "peer-joined", PEER_LEFT: "peer-left", CLOSED: "closed" }
+RelayEvents = { MESSAGE: "message", PEER_JOINED: "peer-joined", PEER_LEFT: "peer-left", CLOSED: "closed", LINKED: "linked", UNLINKED: "unlinked" }
 // message (from: number, payload: Uint8Array) · peer-joined (peer) · peer-left (peer)
 // closed (reason: "left" | "host-left" | Drop's reason | the connection's own reason) - once; every listener is dropped after it
+// linked (peer) - messages to and from peer go by the link now
+// unlinked (peer, wasOpen: boolean) - the link ended, or never opened in time; the relay carries on. One that was open may have lost what was on it
+LinkPayload = 0xff                        // the first byte of the session's own messages (setting up a link), never handed on
+LinkTimeoutMs = 10000
 RefusalText(reason: RelayError): string   // "There's no game with that code." ...
 ```
 
 The session is made in the same moment as the relay's answer, so it hears everything after it. Listen to it before your next `await`.
+
+With `links`, a guest's link signals go to the host by the relay, as payloads starting `LinkPayload`; a game's own messages must start
+with any other byte. When its link opens, each end sends a switch marker by the relay ahead of anything by the link, and holds what the
+other's reliable lane brings until the other's marker comes - so nothing sent by the relay is overtaken. The fast lane is delivered as
+it comes. A link that closes, fails or isn't open within `linkTimeoutMs` emits `UNLINKED` and is let go; there's no second try in that
+session. A peer leaving, or the session closing, closes its links.
 
 ### Relay server
 
@@ -1852,7 +1905,7 @@ same level onto every machine, and the host's and guests' lobbies. All pure.
 `@logic-incubator/engine/net/NetMessages` - a kind byte, then JSON (a `level`'s body is its bytes).
 
 ```ts
-NetVersion = 3;     // a guest on another is refused ("version"); raise it whenever a message changes - this file's or PlayMessages'
+NetVersion = 4;     // a guest on another is refused ("version"); raise it whenever a message changes - this file's or PlayMessages'
 NameLength = 12;
 
 type LobbySeat = { peer: number; name: string; character: string | null };   // host's seat first; character: a game's id, null while choosing
@@ -1901,7 +1954,8 @@ interface RejoinHandler { CanRejoin(index: number): boolean; Rejoin(index: numbe
 type LobbyStart = { seed: number; bundle: string | null; level: LevelFile; seats: LobbySeat[]; you: number };   // you: this machine's index in seats
 type HostLevel = { bundle: string | null; file: LevelFile; shipped: boolean };   // shipped: the game's own, which every copy has in bundle
 LobbyClosedText(reason): string    // "The host has left." / "That game has already started." / "You were away too long." /
-                                   // "Lost the connection, and couldn't get back in." (lost) / "Lost the connection (...)." ...
+                                   // "Lost the connection, and couldn't get back in." (lost) / "Lost the direct link to the host." (link) /
+                                   // "Lost the connection (...)." ...
 
 // Both
 lobby.Code: string;  lobby.Seats: ReadonlyArray<LobbySeat>;  lobby.Mine: LobbySeat | undefined
@@ -1940,13 +1994,15 @@ How it runs:
 - The host leaving closes the room (`CLOSED` with `host-left` at every guest); `Leave` closes with `left`; a lost connection closes with its
   reason - but see below. A lobby is done with after `CLOSED`. Once the run has begun the host keeps every seat, whoever leaves.
 - **Getting back in.** The host's `start` gives each guest a random token. A guest given `reconnect` whose connection goes once its run has
-  begun (`STARTED`) - closed, or nothing heard for `QuietForMs` (`RelaySession.Drop("quiet")`) - emits `DROPPED` and tries again after
+  begun (`STARTED`) - closed, nothing heard for `QuietForMs` (`RelaySession.Drop("quiet")`), or its open direct link to the host ended
+  under it (`UNLINKED` with `wasOpen`; `Drop("link")`), as what was on its way may be lost - emits `DROPPED` and tries again after
   0.5, 1, 2, then every 4 s: `reconnect()`, then `hello` with its token, waiting up to 5 s for the answer. The host's lobby looks the token
   up and asks its `RejoinHandler`: `rejoined` (it moves the seat to the new peer, calls `Rejoin(index, peer)` - the run sends its
   catch-up straight after - and emits `CHANGED`), or refused `gone` (`CanRejoin` false) or `started` (a token it never gave, or no
   handler). The guest emits `REJOINED` the moment the answer comes, so the run is listening on the new `Session` for the catch-up. It
   closes with `host-left` if the room has gone (`no-room`), with the refusal's reason, or with `lost` once `ReconnectForMs` is up.
-  A guest leaving (`Leave`), the host leaving, or a lobby without `reconnect` or before the run has begun closes as it always did.
+  A guest leaving (`Leave`), the host leaving, or a lobby without `reconnect` or before the run has begun closes as it always did; a
+  link ending before the run, or one that never opened, changes nothing - the relay carries on.
 
 ## Online play
 
@@ -1990,12 +2046,15 @@ type NetLevelContext = {
 ### HostSession and GuestSession
 
 `@logic-incubator/engine/net/HostSession`, `GuestSession` - both `extends PlaySession` (`net/PlaySession`: listens to the session's messages and
-departures, answers pings and pings its peers once a second, keeping each one's round trip; `BytesText(bytes)` and `ByteRate` for `Stats`).
+departures, answers pings and pings its peers once a second, keeping each one's round trip; sends each message by a direct link's fast
+lane when `MayBeLost(message)` - inputs, pings, pongs, and a snapshot with no events - and reliably otherwise; `BytesText(bytes)` and
+`ByteRate` for `Stats`).
 
 | | Host | Guest |
 | --- | --- | --- |
 | `Begin` | Waits for every guest still in the room to say it has the level ready (an empty input message), or `WaitForGuestsMs` (10 s); departed heroes are removed again, and away ones set away (those whose connection has gone aren't waited for). | A new `Replica` from the level's spawners; sends "ready"; plays any snapshots that came before it. |
-| `Step` | Each guest's hero plays its waiting inputs (`RemoteInput.Take`), this machine's hero its own; `World.Step`; a snapshot every `SnapshotEvery` (3) steps and as the level ends. | Its own hero steps ahead (`Prediction.Step`); a shot it fires flies at once as a stand-in; sends the last `InputsSent` (3) inputs. |
+| `Step` | Each guest's hero plays its waiting inputs (`RemoteInput.Take`), this machine's hero its own; `World.Step`; a snapshot every `SnapshotEvery` (3) steps and as the level ends. | Its own hero steps ahead (`Prediction.Step`); a shot it fires flies at once as a stand-in; sends the last `InputsSent` (6) inputs. |
+| A snapshot | - | Its events, then the doors and the world - but a snapshot no newer than the newest it has (overtaken on a link's fast lane) is only its events. |
 | `Frame` | Pings. | Pings; moves the `PlayClock` on; samples the `Replica`; puts the other heroes where they were at that moment; settles the correction; updates what's seen. |
 | `Record` | Turns the engine's events into `NetEvent`s for the next snapshot. | - |
 | `Restart` | The next round: tells every guest, forgets their inputs. | - (a `restart` message calls `restart`) |
@@ -2004,8 +2063,9 @@ departures, answers pings and pings its peers once a second, keeping each one's 
 | A guest comes back | `CanRejoin(index)` (not ended, not departed); `Rejoin(index, peer)`: listens for that hero's inputs from `peer`, numbered afresh, sends `catch-up` (with the level's end, if it's over), then a snapshot at once. | `Rejoin(session)`: listens there, lets go of the inputs the host never had, and plays nothing till the `catch-up`: what lasting happened that it hasn't done, done quietly (no events emitted), and the level's end emitted if it hadn't heard it - or, for a new round, its level started over and caught up as it begins. |
 
 `HostSession.Round`, `Playing` (every guest in the room ready), `CanRejoin`, `Rejoin`; `GuestSession.Prediction`, `Playing`, `DrawnTick`,
-`Rejoin`; `Prediction.Forget()` (drops the pending inputs, numbering on). The host's `Stats` says per guest its round trip and inputs waiting,
-`AWAY, NOTHING FOR n S`, `GONE, HELD n S MORE` or `LEFT`.
+`Rejoin`; `Prediction.Forget()` (drops the pending inputs, numbering on). The host's `Stats` says per guest how it's reached (`DIRECT`, `RELAY`
+or `RELAY, LINKING`), its round trip and inputs waiting, `AWAY, NOTHING FOR n S`, `GONE, HELD n S MORE` or `LEFT`; a guest's says the same
+of the host after its round trip.
 
 ### Messages
 

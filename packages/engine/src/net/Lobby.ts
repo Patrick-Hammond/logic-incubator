@@ -12,7 +12,8 @@
  * them anything, so nothing reaches a guest before it's listening.
  *
  * Once the run has begun (`STARTED`), a guest whose connection goes - closed,
- * or quiet for `QuietForMs` - tries to get back in (see
+ * quiet for `QuietForMs`, or its direct link to the host failed under it, with
+ * what was on its way - tries to get back in (see
  * `GuestLobbyOptions.reconnect`) for as long as the host keeps its hero
  * (`HoldAwayMs`): a new place in the room, and a hello with the token its start
  * gave it. The host's lobby asks the run (`SetRejoin`) and lets it back in as
@@ -104,6 +105,8 @@ export function LobbyClosedText(reason: string): string {
             return "Lost touch with the host.";
         case "lost":
             return "Lost the connection, and couldn't get back in.";
+        case "link":
+            return "Lost the direct link to the host.";
         default:
             return "Lost the connection (" + reason + ").";
     }
@@ -176,6 +179,11 @@ abstract class Lobby extends EventEmitter {
     protected abstract OnMessage(from: number, message: LobbyMessage): void;
     protected abstract OnPeerLeft(peer: number): void;
 
+    /** The direct link to `peer` has ended (see `RelayEvents.UNLINKED`) - after being open, if `wasOpen`. The relay carries on. */
+    protected OnUnlinked(_peer: number, _wasOpen: boolean): void {
+        // The host lets the guest say: it's the guest that gets back in.
+    }
+
     /** The session has closed, for `reason` (see `RelayEvents.CLOSED`): so does the lobby - unless a guest's tries to get back in. */
     protected OnSessionClosed(reason: string): void {
         this.Close(reason);
@@ -194,13 +202,16 @@ abstract class Lobby extends EventEmitter {
         };
         const left = (peer: number) => this.OnPeerLeft(peer);
         const closed = (reason: string) => this.OnSessionClosed(reason);
+        const unlinked = (peer: number, wasOpen: boolean) => this.OnUnlinked(peer, wasOpen);
         session.on(RelayEvents.MESSAGE, message);
         session.on(RelayEvents.PEER_LEFT, left);
         session.on(RelayEvents.CLOSED, closed);
+        session.on(RelayEvents.UNLINKED, unlinked);
         this.stops.push(() => {
             session.off(RelayEvents.MESSAGE, message);
             session.off(RelayEvents.PEER_LEFT, left);
             session.off(RelayEvents.CLOSED, closed);
+            session.off(RelayEvents.UNLINKED, unlinked);
         });
     }
 
@@ -467,6 +478,16 @@ export class GuestLobby extends Lobby {
 
     protected OnPeerLeft(_peer: number): void {
         // The host says how the lobby stands; the host leaving closes the room, and with it this.
+    }
+
+    /**
+     * The direct link to the host has failed: what was on its way over it may be lost. During the run that's taken as
+     * the connection gone - it gets back in, and is told what it missed. Before, the relay carries on.
+     */
+    protected OnUnlinked(peer: number, wasOpen: boolean): void {
+        if (peer === RelayHost && wasOpen && this.begun && !this.reconnecting) {
+            this.session.Drop("link");
+        }
     }
 
     /** Its connection has gone: during the run, it tries to get back in - else, or when it left, or the host did, it closes. */

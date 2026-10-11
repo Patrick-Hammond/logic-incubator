@@ -1,12 +1,16 @@
 /**
  * What the host's and a guest's sessions share (see `HostSession`,
  * `GuestSession`): listening to the room for messages of play, pinging the
- * others once a second for the round trip, and stopping. Pure - no pixi - so
- * it runs under the plain node test runner.
+ * others once a second for the round trip, and stopping. Over a direct link
+ * (see `RelaySession`) what's sent again soon anyway - inputs, pings, a
+ * snapshot with nothing happening in it - goes by the fast lane, which may lose
+ * it; the rest goes reliably. Pure - no pixi - so it runs under the plain node
+ * test runner.
  */
 
 import type { Vec2Like } from "@logic-incubator/lib/math/Geometry";
 import { ByteWriter } from "@logic-incubator/lib/net/Bytes";
+import type { LinkState } from "@logic-incubator/lib/net/PeerLink";
 import RelaySession, { RelayEvents } from "@logic-incubator/lib/net/RelaySession";
 import type { EncounterView } from "../Encounter";
 import type { IPlayerInput } from "../input/PlayerControl";
@@ -122,24 +126,29 @@ export default abstract class PlaySession implements NetPlay {
         // The host takes the guest's hero out; a guest hears of it from the host.
     }
 
-    /** Sends a message to peer `to`. Returns its size in bytes. */
+    /** Sends a message to peer `to` - by the fast lane if it may go that way (see `MayBeLost`). Returns its size in bytes. */
     protected Send(to: number, message: PlayMessage): number {
         if (this.Ended) {
             return 0;
         }
         const bytes = EncodePlay(message, this.writer);
-        this.session.Send(to, bytes);
+        this.session.Send(to, bytes, MayBeLost(message));
         return bytes.length;
     }
 
-    /** Sends a message to everyone else in the room. Returns its size in bytes. */
+    /** Sends a message to everyone else in the room, as `Send` does. Returns its size in bytes. */
     protected Broadcast(message: PlayMessage): number {
         if (this.Ended) {
             return 0;
         }
         const bytes = EncodePlay(message, this.writer);
-        this.session.Broadcast(bytes);
+        this.session.Broadcast(bytes, MayBeLost(message));
         return bytes.length;
+    }
+
+    /** How messages to and from `peer` go: by the relay, or by a direct link (see `RelaySession.LinkTo`) - for stats. */
+    protected LinkText(peer: number): string {
+        return LinkWords[this.session.LinkTo(peer)];
     }
 
     /** Pings each of `peers`, if a second has passed since the last. */
@@ -167,6 +176,26 @@ export default abstract class PlaySession implements NetPlay {
         return this.rtt.get(peer);
     }
 }
+
+/**
+ * Whether `message` may go by a direct link's fast lane, which can lose it or let a later one overtake it: what's sent
+ * again soon anyway. Inputs come with the few before them, a ping lost is one round trip unmeasured, and a snapshot is
+ * the whole world as it stands - unless something happened in it, which must arrive, in order.
+ */
+export function MayBeLost(message: PlayMessage): boolean {
+    switch (message.t) {
+        case "input":
+        case "ping":
+        case "pong":
+            return true;
+        case "snapshot":
+            return message.events.length === 0;
+        default:
+            return false;
+    }
+}
+
+const LinkWords: { [state in LinkState]: string } = { relay: "RELAY", linking: "RELAY, LINKING", direct: "DIRECT" };
 
 /** A number of bytes as a person reads it: `"840 B"`, `"1.4 KB"`. */
 export function BytesText(bytes: number): string {

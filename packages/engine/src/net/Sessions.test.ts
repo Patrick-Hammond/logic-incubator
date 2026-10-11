@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Vec2 } from "@logic-incubator/lib/math/Geometry";
-import { WithLag } from "@logic-incubator/lib/net/Lag";
-import { LoopbackRelay } from "@logic-incubator/lib/net/Loopback";
+import { LagOptions, WithLag, WithLinkLag } from "@logic-incubator/lib/net/Lag";
+import { LoopbackLinks, LoopbackRelay } from "@logic-incubator/lib/net/Loopback";
+import { LinkMaker, PeerLink, PeerLinkBase } from "@logic-incubator/lib/net/PeerLink";
+import { RelayHost } from "@logic-incubator/lib/net/RelayRooms";
 import RelaySession from "@logic-incubator/lib/net/RelaySession";
 import { TileSize } from "../Constants";
 import { ALL_PLAYERS_DIED, PICKUP_COLLECTED } from "../Events";
@@ -19,8 +21,8 @@ import type { NetPlay } from "./NetPlay";
 
 /**
  * Whole online runs, headless: a host and its guests, each with its own world on its own copy of the level,
- * talking through an in-memory relay - slowed down and losing packets where a test says - and played a 60th of a
- * second at a time.
+ * talking through an in-memory relay - or direct links, where a test makes them - slowed down and losing packets
+ * where a test says, and played a 60th of a second at a time.
  */
 
 const BOW: WeaponDef = { icon: "bow", shot: { sprite: "arrow", speed: 6, damage: 1, range: 20, cooldown: 0.5 } };
@@ -61,14 +63,18 @@ class Run {
     private relay!: LoopbackRelay;
     private seats: LobbySeat[] = [];
 
-    /** Opens a room with `guests` guests in it, each line to the relay slowed by `lag` if given. */
-    async Open(guests: number, lag?: (i: number) => Parameters<typeof WithLag>[1]): Promise<void> {
+    /**
+     * Opens a room with `guests` guests in it, each line to the relay slowed by `lag` if given. With `links`, each
+     * guest links to the host directly too, its link slowed by `linkLag` if given.
+     */
+    async Open(guests: number, lag?: (i: number) => LagOptions, links?: LoopbackLinks, linkLag?: (i: number) => LagOptions): Promise<void> {
         const relay = this.relay = new LoopbackRelay();
-        const hostRelay = await RelaySession.Host(relay.Connect(), "test");
+        const hostRelay = await RelaySession.Host(relay.Connect(), "test", { links: links && links.Make });
         const guestRelays: RelaySession[] = [];
         for (let i = 0; i < guests; i++) {
             const line = lag ? WithLag(relay.Connect(), lag(i)) : relay.Connect();
-            const joining = RelaySession.Join(line, "test", hostRelay.Code);
+            const make: LinkMaker | undefined = links && (offer => (linkLag ? WithLinkLag(links.Make(offer), linkLag(i)) : links.Make(offer)));
+            const joining = RelaySession.Join(line, "test", hostRelay.Code, { links: make });
             await vi.advanceTimersByTimeAsync(1000);
             guestRelays.push(await joining);
         }
@@ -76,6 +82,24 @@ class Run {
         const now = () => this.now;
         this.host = this.Machine(hostRelay, new HostSession(hostRelay, this.seats, { now }));
         this.guests = guestRelays.map(session => this.Machine(session, new GuestSession(session, this.seats, { now })));
+    }
+
+    /** A new connection to the relay. */
+    Connect(): ReturnType<LoopbackRelay["Connect"]> {
+        return this.relay.Connect();
+    }
+
+    /** Plays a guest on `session` - in the room already - in the run from the start, as the last hero. */
+    AddGuest(session: RelaySession): Machine {
+        this.seats.push({ peer: session.You, name: "P" + this.seats.length, character: "x" });
+        const now = () => this.now;
+        // Every machine's run has every hero; made again with the new one, before anything has begun.
+        [this.host, ...this.guests].forEach(machine => machine.session.End());
+        this.host = this.Machine(this.host.relay, new HostSession(this.host.relay, this.seats, { now }));
+        this.guests = this.guests.map(guest => this.Machine(guest.relay, new GuestSession(guest.relay, this.seats, { now })));
+        const machine = this.Machine(session, new GuestSession(session, this.seats, { now }));
+        this.guests.push(machine);
+        return machine;
     }
 
     /** Guest `guest` (from 0) is back in the room on a new connection, and the host's lobby has let it back into the run. */
@@ -395,9 +419,9 @@ describe("an online run", () => {
         await run.Frames(120, hero => Input(hero ? 1 : 0));
         const host = run.host.session.Stats().join("\n");
         expect(host).toContain("HOST - ROUND 1");
-        expect(host).toMatch(/P1: \d+ MS, \d+ INPUTS WAITING/);
+        expect(host).toMatch(/P1: RELAY, \d+ MS, \d+ INPUTS WAITING/);
         const guest = run.guests[0].session.Stats().join("\n");
-        expect(guest).toMatch(/ROUND TRIP \d+ MS/);
+        expect(guest).toMatch(/ROUND TRIP \d+ MS, RELAY/);
         expect(guest).toMatch(/\/S, DRAWN -?\d+ MS BEHIND/);
         expect(guest).toContain("CORRECTIONS 0");
 
@@ -421,7 +445,133 @@ describe("an online run", () => {
             expect(session.Prediction.Corrections).toBe(0);
         });
     });
+
+    describe("over direct links", () => {
+        it("sends inputs, pings and quiet snapshots by the fast lane, and what happened reliably", async () => {
+            const links = new LoopbackLinks();
+            await run.Open(1, undefined, links);
+            const sent: Array<[number, boolean]> = [];
+            const send = run.host.relay.Send.bind(run.host.relay);
+            run.host.relay.Send = (to: number, payload: Uint8Array, fast = false) => {
+                sent.push([payload[0], fast]);
+                send(to, payload, fast);
+            };
+            await run.BeginAll();
+            await run.Frames(70, hero => (hero === 1 ? Input(0.6, 0.4) : undefined));
+            // Snapshots (kind 17) with nothing in them go fast; the one with the gold taken goes reliably.
+            const snapshots = sent.filter(([kind]) => kind === 17);
+            expect(snapshots.some(([, fast]) => fast)).toBe(true);
+            expect(snapshots.some(([, fast]) => !fast)).toBe(true);
+            expect(run.guests[0].level.pickups).toEqual([]);
+            expect(run.host.session.Stats().join("\n")).toMatch(/P1: DIRECT, \d+ MS/);
+            expect(run.guests[0].session.Stats().join("\n")).toMatch(/ROUND TRIP \d+ MS, DIRECT/);
+        });
+
+        it("over links that lose a tenth of the fast lane and let it overtake itself, still lands each guest where the host has them, uncorrected, missing nothing that happened", async () => {
+            const random = SeededRandom(5);
+            await run.Open(2, () => ({ delayMs: 120 }), new LoopbackLinks({ fastLoss: 0.1, random }), () => ({ delayMs: 30, jitterMs: 40, lossChance: 0.1, random }));
+            expect(run.host.relay.LinkTo(1)).toBe("direct");
+            expect(run.guests[1].relay.LinkTo(RelayHost)).toBe("direct");
+            await run.BeginAll();
+            // Over the gold and through the door, then about.
+            await run.Frames(70, hero => (hero === 1 ? Input(0.6, 0.4) : hero === 2 ? Input(1) : undefined));
+            const walk = (hero: number, frame: number) => (Math.floor(frame / 40 + hero) % 3 === 0 ? undefined : Input(Math.sin(frame / 25 + hero), Math.cos(frame / 17 + hero)));
+            await run.Frames(400, walk);
+            await run.Frames(60, () => undefined);
+            run.guests.forEach((guest, i) => {
+                expect(guest.world.Heroes[i + 1].Position.x).toBe(run.host.world.Heroes[i + 1].Position.x);
+                expect(guest.world.Heroes[i + 1].Position.y).toBe(run.host.world.Heroes[i + 1].Position.y);
+                expect((guest.session as GuestSession).Prediction.Corrections).toBe(0);
+                expect(guest.level.pickups).toEqual([]);
+                expect(guest.level.door.isOpen).toBe(run.host.level.door.isOpen);
+                expect(guest.events.filter(event => event[0] === PICKUP_COLLECTED)).toHaveLength(1);
+            });
+        });
+
+        it("never loses what happened, though everything sent by the fast lane is", async () => {
+            const links = new LoopbackLinks();
+            await run.Open(1, undefined, links);
+            await run.BeginAll();
+            await run.Frames(10, () => undefined);
+            links.options.fastLoss = 1;
+            // The host's hero over the gold: the guest hears of it, though no snapshot of the world gets through.
+            await run.Frames(70, hero => (hero === 0 ? Input(0.6, 0.4) : undefined));
+            const guest = run.guests[0];
+            expect(run.host.level.pickups).toEqual([]);
+            expect(guest.level.pickups).toEqual([]);
+            expect(guest.events).toContainEqual([PICKUP_COLLECTED, 0, 4, 3]);
+        });
+
+        it("draws from the newest snapshot, though an older one comes after it - and does what happened in that", async () => {
+            const links = new LoopbackLinks();
+            // The guest's link holds back the 10th snapshot it's sent by the fast lane, till others have overtaken it.
+            let fastSnapshots = 0;
+            const late: LinkMaker = offer => {
+                const link = links.Make(offer);
+                const held = new HeldLink(link, payload => payload[0] === 17 && ++fastSnapshots === 10);
+                return held;
+            };
+            await run.Open(1, undefined, links);
+            const joining = RelaySession.Join(run.Connect(), "test", run.host.relay.Code, { links: late });
+            await vi.advanceTimersByTimeAsync(1000);
+            const session = await joining;
+            expect(session.LinkTo(RelayHost)).toBe("direct");
+            const guest = run.AddGuest(session);
+            await run.BeginAll();
+            const replica = (guest.session as GuestSession).Entities as unknown as { Newest?: { tick: number } };
+            const newest: number[] = [];
+            for (let i = 0; i < 60; i++) {
+                await run.Frames(1, hero => (hero === 0 ? Input(1) : undefined));
+                newest.push(replica.Newest ? replica.Newest.tick : 0);
+            }
+            expect(fastSnapshots).toBeGreaterThan(20);
+            expect(newest).toEqual(newest.slice().sort((a, b) => a - b));
+        });
+
+        it("carries on by the relay when the links fail", async () => {
+            const links = new LoopbackLinks();
+            await run.Open(1, undefined, links);
+            await run.BeginAll();
+            await run.Frames(30, hero => (hero === 1 ? Input(1) : undefined));
+            links.CutAll();
+            await run.Frames(60, hero => (hero === 1 ? Input(0, 1) : undefined));
+            await run.Frames(30, () => undefined);
+            expect(run.host.relay.LinkTo(1)).toBe("relay");
+            const guest = run.guests[0];
+            expect(guest.world.Heroes[1].Position.y).toBe(run.host.world.Heroes[1].Position.y);
+            expect(run.host.world.Heroes[1].Position.y).toBeGreaterThan(TileSize * 2);
+        });
+    });
 });
+
+/** A link that holds back one message by its fast lane - the one `hold` picks - for a fifth of a second, so others overtake it. */
+class HeldLink extends PeerLinkBase {
+    constructor(private inner: PeerLink, hold: (payload: Uint8Array) => boolean) {
+        super();
+        inner.OnSignal(signal => this.Emit(signal));
+        inner.OnOpen(() => this.Opened());
+        inner.OnMessage((payload, fast) => {
+            if (fast && hold(payload)) {
+                setTimeout(() => this.Deliver(payload, true), 200);
+            } else {
+                this.Deliver(payload, fast);
+            }
+        });
+        inner.OnClose(reason => this.End(reason));
+    }
+
+    Send(payload: Uint8Array, fast: boolean): void {
+        this.inner.Send(payload, fast);
+    }
+
+    Signal(signal: string): void {
+        this.inner.Signal(signal);
+    }
+
+    Close(): void {
+        this.inner.Close();
+    }
+}
 
 /** A walker standing at a cell of `world`'s level, as its encounter would make one. */
 function MonsterAt(world: World, x: number, y: number) {

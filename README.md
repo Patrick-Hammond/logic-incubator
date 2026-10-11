@@ -9,7 +9,7 @@ The shared code the games build on - apart from the relay below, there's nothing
 packages, whose dependencies only point down (editor -> engine -> ui -> lib; the editor may use `ui` too):
 
 - `packages/lib` - `@logic-incubator/lib`: game framework, asset bundles and their build
-  (`src/assets/`, `scripts/`), input, tweening, tilemap rendering, filters, online transports and the
+  (`src/assets/`, `scripts/`), input, tweening, tilemap rendering, filters, online transports, direct WebRTC links and the
   relay's room rules (`src/net/`); plus the HTML page the games are served in (`html/`)
 - `packages/engine` - `@logic-incubator/engine`: the top-down tile engine - level format and
   loading, lighting and depth, heroes (one, a couch party, or players online), monsters and combat, online play - the lobby
