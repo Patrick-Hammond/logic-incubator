@@ -9,19 +9,19 @@ import Level from "../level/Level";
 import { Camera } from "./Camera";
 import GlowLayer, { CreateGlowTexture } from "./GlowLayer";
 import { ViewOrigin } from "./helpers/CameraWindow";
+import { EntitiesLayer, GlowsLayer, OrbsLayer, ProjectilesLayer } from "./helpers/FigureLayers";
 import { GlowFlameY, GlowLook, LookOfGlow } from "./helpers/Glow";
 
-/** One height's tiles, a layer per tile layer, with the glows of the lit tiles among them drawn over them. */
-type Band = { z: number; root: Container; layers: CompositeTilemap[]; glows: GlowLayer };
+export { EntitiesLayer, GlowsLayer, OrbsLayer, ProjectilesLayer };
 
-/** Name of the layer (a `GlowLayer`) the glows of moving lights - a carried torch, a glowing shot - are drawn into, under the figures - see `EntityRenderer`. */
-export const GlowsLayer = "glows";
-/** Name of the layer (a `GlowLayer`) a floating light - the player's mage-light - is drawn into, over the figures - see `EntityRenderer`. */
-export const OrbsLayer = "orbs";
-/** Name of the layer (a `CompositeTilemap`) the player, monsters and spawners are drawn into - see `EntityRenderer`. */
-export const EntitiesLayer = "entities";
-/** Name of the layer (a plain `Container` of sprites, which unlike a tilemap can turn to any angle) shots are drawn into. */
-export const ProjectilesLayer = "projectiles";
+/** Some of a band's tile layers, with the glows of the lit tiles among them drawn over them. */
+type BandPart = { root: Container; glows: GlowLayer };
+
+/**
+ * One height's tiles, a layer per tile layer (`layers`, in the level's order), in two parts: those under the figures, and
+ * those over them - null when the level has no tile layer over its player layer.
+ */
+type Band = { z: number; layers: CompositeTilemap[]; under: BandPart; over: BandPart | null };
 
 /**
  * `CompositeTilemap.tile` has no rotation/flip parameter - it always
@@ -64,10 +64,14 @@ const StandingFootInset = 2 / TileSize;
  * doesn't stay pinned at a perfect 1:1 - though it eases back to 1 if the
  * player stays put. A tile that gives off light has a glow drawn over it, in
  * its own band (see `Glow`). The player, monsters and spawners render into their
- * own layer on top (`EntitiesLayer`), over the glows of lights that move
+ * own layer (`EntitiesLayer`), over the glows of lights that move
  * (`GlowsLayer`) and under those that float (`OrbsLayer`), and shots into one
  * above that (`ProjectilesLayer`); all four get the same `EffectiveZoom` factor
- * so they grow/shrink in step with the world.
+ * so they grow/shrink in step with the world. Those figures' layers go where the
+ * level's player layer is (`Level.playerLayer`): every band's tile layers before it
+ * are drawn under them, and every band's tile layers after it over them - an arch
+ * or a treetop the heroes walk under - so each band is split in two (`Band`), the
+ * parts over the figures added after them, lowest z first again.
  */
 export default class TileMapView extends GameComponent {
     private bands: Band[] = [];
@@ -103,8 +107,12 @@ export default class TileMapView extends GameComponent {
     private ClearBands(): void {
         this.bands.forEach(band => {
             band.layers.forEach(layer => layer.clear());
-            this.camera.root.removeChild(band.root);
-            band.root.destroy({ children: true });
+            [band.under, band.over].forEach(part => {
+                if (part) {
+                    this.camera.root.removeChild(part.root);
+                    part.root.destroy({ children: true });
+                }
+            });
         });
         this.bands = [];
 
@@ -130,24 +138,25 @@ export default class TileMapView extends GameComponent {
     private OnLevelLoaded(): void {
         this.ClearBands();
 
+        const playerLayer = this.level.playerLayer;
+        const anyOver = playerLayer < this.level.tileLayers.length;
         for (const z of this.level.depths) {
-            const root = new Container();
-            root.name = "z-" + z;
-            root.interactive = root.interactiveChildren = false;
+            const under = this.BandPart("z-" + z);
+            const over = anyOver ? this.BandPart("z-" + z + " over") : null;
 
             const layers: CompositeTilemap[] = [];
-            this.level.tileLayers.forEach(layer => {
+            this.level.tileLayers.forEach((layer, index) => {
                 const tileLayer = new CompositeTilemap();
                 tileLayer.interactive = tileLayer.interactiveChildren = false;
                 tileLayer.name = layer.name;
-                root.addChild(tileLayer);
+                const part = index < playerLayer || !over ? under : over;
+                // Under the part's glows, which it was made with.
+                part.root.addChildAt(tileLayer, part.root.children.length - 1);
                 layers.push(tileLayer);
             });
-            const glows = new GlowLayer(this.glowTexture);
-            root.addChild(glows);
 
-            this.camera.root.addChild(root);
-            this.bands.push({ z, root, layers, glows });
+            this.camera.root.addChild(under.root);
+            this.bands.push({ z, layers, under, over });
         }
 
         this.glowsLayer = new GlowLayer(this.glowTexture);
@@ -172,9 +181,21 @@ export default class TileMapView extends GameComponent {
         this.projectilesLayer.scale.set(this.camera.Scale);
         this.camera.root.addChild(this.projectilesLayer);
 
+        this.bands.forEach(band => band.over && this.camera.root.addChild(band.over.root));
+
         this.game.dispatcher.emit(LEVEL_CREATED);
 
         this.Render();
+    }
+
+    /** An empty part of a band, holding just its glows - its tile layers go in under them. */
+    private BandPart(name: string): BandPart {
+        const root = new Container();
+        root.name = name;
+        root.interactive = root.interactiveChildren = false;
+        const glows = new GlowLayer(this.glowTexture);
+        root.addChild(glows);
+        return { root, glows };
     }
 
     private Render(): void {
@@ -185,6 +206,7 @@ export default class TileMapView extends GameComponent {
         const heightData = this.level.heightData;
         const boundW = this.level.boundRect.width;
         const boundH = this.level.boundRect.height;
+        const playerLayer = this.level.playerLayer;
 
         [this.glowsLayer, this.entitiesLayer, this.orbsLayer, this.projectilesLayer].forEach(layer => {
             if (layer) {
@@ -196,8 +218,15 @@ export default class TileMapView extends GameComponent {
             const band = this.bands[i];
             const z = band.z;
             const alpha = ZBandAlpha(z, currentZ);
-            band.root.alpha = alpha;
-            band.root.visible = alpha > 0;
+            const visible = alpha > 0;
+            const under = band.under;
+            const over = band.over;
+            under.root.alpha = alpha;
+            under.root.visible = visible;
+            if (over) {
+                over.root.alpha = alpha;
+                over.root.visible = visible;
+            }
 
             // Relative to the player's z - their own band is 1:1 here, higher
             // bands are bigger, lower bands recede - then `cameraZoom` scales
@@ -207,16 +236,21 @@ export default class TileMapView extends GameComponent {
             const winW = this.camera.BaseViewWidth / zScale;
             const winH = this.camera.BaseViewHeight / zScale;
             const { x: originX, y: originY } = ViewOrigin(centre, this.camera.BaseViewWidth, this.camera.BaseViewHeight, zScale);
-            band.glows.Begin();
-            band.glows.scale.set(camScale * zScale);
+            under.glows.Begin();
+            under.glows.scale.set(camScale * zScale);
+            if (over) {
+                over.glows.Begin();
+                over.glows.scale.set(camScale * zScale);
+            }
 
             for (let l = 0, ll = band.layers.length; l < ll; l++) {
                 const layer = band.layers[l];
                 layer.clear();
-                if (!band.root.visible) {
+                if (!visible) {
                     continue;
                 }
                 layer.scale.set(camScale * zScale);
+                const glows = l < playerLayer || !over ? under.glows : over.glows;
 
                 const columns = this.level.levelData[l];
                 if (!columns) {
@@ -259,14 +293,17 @@ export default class TileMapView extends GameComponent {
                                 if (tile.light !== undefined) {
                                     const lights = this.level.lights;
                                     LookOfGlow(lights.Colour(tile.light), lights.Scale(tile.light), this.glowLook);
-                                    band.glows.Add(left + texture.width / 2, top + texture.height * GlowFlameY, this.glowLook, TileSize);
+                                    glows.Add(left + texture.width / 2, top + texture.height * GlowFlameY, this.glowLook, TileSize);
                                 }
                             }
                         }
                     }
                 }
             }
-            band.glows.End();
+            under.glows.End();
+            if (over) {
+                over.glows.End();
+            }
         }
     }
 

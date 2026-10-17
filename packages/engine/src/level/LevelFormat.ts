@@ -1,8 +1,8 @@
 /**
  * The level file: what the editor saves (its S export, and the localStorage copy Enter plays) and
  * the engine loads (`Level.LoadLevel`). The engine owns it - the editor is only its writer, and
- * saves more of its own state alongside, which the engine ignores. Types plus one enum, so
- * importing it pulls in no other module at runtime.
+ * saves more of its own state alongside, which the engine ignores. Types, one enum and two small
+ * helpers, so importing it pulls in no other module at runtime.
  */
 
 import type { Vec2Like } from "@logic-incubator/lib/math/Geometry";
@@ -67,8 +67,38 @@ export type Brush = {
  */
 export type TileLayerKind = "floor" | "walls";
 
-/** A layer, as far as the engine reads one: tile layers draw in list order, data layers (`isData`) hold data brushes and aren't drawn. `kind` is the editor's (see `TileLayerKind`). */
-export type LevelLayer = { id: number; name: string; isData: boolean; kind?: TileLayerKind };
+/**
+ * A layer, as far as the engine reads one: tile layers draw in list order, data layers (`isData`) hold data brushes and
+ * aren't drawn, and the player layer (`isPlayer`) holds nothing - it marks where the heroes, monsters and shots are drawn
+ * among the tile layers: those before it under them, those after it over them (see `TileLayerOrder`). `kind` is the
+ * editor's (see `TileLayerKind`).
+ */
+export type LevelLayer = { id: number; name: string; isData: boolean; kind?: TileLayerKind; isPlayer?: boolean };
+
+/** Whether `layer` is a tile layer - one with tiles painted on it, drawn - rather than a data layer or the player layer. */
+export function IsTileLayer(layer: LevelLayer): boolean {
+    return !layer.isData && !layer.isPlayer;
+}
+
+/**
+ * A level's tile layers in drawing order, and where the player layer sits among them: the first `playerLayer` are drawn
+ * under the heroes, monsters and shots, the rest over them. In a level without a player layer - every level saved before
+ * there was one - that's all of them, as it always was. Should a hand-edited file have more than one, the first counts.
+ */
+export function TileLayerOrder(layers: ReadonlyArray<LevelLayer>): { tileLayers: LevelLayer[]; playerLayer: number } {
+    const tileLayers: LevelLayer[] = [];
+    let playerLayer = -1;
+    layers.forEach(layer => {
+        if (layer.isPlayer) {
+            if (playerLayer < 0) {
+                playerLayer = tileLayers.length;
+            }
+        } else if (IsTileLayer(layer)) {
+            tileLayers.push(layer);
+        }
+    });
+    return { tileLayers, playerLayer: playerLayer < 0 ? tileLayers.length : playerLayer };
+}
 
 /**
  * A saved level. The nesting is the editor's - `editorData` is its whole state and `levelData`

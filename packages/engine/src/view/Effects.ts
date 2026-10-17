@@ -4,6 +4,7 @@ import { Emitter, EmitterConfig, OldEmitterConfig } from "@logic-incubator/lib/p
 import { LEVEL_CREATED } from "../Events";
 import { Camera } from "./Camera";
 import { EffectsPlacement } from "./helpers/EffectsPlacement";
+import { ProjectilesLayer } from "./helpers/FigureLayers";
 
 /** An emitter's settings: what the particle editor exports (`OldEmitterConfig`), or the newer `EmitterConfig`. */
 export type EffectConfig = EmitterConfig | OldEmitterConfig;
@@ -11,12 +12,14 @@ export type EffectConfig = EmitterConfig | OldEmitterConfig;
 /**
  * Particle effects over the world. `Play` an effect at a position in world pixels - the space
  * `Monster.position`, a shot's `x`/`y` and `MONSTER_KILLED`'s `(type, x, y)` are in - and it draws
- * above the entities and shots (and below the HUD), moving and zooming with the camera.
+ * above the entities and shots - and under any tile layers drawn over them (see `TileMapView`), and
+ * the HUD - moving and zooming with the camera.
  *
  * Its layer sits in the camera's root and is placed every frame the way `EntityRenderer` places
  * the entities layer (see `EffectsPlacement`), so the emitters need no coordinate conversion.
  * `TileMapView` rebuilds its own layers on every level load, so on `LEVEL_CREATED` this layer is
- * put back on top of them, and the level's effects are dropped.
+ * put back just above the shots' layer (on top of everything, if there's none), and the level's
+ * effects are dropped.
  *
  * Emitters are updated here, from `Tick`: they run only while the scene is shown, and a finished
  * one - not emitting, no particles left - is destroyed, so a burst needs no cleanup. A continuous
@@ -70,8 +73,11 @@ export default class Effects extends GameComponent {
 
     private OnLevelCreated(): void {
         this.Clear();
-        // The layers TileMapView has just added are above this one otherwise.
-        this.camera.root.addChild(this.root);
+        // Among the layers TileMapView has just added, rather than under them all.
+        const root = this.camera.root;
+        root.removeChild(this.root);
+        const shots = root.getChildByName(ProjectilesLayer);
+        root.addChildAt(this.root, shots ? root.getChildIndex(shots) + 1 : root.children.length);
     }
 
     private OnUpdate(): void {

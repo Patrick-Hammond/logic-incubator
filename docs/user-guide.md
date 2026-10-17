@@ -1874,7 +1874,8 @@ A level is JSON that the editor writes and the engine reads (`LevelFile`):
 
 ```jsonc
 {
-  "editorData": { "layers": [ { "id": 1, "name": "Layer 1", "isData": false }, { "id": -99999, "name": "attributes", "isData": true } ] },
+  "editorData": { "layers": [ { "id": -99999, "name": "attributes", "isData": true }, { "id": 1, "name": "Layer 1", "isData": false },
+                               { "id": -99998, "name": "player", "isData": false, "isPlayer": true }, { "id": 2, "name": "arches", "isData": false } ] },
   "levelData":  { "levelData": [
       { "name": "floor_1", "position": { "x": 3, "y": 2 }, "pixelOffset": { "x": 0, "y": 0 }, "rotation": 0, "scale": { "x": 1, "y": 1 }, "layerId": 1, "data": null },
       { "name": "player-start", "position": { "x": 1, "y": 1 }, "pixelOffset": { "x": 0, "y": 0 }, "rotation": 0, "scale": { "x": 1, "y": 1 }, "layerId": -99999, "data": null }
@@ -1883,7 +1884,9 @@ A level is JSON that the editor writes and the engine reads (`LevelFile`):
 ```
 
 A **brush** is one placed thing: a tile (`name` is a bare sprite or animation name, `data` null) or a data brush (on a
-data layer). Layers draw in list order, later on top. Beside the brushes, `levelData.quests` holds the level's quests
+data layer). Layers draw in list order, later on top. The **player layer** (`isPlayer`) has no brushes: it marks where the
+heroes, monsters, spawners, shots and particle effects are drawn among the tile layers - those before it under them, those after it
+over them (above, "arches" is drawn over the heroes as they walk beneath). A level without one draws every tile layer under them. Beside the brushes, `levelData.quests` holds the level's quests
 ([9.10](#910-npcs-dialogs-and-quests)); a level without it has none. The engine reads only what `LevelFormat.ts` types; the
 editor saves more of its own state alongside.
 
@@ -2010,7 +2013,8 @@ this.Listen(this.game.dispatcher, MONSTER_KILLED, (type: string, x: number, y: n
 this.Listen(this.game.dispatcher, LEVEL_COMPLETED, () => (CurrentLevel = NextLevel(CurrentLevel)));   // level() hands it back on the next start
 ```
 
-**Particle effects.** `DungeonMain` has an `Effects` layer over the world, under the HUD; `main.Effects.Play(art, config, x, y)` starts an
+**Particle effects.** `DungeonMain` has an `Effects` layer over the figures - under any tile layers drawn over them (after the
+level's player layer, [10.3](#103-layers-data-brushes-and-palette-categories)) and the HUD; `main.Effects.Play(art, config, x, y)` starts an
 effect at a position in world pixels - the space these events and `Monster.position` use - with `art` a sprite or animation name and
 `config` an emitter config from the particle editor. A one-off burst cleans itself up; a continuous effect runs until you set
 `emitter.emit = false` on what `Play` returns. Effects pause with the scene and are dropped when a level (re)starts.
@@ -2548,7 +2552,13 @@ vertical **toolbar** of tools at the far right. Each palette tab ends in a **+**
 - The categories are read when the editor is created, so the game's metadata must already be loaded then - add the game scene
   (which binds the metadata, [9.1](#91-how-the-pieces-fit)) before the editor scene, and load `global` first.
 - Tile layers draw in list order; add, rename, hide (the eye), reorder and duplicate them in the layer panel.
-- Every level has a **floor** and a **walls** layer as well as attributes (a new level starts with just those three, and an
+- The **player** row (its badge is PLAYER, its name in italics beside a dashed line) isn't a layer to paint on but a divider: it shows
+  where the heroes, monsters, shots and effects are drawn in the game. Layers listed above it are drawn under them; layers below it are
+  drawn over them, so an arch, a treetop or the top of a column put on a layer below the line hides a hero walking behind it. It can't
+  be selected, hidden, renamed or removed; move it with the arrows on its own row (each step moves it past one tile layer), or move a
+  tile layer past it with the panel's arrows. Every level has one: a new level starts with it last, and an older level gets it last when
+  opened, which draws everything under the figures, as before. A layer added while it's last goes in just above it.
+- Every level has a **floor** and a **walls** layer as well as attributes and the player row (a new level starts with just those four, and an
   older level gets an empty one of each when opened). A floor layer shows only the **Floor** tab and paints only `floor`
   tiles; a walls layer likewise only **Walls**. Any other tile layer shows every tab but those two. The **+** in the layer
   panel asks whether the new layer is generic, floor or walls. The last floor layer and the last walls layer can't be removed.

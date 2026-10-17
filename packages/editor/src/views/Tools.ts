@@ -9,7 +9,7 @@ import EditorComponent from "../EditorComponent";
 import AssetMetadataStore from "@logic-incubator/engine/level/AssetMetadata";
 import { DoorFootprint, EffectiveDoorLock } from "@logic-incubator/engine/level/Doors";
 import { EffectiveLight, EffectivePickup, EffectiveSpawner } from "@logic-incubator/engine/level/ImplicitData";
-import { Brush, DataBrushValue } from "@logic-incubator/engine/level/LevelFormat";
+import { Brush, DataBrushValue, IsTileLayer } from "@logic-incubator/engine/level/LevelFormat";
 import { EditorActions, EditorTool, IEditorState, MouseButtonState } from "../stores/EditorStore";
 import { Layer, LevelDataActions } from "../stores/LevelDataStore";
 import { TakesCategory } from "./PaletteCategories";
@@ -363,7 +363,7 @@ export default class Tools extends EditorComponent {
             };
         }
 
-        const tileLayers = state.layers.filter(layer => !layer.isData);
+        const tileLayers = state.layers.filter(IsTileLayer);
         const implicit = TopmostBrushCovering(
             this.levelDataStore.state.levelData,
             tileLayers,

@@ -4,7 +4,7 @@ import AssetMetadataStore from "@logic-incubator/engine/level/AssetMetadata";
 import { FindImplicitPlacements } from "@logic-incubator/engine/level/ImplicitData";
 import MonsterRoster from "@logic-incubator/engine/level/entities/MonsterRoster";
 import { SpawnerCells } from "@logic-incubator/engine/level/entities/Spawners";
-import { Brush, DataBrushName } from "@logic-incubator/engine/level/LevelFormat";
+import { Brush, DataBrushName, IsTileLayer } from "@logic-incubator/engine/level/LevelFormat";
 import AssetFactory from "@logic-incubator/lib/loading/AssetFactory";
 import { MapLabel } from "../DataLabels";
 import { DataBrushEditorFor } from "../DataBrushEditors";
@@ -79,6 +79,10 @@ export default class Canvas extends EditorComponent {
             const layerDict: { [id: number]: Container } = {};
             let attributesContainer: Container | null = null;
             this.editorStore.state.layers.forEach(layer => {
+                // A divider with nothing on it - the player isn't drawn here.
+                if (layer.isPlayer) {
+                    return;
+                }
                 const layerContainer = this.layerContainers.Get();
                 layerDict[layer.id] = layerContainer;
                 layerContainer.visible = layer.visible;
@@ -162,7 +166,7 @@ export default class Canvas extends EditorComponent {
             return;
         }
 
-        const tileLayerIds = new Set(state.layers.filter(layer => !layer.isData).map(layer => layer.id));
+        const tileLayerIds = new Set(state.layers.filter(IsTileLayer).map(layer => layer.id));
         const placements = FindImplicitPlacements(
             levelData,
             layerId => tileLayerIds.has(layerId),

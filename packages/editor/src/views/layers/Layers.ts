@@ -2,14 +2,20 @@ import type Assets from "@logic-incubator/lib/assets/Assets";
 import EditorComponent from "../../EditorComponent";
 import { EditorIcon } from "../../EditorAssets";
 import { TileLayerKind } from "@logic-incubator/engine/level/LevelFormat";
-import {EditableLayerCount, EditorActions, IEditorState, IMPLICIT_LAYER_ID, IsRemovableLayer, MaxEditableLayers} from "../../stores/EditorStore";
+import {EditableLayerCount, EditorActions, IEditorState, IMPLICIT_LAYER_ID, IsRemovableLayer, MaxEditableLayers, PlayerLayerMoved} from "../../stores/EditorStore";
 import {Layer, LevelDataActions} from "../../stores/LevelDataStore";
 import {IsFormDialogOpen, OpenFormDialog} from "../../ui/dialog/FormDialog";
 import {ButtonEl, El, InjectStyles} from "../../ui/dom/Dom";
 import EditorOverlay from "../../ui/dom/EditorOverlay";
 
-/** One list row's elements, reused across renders (so a double-click's two clicks land on the same element even though the first re-renders the list). */
-type LayerRow = { row: HTMLElement; eyeButton: HTMLButtonElement; eye: HTMLImageElement; badge: HTMLElement; name: HTMLElement };
+/**
+ * One list row's elements, reused across renders (so a double-click's two clicks land on the same element even though the
+ * first re-renders the list). Any row can be the player layer's, which shows its own up and down buttons instead of an eye.
+ */
+type LayerRow = { row: HTMLElement; eyeButton: HTMLButtonElement; eye: HTMLImageElement; badge: HTMLElement; name: HTMLElement; upButton: HTMLButtonElement; downButton: HTMLButtonElement };
+
+/** The player layer's row, as a tooltip. */
+const PlayerLayerTitle = "Where the player, monsters and shots are drawn: the layers above this line are drawn under them, the layers below it over them.";
 
 function Icon(assets: Assets, name: string): HTMLImageElement {
     const img = document.createElement("img");
@@ -27,9 +33,13 @@ function Icon(assets: Assets, name: string): HTMLImageElement {
  * is always there, can be painted on like any other, and can't be removed,
  * duplicated or reordered (only renamed - double-click it, or the rename
  * button): it's always drawn on top of the tile stack (see `Canvas`), so
- * moving it within the list wouldn't change anything anyway. The list is
- * first to last from the top, so later layers (drawn on top on the map) are
- * further down; it scrolls once there are more layers than fit.
+ * moving it within the list wouldn't change anything anyway. The player
+ * layer isn't a layer to paint on at all, but a divider showing where the
+ * figures are drawn in the game (see `PLAYER_LAYER_ID`): it can't be selected,
+ * and moves with the up and down buttons on its own row, or as a layer is
+ * moved past it. The list is first to last from the top, so later layers
+ * (drawn on top on the map) are further down; it scrolls once there are more
+ * layers than fit.
  */
 export default class Layers extends EditorComponent {
     private list: HTMLElement;
@@ -89,11 +99,15 @@ export default class Layers extends EditorComponent {
 
         layers.forEach((layer, index) => {
             const row = this.rows[index];
-            const kind = layer.id === IMPLICIT_LAYER_ID ? "auto" : layer.isData ? "data" : layer.kind || "tile";
+            const isPlayer = !!layer.isPlayer;
+            const kind = layer.id === IMPLICIT_LAYER_ID ? "auto" : layer.isData ? "data" : isPlayer ? "player" : layer.kind || "tile";
             row.name.textContent = layer.name;
-            row.row.title = layer.name;
+            row.row.title = isPlayer ? PlayerLayerTitle : layer.name;
             row.row.setAttribute("aria-selected", String(layer.selected));
+            row.row.classList.toggle("ly-divider", isPlayer);
             row.row.classList.toggle("ly-hidden", !layer.visible);
+            row.upButton.disabled = !isPlayer || PlayerLayerMoved(layers, true) === layers;
+            row.downButton.disabled = !isPlayer || PlayerLayerMoved(layers, false) === layers;
             row.badge.textContent = kind;
             row.badge.className = "ly-badge ly-" + kind;
             const eyeIcon = this.game.assets.Url(EditorIcon(layer.visible ? "eye" : "eye-slash"));
@@ -130,16 +144,22 @@ export default class Layers extends EditorComponent {
         const eye = eyeButton.appendChild(Icon(this.game.assets, "eye"));
         const badge = row.appendChild(El("span", "ly-badge"));
         const name = row.appendChild(El("span", "ly-name"));
+        const upButton = this.RowButton(row, "arrow-up", "Move the player up: the layer above goes over them", EditorActions.MOVE_PLAYER_LAYER_UP);
+        const downButton = this.RowButton(row, "arrow-down", "Move the player down: the layer below goes under them", EditorActions.MOVE_PLAYER_LAYER_DOWN);
 
+        const isPlayer = () => {
+            const layer = this.editorStore.state.layers[index];
+            return !!layer && !!layer.isPlayer;
+        };
         row.addEventListener("click", () => {
             const layer = this.editorStore.state.layers[index];
-            // Re-selecting would reset the current brush for nothing.
-            if (layer && !layer.selected) {
+            // Re-selecting would reset the current brush for nothing; the player layer is never selected.
+            if (layer && !layer.selected && !layer.isPlayer) {
                 this.editorStore.Dispatch({ type: EditorActions.SELECT_LAYER, data: { layer } });
             }
         });
-        // The first click of the two has already selected it.
-        row.addEventListener("dblclick", () => this.RenameLayer());
+        // The first click of the two has already selected it - unless it's the player layer, which would leave some other layer to rename.
+        row.addEventListener("dblclick", () => !isPlayer() && this.RenameLayer());
         eyeButton.addEventListener("click", e => {
             e.stopPropagation();
             this.editorStore.Dispatch({ type: EditorActions.TOGGLE_LAYER_VISIBILITY, data: { layer: this.editorStore.state.layers[index] } });
@@ -147,7 +167,21 @@ export default class Layers extends EditorComponent {
         });
         eyeButton.addEventListener("dblclick", e => e.stopPropagation());
 
-        return { row, eyeButton, eye, badge, name };
+        return { row, eyeButton, eye, badge, name, upButton, downButton };
+    }
+
+    /** One of the player layer's own move buttons, on its row. */
+    private RowButton(row: HTMLElement, icon: string, title: string, action: EditorActions): HTMLButtonElement {
+        const button = row.appendChild(ButtonEl("ed-icon-button ly-move", undefined, title));
+        button.setAttribute("aria-label", title);
+        button.appendChild(Icon(this.game.assets, icon));
+        button.addEventListener("click", e => {
+            e.stopPropagation();
+            this.editorStore.Dispatch({ type: action });
+            this.levelDataStore.Dispatch({ type: LevelDataActions.REFRESH });
+        });
+        button.addEventListener("dblclick", e => e.stopPropagation());
+        return button;
     }
 
     private ToolButton(parent: HTMLElement, icon: string, title: string, onClick: () => void): HTMLButtonElement {
@@ -194,11 +228,11 @@ export default class Layers extends EditorComponent {
             return;
         }
         this.editorStore.Dispatch({ type: EditorActions.REMOVE_LAYER });
-        // Not layers[0] - that's "attributes", better left for its own kind of data than picked by default.
+        // Not layers[0] - that's "attributes", better left for its own kind of data than picked by default - nor the player layer, which can't be.
         const layers = this.editorStore.state.layers;
         this.editorStore.Dispatch({
             type: EditorActions.SELECT_LAYER,
-            data: { layer: layers.find(layer => layer.id !== IMPLICIT_LAYER_ID) || layers[0] }
+            data: { layer: layers.find(layer => layer.id !== IMPLICIT_LAYER_ID && !layer.isPlayer) || layers[0] }
         });
         this.levelDataStore.Dispatch({ type: LevelDataActions.ERASE_LAYER, data: { destLayer: selectedLayer } });
     }
@@ -245,4 +279,14 @@ const STYLES = `
 .ly-auto { color: #b8ecf7; background: #24505c; }
 .ly-floor { color: #f3dfb8; background: #5c4526; }
 .ly-walls { color: #f7c6bd; background: #5c2f29; }
+.ly-player { color: #c9f2c0; background: #2e5230; }
+.ly-row .ly-move { display: none; width: 18px; height: 18px; }
+.ly-row .ly-move img { width: 12px; height: 12px; opacity: 0.75; }
+.ly-row.ly-divider { cursor: default; color: var(--ed-muted); font-style: italic; }
+.ly-row.ly-divider:hover { background: none; }
+.ly-row.ly-divider .ly-eye { visibility: hidden; }
+.ly-row.ly-divider .ly-badge { font-style: normal; }
+.ly-row.ly-divider .ly-move { display: inline-flex; }
+.ly-row.ly-divider .ly-name { display: flex; align-items: center; gap: 6px; }
+.ly-row.ly-divider .ly-name::after { content: ""; flex: 1; border-top: 1px dashed #4f7a52; }
 `;

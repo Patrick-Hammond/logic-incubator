@@ -5,7 +5,7 @@ import { Scenes } from "@logic-incubator/engine/Constants";
 import { InitalScale } from "../Layout";
 import { DefaultBossValue } from "@logic-incubator/engine/level/entities/Bosses";
 import { DefaultPickupValue } from "@logic-incubator/engine/level/entities/Pickups";
-import { Brush, DataBrushName, DataBrushValue, TileLayerKind } from "@logic-incubator/engine/level/LevelFormat";
+import { Brush, DataBrushName, DataBrushValue, IsTileLayer, TileLayerKind } from "@logic-incubator/engine/level/LevelFormat";
 import { DefaultDialogValue } from "@logic-incubator/engine/story/Talk";
 import { Layer } from "./LevelDataStore";
 
@@ -33,6 +33,8 @@ export const enum EditorActions {
     DUPLICATE_LAYER,
     MOVE_LAYER_UP,
     MOVE_LAYER_DOWN,
+    MOVE_PLAYER_LAYER_UP,
+    MOVE_PLAYER_LAYER_DOWN,
     TOGGLE_LAYER_VISIBILITY,
     CHANGE_SCENE,
     SET_TOOL,
@@ -107,14 +109,57 @@ function WithImplicitLayer(layers: Layer[]): Layer[] {
     return layers;
 }
 
+/**
+ * Fixed id of the player layer: not a layer to paint on, but a divider in the list showing where the heroes, monsters and
+ * shots are drawn among the tile layers - those before it under them, those after it over them (an arch, a treetop; see
+ * `LevelFormat.TileLayerOrder`). It's the layer with `isPlayer` set, always there - a level saved before it existed gets
+ * one last, over every tile layer, which is where the game drew its figures until then - and is never selected, painted,
+ * hidden, renamed, removed or duplicated. It moves on its own (`MOVE_PLAYER_LAYER_UP`/`DOWN`, see `PlayerLayerMoved`), or
+ * as a tile layer is moved past it.
+ */
+export const PLAYER_LAYER_ID = -99998;
+
+function PlayerLayer(): Layer {
+    return { id: PLAYER_LAYER_ID, name: "player", selected: false, visible: true, isData: false, isPlayer: true };
+}
+
+/**
+ * `layers` with the player layer moved past the next tile layer up the list (`up`) or down it - stepping over "attributes",
+ * which isn't drawn in the game, so every move changes what's drawn over the figures. The same array if there's no tile
+ * layer that way to move past.
+ */
+export function PlayerLayerMoved(layers: Layer[], up: boolean): Layer[] {
+    const from = layers.findIndex(layer => layer.isPlayer);
+    if (from < 0) {
+        return layers;
+    }
+    let past = from;
+    do {
+        past += up ? -1 : 1;
+    } while (past >= 0 && past < layers.length && !IsTileLayer(layers[past]));
+    if (past < 0 || past >= layers.length) {
+        return layers;
+    }
+    // Before that tile layer going up; after it going down, where - with the player layer taken out - it's one place earlier.
+    const rest = layers.filter((_, index) => index !== from);
+    return rest.slice(0, past).concat(layers[from], rest.slice(past));
+}
+
+/** `layers` with `layer` added last - or just under the player layer when that's last, so the figures stay on top and a new layer is drawn under them, as one always was. */
+function WithLayerAdded(layers: Layer[], layer: Layer): Layer[] {
+    const last = layers[layers.length - 1];
+    return last && last.isPlayer ? layers.slice(0, -1).concat(layer, last) : layers.concat(layer);
+}
+
 /** The tile layers every level has, in the order they're added (floor under walls) - there's always at least one of each kind, so the palette always has somewhere to put floor and wall tiles. */
 export const DefaultTileLayerKinds: ReadonlyArray<TileLayerKind> = ["floor", "walls"];
 
 /**
- * `layers` with "attributes" (see `WithImplicitLayer`) and at least one floor and one walls layer -
- * a new level starts with just those three, and a level saved before layers had kinds gets an empty one
- * of each, after "attributes" (so the tiles it already has stay drawn on top). Something is always
- * selected: the first floor layer, if nothing was. Untouched (the same array) if there's nothing to add.
+ * `layers` with "attributes" (see `WithImplicitLayer`), at least one floor and one walls layer, and the
+ * player layer (see `PLAYER_LAYER_ID`) - a new level starts with just those four, and a level saved before
+ * layers had kinds gets an empty one of each, after "attributes" (so the tiles it already has stay drawn on
+ * top), and one saved before the player layer gets it last. Something is always selected: the first floor
+ * layer, if nothing was. Untouched (the same array) if there's nothing to add.
  */
 export function WithDefaultLayers(layers: Layer[]): Layer[] {
     let result = WithImplicitLayer(layers);
@@ -133,6 +178,9 @@ export function WithDefaultLayers(layers: Layer[]): Layer[] {
         const layer: Layer = { id: nextId++, name: kind, selected: false, visible: true, isData: false, kind };
         result = result.slice(0, at).concat(layer, result.slice(at));
     });
+    if (!result.some(layer => layer.isPlayer)) {
+        result = result.concat(PlayerLayer());
+    }
     if (!result.some(layer => layer.selected)) {
         const floor = result.find(layer => layer.kind === "floor");
         result = result.map(layer => (layer === floor ? { ...layer, selected: true } : layer));
@@ -140,21 +188,22 @@ export function WithDefaultLayers(layers: Layer[]): Layer[] {
     return result;
 }
 
-/** One more than the highest tile layer id, or 0 for the first. ("attributes" has its own fixed id.) */
+/** One more than the highest tile layer id, or 0 for the first. ("attributes" and the player layer have their own fixed ids.) */
 export function NextTileLayerId(layers: Layer[]): number {
-    return layers.filter(layer => !layer.isData).reduce((next, layer) => Math.max(next, layer.id + 1), 0);
+    return layers.filter(IsTileLayer).reduce((next, layer) => Math.max(next, layer.id + 1), 0);
 }
 
-/** Whether `layer` can be removed: never "attributes", nor the last floor or walls layer. */
+/** Whether `layer` can be removed: never "attributes" or the player layer, nor the last floor or walls layer. */
 export function IsRemovableLayer(layers: Layer[], layer: Layer | undefined): boolean {
-    if (!layer || layer.id === IMPLICIT_LAYER_ID) {
+    if (!layer || layer.id === IMPLICIT_LAYER_ID || layer.isPlayer) {
         return false;
     }
     return !layer.kind || layers.some(other => other.kind === layer.kind && other.id !== layer.id);
 }
 
+/** The tile layers, which `MaxEditableLayers` caps - not "attributes", nor the player layer. */
 export function EditableLayerCount(layers: Layer[]): number {
-    return layers.filter(layer => layer.id !== IMPLICIT_LAYER_ID).length;
+    return layers.filter(IsTileLayer).length;
 }
 
 export type DataBrush = { name: string; colour: number; value: DataBrushValue };
@@ -284,6 +333,10 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
     }
 
     protected Reduce(state: IEditorState, action: IAction<IActionData>): IEditorState {
+        // The player layer is only ever a divider: there's nothing to paint on it, so it's never the one selected.
+        if (action.type === EditorActions.SELECT_LAYER && action.data && action.data.layer && action.data.layer.isPlayer) {
+            return state;
+        }
         const layers = WithDefaultLayers(this.UpdateLayers(state.layers, action));
         const switched = this.SwitchLayer(state, layers, action, this.UpdateBrush(state.currentBrush, action), this.UpdateTool(state.tool, action));
         const newState = {
@@ -501,7 +554,7 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
                 if (kind) {
                     layer.kind = kind;
                 }
-                return layers.map(other => (other.selected ? { ...other, selected: false } : other)).concat(layer);
+                return WithLayerAdded(layers.map(other => (other.selected ? { ...other, selected: false } : other)), layer);
             }
             case EditorActions.REMOVE_LAYER:
                 return layers.filter(layer => layer.selected === false);
@@ -563,14 +616,17 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
                 }
                 return layers;
             }
+            case EditorActions.MOVE_PLAYER_LAYER_UP:
+            case EditorActions.MOVE_PLAYER_LAYER_DOWN:
+                return PlayerLayerMoved(layers, action.type === EditorActions.MOVE_PLAYER_LAYER_UP);
             case EditorActions.DUPLICATE_LAYER: {
                 const selectedLayer = this.SelectedLayer;
-                // There's only ever the one "attributes" layer - what's left to duplicate is always a tile layer.
-                if (!selectedLayer || selectedLayer.id === IMPLICIT_LAYER_ID) {
+                // There's only ever the one "attributes" layer, and the one player layer - what's left to duplicate is always a tile layer.
+                if (!selectedLayer || selectedLayer.id === IMPLICIT_LAYER_ID || selectedLayer.isPlayer) {
                     return layers;
                 }
                 const newLayer = { ...selectedLayer, id: NextTileLayerId(layers), selected: false };
-                return layers.concat(newLayer);
+                return WithLayerAdded(layers, newLayer);
             }
             case EditorActions.RESET:
                 return this.DefaultState().layers;

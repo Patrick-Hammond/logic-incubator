@@ -15,7 +15,7 @@ import MonsterRoster from "./entities/MonsterRoster";
 import {IsPickupValue, PickupValue} from "./entities/Pickups";
 import {SanitiseSpawnerValue, Spawner, SpawnerCells} from "./entities/Spawners";
 import {EffectiveLight, FindImplicitPlacements} from "./ImplicitData";
-import {Brush, DataBrushName, LevelFile, LevelLayer} from "./LevelFormat";
+import {Brush, DataBrushName, LevelFile, LevelLayer, TileLayerOrder} from "./LevelFormat";
 import {AmbientLightGrid, BakeLights, ComposeLighting, LightBake, LightBlockersFor, LightGrid, LightSource, OpenLightBlockers} from "./Lighting";
 import {FindMapBounds} from "./MapBounds";
 import {FindRegions, Region, RegionIdsTouching} from "./Regions";
@@ -61,6 +61,8 @@ export default class Level {
     /** [layer][x][y] -> every tile painted at that cell, in paint order (later = drawn on top). */
     public levelData: Tile[][][][] = [];
     public tileLayers: LevelLayer[] = [];
+    /** How many of `tileLayers` (from the first) are drawn under the heroes, monsters and shots - the player layer's place among them (see `TileLayerOrder`); the rest are drawn over them. All of them in a level without a player layer. */
+    public playerLayer = 0;
     /** Per-cell collision: `true` if any tile placed there has `collidable: true` in `AssetMetadata`, or the cell was painted with the `COLLISION` data brush (an explicit override/addition on top of the intrinsic default). */
     public collisionData: boolean[][] = [];
     /** Per-cell height painted with the `Z_INDEX` data brush. */
@@ -319,13 +321,13 @@ export default class Level {
     /**
      * Puts a pickup down where a hero fell: on their cell, or the nearest open floor to it (see `IsFloor`)
      * when that's a door or a wall - a key left in a doorway that then shut would be out of everyone's
-     * reach. Drawn as `sprite` on the top tile layer (nothing is drawn without one); collected like any
-     * other. Returns the cell it landed on.
+     * reach. Drawn as `sprite` on the top tile layer under the heroes (the bottom one, if every layer is over them;
+     * nothing is drawn without a sprite); collected like any other. Returns the cell it landed on.
      */
     DropPickup(tileX: number, tileY: number, value: PickupValue, sprite: string | null): Vec2Like {
         const cell = this.NearestFloor(tileX, tileY);
         let tile: Tile | null = null;
-        const layer = this.levelData[this.levelData.length - 1];
+        const layer = this.levelData[Math.max(this.playerLayer, 1) - 1];
         if (sprite && layer) {
             tile = CreateTile({ name: sprite, position: {x: cell.x, y: cell.y}, pixelOffset: {x: 0, y: 0}, rotation: 0, scale: {x: 1, y: 1}, layerId: -1, data: null });
             if (tile) {
@@ -393,16 +395,23 @@ export default class Level {
         return null;
     }
 
-    /** The tile drawn on top at the given cell - the last layer with one there, its last-painted tile - or null for an empty cell. What a `PICKUP` brush turns into a pickup. */
+    /**
+     * The tile drawn on top at the given cell - the last layer with one there, its last-painted tile - or null for an empty
+     * cell. What a `PICKUP` brush turns into a pickup, and the NPC a `DIALOG` brush stands for: something on the ground, so
+     * the layers under the heroes are looked in first, and only then those drawn over them (an arch, a treetop).
+     */
     private FindTopTile(x: number, y: number): Tile | null {
-        for (let i = this.levelData.length - 1; i >= 0; i--) {
-            const layer = this.levelData[i];
-            const stack = layer && layer[x] && layer[x][y];
-            if (stack && stack.length) {
-                return stack[stack.length - 1];
+        const top = (from: number, to: number): Tile | null => {
+            for (let i = from - 1; i >= to; i--) {
+                const layer = this.levelData[i];
+                const stack = layer && layer[x] && layer[x][y];
+                if (stack && stack.length) {
+                    return stack[stack.length - 1];
+                }
             }
-        }
-        return null;
+            return null;
+        };
+        return top(this.playerLayer, 0) || top(this.levelData.length, this.playerLayer);
     }
 
     /** Finds the tile that is a pickup at the given cell - by its asset's `AssetMetadata`, or by its own placement's `data` - searching every tile layer. Null if none is. */
@@ -468,15 +477,11 @@ export default class Level {
         /** Per-cell door id (parallel to `doorData`, but tagged with *which* door type) - `FindDoorGroups` needs this to keep two different door types on adjacent cells from merging into one group. */
         const doorIds: (number | undefined)[][] = [];
 
+        const order = TileLayerOrder(file.editorData.layers);
+        this.tileLayers = order.tileLayers;
+        this.playerLayer = order.playerLayer;
         const idMap: {[ id: number ]: number} = {};
-        let id = 0;
-        file.editorData.layers.forEach(layer => {
-            if(!layer.isData) {
-                this.tileLayers[ id ] = layer;
-                idMap[ layer.id ] = id;
-                id++;
-            }
-        });
+        this.tileLayers.forEach((layer, index) => idMap[ layer.id ] = index);
 
         const levelData = file.levelData.levelData;
 
