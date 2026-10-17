@@ -1,4 +1,4 @@
-import {Container, Sprite, Texture} from "pixi.js";
+import {Container, GD8Symmetry, Sprite, Texture} from "pixi.js";
 import {CompositeTilemap} from "@logic-incubator/lib/tilemap";
 import AssetFactory from "@logic-incubator/lib/loading/AssetFactory";
 import {Vec2Like} from "@logic-incubator/lib/math/Geometry";
@@ -30,8 +30,8 @@ const FallenAlpha = 0.35;
 /** How far inside the edges of a figure's 16 px footprint its light is sampled - see `FigureLight`. */
 const FootInset = 2;
 
-/** One sprite to draw into the entities layer: `x`/`y` on screen (already offset by the view), `feet` its bottom edge in the world, which is what the draw order sorts by, and `light` its four corners' light (see `Lighting.FootLight`). */
-type Drawable = {x: number; y: number; feet: number; texture: Texture; facingX: number; light: Float32Array; alpha: number};
+/** One sprite to draw into the entities layer: `x`/`y` on screen (already offset by the view), `feet` its bottom edge in the world, which is what the draw order sorts by, `turn` how it's flipped and turned (see `TileGD8Rotation` - 0 for as it is), and `light` its four corners' light (see `Lighting.FootLight`). */
+type Drawable = {x: number; y: number; feet: number; texture: Texture; turn: GD8Symmetry; light: Float32Array; alpha: number};
 
 /** Fills `out` with the light for a figure whose one-tile footprint has its top-left at `position` (world pixels): the floor's light just inside its feet, so it shades smoothly as it walks. */
 function FigureLight(grid: LightGrid, position: Vec2Like, out: Float32Array): Float32Array {
@@ -114,8 +114,8 @@ export default class EntityRenderer {
         this.entities.clear();
         drawables.forEach(d => {
             this.entities.tile(d.texture, d.x, d.y, {cornerTints: d.light, alpha: d.alpha});
-            if (d.facingX < 0) {
-                this.entities.tileRotate(TileGD8Rotation(0, d.facingX, 1));
+            if (d.turn) {
+                this.entities.tileRotate(d.turn);
             }
         });
 
@@ -126,26 +126,33 @@ export default class EntityRenderer {
     private AddSpawners(encounter: EncounterView, origin: {x: number; y: number}): void {
         const name = MonsterRoster.inst.SpawnerSprite;
         const frames = name != null ? this.Frames(name) : [];
-        if (!frames.length) {
-            return;
-        }
         encounter.spawners.forEach(state => {
             const {x, y} = state.spawner;
             if (state.destroyed || !this.level.IsCellVisible(x, y)) {
                 return;
             }
-            const texture = frames[0];
-            const light = FigureLight(this.level.lightGrid, {x: x * TileSize, y: y * TileSize}, this.NextLight());
+            // Drawn as the tile it is, where it has one (see `Level.SpawnerTile`), as the tile map would draw it; else
+            // as the roster's sprite, top-left on its own cell. Either way over the footprint that makes it solid.
+            const tile = this.level.SpawnerTile(state.spawner);
+            const texture = tile ? (tile.anim ? tile.anim.texture : tile.texture) : frames[0];
+            if (!texture) {
+                return;
+            }
+            const left = x * TileSize - (tile ? tile.pixelOffset.x : 0);
+            const top = y * TileSize - (tile ? tile.pixelOffset.y : 0);
+            const feet = top + texture.height;
+            // It stands on the floor along its whole width, like a tall tile (see `TileMapView.StandingLight`).
+            const light = this.NextLight();
+            FootLight(this.level.lightGrid, (left + FootInset) / TileSize, (left + texture.width - FootInset) / TileSize, (feet - FootInset) / TileSize, light);
             if (encounter.spawnerFlash.has(state)) {
                 MultiplyLight(light, HitTint);
             }
-            // Drawn top-left on its own cell, over the footprint that makes it solid (see `SpawnerCells`).
             this.drawables.push({
-                x: (x - origin.x) * TileSize,
-                y: (y - origin.y) * TileSize,
-                feet: y * TileSize + texture.height,
+                x: left - origin.x * TileSize,
+                y: top - origin.y * TileSize,
+                feet,
                 texture,
-                facingX: 1,
+                turn: tile ? TileGD8Rotation(tile.rotation, tile.scale.x, tile.scale.y) : 0,
                 light,
                 alpha: 1
             });
@@ -174,7 +181,7 @@ export default class EntityRenderer {
                 y: draw.y,
                 feet: position.y + TileSize,
                 texture,
-                facingX: m.facingX,
+                turn: TileGD8Rotation(0, m.facingX, 1),
                 light,
                 alpha: 1
             });
@@ -192,7 +199,7 @@ export default class EntityRenderer {
             y: draw.y,
             feet: position.y + TileSize,
             texture,
-            facingX: hero.FacingX,
+            turn: TileGD8Rotation(0, hero.FacingX, 1),
             light: FigureLight(this.level.lightGrid, position, this.NextLight()),
             // One who is away (online, their player's connection gone) is drawn as faint as the fallen: out of play.
             alpha: !hero.Alive || hero.Away ? FallenAlpha : invulnerable > 0 && Math.floor(invulnerable * BlinkRate) % 2 === 0 ? 0.25 : 1

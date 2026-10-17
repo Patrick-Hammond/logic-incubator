@@ -4,13 +4,13 @@
  * values. Brushes whose value the game never reads (player-start, collision)
  * have no entry, so the editor offers no edit button for them.
  *
- * "light" and "spawner" are keyed by their old `DataBrushName` string even
- * though neither is a paintable data brush any more - a light or a spawner is
- * now an ordinary tile placement (see `ImplicitData.EffectiveLight`/
- * `EffectiveSpawner`), edited by the data-select tool clicking it on the map
- * rather than a palette chip, but it's the exact same value shape and the
- * exact same dialog either way. A pickup is both: the `PICKUP` data brush, and the
- * same value on a tile that gives one (`EffectivePickup`) - one popup for either. "door" is
+ * "light" is keyed by its old `DataBrushName` string even though it isn't a
+ * paintable data brush any more - a light is now an ordinary tile placement
+ * (see `ImplicitData.EffectiveLight`), edited by the data-select tool clicking
+ * it on the map rather than a palette chip, but it's the exact same value shape
+ * and the exact same dialog either way. A pickup and a spawner are both: the
+ * `PICKUP`/`SPAWNER` data brush, and the same value on a tile that gives one
+ * (`EffectivePickup`/`EffectiveSpawner`) - one popup for either. "door" is
  * only ever a tile's own value (`EffectiveDoorLock`): there's no door data brush. A dialog's script
  * and a boss are painted data brushes, each with its popup; so are the level's quests, which a pickup,
  * a boss and a script name by id - their list is `QuestsDialog`'s, and the popups offer them from it.
@@ -425,8 +425,7 @@ const EDITORS: { [name: string]: DataBrushEditor } = {
         fromForm: form => ({ lock: form.locked === true ? Math.max(0, Math.round(Number(form.lock))) : NoLock })
     },
 
-    // Not DataBrushName.SPAWNER - same reason as light, above.
-    spawner: {
+    [DataBrushName.SPAWNER]: {
         title: "Monster spawner",
         subtitle: "Produces monsters over time. Each spawn picks one of the selected types at random.",
         fields: images => [

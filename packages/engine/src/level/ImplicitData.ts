@@ -8,14 +8,15 @@
  * One source of truth for both consumers: `Level.LoadLevel` bakes these
  * into its collision/door/light/spawner/pickup data, and the editor's
  * read-only implicit layer (see `Canvas`) draws exactly the same list, so
- * what the overlay shows is what the game will do.
+ * what the overlay shows is what the game will do. Spawners have a function
+ * of their own, `FindSpawners`, as a `SPAWNER` brush makes one too.
  */
 
 import { Vec2Like } from "@logic-incubator/lib/math/Geometry";
 import { AssetMetadata } from "./AssetMetadata";
 import { DoorFootprint, EffectiveDoorLock } from "./Doors";
 import { IsPickupValue, PickupValue } from "./entities/Pickups";
-import { IsSpawnerValue, SpawnerValue } from "./entities/Spawners";
+import { IsSpawnerValue, SpawnerCells, SpawnerPlacements, SpawnerValue } from "./entities/Spawners";
 import { DataBrushName } from "./LevelFormat";
 import { IsLightValue, LightValue } from "./Lighting";
 
@@ -30,8 +31,6 @@ export type ImplicitPlacements = {
     doors: { x: number; y: number; id: number }[];
     /** A tile's effective light (its own override, or its asset's default) - see `EffectiveLight`. */
     lights: { x: number; y: number; value: LightValue }[];
-    /** A tile's effective spawner (its own override, or its asset's default) - see `EffectiveSpawner`. */
-    spawners: { x: number; y: number; value: SpawnerValue }[];
     /** One per door placement, at its footprint's first cell: the lock id a key has to match to open it (see `EffectiveDoorLock`). */
     doorLocks: { x: number; y: number; lock: number }[];
     /** A tile's effective pickup (its own override, or its asset's default) - see `EffectivePickup`. */
@@ -65,7 +64,7 @@ export function FindImplicitPlacements(
     sizeFor: (assetName: string) => { width: number; height: number },
     tileSize: number
 ): ImplicitPlacements {
-    const placements: ImplicitPlacements = { collision: [], lightBlocks: [], doors: [], doorLocks: [], lights: [], spawners: [], pickups: [] };
+    const placements: ImplicitPlacements = { collision: [], lightBlocks: [], doors: [], doorLocks: [], lights: [], pickups: [] };
     brushes.forEach(brush => {
         if (!isTileLayer(brush.layerId)) {
             return;
@@ -91,10 +90,6 @@ export function FindImplicitPlacements(
         if (light) {
             placements.lights.push({ x, y, value: light });
         }
-        const spawner = EffectiveSpawner(brush, meta);
-        if (spawner) {
-            placements.spawners.push({ x, y, value: spawner });
-        }
         const pickup = EffectivePickup(brush, meta);
         if (pickup) {
             placements.pickups.push({ x, y, value: pickup });
@@ -103,10 +98,76 @@ export function FindImplicitPlacements(
     return placements;
 }
 
+/** A spawner as the level places it (see `FindSpawners`), in the brushes' own space. */
+export type SpawnerPlacement<B> = {
+    x: number;
+    y: number;
+    value: SpawnerValue;
+    /** The tile it's drawn as in play, and which goes when it's destroyed - null for none, when the roster's `spawnerSprite` stands in. */
+    tile: B | null;
+    /** The `SPAWNER` brush that sets its value, if one is painted on its cell. */
+    brush: B | null;
+    /** The cells it makes solid: its tile's footprint (see `SpawnerCells`), or with none the roster sprite's. */
+    cells: Vec2Like[];
+};
+
+/**
+ * Every spawner on the map, one to a cell: each spawner tile's (see `EffectiveSpawner`), and each `SPAWNER` brush's,
+ * which decides what a spawner tile on its cell does (see `SpawnerPlacements`). Any sprite can be one: it's drawn as
+ * a tile on its cell - a spawner tile if there is one, else the top tile that isn't floor, so a brush makes a
+ * gravestone or a statue the spawner but never the floor under it - and is as big as that tile. With no such tile, the
+ * roster's `spawnerSprite` stands in (`spawnerSpriteSize`, undefined for an invisible one-cell spawner).
+ * `tileLayerOrder` is a tile layer's place in the drawing order (undefined for a data layer): it and the brushes'
+ * own order say which tile is on top. What `Level` places, and what the editor's overlay outlines.
+ */
+export function FindSpawners<B extends ImplicitBrush>(
+    brushes: ReadonlyArray<B>,
+    tileLayerOrder: (layerId: number) => number | undefined,
+    metaFor: (assetName: string) => AssetMetadata | undefined,
+    sizeFor: (assetName: string) => { width: number; height: number } | undefined,
+    tileSize: number,
+    spawnerSpriteSize: { width: number; height: number } | undefined
+): SpawnerPlacement<B>[] {
+    const cellKey = (x: number, y: number): string => x + "," + y;
+    /** cell -> the tiles anchored there, with their place in the drawing order */
+    const tilesAt = new Map<string, { tile: B; layer: number; index: number }[]>();
+    const fromTiles: { x: number; y: number; value: SpawnerValue; brush: B | null }[] = [];
+    const fromBrushes: { x: number; y: number; value: SpawnerValue; brush: B | null }[] = [];
+    brushes.forEach((brush, index) => {
+        const { x, y } = brush.position;
+        const layer = tileLayerOrder(brush.layerId);
+        if (layer !== undefined) {
+            const key = cellKey(x, y);
+            const here = tilesAt.get(key) || [];
+            here.push({ tile: brush, layer, index });
+            tilesAt.set(key, here);
+            const value = EffectiveSpawner(brush, metaFor(brush.name));
+            if (value) {
+                fromTiles.push({ x, y, value, brush: null });
+            }
+        } else if (brush.name === DataBrushName.SPAWNER && IsSpawnerValue(brush.data)) {
+            fromBrushes.push({ x, y, value: brush.data, brush });
+        }
+    });
+    return SpawnerPlacements(fromTiles, fromBrushes).map(({ x, y, value, brush }) => {
+        // Top first: the last layer drawn, and on it the last painted.
+        const here = (tilesAt.get(cellKey(x, y)) || []).sort((a, b) => b.layer - a.layer || b.index - a.index).map(entry => entry.tile);
+        const tile =
+            here.find(t => EffectiveSpawner(t, metaFor(t.name)) !== undefined) ||
+            here.find(t => {
+                const meta = metaFor(t.name);
+                return !meta || meta.category !== "floor";
+            }) ||
+            null;
+        const cells = tile ? SpawnerCells(tile.position, sizeFor(tile.name), tileSize, tile.pixelOffset) : SpawnerCells({ x, y }, spawnerSpriteSize, tileSize);
+        return { x, y, value, tile, brush, cells };
+    });
+}
+
 type TileProperty = "collidable";
 const TILE_PROPERTIES: TileProperty[] = ["collidable"];
 
-/** The data brush that can stand in for each property on a tile's cell - just `COLLISION` now that a light or a spawner lives on the tile itself (see `EffectiveLight`/`EffectiveSpawner`) rather than a separate data brush that could outlive it. Doors have none either - their footprint only ever comes from the tile. */
+/** The data brush that can stand in for each property on a tile's cell - just `COLLISION` now that a light lives on the tile itself (see `EffectiveLight`) rather than a separate data brush that could outlive it. A `SPAWNER` brush isn't one either: it's a spawner with or without a tile under it, so erasing a spawner tile leaves it be. Doors have none - their footprint only ever comes from the tile. */
 const EXPLICIT_COUNTERPART: { [dataBrushName: string]: TileProperty } = {
     [DataBrushName.COLLISION]: "collidable"
 };
