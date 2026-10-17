@@ -1,6 +1,7 @@
 /**
  * Everything alive in a level besides the heroes: spawners producing monsters,
- * monsters hunting the nearest hero, and everyone's shots. `DungeonMain` runs it one
+ * bosses waiting where they were placed, monsters hunting the nearest hero, and
+ * everyone's shots. `DungeonMain` runs it one
  * step at a time; `EntityRenderer` draws it. No pixi in here - events go out
  * through an injected `emit`, sprite sizes come in through `sizeFor` - so it
  * runs under the plain node test runner too (see Encounter.test.ts).
@@ -10,6 +11,7 @@ import { RectangleLike, Vec2, Vec2Like } from "@logic-incubator/lib/math/Geometr
 import { PlayerSpeed, TileSize } from "./Constants";
 import { MONSTER_KILLED, PLAYER_DAMAGED, PLAYER_DIED, SPAWNER_DESTROYED } from "./Events";
 import { IsHeightGap } from "./level/Depth";
+import type { Boss } from "./level/entities/Bosses";
 import { IMonsterBehaviour, Separation, Toward } from "./level/entities/Behaviours";
 import FlowField, { UNREACHABLE } from "./level/entities/FlowField";
 import { Health, IsDead } from "./level/entities/Health";
@@ -35,12 +37,16 @@ export function PartyToughness(heroes: number): number {
 }
 /** Seconds a monster or spawner shows it's been hit. */
 export const HitFlashTime = 0.15;
+/** How near, in tiles' walk, a hero comes to a sleeping boss in sight of it to wake it. */
+export const BossWakeRange = 8;
 /** How close (px) monsters get before pushing each other apart - see `Separation`. */
 const SeparationRadius = TileSize * 0.8;
 
 /** The parts of `Level` an encounter uses. */
 export interface EncounterLevel {
     spawners: Spawner[];
+    /** The monsters placed where they stand - see `Bosses`. */
+    bosses: Boss[];
     collisionData: boolean[][];
     boundRect: { width: number; height: number };
     IsSolid(tileX: number, tileY: number): boolean;
@@ -71,6 +77,8 @@ export type EncounterOptions = {
     sizeFor: (name: string) => { width: number; height: number } | undefined;
     /** `[0, 1)`, like `Math.random` - which monster a spawner picks, where wanderers wander. Left out, it's numbers seeded at each `Reset`. */
     random?: () => number;
+    /** Told of each monster killed, as it dies (before `MONSTER_KILLED`) - and `hero`, the slot of whoever killed it. */
+    killed?: (monster: Monster, hero: number) => void;
 };
 
 export type Monster = {
@@ -98,6 +106,12 @@ export type Monster = {
     /** Seconds left showing it's been hit. */
     hitFlash: number;
     spawner: SpawnerState | null;
+    /** Placed by a `BOSS` brush rather than made by a spawner. */
+    boss: boolean;
+    /** The quest killing it counts for, by id - a boss's. */
+    quest?: string;
+    /** Standing where it was placed until a hero comes near it in sight (`BossWakeRange`), or hurts it - a boss, before it's woken. */
+    asleep: boolean;
     dead: boolean;
 };
 
@@ -142,7 +156,7 @@ export default class Encounter implements EncounterView {
     }
 
     /**
-     * Starts over from the level's spawners, as just loaded. Call on every `LEVEL_CREATED` - there's nothing to
+     * Starts over from the level's spawners and bosses, as just loaded. Call on every `LEVEL_CREATED` - there's nothing to
      * fight until the first. Its random numbers start again from `seed` (a new one if left out), so the same seed,
      * level and players' moves play out the same - unless the options brought their own `random`. Monsters and
      * spawners are as tough as a party of `heroes` calls for (see `PartyToughness`).
@@ -162,6 +176,18 @@ export default class Encounter implements EncounterView {
             return state;
         });
         this.spawnerFlash.clear();
+        this.level.bosses.forEach(boss => {
+            const def = MonsterRoster.inst.Def(boss.value.monster);
+            if (def) {
+                const monster = this.CreateMonster(boss.value.monster, def, boss, null);
+                monster.boss = monster.asleep = true;
+                monster.quest = boss.value.quest;
+                if (boss.value.hitPoints) {
+                    monster.hitPoints = Math.ceil(boss.value.hitPoints * this.toughness);
+                }
+                this.monsters.push(monster);
+            }
+        });
         this.doorVersion = this.level.doorVersion;
         this.flow = new FlowField(
             this.level.boundRect.width,
@@ -313,6 +339,8 @@ export default class Encounter implements EncounterView {
             rangedCooldown: def.ranged ? def.ranged.cooldown * this.random() : 0,
             hitFlash: 0,
             spawner,
+            boss: false,
+            asleep: false,
             dead: false
         };
     }
@@ -329,6 +357,15 @@ export default class Encounter implements EncounterView {
             const playerPosition = target.Position;
             m.previous.Copy(m.position);
             const tile = CentreTile(m.position);
+            m.hitFlash = Math.max(0, m.hitFlash - seconds);
+            if (m.asleep) {
+                if (!this.Wakes(tile)) {
+                    // Hunting no one from across the map: it waits to be found.
+                    m.moving = false;
+                    return;
+                }
+                m.asleep = false;
+            }
             // A door that has shut on it overrides whatever it was after: out of the door first.
             const caught = this.ClosedDoorsUnder(m.position);
             const exit = caught.length ? this.DoorExit(caught, BoxCentre(m.position)) : null;
@@ -363,7 +400,6 @@ export default class Encounter implements EncounterView {
             m.animTime += dt;
             m.contactCooldown = Math.max(0, m.contactCooldown - seconds);
             m.rangedCooldown = Math.max(0, m.rangedCooldown - seconds);
-            m.hitFlash = Math.max(0, m.hitFlash - seconds);
 
             if (m.def.contactDamage > 0 && m.contactCooldown === 0) {
                 const box = ContactBox(m.position, TileSize);
@@ -424,13 +460,28 @@ export default class Encounter implements EncounterView {
     }
 
     /** `hero` is the index of the hero whose shot it was, named in `MONSTER_KILLED`. */
+    /**
+     * Whether a sleeping boss at `tile` wakes: a hero has come within `BossWakeRange` tiles' walk of it, where it can be seen.
+     * Seen alone isn't enough - in a level of open rooms with no doors between, every cell is - and a walk, not a straight
+     * line, so one behind a wall stays asleep.
+     */
+    private Wakes(tile: Vec2Like): boolean {
+        const distance = this.flow.DistanceAt(tile.x, tile.y);
+        return distance !== UNREACHABLE && distance <= BossWakeRange && this.level.IsCellVisible(tile.x, tile.y);
+    }
+
     private HurtMonster(m: Monster, damage: number, hero: number): void {
         m.hitPoints -= damage;
         m.hitFlash = HitFlashTime;
+        // A boss shot from afar is awake now.
+        m.asleep = false;
         if (m.hitPoints <= 0) {
             m.dead = true;
             if (m.spawner) {
                 RecordDeath(m.spawner);
+            }
+            if (this.options.killed) {
+                this.options.killed(m, hero);
             }
             this.options.emit(MONSTER_KILLED, m.type, m.position.x, m.position.y, hero);
         }

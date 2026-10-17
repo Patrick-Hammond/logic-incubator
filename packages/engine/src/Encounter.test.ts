@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { Vec2Like } from "@logic-incubator/lib/math/Geometry";
 import { TileSize } from "./Constants";
-import Encounter, { EncounterLevel, EncounterPlayer, PartyToughness } from "./Encounter";
+import Encounter, { BossWakeRange, EncounterLevel, EncounterPlayer, PartyToughness } from "./Encounter";
 import { MONSTER_KILLED, PLAYER_DAMAGED, PLAYER_DIED, SPAWNER_DESTROYED } from "./Events";
 import { Chase, KeepDistance } from "./level/entities/Behaviours";
 import { UNREACHABLE } from "./level/entities/FlowField";
@@ -66,6 +66,7 @@ function TestLevel(rows: string[], spawners: Spawner[], visible: (x: number, y: 
     const height = rows.length;
     return {
         spawners,
+        bosses: [],
         collisionData,
         boundRect: { width, height },
         IsSolid: (x, y) => x < 0 || y < 0 || x >= width || y >= height || !!(collisionData[x] && collisionData[x][y]),
@@ -537,5 +538,54 @@ describe("Encounter with several heroes", () => {
         const { encounter, run } = Setup(ROOM, [TestSpawner(12, 2, { interval: 0 })], player);
         run(60);
         expect(encounter.monsters).toHaveLength(0);
+    });
+});
+
+describe("Bosses", () => {
+    it("stand where they were placed, as tough as they're made, asleep until a hero comes near in sight of them", () => {
+        let seen = false;
+        const hero = new TestPlayer(At(2, 3));
+        const { level, encounter, run } = Setup(ROOM, [], hero, x => seen || x < 10);
+        level.bosses.push({ x: 15, y: 3, value: { monster: "walker", hitPoints: 9, quest: "king" } });
+        encounter.Reset();
+        const boss = encounter.monsters[0];
+        expect(boss).toMatchObject({ type: "walker", hitPoints: 9, boss: true, asleep: true, quest: "king", spawner: null });
+        run(60);
+        expect(boss.position).toEqual(At(15, 3));
+        // In sight, but further than BossWakeRange: still asleep - in open rooms, every cell is in sight.
+        seen = true;
+        run(60);
+        expect(boss.asleep).toBe(true);
+        expect(boss.position).toEqual(At(15, 3));
+        hero.Position = At(15 - BossWakeRange, 3);
+        run(60);
+        expect(boss.asleep).toBe(false);
+        expect(boss.position.x).toBeLessThan(15 * TileSize);
+    });
+
+    it("stay asleep out of sight however near a hero is, and wake when one shoots them from afar", () => {
+        let seen = false;
+        const hero = new TestPlayer(At(12, 3));
+        const { level, encounter, run } = Setup(ROOM, [], hero, x => seen || x < 14);
+        level.bosses.push({ x: 15, y: 3, value: { monster: "walker", hitPoints: 9 } });
+        encounter.Reset();
+        const boss = encounter.monsters[0];
+        run(60);
+        expect(boss.asleep).toBe(true);
+        seen = true;
+        hero.Position = At(2, 3);
+        run(60);
+        expect(boss.asleep).toBe(true);
+        encounter.Fire(hero.Centre, { x: 1, y: 0 }, ARROW, "player", 0);
+        run(60);
+        expect(boss.hitPoints).toBeLessThan(9);
+        expect(boss.asleep).toBe(false);
+    });
+
+    it("are as tough as their kind without hit points of their own - and tougher for a bigger party", () => {
+        const { level, encounter } = Setup(ROOM, [], new TestPlayer(At(2, 3)));
+        level.bosses.push({ x: 15, y: 3, value: { monster: "walker" } }, { x: 15, y: 4, value: { monster: "walker", hitPoints: 9 } });
+        encounter.Reset(1, 3);
+        expect(encounter.monsters.map(m => m.hitPoints)).toEqual([Walker.hitPoints * PartyToughness(3), 9 * PartyToughness(3)]);
     });
 });

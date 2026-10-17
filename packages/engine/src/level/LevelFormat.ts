@@ -6,6 +6,9 @@
  */
 
 import type { Vec2Like } from "@logic-incubator/lib/math/Geometry";
+import type { QuestDef } from "../story/Quests";
+import type { DialogValue } from "../story/Talk";
+import type { BossValue } from "./entities/Bosses";
 import type { PickupValue } from "./entities/Pickups";
 import type { SpawnerValue } from "./entities/Spawners";
 import type { DoorLockValue } from "./Doors";
@@ -26,17 +29,25 @@ import type { LightValue } from "./Lighting";
  *
  * `EXIT` marks a way out: the level is over the moment any hero stands on one (see `World`). It isn't
  * drawn - paint stairs or a ladder there too.
+ *
+ * `DIALOG`, painted over an NPC's tile, makes that cell solid and gives it a dialog script (see `Talk`,
+ * `DialogScript`): a hero walking into it starts the talk, in a game of one hero on one machine.
+ *
+ * `BOSS` puts one of the roster's monsters there, sleeping until a hero comes near - tougher, if it's given
+ * more hit points, and marked for a quest that asks for it to be killed (see `Bosses`).
  */
 export const enum DataBrushName {
     PLAYER_START = "player-start",
     COLLISION = "collision",
     Z_INDEX = "z-index",
     PICKUP = "pickup",
-    EXIT = "exit"
+    EXIT = "exit",
+    DIALOG = "dialog",
+    BOSS = "boss"
 }
 
-/** A data brush's value - a number (`Z_INDEX`'s height), or a light's, spawner's, pickup's or door lock's settings. */
-export type DataBrushValue = number | LightValue | SpawnerValue | PickupValue | DoorLockValue;
+/** A data brush's value - a number (`Z_INDEX`'s height), or a light's, spawner's, pickup's, door lock's, dialog's or boss's settings. */
+export type DataBrushValue = number | LightValue | SpawnerValue | PickupValue | DoorLockValue | DialogValue | BossValue;
 
 /** One placed tile or data brush. `position` is in map cells; `layerId` is its layer's `id`; `data` is null on a tile. */
 export type Brush = {
@@ -61,9 +72,10 @@ export type LevelLayer = { id: number; name: string; isData: boolean; kind?: Til
 
 /**
  * A saved level. The nesting is the editor's - `editorData` is its whole state and `levelData`
- * its level store's - of which the engine reads only what's typed here.
+ * its level store's - of which the engine reads only what's typed here. `quests` are the level's
+ * quests (see `Quests`) - none in a level saved before there were any.
  */
 export type LevelFile = {
     editorData: { layers: LevelLayer[] };
-    levelData: { levelData: Brush[] };
+    levelData: { levelData: Brush[]; quests?: QuestDef[] };
 };

@@ -1,6 +1,6 @@
 /**
- * A modal form popup for editing structured values - text, numbers (slider +
- * exact box), colours, toggles, a single choice and multi-select chip grids -
+ * A modal form popup for editing structured values - text (a line, or a box of
+ * lines), numbers (slider + exact box), colours, toggles, a single choice and multi-select chip grids -
  * described by a list of `FieldSpec`s rather than hand-built per use.
  *
  * Plain DOM layered over the Pixi canvas rather than Pixi widgets: the browser
@@ -50,6 +50,8 @@ export type NumberField = FieldBase & {
     zeroLabel?: string;
 };
 export type TextField = FieldBase & { type: "text"; placeholder?: string };
+/** Lines of text - a script. Enter in it starts a new line rather than saving. */
+export type TextAreaField = FieldBase & { type: "textarea"; placeholder?: string; rows?: number };
 /** Value is a 0xRRGGBB number, same as Pixi tints. */
 export type ColourField = FieldBase & { type: "colour" };
 export type ToggleField = FieldBase & { type: "toggle" };
@@ -57,7 +59,7 @@ export type MultiChoiceField = FieldBase & { type: "multi-choice"; options: Choi
 /** Exactly one of `options` - the value is its `value`. */
 export type ChoiceField = FieldBase & { type: "choice"; options: ChoiceOption[] };
 
-export type FieldSpec = NumberField | TextField | ColourField | ToggleField | MultiChoiceField | ChoiceField;
+export type FieldSpec = NumberField | TextField | TextAreaField | ColourField | ToggleField | MultiChoiceField | ChoiceField;
 
 export type FormValue = number | string | boolean | string[];
 export type FormValues = { [key: string]: FormValue };
@@ -81,6 +83,12 @@ export function IsFieldVisible(field: FieldSpec, values: FormValues): boolean {
 }
 
 let openDialog: HTMLElement | null = null;
+
+/** The popup's look, for another modal of the editor's to share (its `fd-overlay`, `fd-panel`, `fd-header`... classes). */
+export function InjectFormStyles(): void {
+    InjectTheme();
+    InjectStyles("fd-styles", STYLES);
+}
 
 export function IsFormDialogOpen(): boolean {
     return openDialog !== null;
@@ -167,8 +175,8 @@ export function OpenFormDialog(options: FormDialogOptions): Promise<FormValues |
             if (e.key === "Escape") {
                 e.preventDefault();
                 close(null);
-            } else if (e.key === "Enter" && !(e.target instanceof HTMLButtonElement)) {
-                // Buttons (chips, Cancel) keep Enter as "press me"; anywhere else it saves.
+            } else if (e.key === "Enter" && !(e.target instanceof HTMLButtonElement) && !(e.target instanceof HTMLTextAreaElement)) {
+                // Buttons (chips, Cancel) keep Enter as "press me", and a box of lines as a new line; anywhere else it saves.
                 e.preventDefault();
                 save();
             }
@@ -179,7 +187,7 @@ export function OpenFormDialog(options: FormDialogOptions): Promise<FormValues |
         revalidate();
         document.body.appendChild(overlay);
         openDialog = overlay;
-        const firstInput = panel.querySelector<HTMLInputElement>("input[type=text], input[type=number]");
+        const firstInput = panel.querySelector<HTMLInputElement | HTMLTextAreaElement>("input[type=text], input[type=number], textarea");
         if (firstInput) {
             // Selected, so typing replaces the value rather than appending to it.
             firstInput.focus();
@@ -255,6 +263,19 @@ function BuildField(field: FieldSpec, value: FormValue, onChange: (key: string, 
             control.appendChild(input);
             break;
         }
+        case "textarea": {
+            const area = document.createElement("textarea");
+            area.id = id;
+            area.rows = field.rows || 10;
+            area.spellcheck = false;
+            area.value = typeof value === "string" ? value : "";
+            if (field.placeholder) {
+                area.placeholder = field.placeholder;
+            }
+            area.addEventListener("input", () => onChange(field.key, area.value));
+            control.appendChild(area);
+            break;
+        }
         case "colour": {
             const colour = typeof value === "number" ? value : 0xffffff;
             const picker = Input("color", id);
@@ -292,9 +313,12 @@ function BuildField(field: FieldSpec, value: FormValue, onChange: (key: string, 
             grid.setAttribute("role", "group");
             grid.setAttribute("aria-label", field.label);
             const chips = field.options.map(option => {
-                const chip = El("button", "fd-chip fd-choice");
+                const chip = El("button", "fd-chip fd-choice" + (option.image ? " fd-pictured" : ""));
                 chip.type = "button";
                 chip.title = option.label;
+                if (option.image) {
+                    chip.appendChild(El("span", "fd-chip-art")).appendChild(ChipImage(option.image));
+                }
                 chip.appendChild(El("span", "fd-chip-label", option.label));
                 chip.addEventListener("click", () => {
                     show(option.value);
@@ -319,12 +343,7 @@ function BuildField(field: FieldSpec, value: FormValue, onChange: (key: string, 
                 chip.type = "button";
                 chip.title = option.label;
                 if (option.image) {
-                    const img = document.createElement("img");
-                    img.src = option.image.src;
-                    img.width = option.image.width;
-                    img.height = option.image.height;
-                    img.alt = "";
-                    chip.appendChild(El("span", "fd-chip-art")).appendChild(img);
+                    chip.appendChild(El("span", "fd-chip-art")).appendChild(ChipImage(option.image));
                 }
                 chip.appendChild(El("span", "fd-chip-label", option.label));
                 const sync = () => chip.setAttribute("aria-pressed", String(selected.has(option.value)));
@@ -392,6 +411,15 @@ function Clamp(n: number, field: NumberField): number {
     return Math.max(field.min, Math.min(field.max, parseFloat(snapped.toFixed(6))));
 }
 
+function ChipImage(image: NonNullable<ChoiceOption["image"]>): HTMLImageElement {
+    const img = document.createElement("img");
+    img.src = image.src;
+    img.width = image.width;
+    img.height = image.height;
+    img.alt = "";
+    return img;
+}
+
 function HexString(colour: number): string {
     return "#" + colour.toString(16).padStart(6, "0");
 }
@@ -431,10 +459,15 @@ const STYLES = `
     padding: 5px 7px; font: inherit;
 }
 .fd-panel input[type=number] { width: 72px; }
+.fd-panel textarea {
+    flex: 1; resize: vertical; min-height: 120px; tab-size: 4;
+    background: var(--ed-input); color: var(--ed-text-strong); border: 1px solid var(--ed-panel-border); border-radius: 4px;
+    padding: 6px 8px; font: 12px/1.45 monospace;
+}
 .fd-panel input[type=text] { flex: 1; }
 .fd-panel input.fd-hex { flex: 0 0 84px; font-family: monospace; }
 .fd-panel input[type=color] { width: 44px; height: 30px; padding: 0; border: 1px solid var(--ed-panel-border); border-radius: 4px; background: none; cursor: pointer; }
-.fd-panel input:focus-visible, .fd-panel button:focus-visible { outline: 2px solid var(--ed-accent); outline-offset: 1px; }
+.fd-panel input:focus-visible, .fd-panel textarea:focus-visible, .fd-panel button:focus-visible { outline: 2px solid var(--ed-accent); outline-offset: 1px; }
 .fd-suffix { min-width: 88px; color: var(--ed-muted); font-size: 12px; }
 .fd-chips { display: grid; grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); gap: 6px; width: 100%; }
 .fd-chip {
@@ -445,6 +478,7 @@ const STYLES = `
 }
 .fd-choices { grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); }
 .fd-choice { min-height: 0; justify-content: center; padding: 8px 6px; font-size: 12px; }
+.fd-choice.fd-pictured { min-height: 84px; justify-content: flex-end; }
 .fd-chip:hover { border-color: var(--ed-hover-border); }
 .fd-chip[aria-pressed=true] { background: var(--ed-accent-bg); border-color: var(--ed-accent); color: var(--ed-text-strong); }
 .fd-chip[aria-pressed=false] img { opacity: 0.45; filter: grayscale(0.7); }

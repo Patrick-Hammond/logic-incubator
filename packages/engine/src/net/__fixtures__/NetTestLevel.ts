@@ -1,7 +1,8 @@
 /**
  * A level for the online tests, from an ASCII map: `#` solid, `D` the cells of
  * one door, `S` the start, `E` a way out, `$` a gold pickup, `k` the key to the
- * door when it's locked, `@` a spawner's (solid) cell. Its doors open by the
+ * door when it's locked, `@` a spawner's (solid) cell - the gold marked for the
+ * quest `gold`, if `quests` has one. Its doors open by the
  * same rule as `Level`'s (`DoorOpens`) and can be set from a snapshot; pickups
  * are taken and dropped as `Level` does them. Two copies of the same map are
  * the host's level and a guest's.
@@ -13,6 +14,7 @@ import type { CollectedPickup } from "../../level/Level";
 import { NoLock } from "../../level/entities/Keys";
 import { PickupValue } from "../../level/entities/Pickups";
 import { DefaultSpawnerValue, Spawner } from "../../level/entities/Spawners";
+import type { QuestDef } from "../../story/Quests";
 import type { NetLevel } from "../NetPlay";
 
 type Pickup = Vec2Like & { value: PickupValue; sprite: string | null };
@@ -20,7 +22,7 @@ type Door = { cells: Vec2Like[]; isOpen: boolean; lockId: number };
 
 export type NetTestLevel = NetLevel & { door: Door; pickups: Pickup[]; visibleFrom: Vec2Like[] };
 
-export function NetTestLevel(rows: string[], lockId = NoLock, monsters: string[] = ["walker"]): NetTestLevel {
+export function NetTestLevel(rows: string[], lockId = NoLock, monsters: string[] = ["walker"], quests: QuestDef[] = []): NetTestLevel {
     const collisionData: boolean[][] = [];
     const door: Door = { cells: [], isOpen: false, lockId };
     const exits: Vec2Like[] = [];
@@ -36,7 +38,7 @@ export function NetTestLevel(rows: string[], lockId = NoLock, monsters: string[]
         } else if (c === "E") {
             exits.push({ x, y });
         } else if (c === "$") {
-            pickups.push({ x, y, value: { kind: "gold", amount: 5 }, sprite: "coin" });
+            pickups.push({ x, y, value: { kind: "gold", amount: 5, quest: "gold" }, sprite: "coin" });
         } else if (c === "k") {
             pickups.push({ x, y, value: { kind: "key", id: lockId }, sprite: "key" });
         } else if (c === "@") {
@@ -55,6 +57,8 @@ export function NetTestLevel(rows: string[], lockId = NoLock, monsters: string[]
         pickups,
         visibleFrom: [],
         spawners,
+        bosses: [],
+        quests,
         collisionData,
         boundRect: { width, height },
         playerStartPosition: start,
@@ -71,6 +75,8 @@ export function NetTestLevel(rows: string[], lockId = NoLock, monsters: string[]
         },
         IsFloor: (x, y) => !isSolid(x, y) && !isDoor(x, y),
         IsExit: (x, y) => exits.some(e => e.x === x && e.y === y),
+        IsTalker: () => false,
+        Marked: (kind, quest) => (kind === "collect" ? pickups.filter(p => p.value.quest === quest).length : 0),
         IsDoorLocked: (x, y, canOpen) => isDoor(x, y) && !door.isOpen && !canOpen(door.lockId),
         UpdateDoors(tiles, canOpen) {
             if (doors.length) {

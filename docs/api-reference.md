@@ -63,7 +63,8 @@ configuration files and plugin interface. For explanations, examples and workflo
 [Views](#views) ·
 [Player input](#player-input) ·
 [Online lobby](#online-lobby) ·
-[Online play](#online-play)
+[Online play](#online-play) ·
+[Quests and dialogs](#quests-and-dialogs)
 
 **[ui](#ui)**
 [UiLayer and ThemeFor](#uilayer-and-themefor) ·
@@ -1245,6 +1246,10 @@ await relay.close();         // ends every connection and stops
 | `SPAWNER_DESTROYED` | `"spawnerDestroyed"` | `(spawner)` |
 | `PICKUP_COLLECTED` | `"pickupCollected"` | `(hero, tileX, tileY)` - a hero picked up what was on that cell |
 | `KEYS_DROPPED` | `"keysDropped"` | `(hero, tileX, tileY)` - a fallen hero's keys landed on that cell |
+| `NPC_BUMPED` | `"npcBumped"` | `(hero, tileX, tileY)` - a hero walked into the NPC on that cell (a `DIALOG` brush), where talking is on (`World.SetTalk`); `DungeonMain` starts the talk |
+| `TALK_STARTED` | `"talkStarted"` | `(hero, tileX, tileY)` - a talk with that cell's NPC began: play holds still until `TALK_ENDED` |
+| `TALK_ENDED` | `"talkEnded"` | - (the talk is over, play goes on) |
+| `QUEST_UPDATED` | `"questUpdated"` | `(id, state: QuestState, progress, was: QuestState)` - one of the level's quests was given, moved on, met or handed in |
 
 `hero` is always a hero's slot, from 0 - their place in `DungeonMainOptions.heroes`. On an online guest every one of these about play comes from
 the host's snapshots (see [Online play](#online-play)).
@@ -1291,10 +1296,18 @@ main.Paused: boolean                    // Pause() is in force
 main.WaitingForRestart: boolean         // the level is over (everyone down, or a hero out), with manualRestart: everything holds still until Restart()
 main.CanRestart: boolean                // Restart() does something: offline, or the host of an online run
 main.Net: NetPlay | null                // the online run being played, as net() gave it when the level started
+main.Talking: boolean                   // the hero is talking to an NPC: play holds still (and Pause does nothing) until TALK_ENDED
 main.Pause(): void                      // nothing moves, shoots or spawns until Resume(); emits GAME_PAUSED. Online the world plays on: only the heroes played here stand still. Does nothing before a level has started or once it's over
 main.Resume(): void                     // emits GAME_RESUMED
 main.Restart(): void                    // starts over now, every hero on their feet, with whatever level() hands back (what happens by itself a moment after the end, without manualRestart); online, the host's starts it over on every machine, and a guest's does nothing
 ```
+
+**Talks and quests** ([Quests and dialogs](#quests-and-dialogs)): a level started offline with one hero turns talking on (`World.SetTalk(true)`; off
+otherwise), and `NPC_BUMPED` starts a talk: a `DialogRunner` over the NPC's script, with the world's quests and flags, rewards going to the
+hero (`Hero.ApplyPickup`), shown in a `DialogView` with the NPC's tile as the portrait. `TALK_STARTED` and `TALK_ENDED` frame it; a level
+starting over ends it. A `QuestTracker` over the play area shows `World.quests` every frame and is told of each level start (`Begin`).
+Both are attached after the `Hud` and before the `overlay`, so a game's overlay (a pause menu) stays on top - it should stop taking keys
+between `TALK_STARTED` and `TALK_ENDED`, as `in-dungeons-we-dwell`'s `GameOverlay` does (`UiSystem.SetActive(false)`).
 
 `overlay` is how a game puts its own UI over the dungeon without the engine knowing what it is: it is called once, when the scene initialises, and what it
 returns is attached above the HUD (shown, hidden and destroyed with the scene). It gets the scene so it can `Pause`, `Resume` and `Restart` it, and listens to
@@ -1353,6 +1366,7 @@ type Tile = Brush & { texture: Texture; anim?: AnimatedSprite; light?: number };
 type Door = { cells: Vec2Like[]; tile: Tile; isOpen: boolean; regionIds: number[]; openSprite: string; closedSprite: string; lockId: number };
 type Pickup = Vec2Like & { tile: Tile | null; value: PickupValue };      // tile is null for a PICKUP brush on an empty cell
 type CollectedPickup = { value: PickupValue; sprite: string | null };    // sprite = the tile it was, for an item or key with none of its own
+type Talker = Vec2Like & { value: DialogValue; script: DialogScript; tile: Tile | null };   // an NPC: its script as read, and the tile drawn there
 ```
 
 | Field | Type | |
@@ -1371,6 +1385,9 @@ type CollectedPickup = { value: PickupValue; sprite: string | null };    // spri
 | `playerStartPosition` | `Vec2Like \| undefined` | |
 | `exits` | `Vec2Like[]` | Every cell painted with the `exit` data brush - see `IsExit`. |
 | `spawners`, `pickups`, `depths` | | |
+| `talkers` | `Talker[]` | Every `DIALOG` brush: an NPC's cell (solid in `collisionData`, though it blocks no light), its script read against the level's quests (lines with mistakes left out, each warned of), and the top tile there. |
+| `bosses` | `Boss[]` | Every `BOSS` brush whose monster the roster has (`Boss = Vec2Like & { value: BossValue }`); one it hasn't is left out with a warning. `Encounter.Reset` places them. |
+| `quests` | `QuestDef[]` | The level's quests: the well-formed ones in `levelData.quests` (`ReadQuests`). |
 
 | Method | Description |
 | --- | --- |
@@ -1390,6 +1407,8 @@ type CollectedPickup = { value: PickupValue; sprite: string | null };    // spri
 | `SetDoorOpen(index, open)` | Opens or shuts `doors[index]` as it is - its sprite swapped, `doorVersion` bumped - whoever stands where: what an online guest does with the host's doors. Does nothing if it's already so. |
 | `UpdateVisibleRegions(tiles: Vec2Like[])` | Recomputes which regions are reachable through open doors from any of these tiles - what one hero sees, all see (call after `UpdateDoors`). |
 | `IsCellVisible(x, y): boolean` | |
+| `TalkerAt(x, y): Talker \| null`, `IsTalker(x, y): boolean` | The NPC on the cell, if any. |
+| `Marked(kind, quest): number` | How many things the level marks for `quest` (`QuestLevel`): for `"collect"` its pickups with that `quest`, for `"kill"` its bosses; 0 for any other kind. |
 
 ---
 
@@ -1398,8 +1417,9 @@ type CollectedPickup = { value: PickupValue; sprite: string | null };    // spri
 `@logic-incubator/engine/level/LevelFormat` - types and one enum; no runtime imports.
 
 ```ts
-const enum DataBrushName { PLAYER_START = "player-start", COLLISION = "collision", Z_INDEX = "z-index", PICKUP = "pickup", EXIT = "exit" }
-type DataBrushValue = number | LightValue | SpawnerValue | PickupValue | DoorLockValue;
+const enum DataBrushName { PLAYER_START = "player-start", COLLISION = "collision", Z_INDEX = "z-index", PICKUP = "pickup", EXIT = "exit",
+                           DIALOG = "dialog", BOSS = "boss" }
+type DataBrushValue = number | LightValue | SpawnerValue | PickupValue | DoorLockValue | DialogValue | BossValue;
 
 type Brush = {
     name: string;            // a bare sprite/animation name, or a DataBrushName
@@ -1416,12 +1436,13 @@ type LevelLayer = { id: number; name: string; isData: boolean; kind?: TileLayerK
 
 type LevelFile = {
     editorData: { layers: LevelLayer[] };
-    levelData: { levelData: Brush[] };
+    levelData: { levelData: Brush[]; quests?: QuestDef[] };   // quests: see Quests and dialogs; left out, none
 };
 ```
 
 `EXIT` marks a way out: the level is over the moment any hero stands on one (`LEVEL_COMPLETED`). It isn't drawn, so paint stairs or a ladder
-there too. A level with none has no way out but to fall.
+there too. A level with none has no way out but to fall. `DIALOG` is an NPC (`{ script }`, see `story/Talk`) and `BOSS` a monster placed by hand
+(`BossValue`, see `level/entities/Bosses`) - both in [Quests and dialogs](#quests-and-dialogs). A `PickupValue` may carry a `quest`, the id of the quest it counts for.
 
 ---
 
@@ -1718,6 +1739,7 @@ type EncounterOptions = {
     emit: (event: string, ...args: unknown[]) => void;           // the game's dispatcher
     sizeFor: (name: string) => { width: number; height: number } | undefined;   // a sprite's pixel size
     random?: () => number;                                        // [0, 1); left out, numbers seeded at each Reset
+    killed?: (monster: Monster, hero: number) => void;            // a monster died, by that hero's shot (-1 for none) - told before MONSTER_KILLED
 };
 ```
 
@@ -1729,6 +1751,10 @@ type EncounterOptions = {
 | `Seed` | What the random numbers started from at the last `Reset`. |
 | `Fire(from, direction, shot, owner, hero = -1, seq = -1)` | Adds a projectile; a hero's shot names them by slot (`hero`), which `MONSTER_KILLED` passes on, and by the `seq` of the input it was fired with (an online guest's own shot, which its stand-in waits for). Heroes' shots pass through each other - there's no friendly fire. Each `Projectile` keeps its `setup` (`ShotSetup`) and `seq`. |
 | `Update(dt, seconds, players: EncounterPlayer[])` | One step: `dt` in frames (movement; 1 at 60 a second), `seconds` for timers. Only the living among `players` count: the flow field leads to the nearest of them, each monster steers for (and faces, and shoots at) the nearest in a straight line, a touch or a shot hurts the first it reaches, and the dead take no more hits. With none alive, nothing moves. |
+
+**Bosses.** `Reset` also places the level's `bosses` (`EncounterLevel.bosses`): each a `Monster` with `boss` set, its `quest`, and its own
+hit points when its value gives them (times the party's toughness, like any monster's). It starts `asleep`: it stands still, and takes no part,
+until a hero comes within `BossWakeRange` (8) tiles' walk of it while its cell is in sight (`IsCellVisible`), or hurts it; then it plays as its kind does.
 
 Constants `MaxMonsters = 150`, `HitFlashTime = 0.15`, `ToughnessPerHero = 0.5`; `PartyToughness(heroes): number` - `1 + ToughnessPerHero * (heroes - 1)`:
 x1 for one hero, x1.5 for two, x2.5 for four - more bows for the same crowd, without more monsters than `MaxMonsters`. `EncounterLevel` and
@@ -1749,8 +1775,8 @@ each hero's input every step and draws it; a game rarely touches it directly.
 `@logic-incubator/engine/sim/World` - `default class World`:
 
 ```ts
-interface WorldLevel extends EncounterLevel {   // the parts of Level a world uses
-    playerStartPosition; IsFloor(x, y); IsExit(x, y); IsDoorLocked(x, y, canOpen); UpdateDoors(tiles, canOpen);
+interface WorldLevel extends EncounterLevel, QuestLevel {   // the parts of Level a world uses
+    playerStartPosition; quests; IsFloor(x, y); IsExit(x, y); IsTalker(x, y); IsDoorLocked(x, y, canOpen); UpdateDoors(tiles, canOpen);
     UpdateVisibleRegions(tiles); CollectPickupsAt(x, y); DropPickup(x, y, value, sprite);
 }
 
@@ -1771,6 +1797,11 @@ world.Step(inputs: ReadonlyArray<HeroInput>, dt, seconds): void
 world.RemoveHero(index): void           // their player has left: Gone, out of play for good (keys dropped, and the level ends if no one's left standing)
 world.SetAway(index, away: boolean): void   // online, their player's connection has gone (true) or is back: out of play meanwhile, standing
                                         // where they were (the level ends if no one else is in play); never for a hero who is Gone
+world.quests: QuestLog                  // how the level's quests stand - started over by Reset; each change emits QUEST_UPDATED
+world.flags: Set<string>                // the words the level's dialog scripts have set - cleared by Reset
+world.SetTalk(on: boolean): void        // whether walking into an NPC asks for a talk (NPC_BUMPED) - for one hero on one machine; off until turned on
+world.RecordQuest(happening: QuestHappening, hero = 0): void   // counts something that happened toward the quests (QuestLog.Record);
+                                        // hero gets the credit if it completes one that ends the level
 
 type HeroInput = IPlayerInput | ReadonlyArray<IPlayerInput> | undefined   // a list: several steps' worth for that hero, played in turn this step
 NoInput: IPlayerInput                   // standing still
@@ -1791,11 +1822,16 @@ size (`Encounter.Reset(seed, heroes)`).
    them is at least `WarpDistance` tiles away. With a leash, the others' positions bound where they can go (`LeashBoxFor`) and the edge stops
    them like a wall (`Leashed`).
 2. Doors open and shut by where the heroes in play stand (`UpdateDoors`, with `TeamCanOpen`), and the regions they can see are recomputed together.
-3. Each picks up what's under them, in slot order, so the first there gets it (`PICKUP_COLLECTED(hero, x, y)` when there was anything).
+3. Each picks up what's under them, in slot order, so the first there gets it (`PICKUP_COLLECTED(hero, x, y)` when there was anything), and each
+   thing picked up is counted toward the quests (a `collect` happening, with the pickup's `quest`). With talking on, a hero who has just walked into
+   an NPC (`BumpedNpc`) emits `NPC_BUMPED` - once as they reach it, not again while they keep pushing.
 4. A hero on an exit ends the level: `Completed` is set, `LEVEL_COMPLETED(hero)` emitted, and nothing else happens this step.
 5. Each fires the shots they took, if any (`Encounter.Fire` with their slot and the input's `seq`), and the encounter steps with the heroes in
    play - so a monster never goes for, or hits, one who is away.
-6. A hero who fell this step drops every key they carried (`Level.DropPickup`, then `KEYS_DROPPED(hero, x, y)` with the cell they landed on), for
+6. Each monster killed is counted toward the quests (a `kill` happening, with its type and its `quest`). A quest that `ends` the level, met this
+   step, ends it as an exit does: `Completed`, and `LEVEL_COMPLETED` with the hero whose doing met it (checked at the start of the next step too,
+   for one met by a dialog).
+7. A hero who fell this step drops every key they carried (`Level.DropPickup`, then `KEYS_DROPPED(hero, x, y)` with the cell they landed on), for
    the others to pick up. Once none is left in play, `AllDown` is set and `ALL_PLAYERS_DIED` emitted.
 
 Keys are the team's: a door opens for everyone if any living hero holds its key, and an open door never shuts on a hero in it, even if the key
@@ -1863,6 +1899,8 @@ same seed on any machine (mulberry32); `NewSeed()` - a fresh 32-bit seed, differ
 | `Hud extends GameComponent` | `view/Hud` | `new Hud(setup.hearts?)`; `RenderHeroes(heroes)` (every hero, in slot order, the fallen included: one gets the lone hero's panel, as `Render`; a party gets a `HudHeroRow` each, spread down the panel, and the team's keys at the bottom - every key any of them carries); `Render(health, gold, weaponIcon, inventory, keys, spell?)` (the lone hero's panel: hearts, gold, weapon, inventory, keys and `spell`, their `LightSpellState`, shown under the keys as a bar - the skin's `mp` bar, if it has one - and READY, LIT or RECHARGING with the seconds left; null or left out hides it). `SetNames(names: { name; own }[])` heads each row (in slot order) with `name` in place of PLAYER n, in the skin's `focus` colour for `own` - the players at this machine - and `muted` for the rest; rows made later take them too. Built from the UI kit (a `UiPanel`, a `UiIconRow` of hearts, `UiItemSlot`s and `UiInventoryGrid`s, `UiText`) in the skin of the loaded `ui` bundle - the game must load it first. Hearts are the game's own pictures when `setup.hearts` gives them (enlarged 3x, 2x in a party's rows), else the skin's. The keys panel shows each key's sprite and its id. Warns once per missing sprite. |
 | `HudHeroRow extends Container` | `view/HudHeroRow` | One hero's row when a party plays: PLAYER n or `SetName(name, own)`'s (and DOWN, the row dimmed, once they've fallen - LEFT once their player has gone, AWAY while their player's connection is gone) and their hearts, their weapon slot, gold and light spell bar, and a strip of the items they carry. `new HudHeroRow(theme, index, rowWidth, heartTextures?)`, `Render(hero: HudHero)` (redraws only what changed), `static Height(theme)`. Also exports `type HudHero` (what a row reads of a `Hero`), `SpellStatusText(spell)`, `FitScale(texture, box)` and `TextureOf(name)`, which `Hud` shares. |
 | `EntityRenderer` | `view/EntityRenderer` | `new EntityRenderer(camera, level)`; `Reset()` (call on `LEVEL_CREATED`), `Render(heroes: HeroView[], encounter, alpha = 1)` (each hero where their view was last `Place`d - a fallen one faint, a ghost where they fell, and one who is away as faint; monsters and shots `alpha` of the way through their last step). Draws a glow under the figures for each hero's torch and each glowing shot, and the mage-lights - a glow with a bright core - over them. |
+| `DialogView extends GameComponent` | `view/DialogView` | A talk with an NPC over the play area, in its own `UiLayer`: a `UiDialogue` across the bottom with the NPC's portrait, and once a line with choices has come out in full, a `UiMenu` of them above it. `new DialogView(events: DialogViewEvents)` with `{ next(), choose(index), end() }`, each told a frame after the key press that did it; `Open(line: DialogLine, portrait?: Texture)` (a talk's first line; the portrait drawn as big as the skin's frame takes, by whole pixels), `Say(line)`, `Close()`, `IsOpen`. Its scope (`"dialog"`) takes accept (`onAccept`: the box goes on) and cancel (`end`). `DungeonMain` drives it. |
+| `QuestTracker extends GameComponent` | `view/QuestTracker` | The quests under way and complete in the play area's top-left corner (name, `2/5` or DONE, then its `text`) over a shade, and a `UiToastHost` in the top-right: NEW QUEST as one is given, QUEST COMPLETE as one is met, and QUEST for each under way as a level begins. `Begin(log: QuestLog)` (a level started), `Render(log)` (call each frame; redrawn only when `log.Version` changes). Display-only (`input: false`). |
 | `GlowLayer extends Container` | `view/GlowLayer` | Glows added onto what's beneath them, from a pool of sprites: `Begin()`, `Add(x, y, look, pixelsPerTile)` per glow, `End()`. `CreateGlowTexture()` makes the soft white texture they're drawn with (the caller destroys it). |
 | `Glow` | `view/helpers/Glow` | Pure: `GlowTextureSize`, `GlowRadius` (1.25 tiles), `GlowStrength` (0.3), `GlowFlameY` (0.3 - a lit tile's glow sits this far down its art), `OrbCoreRadius`; `GlowPixels(size)` (premultiplied white, fading like `LightFalloff`), `type GlowLook = { tint, alpha, radius }`, `LookOfGlow(rgb, scale, out)` (the light's colour at full saturation, stronger the brighter it is, swelling a little as it flickers), `LookOfOrbCore(rgb, scale, out)` (small, pale and nearly opaque). |
 
@@ -1905,7 +1943,7 @@ same level onto every machine, and the host's and guests' lobbies. All pure.
 `@logic-incubator/engine/net/NetMessages` - a kind byte, then JSON (a `level`'s body is its bytes).
 
 ```ts
-NetVersion = 4;     // a guest on another is refused ("version"); raise it whenever a message changes - this file's or PlayMessages'
+NetVersion = 5;     // a guest on another is refused ("version"); raise it whenever a message changes - this file's or PlayMessages'
 NameLength = 12;
 
 type LobbySeat = { peer: number; name: string; character: string | null };   // host's seat first; character: a game's id, null while choosing
@@ -1920,11 +1958,33 @@ type LobbyMessage =
     | { t: "start"; seed: number; level: StartLevel; seats: LobbySeat[]; token?: string }   // host -> each guest, with a token of its own
     | { t: "need-level" }                                            // guest -> host: my copy isn't yours
     | { t: "level"; packed: Uint8Array }                             // host -> guest: PackLevel's bytes
-    | { t: "rejoined" };                                             // host -> guest coming back: you're in, as the hero you were
+    | { t: "rejoined" }                                              // host -> guest coming back: you're in, as the hero you were
+    | { t: "say"; text: string }                                     // guest -> host: a chat line as typed (kinds 9 and 10)
+    | { t: "chat"; line: ChatLine };                                 // host -> each guest who hears it (see Chat, below)
 
 EncodeMessage(message): Uint8Array
 DecodeMessage(bytes): LobbyMessage | null      // null for an unknown kind, garbled JSON or missing fields
 CleanName(name, fallback): string             // control characters out, spaces squeezed, cut to NameLength; fallback if empty
+UniqueName(name, taken): string               // name made unlike every one of taken (any case): "Sam 2", "Sam 3"... within NameLength
+```
+
+### Chat
+
+`@logic-incubator/engine/net/Chat` - the rules of the players' chat; the lobbies carry it (`Say`, `CHAT`, below).
+
+```ts
+ChatLength = 120;  ChatHistory = 50;           // the most characters a line keeps; the lines a lobby keeps
+ChatBurst = 5;  ChatBurstMs = 5000;            // lines one player may say in that long - the host drops the rest
+
+type ChatLine = { seat: number; from: string; text: string; whisper?: { seat: number; name: string } };
+// seat: who said it, by their place in Seats (online also their hero's slot) · from: their name then · whisper: who it was for
+
+CleanChat(typed): string                       // control characters out, spaces squeezed, trimmed, cut to ChatLength
+ParseChat(typed, names, self): { text: string; to: number | null } | string | null
+// to: the seat it's whispered to ("@name text", any case, the longest name that fits), null for everyone · null: nothing to say ·
+// a string: why it can't be said - "No one here is called x.", "You can't whisper to yourself.", "Say something after @Sam."
+ChatSpeaker(line, you): string                 // "Sam", "Sam TO Ann" - the reader's own seat as YOU
+new ChatLimiter(burst = ChatBurst, ms = ChatBurstMs, now = Date.now): { Allow(who: number): boolean }
 ```
 
 ### Level transfer
@@ -1942,10 +2002,11 @@ CleanName(name, fallback): string             // control characters out, spaces 
 `@logic-incubator/engine/net/Lobby` - eventemitter3s, so a component can `Listen` to them.
 
 ```ts
-LobbyEvents = { CHANGED: "changed", STARTING: "starting", STARTED: "started", CLOSED: "closed", DROPPED: "dropped", REJOINED: "rejoined" }
+LobbyEvents = { CHANGED: "changed", STARTING: "starting", STARTED: "started", CLOSED: "closed", DROPPED: "dropped", REJOINED: "rejoined", CHAT: "chat" }
 // changed () - Seats changed · starting () - a guest's: the host has started, the level is being made ready
 // started (start: LobbyStart) · closed (reason: string) - once; see LobbyClosedText
 // dropped () - a guest's, during the run: its connection has gone and it's getting back in · rejoined () - it's back, in Session
+// chat (line: ChatLine) - a line this player hears: to everyone, or whispered to or by them
 
 ReconnectForMs = HoldAwayMs (60000)   // how long a guest keeps trying to get back in - as long as the host holds its hero
 QuietForMs = 8000                     // nothing heard from the room for this long during the run, and a guest takes its connection for lost
@@ -1961,6 +2022,9 @@ LobbyClosedText(reason): string    // "The host has left." / "That game has alre
 lobby.Code: string;  lobby.Seats: ReadonlyArray<LobbySeat>;  lobby.Mine: LobbySeat | undefined
 lobby.IsHost: boolean;  lobby.IsOpen: boolean;  lobby.Leave(): void
 lobby.Session: RelaySession             // the room - what play goes on in once the run has begun (CreateNetPlay)
+lobby.MySeat: number                    // this player's place in Seats; -1 for a guest not yet let in
+lobby.Say(typed: string): string | null // a chat line ("@name text" whispers) - null once it's on its way, or why it can't be said
+lobby.Chat: ReadonlyArray<ChatLine>     // the last ChatHistory lines heard, oldest first
 
 new HostLobby(session: RelaySession, name: string)      // in the room session opened
 host.Pick(character: string | null): void             // the host's own; not after the start
@@ -2003,6 +2067,12 @@ How it runs:
   closes with `host-left` if the room has gone (`no-room`), with the refusal's reason, or with `lost` once `ReconnectForMs` is up.
   A guest leaving (`Leave`), the host leaving, or a lobby without `reconnect` or before the run has begun closes as it always did; a
   link ending before the run, or one that never opened, changes nothing - the relay carries on.
+- **Chat**, before the run and during it. Every line goes through the host. A guest's `Say` reads the line first (`ParseChat`, against its
+  `Seats`) and returns what's wrong at once - else it sends `say`, or returns that it isn't connected while it's getting back in. The host
+  reads it again against its own seats, drops it past `ChatBurst` lines in `ChatBurstMs` (`ChatLimiter`) or from a peer it hasn't let in,
+  and sends `chat` to everyone - or, for a whisper, only to the player it's for and the one who said it. The host's own lines go the same
+  way, without the limit. Every lobby that hears a line keeps it (`Chat`) and emits `CHAT`, so the speaker sees theirs once the host has
+  passed it on. The host gives a guest whose name is already taken another (`UniqueName`), so `@name` means one player.
 
 ## Online play
 
@@ -2056,7 +2126,8 @@ lane when `MayBeLost(message)` - inputs, pings, pongs, and a snapshot with no ev
 | `Step` | Each guest's hero plays its waiting inputs (`RemoteInput.Take`), this machine's hero its own; `World.Step`; a snapshot every `SnapshotEvery` (3) steps and as the level ends. | Its own hero steps ahead (`Prediction.Step`); a shot it fires flies at once as a stand-in; sends the last `InputsSent` (6) inputs. |
 | A snapshot | - | Its events, then the doors and the world - but a snapshot no newer than the newest it has (overtaken on a link's fast lane) is only its events. |
 | `Frame` | Pings. | Pings; moves the `PlayClock` on; samples the `Replica`; puts the other heroes where they were at that moment; settles the correction; updates what's seen. |
-| `Record` | Turns the engine's events into `NetEvent`s for the next snapshot. | - |
+| `Record` | Turns the engine's events into `NetEvent`s for the next snapshot (`QUEST_UPDATED` into a `quest` event, by its index in `World.quests`). | - |
+| A `quest` event | - | `QuestLog.Follow(index, state, progress)` - its quests are the host's - and `QUEST_UPDATED`, unless it's catching up. |
 | `Restart` | The next round: tells every guest, forgets their inputs. | - (a `restart` message calls `restart`) |
 | A guest leaves (`leave`, from its `End`) | `World.RemoveHero` and a snapshot at once. | (the host leaving closes the lobby) |
 | A guest's connection goes, or it sends nothing for `AwayAfterMs` (3 s) | `World.SetAway` and a snapshot at once; its inputs wait. Its next input puts the hero back. One whose connection went is taken out (`RemoveHero`) after `HoldAwayMs` (60 s). | Its hero stands still (`Step` does nothing while not `Connected`). |
@@ -2079,8 +2150,9 @@ type RestartMessage = { t: "restart"; round: number };                      // h
 type PingMessage = { t: "ping" | "pong"; id: number };
 type CatchUpMessage = { t: "catch-up"; round: number; events: NetEvent[] };   // host -> a guest back in: the round, every lasting event in it, then its end if it's over
 type LeaveMessage = { t: "leave" };                                          // guest -> host: leaving for good
-type NetEvent = pickup | keys | spawner | killed | damaged | died | all-died | completed | shot   // the engine's events, and a new kind of shot's setup
-IsLastingEvent(event): boolean           // pickup, keys, spawner, shot - what changes the level or a hero for good, and goes in a catch-up
+type NetEvent = pickup | keys | spawner | killed | damaged | died | all-died | completed | shot | quest   // the engine's events, and a new kind of shot's setup
+                                         // quest: { e: "quest"; index; state: QuestState; progress } - quest index of the level's moved on (QUEST_UPDATED)
+IsLastingEvent(event): boolean           // pickup, keys, spawner, shot, quest - what changes the level or a hero for good, and goes in a catch-up
 
 QuantiseInput(input, seq): IPlayerInput   // what the host will have of it: each axis to 1/127 - a guest steps its own hero with this, so both agree
 ```
@@ -2098,6 +2170,87 @@ ignored.
 | `Replica` | The guest's copy of the host's monsters, shots and spawners - an `EncounterView`. `new Replica({ you, sizeFor })`; `Reset(spawners)`, `AddShot(index, setup)`, `Push(snapshot)` (keeps the last 20), `Sample(tick, frames)` (each monster and shot between the snapshots either side of `tick`, carried on up to 6 steps past the newest), `HeroAt(index, tick): HeroMoment \| null`, `Newest`. This machine's own shots are stand-ins from the moment they're fired (`Fire(from, direction, setup, seq)`, `StepStandIns(isBlocked)`), stopped by walls and by monsters as drawn, until the host's copy has gone or the host played that input without one. |
 | `Prediction` | The guest's own hero, ahead of the host: `Step(hero, input, others, collider)` numbers and plays an input, kept until the host has played it; `Reconcile(hero, snapshot, others, collider)` starts from the host's word and plays the rest again, leaving the difference in `Offset`, which `Settle(frames)` draws away (or jumps, past two tiles); `Corrections` (differences over half a pixel), `LastError`, `Pending`, `Recent(n)`, `Reset()`, `Forget()` (drops the inputs the host never had - after the connection went - numbering on). |
 | `HeroSync` | `HeroSnapshotOf(hero, ack)` and `ApplyHeroSnapshot(hero, snapshot)` (everything but where they stand, which the caller places). |
+
+## Quests and dialogs
+
+Pure modules under `story/` (no pixi), and the two brushes' values; the [user guide 9.10](user-guide.md#910-npcs-dialogs-and-quests) shows them at work.
+
+`@logic-incubator/engine/story/Quests`:
+
+```ts
+type QuestState = "none" | "active" | "complete" | "finished";   // not given, under way, its goal met, handed in
+QuestStates: ReadonlyArray<QuestState>                            // in that order
+type QuestDef = { id: string; name: string; text?: string; goal: QuestGoal; start?: boolean; ends?: boolean };
+type QuestGoal = { kind: string; [field: string]: unknown };      // a registered kind's (QuestGoalKinds), and its own fields
+type CollectGoal = { kind: "collect"; count?: number };           // count 0 or left out: every pickup marked for it
+type KillGoal = { kind: "kill"; count?: number; monster?: MonsterType };   // monster: that type counts too, while under way
+type ScriptGoal = { kind: "script" };                             // met only by a dialog's `complete`
+type QuestHappening = { kind: string; quest?: string; [field: string]: unknown };   // CollectHappening { pickup }, KillHappening { monster }
+interface QuestLevel { Marked(kind: string, quest: string): number }
+
+type QuestGoalType = {
+    label: string;                                                 // what the editor calls it
+    Default(): QuestGoal;                                          // a new one, as the editor starts it
+    IsValid(goal): boolean;
+    Target(goal, quest, level: QuestLevel): number;                // how far it has to go: at least 1
+    Advance(goal, quest, happening, active: boolean): number;      // how far a happening takes it; 0 for not at all
+};
+RegisterQuestGoal(kind, type): void       // adds (or replaces) a kind, beside collect, kill and script
+QuestGoalKinds(): string[]                // in the order registered - what the editor offers
+QuestGoalFor(kind): QuestGoalType | undefined
+IsQuestId(id): boolean                    // one word: letters, digits, - and _
+IsQuestDef(value): boolean                // an id, a name, a goal of a kind there is, well formed
+ReadQuests(value): QuestDef[]             // a level file's: the well-formed ones, the first of each id; anything else is none
+DefaultQuest(id): QuestDef
+
+type QuestStatus = { def: QuestDef; state: QuestState; progress: number; target: number };
+type QuestChange = (status, was: QuestState, index: number) => void;
+
+new QuestLog(changed?: QuestChange)
+log.Quests: ReadonlyArray<Readonly<QuestStatus>>   // in the level's order
+log.Version: number                       // goes up with every change
+log.Reset(defs, level): void              // starts over: start ones active, the rest none, nothing counted (no change told)
+log.Get(id), log.Index(id), log.State(id) // State is "none" for an id the level hasn't got
+log.Give(id): boolean                     // none -> active, or straight to complete if its target is already met
+log.Complete(id): boolean                 // any but complete or finished -> complete
+log.Finish(id): boolean                   // any but finished -> finished
+log.Record(happening): void               // moves on each quest it counts for; one under way that reaches its target is complete
+log.Follow(index, state, progress): QuestState | null   // as an online guest's: set to the host's, no change told; returns what it was
+```
+
+Something marked for a quest counts before the quest is given (`progress` grows while it's `none`), so giving it then completes it at once.
+
+`@logic-incubator/engine/story/DialogScript` reads a script (the language is in the user guide):
+
+```ts
+interface DialogContext { quests: QuestLog; flags: Set<string>; Reward(value: PickupValue, sprite: string | null): void }
+type DialogCheck = { quests?: ReadonlyArray<string> };   // the level's quest ids, to catch one misspelt; left out, any goes
+type DialogParse = { data: unknown } | { error: string };
+type DialogActionType = { Parse(words, check): DialogParse; Run(data, context): void };
+type DialogConditionType = { Parse(words, check): DialogParse; Test(data, context): boolean };
+type DialogStep = say | choices | goto (with a condition) | action | end;   // each with its line, from 1
+type DialogScript = { steps: DialogStep[]; parts: { [name: string]: number } };
+type DialogError = { line: number; message: string };
+
+ParseDialog(text, check?): { script: DialogScript; errors: DialogError[] }   // a line with a mistake is left out; the rest still plays
+DescribeDialogErrors(errors): string[]     // "Line 3: ..."
+RegisterDialogAction(name, type), RegisterDialogCondition(name, type)        // a script's own words, by their first word
+TestCondition(condition, context): boolean, RunAction(step, context): void
+EndTarget = "end"
+```
+
+`@logic-incubator/engine/story/DialogRunner` plays one: `new DialogRunner(script, context)`; `Start()`, `Next()` (on from a line with no
+choices) and `Choose(index)` (of the choices offered) each run the script on to the next thing said and return it as a
+`DialogLine = { speaker; text; choices: string[] }` (the choices offered under it, their conditions tested), or null once the talk is over
+(`Ended`). A run of more than 1000 steps without a line ends it, so a loop can't hang the game.
+
+`@logic-incubator/engine/story/Talk`: `type DialogValue = { script: string }` (a `DIALOG` brush's), `IsDialogValue(value)`,
+`DefaultDialogValue()`; `BumpedNpc(position, direction, isNpc, tileSize): Vec2Like | null` - the NPC's cell a hero at `position` (their box's
+top-left, in pixels) is walking into, pushing `direction` (past 0.3 on an axis), felt 2 pixels beyond their box.
+
+`@logic-incubator/engine/level/entities/Bosses`: `type BossValue = { monster: MonsterType; hitPoints?: number; quest?: string }`,
+`type Boss = Vec2Like & { value: BossValue }`, `IsBossValue(value)` (the only value with a lone `monster`), `DefaultBossValue()` (the roster's
+first default monster, at three times its hit points).
 
 ---
 
@@ -2126,7 +2279,7 @@ are PascalCase like the rest.
 
 | Member | Meaning |
 | --- | --- |
-| `focus: FocusManager` | `Focused`, `FocusVisible`, `Focus(id \| null)`, `Move(direction)`, `PushScope/PopScope`, `ConfigureScope(options, id?)` (`{ wrap?, onCancel?, onTab?, initial? }` - `onCancel` of the root scope is what cancel does with nothing open: a game's pause), `Subscribe(listener)`. |
+| `focus: FocusManager` | `Focused`, `FocusVisible`, `Focus(id \| null)`, `Move(direction)`, `PushScope/PopScope`, `ConfigureScope(options, id?)` (`{ wrap?, onCancel?, onAccept?, onTab?, initial? }` - `onCancel` of the root scope is what cancel does with nothing open: a game's pause; `onAccept` is what accept does while nothing in the scope is focused), `Subscribe(listener)`. |
 | `Register(control, options?): () => void` | Makes a `UiControl` focusable: `{ id?, scope?, neighbours?, scroll? }`. Hovering focuses it (no ring), the arrows move to the nearest enabled one in that direction, accept presses it. `scroll` scrolls that `UiScrollView` to a control moved to. Returns what undoes it; destroying the control does too. |
 | `PushScope(id, options?)` / `PopScope(id)` | A modal takes over focus and cancel until it is popped; focus goes back to what had it. Register a modal's controls first (with `scope: id`), then push, so the first can be focused at once when the keyboard or pad is in use. |
 | `Track(widget: { Update(ms) }): () => void` | Calls `widget.Update(ms)` every frame while the system is active (dialogue typing, toasts, a text field's caret, a tile marker). |
@@ -2184,8 +2337,9 @@ hover / pressed / disabled / focused states (`Enabled`, `Focused`, `State`, `Act
 | `UiProgressBar` | `(theme, kind, width, value = 0)`; `Value` (0 to 1), `BarWidth`, `BarHeight`. Kinds: hp, mp, xp, gold. | |
 | `UiPanel`, `UiWindow`, `UiBorder` | `UiPanel(theme, variant, width, height)`: add to `content`, `InnerWidth`, `InnerHeight`, `PanelWidth`, `Resize`; variants plain, ornate, carved, carved_light, raised, raised_light. `UiWindow(theme, variant, width, height, title)`: a panel with a title plate and a close button (`CloseButton`), `content`, `InnerWidth`, `InnerHeight`; `UiWindow.HeightFor(theme, variant, inner)` is the height that leaves `inner` for the content. `UiBorder(theme, style, width)`: an ornamental line (separator, separator_light); `LineHeight`, `Resize`. | window: `close` |
 | `UiTooltip` | `(theme, variant)`; put it in the topmost layer. `Attach(target, content \| () => content): () => void` shows it after the skin's `delay` of the pointer resting (at once on keyboard focus) and hides it on leave or press; `ShowFor(target, { title?, text? }, bounds?)`, `Hide()`. | |
-| `UiDialogue extends UiControl` | `(theme, variant, width, height)`; `Say({ speaker?, text, portrait? })`, `Done`, `Skip()`; `Track` it. A press while typing shows the rest, a press after that emits `advance`. The game skin stands the portrait's frame beside the box and puts the name on a plate across its top, both standing above the box. | `advance` |
+| `UiDialogue extends UiControl` | `(theme, variant, width, height)`; `Say({ speaker?, text, portrait?, portraitScale? })` (`portraitScale`: how many times to enlarge the portrait, centred in its frame - default 1), `Done`, `Skip()`; `Track` it. A press while typing shows the rest, a press after that emits `advance`. The game skin stands the portrait's frame beside the box and puts the name on a plate across its top, both standing above the box. | `advance` |
 | `UiToastHost` | `(theme, variant, max = 4)`; `Push({ title, text?, kind?, seconds? }): () => void` (dismisses it), `Count`, `HostWidth`; `Track` it. A press dismisses a toast; the rest wait their turn. | |
+| `UiChatBox` (a `Container`) | `(theme, { width, rows, showSeconds = 8, keep = 50, maxLength = 120, placeholder?, field = "default", font = "body" })` - a chat: lines newest at the bottom, each `{ head?, text, headColour?, textColour? }` (`head: ` in its colour, then the text, wrapped). `Add(entry, show = true)` (`show` false: there to read when opened, not shown now), `Clear()`, `Open(text?)`, `Close()`, `IsOpen`, `Entries`, `BoxHeight`; `Update(ms)` it. Closed, a line shows for `showSeconds` then fades; open, the last `rows` rows over a shade and a `UiTextInput` under them, which takes the keys. Enter sends, Escape or clicking away closes. A character the font can't draw shows as `?`. | `send (text)`, `close` |
 | `UiPlayerFrame` | `(theme, variant)` - a character's HUD frame: `SetPortrait(texture \| null)`, `Health`, `Energy` (0 to 1), `SetStatuses(frames)`, `FrameWidth`, `FrameHeight`. | |
 | `UiAbilitySlot` | `(theme, variant, icon?, glyph?)` - an ability in its frame with a prompt above: `SetIcon(texture \| null)`, `SetGlyph(frame, fallback?)`, `GlyphPressed`, `Cooldown` (1 just used, 0 ready), `SlotWidth`, `SlotHeight`. | |
 | `UiStatusRow` | `(theme, statuses?, gap?)` - status icons in a row: `SetStatuses(frames)` (the same list again does nothing), `RowWidth`. | |
@@ -2197,7 +2351,7 @@ hover / pressed / disabled / focused states (`Enabled`, `Focused`, `State`, `Act
 ## Pure rules
 
 Plain-Node modules the widgets are built on, each with unit tests: `geometry/SliceRects`, `geometry/BorderRects`, `widgets/ButtonLook`, `BarMath`, `SliderMath`, `SelectorMath` (`StepChoice`), `ScrollMath`,
-`TextInputModel`, `Typewriter` (`Typewriter`, `WrapText`), `TooltipPlacement`, `ToastQueue`, `IconStates`, `InputGlyphs` (`KeyGlyph`, `PadButtonGlyph`, `DpadGlyph`, `StickGlyph`, `MouseGlyph`,
+`TextInputModel`, `Typewriter` (`Typewriter`, `WrapText`), `TooltipPlacement`, `ToastQueue`, `ChatLog` (`ChatLog`, `WrapChat`), `IconStates`, `InputGlyphs` (`KeyGlyph`, `PadButtonGlyph`, `DpadGlyph`, `StickGlyph`, `MouseGlyph`,
 `PressedGlyph`), `SkillTreeLayout` (`NodeRect`, `LinkRect`, `TreeSize`), and `input/` `UiAction`, `KeyMap`, `PadMap`, `InputRepeater`, `UiInputCore`, `FocusManager`.
 
 The package's art tools (`packages/ui/tools`, run by plain node) are described in its README: importing the Tiny Dungeons pack (`import-pack.mjs`), the Aseprite template and slicer, and the font converter.
@@ -2274,7 +2428,8 @@ Both extend lib's `Store`.
 `DataBrushIcon(icons, name)`, `type LayerMemory = { tool; brush }`, `interface IEditorState` (its `layerMemory`, keyed by layer id, is each layer's tool and brush from when another layer was selected, restored when it is selected again, except when the dropper picked the brush; a layer with none gets the empty brush and keeps the current tool).
 
 `@logic-incubator/editor/stores/LevelDataStore` - `default class LevelDataStore` (the painted brushes): `type Layer = LevelLayer & { selected; visible }`,
-`type LevelDataState = { levelData: LevelData }`, `const enum LevelDataActions` (`COPY`, `RESET`, paint/erase actions, ...).
+`type LevelDataState = { levelData: LevelData; quests: QuestDef[] }`, `const enum LevelDataActions` (`COPY`, `RESET`, `SET_QUESTS` - `data.quests`, the quest list's -, paint/erase actions, ...).
+`Load` gives a level saved without quests (or a generated map) none; `RESET` clears them.
 
 Layout constants (`@logic-incubator/editor/Layout`): `EditorWidth` (1280), `EditorHeight` (720), `InitalScale` (1.5), `SidebarWidth` (260), `ToolbarWidth` (40), `GridBounds`.
 
@@ -2293,9 +2448,12 @@ Used by the editor's own views; available for editor extensions.
 | `ui/dom/Dom` | `El(tag, className, text?)`, `ButtonEl(className, text?, title?)`, `InjectStyles(id, css)`, `RemoveInjectedStyles()`, `InjectTheme()` |
 | `ui/dom/EditorOverlay` | `default class EditorOverlay` - singleton DOM overlay (`inst`, `Destroy()`), `Slot(name: OverlaySlot): HTMLElement` with `OverlaySlot = "brushes" \| "selected" \| "layers" \| "tools" \| "help"`, `SetVisible(visible)` |
 | `ui/dom/SpriteCanvas` | `default class SpriteCanvas` (draws textures to a 2D canvas); `FitIcon`, `VisibleBounds`, `DrawTexture`, `DrawDataBrushSwatch` |
-| `ui/dialog/FormDialog` | `OpenFormDialog(options: FormDialogOptions): Promise<FormValues \| null>`, `IsFormDialogOpen()`; field specs `NumberField`, `TextField`, `ColourField`, `ToggleField`, `ChoiceField` (exactly one option), `MultiChoiceField` (`FieldSpec`), `ChoiceOption`; any field can have `visibleWhen(values)` to show only while it applies to the other values (a pickup's key id only for a key); `IsFieldVisible(field, values)`; options may set `saveLabel` and `cancelLabel` (`null` leaves Cancel out - a message with just an OK, which the sprite editor uses for alerts and confirms) |
-| `DataBrushEditors` | `DataBrushEditorFor(name): DataBrushEditor \| undefined` - the dialog definitions for editing a value: `"light"` (brightness, tint, range and flicker), `"spawner"`, `"pickup"` (the `PICKUP` brush's name - the same popup for the brush and for a tile that gives one; a weapon's shot can be set to give off light, and a light to carry has a light and how long it burns), `"door"` (a door tile's lock: a Locked checkbox that reveals its key id) and the height. `EditorImages` carries the lookups they need from the game's art (`monster`, `hasSprite`) |
-| `DataLabels` | `PickupLabel(pickup)`, `MapLabel(value)` (the short tag drawn over a value on the attributes overlay: `G10`, `H2`, `K3`, `W`, `I`, `T` for a light to carry (a torch), `L3` for a locked door - an unlocked one has no tag...; only characters the bitmap font has), `DescribePickup(pickup)`, `DescribeLock(lock)` (pure) |
+| `ui/dialog/FormDialog` | `OpenFormDialog(options: FormDialogOptions): Promise<FormValues \| null>`, `IsFormDialogOpen()`, `InjectFormStyles()` (its look - `fd-overlay`, `fd-panel`, `fd-header`... - for another modal to share); field specs `NumberField`, `TextField`, `TextAreaField` (lines of text: a script - Enter in it is a new line, not Save), `ColourField`, `ToggleField`, `ChoiceField` (exactly one option; an option's `image` draws a picture on its chip, as a multi-choice's does), `MultiChoiceField` (`FieldSpec`), `ChoiceOption`; any field can have `visibleWhen(values)` to show only while it applies to the other values (a pickup's key id only for a key); `IsFieldVisible(field, values)`; options may set `saveLabel` and `cancelLabel` (`null` leaves Cancel out - a message with just an OK, which the sprite editor uses for alerts and confirms) |
+| `DataBrushEditors` | `DataBrushEditorFor(name): DataBrushEditor \| undefined` - the dialog definitions for editing a value: `"light"` (brightness, tint, range and flicker), `"spawner"`, `"pickup"` (the `PICKUP` brush's name - the same popup for the brush and for a tile that gives one; a weapon's shot can be set to give off light, and a light to carry has a light and how long it burns), `"door"` (a door tile's lock: a Locked checkbox that reveals its key id), the height, `"dialog"` (a script box, read as it's typed against the level's quests: the first mistake and how many more) and `"boss"` (its monster, hit points and quest). A pickup and a boss choose the quest they count for from None and the level's. `EditorImages` carries the lookups they need from the game's art and the level (`monster`, `hasSprite`, `quests?`) |
+| `DataBrushDialog` | `OpenDataBrushDialog(name, value, context?, quests?)` - the popup for a value, with the level's quests to offer; `MonsterImage(type)` (a monster's chip picture, cached) |
+| `QuestEditor` | The quest popup's pure parts: `QuestFields(images)`, `QuestToForm(quest)`, `QuestFromForm(form, was)` (a goal of a kind it doesn't know keeps its fields), `QuestProblem(form, others)`, `NewQuestId(quests)`, `DescribeQuest(quest)` |
+| `QuestsDialog` | `OpenQuestsDialog(quests): Promise<QuestDef[] \| null>` - the quest list (Q): Edit, Remove, Add quest; resolves with the new list on Save, null if cancelled or unchanged; `IsQuestsDialogOpen()` |
+| `DataLabels` | `PickupLabel(pickup)`, `MapLabel(value)` (the short tag drawn over a value on the attributes overlay: `G10`, `H2`, `K3`, `W`, `I`, `T` for a light to carry (a torch), `L3` for a locked door - an unlocked one has no tag -, `D` for a dialog, `B` for a boss, and a `Q` after a pickup's or boss's that counts for a quest; only characters the bitmap font has), `DescribePickup(pickup)`, `DescribeBoss(boss)`, `DescribeDialog(script)`, `DescribeLock(lock)` (pure) |
 | `views/PaletteCategories` | `type TileSet = { id: AssetCategory; name; brushes: string[] }`; `GroupByCategory(names, categoryOf): TileSet[]` (one set per category, in `AssetCategories` order, empty ones included, each sorted by name); `EmptyTabHint(id, canCreate?): string` (pure); `ShowsCategory(kind, category)` (a floor/walls layer shows only its own tab, any other tile layer all but those two); `TakesCategory(kind, category)` (a floor/walls layer paints only its own category, a generic one anything); `EmptyTabHint(id, canCreate?)` mentions the tab's + when the sprite editor is available |
 | `tools/ToolGeometry` | `SpanRect(a, b)`, `RectCells(rect, border?)`, `InRect(rect, x, y)`, `FloodFill(start, bounds, keyAt)`, `TopmostBrushAt(...)` (a brush is only at its anchor cell), `TopmostBrushCovering(brushes, layers, cell, footprintOf, accept?)` (a brush is on top at every cell of its footprint - what the data-select tool uses, so a 2x2 spawner or door is the target wherever it's clicked), `BoundsOfCells(cells)`, `type CellRect` |
 

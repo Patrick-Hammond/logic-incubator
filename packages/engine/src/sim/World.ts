@@ -8,7 +8,10 @@
  * everyone (`LEVEL_COMPLETED`). On a shared screen the party is held within one
  * screen (`SetLeash`), and a hero far from the rest can warp to them. Online, a
  * hero whose player's connection has gone is away (`SetAway`): out of play,
- * standing where they were, until their player is back. No camera
+ * standing where they were, until their player is back. The level's quests
+ * (`Quests`) are kept here, moved on by what's picked up and killed; one that
+ * `ends` the level ends it as a way out does. A lone hero on one machine can
+ * talk (`SetTalk`): walking into an NPC asks for the talk (`NPC_BUMPED`). No camera
  * and no sprites - `DungeonMain` draws it. Pure - no pixi - so it runs under the
  * plain node test runner.
  */
@@ -16,19 +19,25 @@
 import { Vec2, Vec2Like } from "@logic-incubator/lib/math/Geometry";
 import { TileSize } from "../Constants";
 import type { PlayerSetup } from "../DungeonMain";
-import Encounter, { EncounterLevel, EncounterOptions } from "../Encounter";
-import { ALL_PLAYERS_DIED, KEYS_DROPPED, LEVEL_COMPLETED, PICKUP_COLLECTED } from "../Events";
+import Encounter, { EncounterLevel, EncounterOptions, Monster } from "../Encounter";
+import { ALL_PLAYERS_DIED, KEYS_DROPPED, LEVEL_COMPLETED, NPC_BUMPED, PICKUP_COLLECTED, QUEST_UPDATED } from "../Events";
 import type { IPlayerInput } from "../input/PlayerControl";
 import type { CollectedPickup } from "../level/Level";
 import { LightSpell } from "../level/entities/LightSpell";
 import { PickupValue } from "../level/entities/Pickups";
 import TileCollision from "../level/TileCollision";
+import QuestLog, { QuestDef, QuestHappening, QuestLevel, QuestState, QuestStatus } from "../story/Quests";
+import { BumpedNpc } from "../story/Talk";
 import type { MoveCollider } from "../view/helpers/PlayerMovement";
 import Hero from "./Hero";
 import { LeashBoxFor, Leashed } from "./Leash";
 
 /** The parts of `Level` a world uses, on top of what its encounter does. */
-export interface WorldLevel extends EncounterLevel {
+export interface WorldLevel extends EncounterLevel, QuestLevel {
+    /** The level's quests - see `Quests`. */
+    readonly quests: ReadonlyArray<QuestDef>;
+    /** Whether there's an NPC to talk to on the cell (a `DIALOG` brush). */
+    IsTalker(tileX: number, tileY: number): boolean;
     readonly playerStartPosition: Vec2Like | undefined;
     IsFloor(tileX: number, tileY: number): boolean;
     IsExit(tileX: number, tileY: number): boolean;
@@ -102,6 +111,10 @@ export function StartCells(start: Vec2Like, count: number, isFloor: (x: number, 
 
 export default class World {
     readonly encounter: Encounter;
+    /** How the level's quests stand - started over with each `Reset`. */
+    readonly quests: QuestLog;
+    /** What the level's dialog scripts have `set` (see `DialogScript`) - forgotten with each `Reset`. */
+    readonly flags = new Set<string>();
     private heroes: Hero[] = [];
     /** By slot: whether that hero's fall has been dealt with (their keys dropped). */
     private fallen: boolean[] = [];
@@ -113,9 +126,18 @@ export default class World {
     private completed = false;
     /** The furthest apart heroes may get, in pixels between top-lefts - null for as far as they like. */
     private leash: { width: number; height: number } | null = null;
+    /** Whether heroes talk to the NPCs they walk into - see `SetTalk`. */
+    private talk = false;
+    /** By slot: whether that hero was walking into an NPC last step - a talk starts as they first do, not again while they keep at it. */
+    private bumping: boolean[] = [];
+    /** The slot of the hero who met the goal of a quest that `ends` the level, since the last step - -1 for none. */
+    private questEnd = -1;
+    /** The slot of the hero whose doing is being recorded - who gets the credit for a quest it completes. */
+    private doer = 0;
 
     constructor(private level: WorldLevel, private options: EncounterOptions) {
-        this.encounter = new Encounter(level, options);
+        this.encounter = new Encounter(level, { ...options, killed: (monster, hero) => this.Killed(monster, hero) });
+        this.quests = new QuestLog((status, was) => this.QuestChanged(status, was));
         this.collision = new TileCollision(level, (x, y) => this.IsLockedOut(x, y));
     }
 
@@ -167,8 +189,12 @@ export default class World {
             return hero;
         });
         this.fallen = this.heroes.map(() => false);
+        this.bumping = this.heroes.map(() => false);
         this.allDown = !this.heroes.length;
         this.completed = false;
+        this.questEnd = -1;
+        this.flags.clear();
+        this.quests.Reset(this.level.quests, this.level);
         this.encounter.Reset(seed, this.heroes.length);
         this.level.UpdateVisibleRegions(cells);
     }
@@ -179,6 +205,23 @@ export default class World {
      */
     SetLeash(span: { width: number; height: number } | null): void {
         this.leash = span ? { width: span.width * TileSize, height: span.height * TileSize } : null;
+    }
+
+    /**
+     * Whether heroes talk to the NPCs they walk into (`NPC_BUMPED`) - for a lone hero on one machine (a Quest); in co-op
+     * and online an NPC just stands there. Off until turned on.
+     */
+    SetTalk(on: boolean): void {
+        this.talk = on;
+    }
+
+    /**
+     * Counts something that happened toward the level's quests (see `QuestLog.Record`), done by hero `hero` - who gets the
+     * credit if it completes one that ends the level.
+     */
+    RecordQuest(happening: QuestHappening, hero = 0): void {
+        this.doer = hero;
+        this.quests.Record(happening);
     }
 
     /** Whether a door with this lock opens for the team: it's no lock, or a living hero carries its key. */
@@ -199,7 +242,7 @@ export default class World {
      * `seconds` for timers.
      */
     Step(inputs: ReadonlyArray<HeroInput>, dt: number, seconds: number): void {
-        if (this.allDown || this.completed) {
+        if (this.allDown || this.completed || this.EndForQuest()) {
             return;
         }
         // Only those in play: one who is away neither moves, nor picks up, nor is gone for by the monsters.
@@ -216,6 +259,7 @@ export default class World {
                 }
                 const box = this.leash && LeashBoxFor(others.map(other => other.Position), this.leash);
                 hero.Step(input, dt, seconds, box ? Leashed(this.collision, box) : this.collision);
+                this.Bump(hero, input);
                 // Taken as it's fired: a hero given two steps at once can fire in each.
                 const shot = hero.TakeShot();
                 if (shot) {
@@ -232,6 +276,7 @@ export default class World {
             if (collected.length) {
                 collected.forEach(pickup => hero.ApplyPickup(pickup));
                 this.options.emit(PICKUP_COLLECTED, hero.Index, tiles[i].x, tiles[i].y);
+                collected.forEach(pickup => this.RecordQuest({ kind: "collect", quest: pickup.value.quest, pickup: pickup.value }, hero.Index));
             }
         });
         const out = living.find((hero, i) => this.level.IsExit(tiles[i].x, tiles[i].y));
@@ -244,6 +289,7 @@ export default class World {
 
         this.encounter.Update(dt, seconds, living);
         this.CheckFallen();
+        this.EndForQuest();
     }
 
     /**
@@ -274,6 +320,41 @@ export default class World {
         hero.SetAway(away);
         if (away && !this.allDown && !this.completed) {
             this.CheckFallen();
+        }
+    }
+
+    /** A monster died - `hero`'s shot killed it: the quests count it. */
+    private Killed(monster: Monster, hero: number): void {
+        this.RecordQuest({ kind: "kill", quest: monster.quest, monster: monster.type }, Math.max(0, hero));
+    }
+
+    private QuestChanged(status: Readonly<QuestStatus>, was: QuestState): void {
+        if (status.state === "complete" && status.def.ends && this.questEnd < 0) {
+            this.questEnd = this.doer;
+        }
+        this.options.emit(QUEST_UPDATED, status.def.id, status.state, status.progress, was);
+    }
+
+    /** Ends the level if a quest that `ends` it has had its goal met since the last look - as a way out does - and returns whether it has. */
+    private EndForQuest(): boolean {
+        if (this.questEnd < 0 || this.completed || this.allDown) {
+            return false;
+        }
+        this.completed = true;
+        this.options.emit(LEVEL_COMPLETED, this.questEnd);
+        return true;
+    }
+
+    /** Asks for a talk (`NPC_BUMPED`) if `hero`, given `input`, has just walked into an NPC - and talking is on. */
+    private Bump(hero: Hero, input: IPlayerInput): void {
+        if (!this.talk) {
+            return;
+        }
+        const npc = BumpedNpc(hero.Position, input.direction, (x, y) => this.level.IsTalker(x, y), TileSize);
+        const was = this.bumping[hero.Index];
+        this.bumping[hero.Index] = !!npc;
+        if (npc && !was) {
+            this.options.emit(NPC_BUMPED, hero.Index, npc.x, npc.y);
         }
     }
 

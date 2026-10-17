@@ -6,6 +6,7 @@ import EditorComponent from "../EditorComponent";
 import {GenerateMap, IMap, MapType} from "../maps/Generators";
 import {ApplyMapStyle, IStyler} from "../maps/Styler";
 import {GenerateZTest} from "../maps/ZTest";
+import { OpenQuestsDialog } from "../QuestsDialog";
 import {EditorSave, MakeEditorSave, SaveLevel} from "../SavedLevel";
 import {EditorActions, IEditorState, IMPLICIT_LAYER_ID} from "../stores/EditorStore";
 import {LevelDataActions, LevelDataState} from "../stores/LevelDataStore";
@@ -34,7 +35,9 @@ export default class Keyboard extends EditorComponent {
                 this.editorStore.Dispatch({ type: EditorActions.CHANGE_SCENE, data: { name: scene } });
             }
 
-            if (this.editorStore.state.currentScene === Scenes.EDITOR) {
+            // The scene actually showing, not the store's idea of it: that starts as the editor even when the game boots to its
+            // own front end, which would otherwise take these keys - T, say, which online is the chat's.
+            if (this.game.sceneManager.CurrentScene === Scenes.EDITOR) {
                 switch (e.keyCode) {
                     case Key.UpArrow:
                         this.editorStore.Dispatch({ type: EditorActions.BRUSH_NUDGE, data: { nudge: { x: 0, y: 1 } } });
@@ -103,6 +106,8 @@ export default class Keyboard extends EditorComponent {
                                 this.editorStore.Dispatch({ type: EditorActions.RESET, data: { persistZoom: false } });
                                 this.levelDataStore.Dispatch({ type: LevelDataActions.RESET });
                             }
+                        } else {
+                            this.EditQuests();
                         }
                         break;
                     case Key.T:
@@ -163,6 +168,15 @@ export default class Keyboard extends EditorComponent {
         const contextMenu = document.body.oncontextmenu;
         document.body.oncontextmenu = () => false;
         this.Own(() => (document.body.oncontextmenu = contextMenu));
+    }
+
+    /** The level's quests, in their list - saved as one undo step. */
+    private EditQuests(): void {
+        OpenQuestsDialog(this.levelDataStore.state.quests).then(quests => {
+            if (quests) {
+                this.levelDataStore.Dispatch({ type: LevelDataActions.SET_QUESTS, data: { quests }, canUndo: true });
+            }
+        });
     }
 
     /** What Enter and S save: the engine's level format, with the rest of the editor's state riding along in `editorData`. */

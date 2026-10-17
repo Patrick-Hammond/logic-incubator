@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Vec2, Vec2Like } from "@logic-incubator/lib/math/Geometry";
 import { TileSize } from "../Constants";
-import { ALL_PLAYERS_DIED, LEVEL_COMPLETED } from "../Events";
+import { ALL_PLAYERS_DIED, LEVEL_COMPLETED, NPC_BUMPED, QUEST_UPDATED } from "../Events";
 import type { IPlayerInput } from "../input/PlayerControl";
 import { DoorOpens } from "../level/Doors";
 import type { CollectedPickup } from "../level/Level";
@@ -11,10 +11,11 @@ import { LightSpell } from "../level/entities/LightSpell";
 import type { MonsterDef } from "../level/entities/MonsterRoster";
 import { PickupValue } from "../level/entities/Pickups";
 import { WeaponDef } from "../level/entities/Projectiles";
+import type { QuestDef } from "../story/Quests";
 import World, { StartCells, WarpDistance, WorldLevel } from "./World";
 
 /**
- * Whole steps of play for a party on ASCII maps (`#` solid, `D` the cells of one door, `S` the start, `E` a way out),
+ * Whole steps of play for a party on ASCII maps (`#` solid, `D` the cells of one door, `S` the start, `E` a way out, `N` an NPC),
  * with the real heroes, collision and encounter - only the level is a stand-in, its doors following the
  * same rule as `Level`'s (`DoorOpens`).
  */
@@ -28,13 +29,17 @@ const Walker: MonsterDef = { idle: "walker_idle", run: "walker_run", hitPoints: 
 type Pickup = Vec2Like & { value: PickupValue; sprite: string | null };
 type TestLevel = WorldLevel & { door: { cells: Vec2Like[]; isOpen: boolean; lockId: number }; pickups: Pickup[]; visibleFrom: Vec2Like[] };
 
-function Level(rows: string[], lockId = NoLock): TestLevel {
+function Level(rows: string[], lockId = NoLock, quests: QuestDef[] = []): TestLevel {
     const collisionData: boolean[][] = [];
     const door = { cells: [] as Vec2Like[], isOpen: false, lockId };
     const exits: Vec2Like[] = [];
+    const npcs: Vec2Like[] = [];
     let start: Vec2Like | undefined;
     rows.forEach((row, y) => row.split("").forEach((c, x) => {
-        (collisionData[x] = collisionData[x] || [])[y] = c === "#";
+        (collisionData[x] = collisionData[x] || [])[y] = c === "#" || c === "N";
+        if (c === "N") {
+            npcs.push({ x, y });
+        }
         if (c === "D") {
             door.cells.push({ x, y });
         } else if (c === "S") {
@@ -53,6 +58,8 @@ function Level(rows: string[], lockId = NoLock): TestLevel {
         pickups: [],
         visibleFrom: [],
         spawners: [],
+        bosses: [],
+        quests,
         collisionData,
         boundRect: { width, height },
         playerStartPosition: start,
@@ -66,6 +73,8 @@ function Level(rows: string[], lockId = NoLock): TestLevel {
         RemoveSpawner: () => undefined,
         IsFloor: (x, y) => !isSolid(x, y) && !isDoor(x, y),
         IsExit: (x, y) => exits.some(e => e.x === x && e.y === y),
+        IsTalker: (x, y) => npcs.some(n => n.x === x && n.y === y),
+        Marked: (kind, quest) => (kind === "collect" ? level.pickups.filter(p => p.value.quest === quest).length : 0),
         IsDoorLocked: (x, y, canOpen) => isDoor(x, y) && !door.isOpen && !canOpen(door.lockId),
         UpdateDoors(tiles, canOpen) {
             const open = DoorOpens(door, tiles, canOpen);
@@ -94,8 +103,8 @@ function Input(x = 0, y = 0, extra: Partial<IPlayerInput> = {}): IPlayerInput {
     return { direction: new Vec2(x, y), firing: false, aimX: 0, casting: false, ...extra };
 }
 
-function Setup(rows: string[], heroes: number, lockId = NoLock) {
-    const level = Level(rows, lockId);
+function Setup(rows: string[], heroes: number, lockId = NoLock, quests: QuestDef[] = []) {
+    const level = Level(rows, lockId, quests);
     const events: { event: string; args: unknown[] }[] = [];
     const world = new World(level, { emit: (event, ...args) => events.push({ event, args }), sizeFor: () => ({ width: TileSize, height: TileSize }) });
     world.Reset(SETUP, Array.from({ length: heroes }, () => undefined));
@@ -367,6 +376,89 @@ describe("World", () => {
 });
 
 /** A walker standing at cell (`x`, `y`), going for the nearest hero in play. */
+describe("World's quests and talk", () => {
+    const Mushrooms: QuestDef = { id: "mushrooms", name: "MUSHROOMS", goal: { kind: "collect" }, start: true };
+
+    it("counts the pickups marked for a quest, and tells of it", () => {
+        const { level, world, events } = Setup(ROOM, 1, NoLock, [Mushrooms]);
+        level.pickups.push({ x: 5, y: 2, value: { kind: "item", quest: "mushrooms" }, sprite: "mushroom" });
+        level.pickups.push({ x: 6, y: 2, value: { kind: "item", quest: "mushrooms" }, sprite: "mushroom" });
+        world.Reset(SETUP, [undefined]);
+        expect(world.quests.Get("mushrooms")).toMatchObject({ state: "active", target: 2 });
+        Put(world, 0, { x: 5, y: 2 });
+        world.Step([Input()], 1, FRAME);
+        Put(world, 0, { x: 6, y: 2 });
+        world.Step([Input()], 1, FRAME);
+        expect(events.filter(e => e.event === QUEST_UPDATED).map(e => e.args)).toEqual([
+            ["mushrooms", "active", 1, "active"],
+            ["mushrooms", "complete", 2, "active"]
+        ]);
+        // It doesn't end the level.
+        expect(world.Completed).toBe(false);
+    });
+
+    it("ends the level when a quest that ends it is complete - the hero who did it got there", () => {
+        const { level, world, events } = Setup(ROOM, 2, NoLock, [{ ...Mushrooms, ends: true }]);
+        level.pickups.push({ x: 7, y: 2, value: { kind: "item", quest: "mushrooms" }, sprite: null });
+        world.Reset(SETUP, [undefined, undefined]);
+        Put(world, 1, { x: 7, y: 2 });
+        world.Step([Input(), Input()], 1, FRAME);
+        expect(world.Completed).toBe(true);
+        expect(events.filter(e => e.event === LEVEL_COMPLETED).map(e => e.args)).toEqual([[1]]);
+    });
+
+    it("counts a monster marked for a quest when a hero's shot kills it", () => {
+        const { world } = Setup(ROOM, 1, NoLock, [{ id: "king", name: "KING", goal: { kind: "kill" }, start: true, ends: true }]);
+        Put(world, 0, { x: 2, y: 2 });
+        const king = { ...WalkerAt(4, 2), hitPoints: 1, quest: "king" };
+        world.encounter.monsters.push(king);
+        for (let i = 0; i < 30 && !world.Completed; i++) {
+            world.Step([Input(0, 0, { firing: true })], 1, FRAME);
+        }
+        expect(king.dead).toBe(true);
+        expect(world.quests.State("king")).toBe("complete");
+        expect(world.Completed).toBe(true);
+    });
+
+    it("starts the quests over, and forgets what dialogs set, with each Reset", () => {
+        const { world } = Setup(ROOM, 1, NoLock, [{ id: "smith", name: "SMITH", goal: { kind: "script" } }]);
+        world.quests.Give("smith");
+        world.flags.add("met");
+        world.Reset(SETUP, [undefined]);
+        expect(world.quests.State("smith")).toBe("none");
+        expect(world.flags.size).toBe(0);
+    });
+
+    const SHOP = [
+        "#######",
+        "#.S.N.#",
+        "#######"
+    ];
+
+    it("asks for a talk as a hero walks into an NPC - once, until they walk into it again", () => {
+        const { world, events } = Setup(SHOP, 1);
+        world.SetTalk(true);
+        const bumps = () => events.filter(e => e.event === NPC_BUMPED).map(e => e.args);
+        for (let i = 0; i < 60; i++) {
+            world.Step([Input(1, 0)], 1, FRAME);
+        }
+        expect(bumps()).toEqual([[0, 4, 1]]);
+        world.Step([Input()], 1, FRAME);
+        world.Step([Input(1, 0)], 1, FRAME);
+        expect(bumps()).toEqual([[0, 4, 1], [0, 4, 1]]);
+        // An NPC is solid.
+        expect(world.Heroes[0].Tile.x).toBe(3);
+    });
+
+    it("leaves NPCs be with talk off", () => {
+        const { world, events } = Setup(SHOP, 1);
+        for (let i = 0; i < 60; i++) {
+            world.Step([Input(1, 0)], 1, FRAME);
+        }
+        expect(events.some(e => e.event === NPC_BUMPED)).toBe(false);
+    });
+});
+
 function WalkerAt(x: number, y: number) {
     return {
         id: 1,
@@ -385,6 +477,8 @@ function WalkerAt(x: number, y: number) {
         rangedCooldown: 0,
         hitFlash: 0,
         spawner: null,
+        boss: false,
+        asleep: false,
         dead: false
     };
 }

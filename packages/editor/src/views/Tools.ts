@@ -253,7 +253,7 @@ export default class Tools extends EditorComponent {
         if (!editable) {
             return;
         }
-        OpenDataBrushDialog(editable.editorKey, editable.value, editable.context).then(value => {
+        OpenDataBrushDialog(editable.editorKey, editable.value, editable.context, this.levelDataStore.state.quests).then(value => {
             if (value != null) {
                 this.levelDataStore.Dispatch({ type: LevelDataActions.SET_DATA, data: { target: editable.target, value }, canUndo: true });
             }

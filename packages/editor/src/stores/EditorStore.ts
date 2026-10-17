@@ -3,8 +3,10 @@ import { AddTypes, SubtractTypes } from "@logic-incubator/lib/patterns/Enumerate
 import Store, { IAction } from "@logic-incubator/lib/patterns/redux/Store";
 import { Scenes } from "@logic-incubator/engine/Constants";
 import { InitalScale } from "../Layout";
+import { DefaultBossValue } from "@logic-incubator/engine/level/entities/Bosses";
 import { DefaultPickupValue } from "@logic-incubator/engine/level/entities/Pickups";
 import { Brush, DataBrushName, DataBrushValue, TileLayerKind } from "@logic-incubator/engine/level/LevelFormat";
+import { DefaultDialogValue } from "@logic-incubator/engine/story/Talk";
 import { Layer } from "./LevelDataStore";
 
 export const enum EditorActions {
@@ -229,7 +231,9 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
                 { name: DataBrushName.COLLISION, colour: 0xffd166, value: 0 },
                 { name: DataBrushName.Z_INDEX, colour: 0x06d6a0, value: 0 },
                 { name: DataBrushName.PICKUP, colour: 0xf15bb5, value: DefaultPickupValue() },
-                { name: DataBrushName.EXIT, colour: 0x4cc9f0, value: 0 }
+                { name: DataBrushName.EXIT, colour: 0x4cc9f0, value: 0 },
+                { name: DataBrushName.DIALOG, colour: 0x8ac926, value: DefaultDialogValue() },
+                { name: DataBrushName.BOSS, colour: 0xd00000, value: DefaultBossValue() }
             ],
             layers: [],
             mouseButtonState: MouseButtonState.UP,

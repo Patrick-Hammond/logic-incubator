@@ -10,6 +10,7 @@ import { ByteReader, ByteWriter } from "@logic-incubator/lib/net/Bytes";
 import { Vec2 } from "@logic-incubator/lib/math/Geometry";
 import type { IPlayerInput } from "../input/PlayerControl";
 import type { ShotSetup } from "../level/entities/Projectiles";
+import { QuestState, QuestStates } from "../story/Quests";
 
 /** The first byte of each kind - clear of the lobby's, which `DecodeMessage` reads. */
 const InputKind = 16;
@@ -106,7 +107,9 @@ export type NetEvent =
     | { e: "all-died" }
     | { e: "completed"; hero: number }
     /** A kind of shot not seen before in this run: `ProjectileSnapshot.shot` numbers it from now on. */
-    | { e: "shot"; index: number; setup: ShotSetup };
+    | { e: "shot"; index: number; setup: ShotSetup }
+    /** The level's quest at `index` (of its quests, in order) is now in `state`, `progress` along (`QUEST_UPDATED`). */
+    | { e: "quest"; index: number; state: QuestState; progress: number };
 
 /** Host to every guest, 20 times a second and as a level ends: the world after step `tick` of level `round`, and what happened since the last one. */
 export type Snapshot = {
@@ -141,12 +144,12 @@ export type LeaveMessage = { t: "leave" };
 
 export type PlayMessage = InputMessage | Snapshot | RestartMessage | PingMessage | CatchUpMessage | LeaveMessage;
 
-/** Whether `event` changes the level or a hero for good - a pickup, keys dropped, a spawner gone, a kind of shot - rather than just being shown. */
+/** Whether `event` changes the level or a hero for good - a pickup, keys dropped, a spawner gone, a kind of shot, a quest moved on - rather than just being shown. */
 export function IsLastingEvent(event: NetEvent): boolean {
-    return event.e === "pickup" || event.e === "keys" || event.e === "spawner" || event.e === "shot";
+    return event.e === "pickup" || event.e === "keys" || event.e === "spawner" || event.e === "shot" || event.e === "quest";
 }
 
-const EventKinds = ["pickup", "keys", "spawner", "killed", "damaged", "died", "all-died", "completed", "shot"];
+const EventKinds = ["pickup", "keys", "spawner", "killed", "damaged", "died", "all-died", "completed", "shot", "quest"];
 
 const HeroGone = 1;
 const HeroFacingLeft = 2;
@@ -340,6 +343,9 @@ function WriteEvents(writer: ByteWriter, events: ReadonlyArray<NetEvent>): void 
             case "shot":
                 writer.U16(event.index).String(JSON.stringify(event.setup));
                 break;
+            case "quest":
+                writer.U8(event.index).U8(QuestStates.indexOf(event.state)).U16(Math.max(0, Math.min(0xffff, event.progress)));
+                break;
         }
     });
 }
@@ -451,6 +457,14 @@ function ReadEvent(reader: ByteReader): NetEvent {
         case "shot": {
             const index = reader.U16();
             return { e: kind, index, setup: JSON.parse(reader.String()) as ShotSetup };
+        }
+        case "quest": {
+            const index = reader.U8();
+            const state = QuestStates[reader.U8()];
+            if (!state) {
+                throw new RangeError("Unknown quest state.");
+            }
+            return { e: kind, index, state, progress: reader.U16() };
         }
         default:
             throw new RangeError("Unknown event.");

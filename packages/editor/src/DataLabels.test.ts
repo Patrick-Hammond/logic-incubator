@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DescribeLock, DescribePickup, MapLabel, PickupLabel } from "./DataLabels";
+import { DescribeBoss, DescribeDialog, DescribeLock, DescribePickup, MapLabel, PickupLabel } from "./DataLabels";
 
 const WEAPON = { icon: "weapon_axe", shot: { sprite: "weapon_throwing_axe", speed: 5, damage: 2, cooldown: 0.4, range: 8 } };
 const TORCH = { brightness: 1, tint: 0xffc780, range: 7 };
@@ -48,6 +48,14 @@ describe("MapLabel", () => {
         expect(MapLabel({ kind: "light", light: TORCH })).toBe("T");
     });
 
+    it("tags an NPC's dialog D and a boss B - and a pickup or boss that counts for a quest with a Q after", () => {
+        expect(MapLabel({ script: "MINER: Hello." })).toBe("D");
+        expect(MapLabel({ monster: "ogre" })).toBe("B");
+        expect(MapLabel({ monster: "ogre", hitPoints: 40, quest: "demon" })).toBe("BQ");
+        expect(MapLabel({ kind: "gold", amount: 10, quest: "gold" })).toBe("G10Q");
+        expect(MapLabel({ kind: "key", id: 3, quest: "gold" })).toBe("K3Q");
+    });
+
     it("is empty for no value", () => {
         expect(MapLabel(null)).toBe("");
         expect(MapLabel(undefined)).toBe("");
@@ -55,7 +63,7 @@ describe("MapLabel", () => {
     });
 });
 
-describe("DescribePickup and DescribeLock", () => {
+describe("DescribePickup, DescribeBoss, DescribeDialog and DescribeLock", () => {
     it("say each pickup in a few words", () => {
         expect(DescribePickup({ kind: "gold", amount: 10 })).toBe("10 gold");
         expect(DescribePickup({ kind: "health", amount: 2 })).toBe("2 hit points");
@@ -65,6 +73,18 @@ describe("DescribePickup and DescribeLock", () => {
         expect(DescribePickup({ kind: "item" })).toMatch(/its own sprite/);
         expect(DescribePickup({ kind: "light", light: TORCH, seconds: 90 })).toBe("a light to carry, 90 s");
         expect(DescribePickup({ kind: "light", light: TORCH })).toBe("a light to carry");
+    });
+
+    it("say which quest a pickup counts for", () => {
+        expect(DescribePickup({ kind: "gold", amount: 10, quest: "hoard" })).toBe("10 gold · quest hoard");
+    });
+
+    it("say a boss and a dialog in a few words", () => {
+        expect(DescribeBoss({ monster: "big_demon", hitPoints: 120, quest: "demon" })).toBe("big demon · 120 hit points · quest demon");
+        expect(DescribeBoss({ monster: "ogre" })).toBe("ogre · its own hit points");
+        expect(DescribeDialog("# a comment\nMINER: Rats!\n> Go.\n")).toBe("“MINER: Rats!” · 2 lines");
+        expect(DescribeDialog("MINER: Hello.")).toBe("“MINER: Hello.”");
+        expect(DescribeDialog("  \n# just this\n")).toBe("says nothing");
     });
 
     it("says what a door's lock needs", () => {

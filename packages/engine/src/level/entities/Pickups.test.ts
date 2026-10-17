@@ -68,6 +68,15 @@ describe("IsPickupValue", () => {
     });
 });
 
+describe("a pickup's quest", () => {
+    it("may mark any kind for a quest, by an id one could have", () => {
+        expect(IsPickupValue({ kind: "item", quest: "mushrooms" })).toBe(true);
+        expect(IsPickupValue({ kind: "gold", amount: 1, quest: "gold-run" })).toBe(true);
+        expect(IsPickupValue({ kind: "item", quest: "two words" })).toBe(false);
+        expect(IsPickupValue({ kind: "item", quest: 7 })).toBe(false);
+    });
+});
+
 describe("DefaultPickupValue", () => {
     it("is valid for every kind but a weapon, whose sprites are the game's to name", () => {
         PickupKinds.filter(kind => kind !== "weapon").forEach(kind => {

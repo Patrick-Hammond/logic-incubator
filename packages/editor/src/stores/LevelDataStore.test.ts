@@ -14,7 +14,7 @@ function brush(name: string, x: number, y: number, layerId = TILE_LAYER.id): Bru
 
 function storeWith(brushes: Brush[]): LevelDataStore {
     const store = new LevelDataStore(20);
-    store.Load({ levelData: brushes });
+    store.Load({ levelData: brushes, quests: [] });
     return store;
 }
 
@@ -127,5 +127,26 @@ describe("LevelDataStore stamp/fill and placed data", () => {
         const before = store.state.levelData;
         store.Dispatch({ type: LevelDataActions.SET_DATA, data: { target: light, value } });
         expect(store.state.levelData).toBe(before);
+    });
+});
+
+describe("LevelDataStore quests", () => {
+    const rats = { id: "rats", name: "RATS", goal: { kind: "kill" } };
+
+    it("keeps the level's quests, set as one undo step, and clears them with the map", () => {
+        const store = storeWith([]);
+        store.Dispatch({ type: LevelDataActions.SET_QUESTS, data: { quests: [rats] }, canUndo: true });
+        expect(store.state.quests).toEqual([rats]);
+        store.Undo();
+        expect(store.state.quests).toEqual([]);
+        store.Dispatch({ type: LevelDataActions.SET_QUESTS, data: { quests: [rats] } });
+        store.Dispatch({ type: LevelDataActions.RESET });
+        expect(store.state.quests).toEqual([]);
+    });
+
+    it("loads a level saved before it had quests with none", () => {
+        const store = new LevelDataStore(20);
+        store.Load({ levelData: [] } as never);
+        expect(store.state.quests).toEqual([]);
     });
 });

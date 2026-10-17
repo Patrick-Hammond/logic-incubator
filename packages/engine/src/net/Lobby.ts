@@ -11,6 +11,11 @@
  * A guest says hello first; only then does the host count them in and tell
  * them anything, so nothing reaches a guest before it's listening.
  *
+ * The players can talk the whole time, before the run and during it: `Say` a
+ * line, and every lobby that hears one emits `CHAT` (and keeps the last few, in
+ * `Chat`). Every line goes through the host, which reads it (see `ParseChat`)
+ * and passes it on - to everyone, or whispered to one player.
+ *
  * Once the run has begun (`STARTED`), a guest whose connection goes - closed,
  * quiet for `QuietForMs`, or its direct link to the host failed under it, with
  * what was on its way - tries to get back in (see
@@ -25,9 +30,10 @@ import RelaySession, { RelayEvents, RelayRefusedError } from "@logic-incubator/l
 import { RelayHost, RoomSeats } from "@logic-incubator/lib/net/RelayRooms";
 import type { LevelFile } from "../level/LevelFormat";
 import { NewSeed } from "../Random";
+import { ChatHistory, ChatLimiter, ChatLine, CleanChat, ParseChat } from "./Chat";
 import { HoldAwayMs } from "./HostSession";
 import { LevelHash, PackLevel, UnpackLevel } from "./LevelTransfer";
-import { CleanName, DecodeMessage, EncodeMessage, LobbyMessage, LobbySeat, NetVersion, StartLevel } from "./NetMessages";
+import { CleanName, DecodeMessage, EncodeMessage, LobbyMessage, LobbySeat, NetVersion, StartLevel, UniqueName } from "./NetMessages";
 
 /** Events a lobby emits. */
 export const LobbyEvents = {
@@ -42,7 +48,9 @@ export const LobbyEvents = {
     /** () - a guest's, during the run: its connection has gone, and it's trying to get back in (see `GuestLobby.Reconnecting`). */
     DROPPED: "dropped",
     /** () - a guest's: it's back in the run after `DROPPED`, in the room as `Session` now. */
-    REJOINED: "rejoined"
+    REJOINED: "rejoined",
+    /** (line: ChatLine) - a line of the chat this player hears: said to everyone, or whispered to or by them (see `Say`). */
+    CHAT: "chat"
 };
 
 /** How long a guest whose connection has gone keeps trying to get back into the run, in milliseconds - as long as the host keeps its hero. */
@@ -126,9 +134,11 @@ function NewToken(): string {
     return token.slice(0, 16);
 }
 
-/** What the two lobbies share: the room, the seats, and leaving. */
+/** What the two lobbies share: the room, the seats, the chat, and leaving. */
 abstract class Lobby extends EventEmitter {
     protected seats: LobbySeat[] = [];
+    /** The chat lines this player has heard, oldest first - the last `ChatHistory`. */
+    private chat: ChatLine[] = [];
     /** When anything last came from the room, by `Date.now`. */
     protected heardAt = Date.now();
     private over = false;
@@ -163,6 +173,24 @@ abstract class Lobby extends EventEmitter {
     get IsHost(): boolean {
         return this.session.IsHost;
     }
+
+    /** The last `ChatHistory` lines of the chat this player has heard, oldest first - what a chat window opened now starts with. */
+    get Chat(): ReadonlyArray<ChatLine> {
+        return this.chat;
+    }
+
+    /** This player's seat - their place in `Seats` - or -1 for a guest the host hasn't let in yet. What a `ChatLine.seat` is. */
+    get MySeat(): number {
+        return this.seats.findIndex(seat => seat.peer === this.session.You);
+    }
+
+    /**
+     * Says `typed` to everyone in the game - or, starting `@` and a player's name, whispers it to them (see `ParseChat`).
+     * The line comes back as `CHAT` once the host has passed it on. Returns null once it's on its way (or there was
+     * nothing to say), or why it can't be said, as a player reads it: no one has that name, or this player isn't in
+     * touch with the host just now.
+     */
+    abstract Say(typed: string): string | null;
 
     /** Whether it's still open: not left, closed by the host, or cut off. */
     get IsOpen(): boolean {
@@ -219,6 +247,20 @@ abstract class Lobby extends EventEmitter {
         this.session.Send(to, EncodeMessage(message));
     }
 
+    /** A line of the chat for this player: kept, and told (`CHAT`). */
+    protected Hear(line: ChatLine): void {
+        this.chat.push(line);
+        if (this.chat.length > ChatHistory) {
+            this.chat.splice(0, this.chat.length - ChatHistory);
+        }
+        this.emit(LobbyEvents.CHAT, line);
+    }
+
+    /** `typed` read as a line `seat` says (see `ParseChat`), against everyone's names. */
+    protected Parse(typed: string, seat: number): ReturnType<typeof ParseChat> {
+        return ParseChat(typed, this.seats.map(other => other.name), seat);
+    }
+
     /** The start as this machine plays it. */
     protected StartFor(seed: number, bundle: string | null, level: LevelFile, seats: LobbySeat[]): LobbyStart {
         return { seed, bundle, level, seats, you: seats.findIndex(seat => seat.peer === this.session.You) };
@@ -245,6 +287,8 @@ export class HostLobby extends Lobby {
     /** Each hero's token to come back into the run with, by slot, once it's begun - "" for the host's own. */
     private tokens: string[] = [];
     private rejoin: RejoinHandler | null = null;
+    /** Keeps each guest from saying too much too fast. */
+    private limiter = new ChatLimiter();
 
     /** Hosts in the room `session` has opened (see `RelaySession.Host`), as the player called `name`. */
     constructor(session: RelaySession, name: string) {
@@ -269,6 +313,20 @@ export class HostLobby extends Lobby {
         }
         this.seats[0].character = character;
         this.Changed();
+    }
+
+    Say(typed: string): string | null {
+        if (!this.IsOpen) {
+            return "You're not in a game.";
+        }
+        const parsed = this.Parse(typed, this.MySeat);
+        if (typeof parsed === "string") {
+            return parsed;
+        }
+        if (parsed) {
+            this.Pass(this.MySeat, parsed.text, parsed.to);
+        }
+        return null;
     }
 
     /**
@@ -321,7 +379,9 @@ export class HostLobby extends Lobby {
             } else if (this.seats.length >= RoomSeats) {
                 this.Send(from, { t: "refused", reason: "full" });
             } else {
-                this.seats.push({ peer: from, name: CleanName(message.name, SeatName(this.seats.length)), character: null });
+                // Every name its own, so a whisper's @name always means one player.
+                const name = UniqueName(CleanName(message.name, SeatName(this.seats.length)), this.seats.map(other => other.name));
+                this.seats.push({ peer: from, name, character: null });
                 this.seats.sort((a, b) => a.peer - b.peer);
                 this.Changed();
             }
@@ -330,6 +390,13 @@ export class HostLobby extends Lobby {
             this.Changed();
         } else if (message.t === "need-level" && seat && this.start) {
             this.Packed().then(packed => this.Send(from, { t: "level", packed }));
+        } else if (message.t === "say" && seat && this.limiter.Allow(from)) {
+            const index = this.seats.indexOf(seat);
+            // What can't be said was already told the guest, by its own lobby reading it first: nothing to send back.
+            const parsed = this.Parse(message.text, index);
+            if (parsed && typeof parsed !== "string") {
+                this.Pass(index, parsed.text, parsed.to);
+            }
         }
     }
 
@@ -361,6 +428,24 @@ export class HostLobby extends Lobby {
             this.rejoin.Rejoin(index, from);
             this.emit(LobbyEvents.CHANGED);
         }
+    }
+
+    /** A line said by the player in seat `seat`: to everyone - or whispered to seat `to`, and heard only there and by who said it. */
+    private Pass(seat: number, text: string, to: number | null): void {
+        const speaker = this.seats[seat];
+        const target = to === null ? undefined : this.seats[to];
+        const line: ChatLine = { seat, from: speaker.name, text: CleanChat(text) };
+        if (target) {
+            line.whisper = { seat: to!, name: target.name };
+        }
+        const hearers = target ? [speaker, target] : this.seats;
+        hearers.forEach(hearer => {
+            if (hearer.peer === RelayHost) {
+                this.Hear(line);
+            } else {
+                this.Send(hearer.peer, { t: "chat", line });
+            }
+        });
     }
 
     /** Everyone let in but the host. */
@@ -445,6 +530,24 @@ export class GuestLobby extends Lobby {
         }
     }
 
+    Say(typed: string): string | null {
+        if (!this.IsOpen || !this.Joined) {
+            return "You're not in a game.";
+        }
+        if (this.reconnecting) {
+            return "Not connected to the host - say it again once you're back.";
+        }
+        // Read here first, so what can't be said is told at once; the host reads it again.
+        const parsed = this.Parse(typed, this.MySeat);
+        if (typeof parsed === "string") {
+            return parsed;
+        }
+        if (parsed) {
+            this.Send(RelayHost, { t: "say", text: CleanChat(typed) });
+        }
+        return null;
+    }
+
     protected OnMessage(from: number, message: LobbyMessage): void {
         // Only the host speaks to guests.
         if (from !== RelayHost) {
@@ -452,6 +555,8 @@ export class GuestLobby extends Lobby {
         }
         if (this.answer && (message.t === "rejoined" || message.t === "refused")) {
             this.answer(message.t === "rejoined" ? "rejoined" : message.reason);
+        } else if (message.t === "chat") {
+            this.Hear(message.line);
         } else if (message.t === "lobby" && !this.start) {
             this.seats = message.seats;
             this.emit(LobbyEvents.CHANGED);

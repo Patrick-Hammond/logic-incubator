@@ -11,19 +11,25 @@
  * rather than a palette chip, but it's the exact same value shape and the
  * exact same dialog either way. A pickup is both: the `PICKUP` data brush, and the
  * same value on a tile that gives one (`EffectivePickup`) - one popup for either. "door" is
- * only ever a tile's own value (`EffectiveDoorLock`): there's no door data brush.
+ * only ever a tile's own value (`EffectiveDoorLock`): there's no door data brush. A dialog's script
+ * and a boss are painted data brushes, each with its popup; so are the level's quests, which a pickup,
+ * a boss and a script name by id - their list is `QuestsDialog`'s, and the popups offer them from it.
  *
  * No pixi in here - monster pictures come in via `EditorImages` - so the
  * conversions run under the plain node test runner (see DataBrushEditors.test.ts).
  */
 
 import { IsDoorLockValue } from "@logic-incubator/engine/level/Doors";
+import { BossValue, DefaultBossValue, IsBossValue } from "@logic-incubator/engine/level/entities/Bosses";
 import { NoLock } from "@logic-incubator/engine/level/entities/Keys";
 import MonsterRoster, { MonsterType } from "@logic-incubator/engine/level/entities/MonsterRoster";
 import { DefaultPickupValue, IsPickupValue, PickupKind, PickupKinds, PickupValue } from "@logic-incubator/engine/level/entities/Pickups";
 import { DefaultSpawnerValue, IsSpawnerValue, SanitiseSpawnerValue } from "@logic-incubator/engine/level/entities/Spawners";
 import { IsLightValue, LightValue, MAX_BRIGHTNESS } from "@logic-incubator/engine/level/Lighting";
 import { DataBrushName, DataBrushValue } from "@logic-incubator/engine/level/LevelFormat";
+import { DescribeDialogErrors, ParseDialog } from "@logic-incubator/engine/story/DialogScript";
+import type { QuestDef } from "@logic-incubator/engine/story/Quests";
+import { DefaultDialogValue, IsDialogValue } from "@logic-incubator/engine/story/Talk";
 import { ChoiceOption, FieldSpec, FormValue, FormValues } from "./ui/dialog/FormDialog";
 
 /** Lookups the dialogs need from the running editor, passed in so this module stays pixi-free. */
@@ -32,6 +38,8 @@ export type EditorImages = {
     monster: (type: MonsterType) => ChoiceOption["image"] | undefined;
     /** Whether the sprite sheet has a sprite or animation by this name - for the sprite names a pickup is typed with. */
     hasSprite: (name: string) => boolean;
+    /** The level's quests (see `QuestsDialog`) - for a pickup or boss to count for, and a script to name. Left out: none to offer, and any id a script names goes. */
+    quests?: ReadonlyArray<QuestDef>;
 };
 
 export type DataBrushEditor = {
@@ -61,6 +69,43 @@ function SpriteProblem(name: string, what: string, images?: EditorImages): strin
         return `Name ${what}.`;
     }
     return images && !images.hasSprite(name) ? `“${name}” isn't a sprite in the sheet.` : null;
+}
+
+/** The quest a pickup or boss counts for: none, or one of the level's. */
+function QuestField(images: EditorImages, label: string, hint: string): FieldSpec {
+    const quests = images.quests || [];
+    return {
+        type: "choice",
+        key: "quest",
+        label,
+        options: [{ value: "", label: "None" }].concat(quests.map(quest => ({ value: quest.id, label: quest.name || quest.id }))),
+        hint: quests.length ? hint : hint + " The level has no quests yet - add them with Q."
+    };
+}
+
+/** A quest picked in `QuestField` that isn't the level's - one since taken off its list, say. Skipped without the list to check against. */
+function QuestProblem(form: FormValues, images?: EditorImages): string | null {
+    const quest = String(form.quest || "");
+    if (!quest || !images || !images.quests || images.quests.some(def => def.id === quest)) {
+        return null;
+    }
+    return `“${quest}” isn't one of the level's quests - pick another, or None.`;
+}
+
+/** `value` counting for the quest `QuestField` was set to - without a `quest` for None. */
+function WithQuest<T extends object>(value: T, form: FormValues): T & { quest?: string } {
+    const quest = String(form.quest || "");
+    return quest ? { ...value, quest } : value;
+}
+
+/** The first of a script's mistakes, and how many more there are - a footer has room for one. */
+function ScriptProblem(script: string, images?: EditorImages): string | null {
+    const check = images && images.quests ? { quests: images.quests.map(quest => quest.id) } : {};
+    const errors = DescribeDialogErrors(ParseDialog(script, check).errors);
+    if (!errors.length) {
+        return null;
+    }
+    return errors.length > 1 ? `${errors[0]} (and ${errors.length - 1} more)` : errors[0];
 }
 
 /** A torch: what a new light starts as. */
@@ -107,6 +152,47 @@ function LightFromForm(prefix: string, form: FormValues): LightValue {
     return flicker > 0 ? { ...light, flicker } : light;
 }
 
+/** The pickup a pickup's form was set to - its kind's fields, the rest ignored. */
+function PickupFromForm(form: FormValues): PickupValue {
+    switch (form.kind) {
+        case "health":
+            return { kind: "health", amount: Math.max(0, Math.round(Number(form.healthAmount))) };
+        case "key":
+            return { kind: "key", id: Math.max(0, Math.round(Number(form.keyId))) };
+        case "weapon": {
+            const plain = {
+                sprite: Name(form.shotSprite),
+                speed: Number(form.shotSpeed),
+                damage: Number(form.shotDamage),
+                cooldown: Number(form.shotCooldown),
+                range: Number(form.shotRange)
+            };
+            const shot = form.shotGlows === true ? { ...plain, light: LightFromForm("shotLight", form) } : plain;
+            return {
+                kind: "weapon",
+                weapon: { icon: Name(form.weaponIcon), shot: form.shotTurns === true ? { ...shot, spriteAngle: Number(form.shotAngle) * RADIANS } : shot }
+            };
+        }
+        case "item": {
+            const sprite = Name(form.itemSprite);
+            return sprite ? { kind: "item", sprite } : { kind: "item" };
+        }
+        case "light":
+            return { kind: "light", light: LightFromForm("carried", form), seconds: Math.max(0, Number(form.carriedSeconds)) };
+        default:
+            return { kind: "gold", amount: Math.max(0, Math.round(Number(form.goldAmount))) };
+    }
+}
+
+/** What's wrong with a pickup's sprites, if anything. */
+function PickupProblem(form: FormValues, images?: EditorImages): string | null {
+    if (form.kind === "weapon") {
+        return SpriteProblem(Name(form.weaponIcon), "the sprite the HUD shows for the weapon", images) || SpriteProblem(Name(form.shotSprite), "the sprite the shot is drawn with", images);
+    }
+    // A blank item sprite is fine - it's the sprite the pickup is on - but one that's named has to exist.
+    return form.kind === "item" && Name(form.itemSprite) ? SpriteProblem(Name(form.itemSprite), "the item's sprite", images) : null;
+}
+
 const EDITORS: { [name: string]: DataBrushEditor } = {
     [DataBrushName.Z_INDEX]: {
         title: "Height",
@@ -139,7 +225,7 @@ const EDITORS: { [name: string]: DataBrushEditor } = {
     [DataBrushName.PICKUP]: {
         title: "Pickup",
         subtitle: "What the player gets for walking over it - it then disappears.",
-        fields: () => [
+        fields: images => [
             { type: "choice", key: "kind", label: "Gives the player", options: PickupKinds.map(kind => ({ value: kind, label: PICKUP_LABELS[kind] })) },
             { type: "number", key: "goldAmount", label: "Amount", min: 0, max: 99999, sliderMax: 100, visibleWhen: whenKind("gold") },
             {
@@ -221,7 +307,8 @@ const EDITORS: { [name: string]: DataBrushEditor } = {
                 unit: "seconds",
                 hint: "It dims over its last few seconds, then goes out. 0 lasts the rest of the level.",
                 visibleWhen: whenKind("light")
-            }
+            },
+            QuestField(images, "Counts for quest", "A collect quest counts the pickups that name it.")
         ],
         toForm: value => {
             const pickup: PickupValue = IsPickupValue(value) ? value : DefaultPickupValue();
@@ -247,46 +334,66 @@ const EDITORS: { [name: string]: DataBrushEditor } = {
                 ...LightToForm("shotLight", shot.light || DEFAULT_LIGHT),
                 itemSprite: pickup.kind === "item" ? pickup.sprite || "" : "",
                 ...LightToForm("carried", carried.light),
-                carriedSeconds: carried.seconds || 0
+                carriedSeconds: carried.seconds || 0,
+                quest: pickup.quest || ""
             };
         },
-        fromForm: form => {
-            switch (form.kind) {
-                case "health":
-                    return { kind: "health", amount: Math.max(0, Math.round(Number(form.healthAmount))) };
-                case "key":
-                    return { kind: "key", id: Math.max(0, Math.round(Number(form.keyId))) };
-                case "weapon": {
-                    const plain = {
-                        sprite: Name(form.shotSprite),
-                        speed: Number(form.shotSpeed),
-                        damage: Number(form.shotDamage),
-                        cooldown: Number(form.shotCooldown),
-                        range: Number(form.shotRange)
-                    };
-                    const shot = form.shotGlows === true ? { ...plain, light: LightFromForm("shotLight", form) } : plain;
-                    return {
-                        kind: "weapon",
-                        weapon: { icon: Name(form.weaponIcon), shot: form.shotTurns === true ? { ...shot, spriteAngle: Number(form.shotAngle) * RADIANS } : shot }
-                    };
-                }
-                case "item": {
-                    const sprite = Name(form.itemSprite);
-                    return sprite ? { kind: "item", sprite } : { kind: "item" };
-                }
-                case "light":
-                    return { kind: "light", light: LightFromForm("carried", form), seconds: Math.max(0, Number(form.carriedSeconds)) };
-                default:
-                    return { kind: "gold", amount: Math.max(0, Math.round(Number(form.goldAmount))) };
+        fromForm: form => WithQuest(PickupFromForm(form), form),
+        validate: (form, images) => QuestProblem(form, images) || PickupProblem(form, images)
+    },
+
+    [DataBrushName.DIALOG]: {
+        title: "Dialog",
+        subtitle: "Paint it over an NPC: the cell is solid, and walking into it starts this talk. Quest games only - in co-op an NPC just stands there.",
+        fields: () => [
+            {
+                type: "textarea",
+                key: "script",
+                label: "Script",
+                rows: 16,
+                placeholder: "MINER: Rats! The cellar's crawling with them.\n> I'll clear them out. -> accept\n> Not now.\n\naccept:\ngive rats",
+                hint:
+                    "WHO: text says a line. > text -> part is a choice. part: starts a part, -> part goes there, end ends the talk. " +
+                    "if rats active -> part tests a quest (none, active, complete, finished) or a set word. " +
+                    "Actions: give, complete, finish QUEST; reward gold N, health N, key N, item SPRITE; set and unset WORD. # is a comment."
             }
+        ],
+        toForm: value => ({ script: (IsDialogValue(value) ? value : DefaultDialogValue()).script }),
+        fromForm: form => ({ script: String(form.script) }),
+        validate: (form, images) => (String(form.script).trim() ? ScriptProblem(String(form.script), images) : "Give the NPC something to say.")
+    },
+
+    [DataBrushName.BOSS]: {
+        title: "Boss",
+        subtitle: "One monster, standing where it's painted - asleep until a hero sees it.",
+        fields: images => [
+            {
+                type: "choice",
+                key: "monster",
+                label: "Monster",
+                options: MonsterRoster.inst.Types.map(type => ({ value: type, label: type.replace(/_/g, " "), image: images.monster(type) }))
+            },
+            {
+                type: "number",
+                key: "hitPoints",
+                label: "Hit points",
+                min: 0,
+                max: 9999,
+                sliderMax: 200,
+                zeroLabel: "its kind's own",
+                hint: "Before the party's toughness - more heroes make it tougher, as they do every monster."
+            },
+            QuestField(images, "Killing it counts for quest", "A kill quest counts the bosses that name it.")
+        ],
+        toForm: value => {
+            const boss: BossValue = IsBossValue(value) ? value : DefaultBossValue();
+            return { monster: boss.monster, hitPoints: boss.hitPoints || 0, quest: boss.quest || "" };
         },
-        validate: (form, images) => {
-            if (form.kind === "weapon") {
-                return SpriteProblem(Name(form.weaponIcon), "the sprite the HUD shows for the weapon", images) || SpriteProblem(Name(form.shotSprite), "the sprite the shot is drawn with", images);
-            }
-            // A blank item sprite is fine - it's the sprite the pickup is on - but one that's named has to exist.
-            return form.kind === "item" && Name(form.itemSprite) ? SpriteProblem(Name(form.itemSprite), "the item's sprite", images) : null;
-        }
+        fromForm: form => {
+            const hitPoints = Math.max(0, Math.round(Number(form.hitPoints)));
+            return WithQuest(hitPoints ? { monster: String(form.monster), hitPoints } : { monster: String(form.monster) }, form);
+        },
+        validate: (form, images) => (MonsterRoster.inst.Has(String(form.monster)) ? QuestProblem(form, images) : "Pick a monster.")
     },
 
     // Only ever a door tile's own value - there's no door data brush (see the module doc comment). Unlocked is NoLock (-1).
