@@ -85,6 +85,8 @@ describe("DescribePickup, DescribeBoss, DescribeDialog and DescribeLock", () => 
         expect(DescribeDialog("# a comment\nMINER: Rats!\n> Go.\n")).toBe("“MINER: Rats!” · 2 lines");
         expect(DescribeDialog("MINER: Hello.")).toBe("“MINER: Hello.”");
         expect(DescribeDialog("  \n# just this\n")).toBe("says nothing");
+        expect(DescribeDialog("MINER: Rats!\n\nshout: # when a hero's near\nHelp, help!")).toBe("“MINER: Rats!” · 3 lines · shouts");
+        expect(DescribeDialog("shout:\nOh dear, where did I put it?!")).toBe("“Oh dear, where did I put it?!” · 2 lines · shouts");
     });
 
     it("says what a door's lock needs", () => {

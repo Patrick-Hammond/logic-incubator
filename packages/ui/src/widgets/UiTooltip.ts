@@ -14,7 +14,8 @@ export type TooltipContent = {
 /**
  * A tooltip: a small framed note with an optional title and wrapped text, and (for a skin that draws one) a tail pointing at the thing it describes. It sits above that thing if there is room, below it
  * otherwise, and stays inside the bounds. Put it in the topmost layer, then either `ShowFor` something yourself or `Attach` it to a control, which shows it after the pointer
- * has rested there for the skin's delay (or at once when the control takes keyboard focus) and hides it when the pointer leaves or presses.
+ * has rested there for the skin's delay (or at once when the control takes keyboard focus) and hides it when the pointer leaves or presses. `ShowAt` points it at a rectangle
+ * instead - a figure in a tile map, say, as a speech bubble (the game skin's `speech` variant).
  */
 export default class UiTooltip extends Container {
     private readonly skin: TooltipSkin;
@@ -25,6 +26,8 @@ export default class UiTooltip extends Container {
     private readonly body = new Container();
     private timer: ReturnType<typeof setTimeout> | null = null;
     private owner: DisplayObject | null = null;
+    /** What the frame and text were last built for. */
+    private built: TooltipContent | null = null;
 
     constructor(private readonly theme: UiTheme, variant: string) {
         super();
@@ -42,20 +45,43 @@ export default class UiTooltip extends Container {
         this.interactiveChildren = false;
     }
 
-    /** What the tooltip shows now, or null when hidden. */
+    /** What the tooltip is shown for now: null when hidden, or when shown at a rectangle (`ShowAt`). */
     get Owner(): DisplayObject | null {
         return this.owner;
     }
 
     /** Shows `content` pointing at `target` (any display object; its bounds on screen). `bounds` is the room it may use in this container's parent's coordinates; the whole canvas by default. */
     ShowFor(target: DisplayObject, content: TooltipContent, bounds?: Rect): void {
+        const parent = this.parent;
+        if (!parent) {
+            this.CancelPending();
+            return;
+        }
+        const box = target.getBounds();
+        const topLeft = parent.toLocal(new Point(box.x, box.y));
+        const bottomRight = parent.toLocal(new Point(box.x + box.width, box.y + box.height));
+        this.Show(target, { x: topLeft.x, y: topLeft.y, width: bottomRight.x - topLeft.x, height: bottomRight.y - topLeft.y }, content, bounds);
+    }
+
+    /**
+     * Shows `content` pointing at `target`, a rectangle in this container's parent's coordinates, for something that isn't a display object of its own (a figure drawn in a tile
+     * map). Given the same content again it only moves, so it can follow what it points at every frame. `bounds` as for `ShowFor`.
+     */
+    ShowAt(target: Rect, content: TooltipContent, bounds?: Rect): void {
+        this.Show(null, target, content, bounds);
+    }
+
+    private Show(owner: DisplayObject | null, target: Rect, content: TooltipContent, bounds?: Rect): void {
         this.CancelPending();
         const parent = this.parent;
         if (!parent) {
             return;
         }
-        this.owner = target;
-        this.Build(content);
+        this.owner = owner;
+        if (!this.built || this.built.title !== content.title || this.built.text !== content.text) {
+            this.Build(content);
+            this.built = { title: content.title, text: content.text };
+        }
         const place = this.PlaceFor(target, parent, bounds);
         this.position.set(place.x, place.y);
         if (this.tails) {
@@ -138,16 +164,13 @@ export default class UiTooltip extends Container {
         }
     }
 
-    private PlaceFor(target: DisplayObject, parent: Container, bounds?: Rect) {
-        const box = target.getBounds();
-        const topLeft = parent.toLocal(new Point(box.x, box.y));
-        const bottomRight = parent.toLocal(new Point(box.x + box.width, box.y + box.height));
+    private PlaceFor(target: Rect, parent: Container, bounds?: Rect) {
         const view = this.theme.host ? this.theme.host.view : null;
-        const limit = view ? parent.toLocal(new Point(view.width, view.height)) : new Point(bottomRight.x + 1000, bottomRight.y + 1000);
+        const limit = view ? parent.toLocal(new Point(view.width, view.height)) : new Point(target.x + target.width + 1000, target.y + target.height + 1000);
         const room = bounds || { x: 0, y: 0, width: limit.x, height: limit.y };
         const frame = this.frame as NineSlice;
         return PlaceTooltip(
-            { x: topLeft.x, y: topLeft.y, width: bottomRight.x - topLeft.x, height: bottomRight.y - topLeft.y },
+            target,
             { width: frame.SliceWidth, height: frame.SliceHeight },
             room,
             this.skin.gap,

@@ -37,6 +37,7 @@
  * - The rest are actions: `give QUEST`, `complete QUEST` (its goal met, whatever it was), `finish QUEST` (handed in), `reward gold N`,
  *   `reward health N` (half-hearts), `reward key N [SPRITE]`, `reward item SPRITE`, `set WORD` and `unset WORD`.
  * - `#` starts a comment; blank lines are skipped.
+ * - A part called `shout` isn't part of the talk: it's what the NPC calls out when a hero comes near (see `Shouts`).
  *
  * More actions and conditions can be added with `RegisterDialogAction` and `RegisterDialogCondition`. Pure - no pixi - so it runs
  * under the plain node test runner.
@@ -93,6 +94,8 @@ export type DialogError = { line: number; message: string };
 
 /** Where `-> end` goes. */
 export const EndTarget = "end";
+/** The part an NPC shouts from (see `Shouts`) - a talk never runs into it, even from the top. */
+export const ShoutPart = "shout";
 
 const actions: { [name: string]: DialogActionType } = {};
 const conditions: { [name: string]: DialogConditionType } = {};
@@ -264,8 +267,9 @@ export function ParseDialog(text: string, check: DialogCheck = {}): { script: Di
             } else if (Object.prototype.hasOwnProperty.call(parts, name)) {
                 fail(line, `There's already a part called "${name}".`);
             } else {
-                // Reaching the end of a part ends the talk - it doesn't run on into the next.
-                if (steps.length) {
+                // Reaching the end of a part ends the talk - it doesn't run on into the next. A script that starts with
+                // what its NPC shouts has no talk before it, rather than starting the talk with the shouts.
+                if (steps.length || name === ShoutPart) {
                     steps.push({ kind: "end", line });
                 }
                 parts[name] = steps.length;

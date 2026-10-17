@@ -25,6 +25,7 @@ import {HeroView} from "./view/HeroView";
 import {PartyBounds, PartySpan, PartyZoom} from "./view/helpers/PartyFrame";
 import Hud from "./view/Hud";
 import QuestTracker from "./view/QuestTracker";
+import ShoutView from "./view/ShoutView";
 import TileMapView from "./view/TileMap";
 
 /** The game's side of the heroes: how they look, how tough they are, what they shoot, and how the HUD shows it - every hero's, unless a `HeroSlot` says otherwise. */
@@ -135,6 +136,9 @@ export class DungeonMain extends GameComponent {
     /** The talk with an NPC going on - see `StartTalk` - or null. */
     private talk: {runner: DialogRunner; hero: number} | null = null;
     private effects: Effects | undefined;
+    private shouts: ShoutView | undefined;
+    /** The centres of the heroes who hear the NPCs shout - gathered into the same array each frame (see `Hearers`). */
+    private readonly hearers: Vec2Like[] = [];
     private levelAssets: LevelAssets | undefined;
     /** Seconds until the next start after the level ended - 0 while it's being played. */
     private restartIn = 0;
@@ -236,6 +240,8 @@ export class DungeonMain extends GameComponent {
         this.Attach(new TileMapView(level, camera));
         // Inside the camera, so effects scroll and zoom with the world, and over its layers; under the HUD.
         this.effects = this.Attach(new Effects(camera), camera.root);
+        // Over the world, as its effects are, but under the HUD.
+        this.shouts = this.Attach(new ShoutView(level, camera));
         this.hud = this.Attach(new Hud(this.options.player.hearts));
         this.tracker = this.Attach(new QuestTracker());
         this.dialog = this.Attach(new DialogView({
@@ -291,7 +297,7 @@ export class DungeonMain extends GameComponent {
             this.game.assets.UseLevelBundle().catch(() => undefined);
         }
         // Drops anything a `Reload` still waiting on its assets would otherwise carry on with.
-        this.level = this.camera = this.world = this.renderer = this.hud = this.tracker = this.dialog = this.effects = this.levelAssets = undefined;
+        this.level = this.camera = this.world = this.renderer = this.hud = this.tracker = this.dialog = this.effects = this.shouts = this.levelAssets = undefined;
         this.talk = null;
     }
 
@@ -312,8 +318,11 @@ export class DungeonMain extends GameComponent {
         const net = (this.options.net && this.options.net()) || null;
         this.EndTalk();
         this.world.Reset(setup, slots.map(slot => (slot.lightSpell === undefined ? setup.lightSpell : slot.lightSpell || undefined)), seed);
-        // Talking is for a Quest: one hero, on this machine alone.
-        this.world.SetTalk(!net && slots.length === 1);
+        // Talking is for a Quest: one hero, on this machine alone - and so is hearing the NPCs shout.
+        const talk = !net && slots.length === 1;
+        this.world.SetTalk(talk);
+        const world = this.world;
+        this.shouts.Begin(talk ? this.level.talkers : [], { quests: world.quests, flags: world.flags, Reward: () => undefined });
         this.tracker.Begin(this.world.quests);
         this.local = slots.map(slot => slot.input !== null);
         // A party sharing one screen is held to what fits on it; one spread over machines isn't.
@@ -438,6 +447,22 @@ export class DungeonMain extends GameComponent {
             this.hud.RenderHeroes(this.world.Heroes);
         }
         this.tracker.Render(this.world.quests);
+        // A talk holds the NPCs' shouts where they are, hushed.
+        if (!this.talk) {
+            this.shouts.Render(seconds, this.Hearers());
+        }
+    }
+
+    /** The centres of the heroes played here who are still standing - the ones who hear the NPCs shout. */
+    private Hearers(): ReadonlyArray<Vec2Like> {
+        const hearers = this.hearers;
+        hearers.length = 0;
+        this.world.Heroes.forEach((hero, i) => {
+            if (this.local[i] && hero.Alive && !hero.Gone) {
+                hearers.push(hero.Centre);
+            }
+        });
+        return hearers;
     }
 
     /**
@@ -460,6 +485,7 @@ export class DungeonMain extends GameComponent {
             return;
         }
         this.talk = {runner, hero};
+        this.shouts.Hush();
         const tile = talker.tile;
         this.dialog.Open(line, tile ? (tile.anim ? tile.anim.texture : tile.texture) : undefined);
         this.game.dispatcher.emit(TALK_STARTED, hero, tileX, tileY);

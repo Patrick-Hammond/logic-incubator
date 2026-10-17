@@ -1013,6 +1013,14 @@
 			"bottom": 2
 		}
 	},
+	"speech_tail_down": {
+		"width": 18,
+		"height": 14
+	},
+	"speech_tail_up": {
+		"width": 18,
+		"height": 12
+	},
 	"status_armor": {
 		"width": 20,
 		"height": 20

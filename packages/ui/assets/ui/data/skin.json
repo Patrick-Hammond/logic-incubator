@@ -11,8 +11,8 @@
 		"scrollStep": 24,
 		"caretWidth": 2,
 		"caretMargin": 4,
-		"tailMargin": 12,
-		"tailOverlap": 2,
+		"tailMargin": 16,
+		"tailOverlap": 4,
 		"slide": 24,
 		"bob": 2,
 		"ringGap": 2,
@@ -283,6 +283,19 @@
 			"textFont": "body",
 			"textColour": "#857ecd",
 			"delay": 450
+		},
+		"speech": {
+			"frame": { "frame": "panel_raised_light" },
+			"padding": { "left": 12, "top": 8, "right": 12, "bottom": 12 },
+			"tailDown": "speech_tail_down",
+			"tailUp": "speech_tail_up",
+			"gap": 2,
+			"maxWidth": 260,
+			"titleFont": "body",
+			"titleColour": "#feffe5",
+			"textFont": "body",
+			"textColour": "#feffe5",
+			"delay": 0
 		}
 	},
 	"dialogues": {

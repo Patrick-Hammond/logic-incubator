@@ -10,8 +10,8 @@
 //
 // Most pieces are copied as they are. The looks the pack doesn't draw are made from the ones it does, and are the first thing to redraw by hand: hover (brighter) and
 // disabled (greyed) states, a focused field and a selected slot (outlined in the pack's cream), the vertical slider track (the horizontal one mirrored across its diagonal,
-// so its light still comes from the top left), tabs along a top edge (the side tab turned), green and amber bar fills, hearts (the heart of the health skill) and radio rings
-// (the skill tree's junction rings). The window's title plate is made taller than the pack draws it (its straight-sided body grows), so the title has room round it; the dialogue's
+// so its light still comes from the top left), tabs along a top edge (the side tab turned), green and amber bar fills, hearts (the heart of the health skill), radio rings
+// (the skill tree's junction rings) and a speech bubble's points (in the light raised panel's edge colours). The window's title plate is made taller than the pack draws it (its straight-sided body grows), so the title has room round it; the dialogue's
 // name plate is the pack's own.
 //
 // The sprites folder belongs to this tool: a PNG it doesn't write is removed (unless --keep), so a piece renamed or dropped here doesn't linger in the atlas.
@@ -129,7 +129,10 @@ Put("panel_plain", Read("components/component_9slices_panel.png"), "auto");
 Put("panel_carved", Read("components/component_9slices_panel_carved.png"), "auto");
 Put("panel_carved_light", Read("components/component_9slices_panel_carved_light.png"), "auto");
 Put("panel_raised", Read("components/component_9slices_panel_elevation_dark.png"), "auto");
-Put("panel_raised_light", Read("components/component_9slices_panel_elevation_light.png"), "auto");
+const raisedLight = Read("components/component_9slices_panel_elevation_light.png");
+Put("panel_raised_light", raisedLight, "auto");
+// The point of a speech bubble (a tooltip on the light raised panel), which the pack doesn't draw.
+SpeechTails(raisedLight);
 const plate = Read("components/component_3slices_window_title.png");
 Put("window_title", TallerPlate(plate, 4), { top: 0, bottom: 0 });
 Put("name_plate", plate, { top: 0, bottom: 0 });
@@ -282,6 +285,41 @@ function Hearts(icon) {
     Put("icon_heart_full", fill("#cc1825", mask.width, "#cc1825"));
     Put("icon_heart_half", fill("#cc1825", half, BLUE));
     Put("icon_heart_empty", fill(BLUE, 0, BLUE));
+}
+
+/**
+ * A speech bubble's point, under the light raised panel (pointing down) and over it (pointing up): a small stepped triangle in the panel's own edge colours - its rim inside,
+ * its outline round it, and under the down one the panel's shadow. Each starts with the two rows of the panel's edge it lies over (the skin's `tailOverlap`, enlarged), so the
+ * panel's outline opens where the point joins it.
+ */
+function SpeechTails(panel) {
+    const middle = panel.width >> 1;
+    const pixel = y => Array.from(panel.data.subarray((y * panel.width + middle) * 4, (y * panel.width + middle) * 4 + 4));
+    const half = 4;
+    const paint = (img, x, y, colour) => img.data.set(colour, (y * img.width + x) * 4);
+    // Each row as how far it reaches either side of the middle: outline at its two ends, rim between.
+    const row = (img, y, reach, ink, rim) => {
+        for (let x = half - reach; x <= half + reach; x++) paint(img, x, y, x === half - reach || x === half + reach ? ink : rim);
+    };
+
+    // Under the panel: over its bottom outline and shadow, then a pixel narrower each side a row down to the tip, and the shadow under its edges.
+    const reachDown = [half, half, 3, 2, 1, 0];
+    const down = CreateImage(half * 2 + 1, reachDown.length + 1);
+    reachDown.forEach((reach, y) => row(down, y, reach, pixel(panel.height - 2), pixel(panel.height - 3)));
+    const shadow = pixel(panel.height - 1);
+    for (let y = down.height - 2; y >= 0; y--) {
+        for (let x = 0; x < down.width; x++) {
+            if (down.data[(y * down.width + x) * 4 + 3] === 255 && down.data[((y + 1) * down.width + x) * 4 + 3] === 0) paint(down, x, y + 1, shadow);
+        }
+    }
+    Put("speech_tail_down", down);
+
+    // Over the panel: from the tip, a pixel wider each side a row, down over its top outline and the rim inside it.
+    const reachUp = [0, 1, 2, 3, half];
+    const up = CreateImage(half * 2 + 1, reachUp.length + 1);
+    reachUp.forEach((reach, y) => row(up, y, reach, pixel(0), pixel(1)));
+    for (let x = 0; x < up.width; x++) paint(up, x, up.height - 1, pixel(1));
+    Put("speech_tail_up", up);
 }
 
 WriteFrames(join(dataDir, "frames.json"), frames);

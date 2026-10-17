@@ -355,7 +355,8 @@ const EDITORS: { [name: string]: DataBrushEditor } = {
                 hint:
                     "WHO: text says a line. > text -> part is a choice. part: starts a part, -> part goes there, end ends the talk. " +
                     "if rats active -> part tests a quest (none, active, complete, finished) or a set word. " +
-                    "Actions: give, complete, finish QUEST; reward gold N, health N, key N, item SPRITE; set and unset WORD. # is a comment."
+                    "Actions: give, complete, finish QUEST; reward gold N, health N, key N, item SPRITE; set and unset WORD. # is a comment. " +
+                    "A part called shout: is what the NPC calls out when a hero comes near, a line at a time - put it after the talk."
             }
         ],
         toForm: value => ({ script: (IsDialogValue(value) ? value : DefaultDialogValue()).script }),

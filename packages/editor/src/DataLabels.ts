@@ -15,6 +15,7 @@ import { IsPickupValue, PickupValue } from "@logic-incubator/engine/level/entiti
 import { IsSpawnerValue } from "@logic-incubator/engine/level/entities/Spawners";
 import { IsLightValue } from "@logic-incubator/engine/level/Lighting";
 import { DataBrushValue } from "@logic-incubator/engine/level/LevelFormat";
+import { ShoutPart } from "@logic-incubator/engine/story/DialogScript";
 import { IsDialogValue } from "@logic-incubator/engine/story/Talk";
 
 /** A pickup's tag on the map: gold G10, health H2, key K3, weapon W, item I, a light to carry T (for torch - L is a locked door's). */
@@ -95,13 +96,22 @@ export function DescribeBoss(boss: BossValue): string {
     return parts.concat(boss.quest ? [`quest ${boss.quest}`] : []).join(" · ");
 }
 
-/** A dialog script in a few words, for the selected-brush card: its first line said, and how long it is. */
+/** A dialog script in a few words, for the selected-brush card: its first line (not a part's name), how long it is, and whether its NPC shouts (a `shout:` part). */
 export function DescribeDialog(script: string): string {
-    const lines = script.split(/\r?\n/).map(line => line.trim()).filter(line => line && line.charAt(0) !== "#");
+    const lines = script.split(/\r?\n/).map(line => line.replace(/#.*/, "").trim()).filter(line => line);
     if (!lines.length) {
         return "says nothing";
     }
-    return lines.length > 1 ? `“${lines[0]}” · ${lines.length} lines` : `“${lines[0]}”`;
+    const label = (line: string) => /^[^\s:]+:$/.test(line);
+    const first = lines.filter(line => !label(line))[0] || lines[0];
+    const words = [`“${first}”`];
+    if (lines.length > 1) {
+        words.push(`${lines.length} lines`);
+    }
+    if (lines.some(line => line === ShoutPart + ":")) {
+        words.push("shouts");
+    }
+    return words.join(" · ");
 }
 
 /** What a door's lock id means, for a tooltip or the card: unlocked, or the key it needs. */

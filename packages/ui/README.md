@@ -63,6 +63,7 @@ The pack's pieces and what draws them:
 | Skill icons, selection frame, tier badges, path tileset | `UiSkillTree` (`skill_health`, `tier_2`, the rings and links) |
 | Pointers, hovered-tile sheet | `UiCursor` (`default`, `pointer`, `pressed`, `attack`), `UiTileMarker` |
 | Settings mockup's "< value >" rows | `UiSelector` |
+| (made) a speech bubble's points | tooltip `speech`: a speech bubble on the light raised panel, pointed at a figure with `ShowAt` (the dungeon's NPC shouts) |
 
 ## Focus and input
 
@@ -94,7 +95,7 @@ corners marked by their insets in `data/frames.json`.
 `node packages/ui/tools/import-pack.mjs` builds the bundle's sprites and `frames.json` from the pack folder, enlarged (`--scale=N`, 2 by default): it copies the pieces, finds each stretchable frame's insets from the art
 itself (the longest run of identical columns and rows is the part that stretches), and makes the looks the pack doesn't draw - hover (brighter) and disabled (greyed) states, a
 focused field and a selected slot (outlined in the pack's cream), the vertical slider track (the horizontal one mirrored across its diagonal so its light still comes from the top
-left), tabs along a top edge (the side tab turned), green and amber bar fills, hearts (from the health skill's heart) and radio rings (the skill tree's junction rings). Those are
+left), tabs along a top edge (the side tab turned), green and amber bar fills, hearts (from the health skill's heart), radio rings (the skill tree's junction rings) and a speech bubble's points (in the light raised panel's edge colours). Those are
 the first things to redraw by hand. It also makes the window's title plate taller than the pack draws it (`window_title`: the plate's straight-sided body grows, its end curls
 stay on its base) so the title has room round it, and keeps the pack's own as the dialogue's `name_plate`. The tool owns `sprites/ui/`: a PNG it doesn't write is removed (`--keep` to leave them).
 

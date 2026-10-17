@@ -2121,6 +2121,7 @@ MINER: Quiet as a tomb down there now.
 | `WHO: text` | A line said, headed with who says it. A line of plain text is said with no name. |
 | `> text -> part` | A choice for the player, offered under the line said before it; choices one after another make one menu. Without `-> part` it carries on after the menu; with `if CONDITION` at the end it's only offered when that holds. |
 | `part:` | Starts a part, which `-> part` goes to. The talk starts at the top, and reaching the end of a part ends it. |
+| `shout:` | Starts the part the NPC shouts from as a hero comes near - not part of the talk (see **Shouts** below). |
 | `-> part`, `end` | Goes there; ends the talk (as `-> end` does). `if CONDITION -> part` goes there only when the condition holds. |
 | `give QUEST`, `complete QUEST`, `finish QUEST` | Gives a quest; has its goal met, whatever it is; hands it in. |
 | `reward gold N`, `reward health N`, `reward key N [SPRITE]`, `reward item SPRITE` | Hands the hero something as if they'd picked it up (health in half-hearts; a key is shown as `SPRITE`). |
@@ -2130,6 +2131,26 @@ MINER: Quiet as a tomb down there now.
 A condition is a quest and a state (`rats active`, `rats complete`) or a word that's been `set`; `not` before it turns it
 round. The editor reads a script as it's typed - a part that isn't there, a quest the level hasn't got, words it can't make out -
 and won't save it until it reads, naming the first line that doesn't. The engine leaves out a line it can't read, with a console warning.
+
+**Shouts.** A part called `shout` is what the NPC calls out when a hero comes near, in a speech bubble over them - "Help, help!"
+as the hero walks by. It isn't part of the talk (a talk never runs into it), so it goes after the talk:
+
+```
+shout:
+if rats finished -> shout-after
+Help, help! Rats!
+Oh dear, where did I put my cheese?!
+
+shout-after:
+Not a squeak. Lovely.
+```
+
+A moment after a hero comes within 5 tiles of an NPC in sight (`ShoutRange`), the NPC shouts one of the part's lines, picked at
+random and never the same one twice running. It stays up a few seconds, longer for a longer line, and the NPC is quiet for 5 to 9
+seconds before the next, for as long as the hero stays near. The part's `if` and `->` lines work as they do in a talk, so what an
+NPC shouts can change with the quests. Who says a line isn't shown, and actions and choices are passed over, since shouting changes
+nothing. A talk hushes the shouting. A script that is only a shout part makes an NPC who calls out but has nothing to say when walked
+into. Like talks, shouts are for a Quest.
 
 **Bosses.** The `boss` brush places one of the roster's monsters (`monster`) where it's painted, with `hitPoints` of its own
 (left out or 0, its kind's; a party's toughness raises it like any monster's), counted for `quest` when it's killed. It sleeps
@@ -2419,6 +2440,30 @@ starts, and killing the king clears the level as reaching an exit does. A `start
 the five relics", with an exit for after. A level made for both can have NPC quests as well; a Quest offers them, and in
 co-op and online the NPCs only stand there.
 
+#### Calling out to passers-by (shouts)
+
+Brog, from [A lost hoard](#a-lost-hoard-collect), can call out to a hero who comes near. Add a `shout` part after his talk; the
+rest of his script stays as it is:
+
+```
+shout:
+if hoard finished -> shout-after
+if hoard active -> shout-waiting
+Help, help! Thieves!
+Oh dear, where did I put it?!
+Is anyone there?
+
+shout-waiting:
+Three sacks! Don't forget!
+
+shout-after:
+Gold, glorious gold.
+```
+
+Before the quest is given he shouts one of the first three lines as a hero comes within 5 tiles, and another every few seconds
+while they stay. While the hero is looking for the gold he reminds them, and once it's handed in he's happy. A prisoner who only
+calls out is a script that's all shout part: walking into them starts no talk.
+
 #### Mistakes to avoid
 
 - **Check before you `finish`.** `finish` hands a quest in whatever state it's in, so put it in a part you reach with
@@ -2430,6 +2475,7 @@ co-op and online the NPCs only stand there.
   words are just part of what the choice says.
 - **A plain line can't start with an action word.** A line whose first word is `give`, `complete`, `finish`, `reward`,
   `set`, `unset`, `if` or `end` (in lower case) is read as that. Give it a speaker (`BROG: give it back!`).
+- **Put `shout:` after the talk.** A talk starts at the top, so a script that starts with its shout part has no talk.
 - **`#` starts a comment, anywhere on a line**, so a line can't say it: `GUARD: Room #3` says "Room".
 - **Ids are exact.** `Hoard` isn't `hoard`. The popup names a quest the level hasn't got, and a part the script hasn't got.
 - **A kill goal's `monster` counts only once the quest is given,** while pickups and bosses marked for a quest count
@@ -2929,8 +2975,8 @@ small portrait by whole pixels to fill its frame, as the dungeon's talks do with
 
 The art is the **Tiny Dungeons UI pack** (`packages/ui/design/Tiny Dungeons - UI Pack`). It is drawn for a 480x270 screen, so `node packages/ui/tools/import-pack.mjs` enlarges every piece
 2x with nearest-neighbour scaling (each pixel a 2x2 block, never smoothed; `--scale=N` for another size) as it builds the bundle's sprites and `data/frames.json`: it copies the pieces, finds each stretchable frame's nine-slice insets from the art (the longest run of identical columns and rows is what stretches), and
-derives the looks the pack doesn't draw - hover and disabled states, a focused field, a selected slot, the vertical slider track, top-edge tabs, green and amber bar fills, hearts and radio
-rings. It also turns the pack's slate greys violet to match the game's first UI - each keeps its lightness and takes hue 245 (`--hue=<0-359>`, or `--hue=none` for the pack's
+derives the looks the pack doesn't draw - hover and disabled states, a focused field, a selected slot, the vertical slider track, top-edge tabs, green and amber bar fills, hearts, radio
+rings and a speech bubble's points. It also turns the pack's slate greys violet to match the game's first UI - each keeps its lightness and takes hue 245 (`--hue=<0-359>`, or `--hue=none` for the pack's
 own) - and makes the window's title plate taller so its title has room round it. To change the art, edit the pack's files and import again, then run `npm run assets` in the game so the atlas is rebuilt. `packages/ui/art/` also has an Aseprite template of the
 whole atlas (`slice-sheet.mjs` writes it back) for drawing over everything at once - after which the pack shouldn't be imported again, as that rewrites the sprites.
 
@@ -2957,6 +3003,9 @@ Beyond the widgets the game's screens use, the kit has a component for each of t
   `SetUnlocked(id, true)`, and a `select` event when a skill is pressed. Skills sit in the middle of grid cells (the skin's `cell`); a link turns only at a ring.
 - **`UiTileMarker`** - the brackets that pulse round the tile under the pointer; it goes in the map's own layer (`SetTile(x, y)` in its pixels) and is driven by `Update(ms)`.
 - **Equipment slots** - `slot.SetPlaceholder("slot_icon_helmet")` shows what goes in an empty slot.
+- **Speech bubbles** - a `UiTooltip` in the skin's `speech` look (the light raised panel, cream text, and a point drawn to match). `ShowAt(rect, { text }, bounds)`
+  points it at a rectangle rather than a display object - a figure drawn in a tile map - and, given the same text again, only moves it, so it can follow the figure every
+  frame; set its `alpha` to fade it. The dungeon's NPC shouts ([9.10](#910-npcs-dialogs-and-quests)) are drawn in it.
 - **Side tabs** - `new UiTabs(theme, "side", [{ icon: "icon_settings" }, ...], { mirror: true })` hangs icon tabs down a panel's left edge (without `mirror`, its right).
 - **`UiChatBox`** - a chat: lines newest at the bottom, each with who said it in a colour of its own (`Add({ head, text, headColour, textColour })`), wrapped to its
   width. Closed it shows each line for a few seconds and fades it, so it stays out of play's way; `Open()` shows its last rows over a shade with a text field under them,

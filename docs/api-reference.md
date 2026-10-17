@@ -1306,7 +1306,9 @@ main.Restart(): void                    // starts over now, every hero on their 
 otherwise), and `NPC_BUMPED` starts a talk: a `DialogRunner` over the NPC's script, with the world's quests and flags, rewards going to the
 hero (`Hero.ApplyPickup`), shown in a `DialogView` with the NPC's tile as the portrait. `TALK_STARTED` and `TALK_ENDED` frame it; a level
 starting over ends it. A `QuestTracker` over the play area shows `World.quests` every frame and is told of each level start (`Begin`).
-Both are attached after the `Hud` and before the `overlay`, so a game's overlay (a pause menu) stays on top - it should stop taking keys
+A `ShoutView`, under the `Hud`, draws what the NPCs shout (their script's `shout` part) while the hero is in earshot; it's given the
+level's NPCs only when talking is on, and a talk hushes it.
+The tracker and the talk are attached after the `Hud` and before the `overlay`, so a game's overlay (a pause menu) stays on top - it should stop taking keys
 between `TALK_STARTED` and `TALK_ENDED`, as `in-dungeons-we-dwell`'s `GameOverlay` does (`UiSystem.SetActive(false)`).
 
 `overlay` is how a game puts its own UI over the dungeon without the engine knowing what it is: it is called once, when the scene initialises, and what it
@@ -1901,6 +1903,8 @@ same seed on any machine (mulberry32); `NewSeed()` - a fresh 32-bit seed, differ
 | `EntityRenderer` | `view/EntityRenderer` | `new EntityRenderer(camera, level)`; `Reset()` (call on `LEVEL_CREATED`), `Render(heroes: HeroView[], encounter, alpha = 1)` (each hero where their view was last `Place`d - a fallen one faint, a ghost where they fell, and one who is away as faint; monsters and shots `alpha` of the way through their last step). Draws a glow under the figures for each hero's torch and each glowing shot, and the mage-lights - a glow with a bright core - over them. |
 | `DialogView extends GameComponent` | `view/DialogView` | A talk with an NPC over the play area, in its own `UiLayer`: a `UiDialogue` across the bottom with the NPC's portrait, and once a line with choices has come out in full, a `UiMenu` of them above it. `new DialogView(events: DialogViewEvents)` with `{ next(), choose(index), end() }`, each told a frame after the key press that did it; `Open(line: DialogLine, portrait?: Texture)` (a talk's first line; the portrait drawn as big as the skin's frame takes, by whole pixels), `Say(line)`, `Close()`, `IsOpen`. Its scope (`"dialog"`) takes accept (`onAccept`: the box goes on) and cancel (`end`). `DungeonMain` drives it. |
 | `QuestTracker extends GameComponent` | `view/QuestTracker` | The quests under way and complete in the play area's top-left corner (name, `2/5` or DONE, then its `text`) over a shade, and a `UiToastHost` in the top-right: NEW QUEST as one is given, QUEST COMPLETE as one is met, and QUEST for each under way as a level begins. `Begin(log: QuestLog)` (a level started), `Render(log)` (call each frame; redrawn only when `log.Version` changes). Display-only (`input: false`). |
+| `ShoutView extends GameComponent` | `view/ShoutView` | What the NPCs shout (`story/Shouts`), in speech bubbles over them: the skin's `speech` tooltip pointing at each NPC's sprite (the part the atlas trimmed it to, so at the figure rather than the room over its head), in its own `UiLayer` (`input: false`), kept to the play area. `new ShoutView(level, camera)`; `Begin(talkers, context: DialogContext)` (a level started: one `Shouter` for each NPC whose script has a shout part; pass none for no shouting), `Render(seconds, hearers: ReadonlyArray<Vec2Like>)` (each frame: moves them on, with the centres of the heroes who can hear - a cell's NPC shouts while one is `InEarshot` and the cell `IsCellVisible`), `Hush()` (a talk started). `DungeonMain` drives it, and doesn't `Render` it during a talk. |
+| `TilePlacement` | `view/helpers/TilePlacement` | Pure: `TileRect(view: CameraView, cell, z, size, offset): PlacedRect` - where `TileMapView` draws a tile `size` pixels big, `offset` up and left of a cell's corner, on a cell of height `z`, in the camera's root (that height's band's scale and origin). `CameraView = { centre, baseWidth, baseHeight, scale, zoom, currentZ }`, as the `Camera`'s getters give them. |
 | `GlowLayer extends Container` | `view/GlowLayer` | Glows added onto what's beneath them, from a pool of sprites: `Begin()`, `Add(x, y, look, pixelsPerTile)` per glow, `End()`. `CreateGlowTexture()` makes the soft white texture they're drawn with (the caller destroys it). |
 | `Glow` | `view/helpers/Glow` | Pure: `GlowTextureSize`, `GlowRadius` (1.25 tiles), `GlowStrength` (0.3), `GlowFlameY` (0.3 - a lit tile's glow sits this far down its art), `OrbCoreRadius`; `GlowPixels(size)` (premultiplied white, fading like `LightFalloff`), `type GlowLook = { tint, alpha, radius }`, `LookOfGlow(rgb, scale, out)` (the light's colour at full saturation, stronger the brighter it is, swelling a little as it flickers), `LookOfOrbCore(rgb, scale, out)` (small, pale and nearly opaque). |
 
@@ -2237,12 +2241,34 @@ DescribeDialogErrors(errors): string[]     // "Line 3: ..."
 RegisterDialogAction(name, type), RegisterDialogCondition(name, type)        // a script's own words, by their first word
 TestCondition(condition, context): boolean, RunAction(step, context): void
 EndTarget = "end"
+ShoutPart = "shout"                        // the part an NPC shouts from: a talk never runs into it, even from the top
 ```
 
 `@logic-incubator/engine/story/DialogRunner` plays one: `new DialogRunner(script, context)`; `Start()`, `Next()` (on from a line with no
 choices) and `Choose(index)` (of the choices offered) each run the script on to the next thing said and return it as a
 `DialogLine = { speaker; text; choices: string[] }` (the choices offered under it, their conditions tested), or null once the talk is over
 (`Ended`). A run of more than 1000 steps without a line ends it, so a loop can't hang the game.
+
+`@logic-incubator/engine/story/Shouts` is what an NPC shouts as a hero comes near:
+
+```ts
+ShoutRange = 5                             // tiles, centre to centre, that a hero comes within to hear them
+ShoutDelay = 0.6                           // seconds from a hero coming near to the first shout
+ShoutGapMin = 5, ShoutGapMax = 9           // seconds of quiet between shouts
+ShoutFadeIn = 0.15, ShoutFadeOut = 0.3     // seconds a bubble takes to come and go
+HasShouts(script): boolean                 // it has a shout part
+ShoutLines(script, context): string[]      // the text of every line said in the shout part, following its ifs and ->s (who says it dropped; actions and choices passed over)
+ShoutSeconds(text): number                 // how long a shout stays up: 2 s and 0.05 s a character, at most 5
+InEarshot(centre, cell, tileSize): boolean // a hero's centre (pixels) within ShoutRange tiles of the cell's
+
+new Shouter(random = Math.random)          // when one NPC shouts, and what
+shouter.Update(seconds, near, lines: () => ReadonlyArray<string>): string | null   // each frame: what it's shouting now; lines asked for only as a shout starts
+shouter.Text: string | null, shouter.Fade: number   // 0 to 1, as the bubble comes and goes
+shouter.Hush(): void                       // stops now and keeps quiet a gap
+```
+
+A shout picks one of the lines at random, not the one before when there are others, and stays up `ShoutSeconds`; then the NPC is quiet
+for a gap, and shouts again only while a hero is still near. A hero coming near starts at least `ShoutDelay` of quiet.
 
 `@logic-incubator/engine/story/Talk`: `type DialogValue = { script: string }` (a `DIALOG` brush's), `IsDialogValue(value)`,
 `DefaultDialogValue()`; `BumpedNpc(position, direction, isNpc, tileSize): Vec2Like | null` - the NPC's cell a hero at `position` (their box's
@@ -2336,7 +2362,7 @@ hover / pressed / disabled / focused states (`Enabled`, `Focused`, `State`, `Act
 | `UiIconRow` | `(theme, variant, count, { textures?, scale?, gap? })` - hearts, orbs; `SetValue(value, max)`, `RowWidth`, `RowHeight`. `textures` are the game's own pictures in place of the skin's. | |
 | `UiProgressBar` | `(theme, kind, width, value = 0)`; `Value` (0 to 1), `BarWidth`, `BarHeight`. Kinds: hp, mp, xp, gold. | |
 | `UiPanel`, `UiWindow`, `UiBorder` | `UiPanel(theme, variant, width, height)`: add to `content`, `InnerWidth`, `InnerHeight`, `PanelWidth`, `Resize`; variants plain, ornate, carved, carved_light, raised, raised_light. `UiWindow(theme, variant, width, height, title)`: a panel with a title plate and a close button (`CloseButton`), `content`, `InnerWidth`, `InnerHeight`; `UiWindow.HeightFor(theme, variant, inner)` is the height that leaves `inner` for the content. `UiBorder(theme, style, width)`: an ornamental line (separator, separator_light); `LineHeight`, `Resize`. | window: `close` |
-| `UiTooltip` | `(theme, variant)`; put it in the topmost layer. `Attach(target, content \| () => content): () => void` shows it after the skin's `delay` of the pointer resting (at once on keyboard focus) and hides it on leave or press; `ShowFor(target, { title?, text? }, bounds?)`, `Hide()`. | |
+| `UiTooltip` | `(theme, variant)`; put it in the topmost layer. `Attach(target, content \| () => content): () => void` shows it after the skin's `delay` of the pointer resting (at once on keyboard focus) and hides it on leave or press; `ShowFor(target, { title?, text? }, bounds?)`, `ShowAt(rect, content, bounds?)` (pointing at a rectangle in its parent's coordinates - something drawn that isn't a display object of its own; given the same content again it only moves, so it can follow every frame), `Hide()`, `Owner` (what `ShowFor` showed it for; null when hidden or shown `ShowAt`). The game skin's `speech` variant is a speech bubble (the light raised panel with a point). | |
 | `UiDialogue extends UiControl` | `(theme, variant, width, height)`; `Say({ speaker?, text, portrait?, portraitScale? })` (`portraitScale`: how many times to enlarge the portrait, centred in its frame - default 1), `Done`, `Skip()`; `Track` it. A press while typing shows the rest, a press after that emits `advance`. The game skin stands the portrait's frame beside the box and puts the name on a plate across its top, both standing above the box. | `advance` |
 | `UiToastHost` | `(theme, variant, max = 4)`; `Push({ title, text?, kind?, seconds? }): () => void` (dismisses it), `Count`, `HostWidth`; `Track` it. A press dismisses a toast; the rest wait their turn. | |
 | `UiChatBox` (a `Container`) | `(theme, { width, rows, showSeconds = 8, keep = 50, maxLength = 120, placeholder?, field = "default", font = "body" })` - a chat: lines newest at the bottom, each `{ head?, text, headColour?, textColour? }` (`head: ` in its colour, then the text, wrapped). `Add(entry, show = true)` (`show` false: there to read when opened, not shown now), `Clear()`, `Open(text?)`, `Close()`, `IsOpen`, `Entries`, `BoxHeight`; `Update(ms)` it. Closed, a line shows for `showSeconds` then fades; open, the last `rows` rows over a shade and a `UiTextInput` under them, which takes the keys. Enter sends, Escape or clicking away closes. A character the font can't draw shows as `?`. | `send (text)`, `close` |
@@ -2453,7 +2479,7 @@ Used by the editor's own views; available for editor extensions.
 | `DataBrushDialog` | `OpenDataBrushDialog(name, value, context?, quests?)` - the popup for a value, with the level's quests to offer; `MonsterImage(type)` (a monster's chip picture, cached) |
 | `QuestEditor` | The quest popup's pure parts: `QuestFields(images)`, `QuestToForm(quest)`, `QuestFromForm(form, was)` (a goal of a kind it doesn't know keeps its fields), `QuestProblem(form, others)`, `NewQuestId(quests)`, `DescribeQuest(quest)` |
 | `QuestsDialog` | `OpenQuestsDialog(quests): Promise<QuestDef[] \| null>` - the quest list (Q): Edit, Remove, Add quest; resolves with the new list on Save, null if cancelled or unchanged; `IsQuestsDialogOpen()` |
-| `DataLabels` | `PickupLabel(pickup)`, `MapLabel(value)` (the short tag drawn over a value on the attributes overlay: `G10`, `H2`, `K3`, `W`, `I`, `T` for a light to carry (a torch), `L3` for a locked door - an unlocked one has no tag -, `D` for a dialog, `B` for a boss, and a `Q` after a pickup's or boss's that counts for a quest; only characters the bitmap font has), `DescribePickup(pickup)`, `DescribeBoss(boss)`, `DescribeDialog(script)`, `DescribeLock(lock)` (pure) |
+| `DataLabels` | `PickupLabel(pickup)`, `MapLabel(value)` (the short tag drawn over a value on the attributes overlay: `G10`, `H2`, `K3`, `W`, `I`, `T` for a light to carry (a torch), `L3` for a locked door - an unlocked one has no tag -, `D` for a dialog, `B` for a boss, and a `Q` after a pickup's or boss's that counts for a quest; only characters the bitmap font has), `DescribePickup(pickup)`, `DescribeBoss(boss)`, `DescribeDialog(script)` (its first line, not a part's name, how many lines, and `shouts` when it has a shout part), `DescribeLock(lock)` (pure) |
 | `views/PaletteCategories` | `type TileSet = { id: AssetCategory; name; brushes: string[] }`; `GroupByCategory(names, categoryOf): TileSet[]` (one set per category, in `AssetCategories` order, empty ones included, each sorted by name); `EmptyTabHint(id, canCreate?): string` (pure); `ShowsCategory(kind, category)` (a floor/walls layer shows only its own tab, any other tile layer all but those two); `TakesCategory(kind, category)` (a floor/walls layer paints only its own category, a generic one anything); `EmptyTabHint(id, canCreate?)` mentions the tab's + when the sprite editor is available |
 | `tools/ToolGeometry` | `SpanRect(a, b)`, `RectCells(rect, border?)`, `InRect(rect, x, y)`, `FloodFill(start, bounds, keyAt)`, `TopmostBrushAt(...)` (a brush is only at its anchor cell), `TopmostBrushCovering(brushes, layers, cell, footprintOf, accept?)` (a brush is on top at every cell of its footprint - what the data-select tool uses, so a 2x2 spawner or door is the target wherever it's clicked), `BoundsOfCells(cells)`, `type CellRect` |
 

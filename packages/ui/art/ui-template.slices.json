@@ -3766,6 +3766,36 @@
 						}
 					}
 				]
+			},
+			{
+				"name": "speech_tail_down",
+				"color": "#0000ffff",
+				"keys": [
+					{
+						"frame": 0,
+						"bounds": {
+							"x": 176,
+							"y": 1488,
+							"w": 18,
+							"h": 14
+						}
+					}
+				]
+			},
+			{
+				"name": "speech_tail_up",
+				"color": "#0000ffff",
+				"keys": [
+					{
+						"frame": 0,
+						"bounds": {
+							"x": 208,
+							"y": 1488,
+							"w": 18,
+							"h": 12
+						}
+					}
+				]
 			}
 		]
 	}
