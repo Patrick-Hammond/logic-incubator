@@ -2,11 +2,13 @@ import { Key } from "@logic-incubator/lib/io/Keyboard";
 import AssetFactory from "@logic-incubator/lib/loading/AssetFactory";
 import AssetMetadataStore from "@logic-incubator/engine/level/AssetMetadata";
 import { AnimationSpeed } from "@logic-incubator/engine/Constants";
+import { IsBossValue } from "@logic-incubator/engine/level/entities/Bosses";
 import { IsPickupValue } from "@logic-incubator/engine/level/entities/Pickups";
 import { IsSpawnerValue } from "@logic-incubator/engine/level/entities/Spawners";
 import { IsLightValue } from "@logic-incubator/engine/level/Lighting";
 import { DataBrushValue } from "@logic-incubator/engine/level/LevelFormat";
-import { DescribePickup } from "../DataLabels";
+import { IsDialogValue } from "@logic-incubator/engine/story/Talk";
+import { DescribeBoss, DescribeDialog, DescribePickup } from "../DataLabels";
 import { OpenDataBrushDialog } from "../DataBrushDialog";
 import { DataBrushEditorFor } from "../DataBrushEditors";
 import EditorComponent from "../EditorComponent";
@@ -167,6 +169,12 @@ export default class SelectedBrush extends EditorComponent {
         if (IsPickupValue(value)) {
             return { text: DescribePickup(value) };
         }
+        if (IsDialogValue(value)) {
+            return { text: DescribeDialog(value.script) };
+        }
+        if (IsBossValue(value)) {
+            return { text: DescribeBoss(value) };
+        }
         if (IsLightValue(value)) {
             return { text: `${value.brightness} bright · ${value.range} tiles`, colour: value.tint };
         }
@@ -235,7 +243,7 @@ export default class SelectedBrush extends EditorComponent {
         if (!dataBrush) {
             return;
         }
-        OpenDataBrushDialog(dataBrush.name, dataBrush.value).then(value => {
+        OpenDataBrushDialog(dataBrush.name, dataBrush.value, undefined, this.levelDataStore.state.quests).then(value => {
             // Guard against the selection having changed underneath the (modal, but async) dialog.
             if (value != null && this.editorStore.SelectedDataBrush === dataBrush) {
                 this.editorStore.Dispatch({ type: EditorActions.SET_DATA_BRUSH_VALUE, data: { value } });

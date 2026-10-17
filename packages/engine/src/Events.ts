@@ -25,3 +25,17 @@ export const SPAWNER_DESTROYED = "spawnerDestroyed";
 export const PICKUP_COLLECTED = "pickupCollected";
 /** `(hero: number, tileX: number, tileY: number)` - a hero who fell (or left) dropped the keys they carried, all on that cell, for the others to pick up. */
 export const KEYS_DROPPED = "keysDropped";
+/**
+ * `(hero: number, tileX: number, tileY: number)` - a hero walked into an NPC (a `DIALOG` brush's cell) in a game where they can
+ * talk (`World.SetTalk`: one hero, on one machine). `DungeonMain` starts the talk.
+ */
+export const NPC_BUMPED = "npcBumped";
+/** `(hero: number, tileX: number, tileY: number)` - a talk with the NPC on that cell began: play holds still until `TALK_ENDED`. */
+export const TALK_STARTED = "talkStarted";
+/** The talk is over, and play goes on. */
+export const TALK_ENDED = "talkEnded";
+/**
+ * `(id: string, state: QuestState, progress: number, was: QuestState)` - one of the level's quests was given, moved on, met its
+ * goal or was handed in (see `Quests`): where it is now, how far toward its target, and the state it was in before.
+ */
+export const QUEST_UPDATED = "questUpdated";

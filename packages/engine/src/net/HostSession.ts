@@ -16,11 +16,12 @@
 
 import { RelayHost } from "@logic-incubator/lib/net/RelayRooms";
 import type { EncounterView } from "../Encounter";
-import { ALL_PLAYERS_DIED, KEYS_DROPPED, LEVEL_COMPLETED, MONSTER_KILLED, PICKUP_COLLECTED, PLAYER_DAMAGED, PLAYER_DIED, SPAWNER_DESTROYED } from "../Events";
+import { ALL_PLAYERS_DIED, KEYS_DROPPED, LEVEL_COMPLETED, MONSTER_KILLED, PICKUP_COLLECTED, PLAYER_DAMAGED, PLAYER_DIED, QUEST_UPDATED, SPAWNER_DESTROYED } from "../Events";
 import { StepSeconds } from "../FixedStep";
 import type { IPlayerInput } from "../input/PlayerControl";
 import MonsterRoster from "../level/entities/MonsterRoster";
 import type { ShotSetup } from "../level/entities/Projectiles";
+import type { QuestState } from "../story/Quests";
 import type { HeroInput } from "../sim/World";
 import { HeroSnapshotOf } from "./HeroSync";
 import type { NetLevelContext } from "./NetPlay";
@@ -186,6 +187,13 @@ export default class HostSession extends PlaySession {
             case LEVEL_COMPLETED:
                 this.events.push({ e: "completed", hero: n(0) });
                 break;
+            case QUEST_UPDATED: {
+                const index = context.world.quests.Index(args[0] as string);
+                if (index >= 0) {
+                    this.events.push({ e: "quest", index, state: args[1] as QuestState, progress: n(2) });
+                }
+                break;
+            }
         }
     }
 

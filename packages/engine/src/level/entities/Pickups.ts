@@ -3,10 +3,17 @@
  * it runs under the plain node test runner, same as Spawners.ts.
  */
 
+import {IsQuestId} from "../../story/Quests";
 import {IsCompleteLightValue, LightValue} from "../Lighting";
 import {WeaponDef} from "./Projectiles";
 
-export type PickupValue =
+/** Any pickup can be marked for a quest: picking it up counts for that one (see `Quests`). */
+export type PickupValue = PickupKindValue & {
+    /** The id of the quest it counts for. */
+    quest?: string;
+};
+
+type PickupKindValue =
     | { kind: "gold"; amount: number }
     /** Hit points restored, in the same half-hearts as damage - never past the player's maximum. */
     | { kind: "health"; amount: number }
@@ -41,7 +48,7 @@ function IsWeaponDef(value: unknown): value is WeaponDef {
 
 /**
  * Whether `value` is a well-formed pickup: a known `kind` with the fields that kind needs, all numbers
- * finite. Strict, since a pickup comes from hand-edited `assets-meta.json` as well as the editor - and
+ * finite, and the quest it's marked for, if any, an id one could have. Strict, since a pickup comes from hand-edited `assets-meta.json` as well as the editor - and
  * it's also what tells a pickup apart from a light or spawner in a tile's `Brush.data` (it's the only
  * value with a `kind`). Anything that fails is treated as "no pickup" rather than half-applied.
  */
@@ -49,7 +56,10 @@ export function IsPickupValue(value: unknown): value is PickupValue {
     if (typeof value !== "object" || value === null) {
         return false;
     }
-    const pickup = value as { kind?: unknown; amount?: unknown; id?: unknown; weapon?: unknown; sprite?: unknown; light?: unknown; seconds?: unknown };
+    const pickup = value as { kind?: unknown; amount?: unknown; id?: unknown; weapon?: unknown; sprite?: unknown; light?: unknown; seconds?: unknown; quest?: unknown };
+    if (pickup.quest !== undefined && !IsQuestId(pickup.quest)) {
+        return false;
+    }
     switch (pickup.kind) {
         case "gold":
         case "health":

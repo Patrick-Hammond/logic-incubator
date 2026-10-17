@@ -20,7 +20,7 @@ const TOOLS: ToolInfo[] = [
         name: "Data select",
         key: Key.A,
         keyLabel: "A",
-        hint: "Click a placed light, spawner, pickup, door or height - any cell of it - to edit its value. Only available with the attributes layer selected."
+        hint: "Click a placed light, spawner, pickup, door, height, dialog or boss - any cell of it - to edit its value. Only available with the attributes layer selected."
     },
     {
         tool: EditorTool.STAMP,

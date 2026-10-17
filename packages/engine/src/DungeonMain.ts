@@ -2,7 +2,7 @@ import GameComponent from "@logic-incubator/lib/game/GameComponent";
 import AssetFactory from "@logic-incubator/lib/loading/AssetFactory";
 import {Vec2Like} from "@logic-incubator/lib/math/Geometry";
 import { TileSize } from "./Constants";
-import {ALL_PLAYERS_DIED, GAME_PAUSED, GAME_RESUMED, LEVEL_COMPLETED, LEVEL_CREATED} from "./Events";
+import {ALL_PLAYERS_DIED, GAME_PAUSED, GAME_RESUMED, LEVEL_COMPLETED, LEVEL_CREATED, NPC_BUMPED, TALK_ENDED, TALK_STARTED} from "./Events";
 import FixedStep, {StepSeconds} from "./FixedStep";
 import PlayerControl, {DefaultInput, InputDevice} from "./input/PlayerControl";
 import AssetMetadataStore from "./level/AssetMetadata";
@@ -15,13 +15,16 @@ import {LevelFile} from "./level/LevelFormat";
 import { MovingLight } from "./level/SceneLights";
 import type {NetPlay} from "./net/NetPlay";
 import World from "./sim/World";
+import DialogRunner, {DialogLine} from "./story/DialogRunner";
 import type {EncounterView} from "./Encounter";
 import {Camera} from "./view/Camera";
+import DialogView from "./view/DialogView";
 import Effects from "./view/Effects";
 import EntityRenderer from "./view/EntityRenderer";
 import {HeroView} from "./view/HeroView";
 import {PartyBounds, PartySpan, PartyZoom} from "./view/helpers/PartyFrame";
 import Hud from "./view/Hud";
+import QuestTracker from "./view/QuestTracker";
 import TileMapView from "./view/TileMap";
 
 /** The game's side of the heroes: how they look, how tough they are, what they shoot, and how the HUD shows it - every hero's, unless a `HeroSlot` says otherwise. */
@@ -127,6 +130,10 @@ export class DungeonMain extends GameComponent {
     private world: World | undefined;
     private renderer: EntityRenderer | undefined;
     private hud: Hud | undefined;
+    private tracker: QuestTracker | undefined;
+    private dialog: DialogView | undefined;
+    /** The talk with an NPC going on - see `StartTalk` - or null. */
+    private talk: {runner: DialogRunner; hero: number} | null = null;
     private effects: Effects | undefined;
     private levelAssets: LevelAssets | undefined;
     /** Seconds until the next start after the level ended - 0 while it's being played. */
@@ -160,9 +167,14 @@ export class DungeonMain extends GameComponent {
         return this.effects;
     }
 
-    /** Whether play runs on: a level has started, and nothing - a pause (offline), the party's end, a restart - holds it. */
+    /** Whether play runs on: a level has started, and nothing - a pause (offline), a talk, the party's end, a restart - holds it. */
     private get Running(): boolean {
-        return this.started && (!this.paused || !!this.net) && !this.waitingForRestart && !this.restarting && this.restartIn <= 0;
+        return this.started && (!this.paused || !!this.net) && !this.talk && !this.waitingForRestart && !this.restarting && this.restartIn <= 0;
+    }
+
+    /** Whether the hero is talking to an NPC - play holds still until the talk is over (`TALK_ENDED`). */
+    get Talking(): boolean {
+        return !!this.talk;
     }
 
     /** Whether `Pause` is in force - online, where play goes on under it, the heroes played here just stand still. */
@@ -187,10 +199,10 @@ export class DungeonMain extends GameComponent {
 
     /**
      * Stops play - nothing moves, shoots or spawns - until `Resume`. Online the world plays on, as it's everyone's: only the
-     * heroes played here stop, and stand still until `Resume`. Does nothing before a level has started, or once it's over.
+     * heroes played here stop, and stand still until `Resume`. Does nothing before a level has started, once it's over, or in a talk.
      */
     Pause(): void {
-        if (this.paused || !this.started || this.waitingForRestart || this.restarting || this.restartIn > 0) {
+        if (this.paused || !this.started || this.talk || this.waitingForRestart || this.restarting || this.restartIn > 0) {
             return;
         }
         this.paused = true;
@@ -225,6 +237,12 @@ export class DungeonMain extends GameComponent {
         // Inside the camera, so effects scroll and zoom with the world, and over its layers; under the HUD.
         this.effects = this.Attach(new Effects(camera), camera.root);
         this.hud = this.Attach(new Hud(this.options.player.hearts));
+        this.tracker = this.Attach(new QuestTracker());
+        this.dialog = this.Attach(new DialogView({
+            next: () => this.TalkOn(this.talk && this.talk.runner.Next()),
+            choose: index => this.TalkOn(this.talk && this.talk.runner.Choose(index)),
+            end: () => this.EndTalk()
+        }));
         if (this.options.overlay) {
             this.Attach(this.options.overlay(this));
         }
@@ -250,6 +268,7 @@ export class DungeonMain extends GameComponent {
         // The level is over either way: everyone down, or a hero out.
         this.Listen(this.game.dispatcher, ALL_PLAYERS_DIED, this.OnLevelOver);
         this.Listen(this.game.dispatcher, LEVEL_COMPLETED, this.OnLevelOver);
+        this.Listen(this.game.dispatcher, NPC_BUMPED, this.StartTalk);
         this.Tick(this.OnUpdate);
     }
 
@@ -272,7 +291,8 @@ export class DungeonMain extends GameComponent {
             this.game.assets.UseLevelBundle().catch(() => undefined);
         }
         // Drops anything a `Reload` still waiting on its assets would otherwise carry on with.
-        this.level = this.camera = this.world = this.renderer = this.hud = this.effects = this.levelAssets = undefined;
+        this.level = this.camera = this.world = this.renderer = this.hud = this.tracker = this.dialog = this.effects = this.levelAssets = undefined;
+        this.talk = null;
     }
 
     /** Every hero is down, or one got out: hold still, then start over - with whatever level `level` hands back - shortly, or when told to (always, for an online guest, whose host says when). */
@@ -289,7 +309,12 @@ export class DungeonMain extends GameComponent {
         const setup = this.options.player;
         const slots = this.Slots();
         const seed = this.options.seed && this.options.seed();
+        const net = (this.options.net && this.options.net()) || null;
+        this.EndTalk();
         this.world.Reset(setup, slots.map(slot => (slot.lightSpell === undefined ? setup.lightSpell : slot.lightSpell || undefined)), seed);
+        // Talking is for a Quest: one hero, on this machine alone.
+        this.world.SetTalk(!net && slots.length === 1);
+        this.tracker.Begin(this.world.quests);
         this.local = slots.map(slot => slot.input !== null);
         // A party sharing one screen is held to what fits on it; one spread over machines isn't.
         const allHere = this.local.every(here => here);
@@ -315,7 +340,7 @@ export class DungeonMain extends GameComponent {
         this.waitingForRestart = false;
         this.started = true;
 
-        const net = this.net = (this.options.net && this.options.net()) || null;
+        this.net = net;
         if (net) {
             const dispatcher = this.game.dispatcher;
             net.Begin({
@@ -412,6 +437,53 @@ export class DungeonMain extends GameComponent {
         if (this.world.Heroes.length) {
             this.hud.RenderHeroes(this.world.Heroes);
         }
+        this.tracker.Render(this.world.quests);
+    }
+
+    /**
+     * A hero walked into an NPC (`NPC_BUMPED`): the talk starts - play holds still while it goes on - with what its script
+     * says first, unless it says nothing at all. What it hands out goes to that hero.
+     */
+    private StartTalk(hero: number, tileX: number, tileY: number): void {
+        const talker = this.level && this.level.TalkerAt(tileX, tileY);
+        const world = this.world;
+        if (!talker || !world || this.talk || this.net) {
+            return;
+        }
+        const runner = new DialogRunner(talker.script, {
+            quests: world.quests,
+            flags: world.flags,
+            Reward: (value, sprite) => world.Heroes[hero].ApplyPickup({value, sprite})
+        });
+        const line = runner.Start();
+        if (!line) {
+            return;
+        }
+        this.talk = {runner, hero};
+        const tile = talker.tile;
+        this.dialog.Open(line, tile ? (tile.anim ? tile.anim.texture : tile.texture) : undefined);
+        this.game.dispatcher.emit(TALK_STARTED, hero, tileX, tileY);
+    }
+
+    /** The talk's next line - or, with none, its end. */
+    private TalkOn(line: DialogLine | null): void {
+        if (line) {
+            this.dialog.Say(line);
+        } else {
+            this.EndTalk();
+        }
+    }
+
+    /** Ends the talk going on, if there is one, and play goes on. */
+    private EndTalk(): void {
+        if (!this.talk) {
+            return;
+        }
+        this.talk = null;
+        if (this.dialog) {
+            this.dialog.Close();
+        }
+        this.game.dispatcher.emit(TALK_ENDED);
     }
 
     /** Who plays this level: `heroes`' slots, or one hero from `playerSprite` and `playerLightSpell`. */

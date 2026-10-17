@@ -4,13 +4,15 @@ import Store, { IAction } from "@logic-incubator/lib/patterns/redux/Store";
 import AssetMetadataStore from "@logic-incubator/engine/level/AssetMetadata";
 import { OrphanedExplicitData } from "@logic-incubator/engine/level/ImplicitData";
 import { Brush, DataBrushValue, LevelLayer } from "@logic-incubator/engine/level/LevelFormat";
+import type { QuestDef } from "@logic-incubator/engine/story/Quests";
 
 /**
  * A level's layer (see `LevelLayer`) plus what only the editor keeps: which one is selected and
  * whether it's shown.
  */
 export type Layer = LevelLayer & { selected: boolean; visible: boolean };
-export type LevelDataState = { levelData: LevelData };
+/** The level as painted, and its quests (see `Quests`) - what the level file's `levelData` is. */
+export type LevelDataState = { levelData: LevelData; quests: QuestDef[] };
 
 export const enum LevelDataActions {
     PAINT,
@@ -23,7 +25,9 @@ export const enum LevelDataActions {
     /** Sets the `data` of one placed brush (`target`, by identity) to `value` - the data-select tool's dialog. */
     SET_DATA,
     REFRESH,
-    RESET
+    RESET,
+    /** Sets the level's quests to `quests` - the quest list's. */
+    SET_QUESTS
 }
 
 type LevelData = Brush[];
@@ -41,18 +45,36 @@ type ActionData = {
     cells?: Vec2Like[];
     target?: Brush;
     value?: DataBrushValue;
+    quests?: QuestDef[];
 };
 
 export default class LevelDataStore extends Store<LevelDataState, ActionData> {
     protected DefaultState(): LevelDataState {
-        return { levelData: [] };
+        return { levelData: [], quests: [] };
+    }
+
+    /** A level saved before it had quests - or a generated map - has none. */
+    Load(state: LevelDataState): void {
+        super.Load({ ...state, quests: state && Array.isArray(state.quests) ? state.quests : [] });
     }
 
     protected Reduce(state: LevelDataState, action: IAction<ActionData>): LevelDataState {
         const newState = {
-            levelData: this.UpdateLevelData(state.levelData, action)
+            levelData: this.UpdateLevelData(state.levelData, action),
+            quests: this.UpdateQuests(state.quests, action)
         };
         return newState as LevelDataState;
+    }
+
+    private UpdateQuests(quests: QuestDef[] | undefined, action: IAction<ActionData>): QuestDef[] {
+        switch (action.type) {
+            case LevelDataActions.SET_QUESTS:
+                return action.data.quests.slice();
+            case LevelDataActions.RESET:
+                return [];
+            default:
+                return quests || [];
+        }
     }
 
     private UpdateLevelData(levelData: LevelData, action: IAction<ActionData>): LevelData {

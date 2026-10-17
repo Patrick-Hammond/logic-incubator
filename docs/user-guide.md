@@ -1495,14 +1495,17 @@ DungeonMain (a scene)
  ├─ TileMapView       draws the level's tile layers, lit and banded by height
  ├─ Effects           particle effects over the world (`main.Effects.Play`)
  ├─ Hud               hearts, gold, equipped weapon, inventory - a row per hero for a party (built from the UI kit)
+ ├─ QuestTracker      the quests under way, top-left, and a toast as each is given and met
+ ├─ DialogView        a talk with an NPC: what's said, their portrait and the player's choices
  ├─ overlay?          the game's own UI over everything: a pause menu, an end-of-level screen
  ├─ PlayerControl     one per hero: reads their keyboard or gamepad
  ├─ World             everything that plays out (pure logic, no pixi):
  │   ├─ Hero          one per hero: their state (PlayerState: moving, shooting, taking hits)
- │   └─ Encounter     spawners, monsters, projectiles
+ │   ├─ Encounter     spawners, monsters (bosses among them), projectiles
+ │   └─ QuestLog      how the level's quests stand
  ├─ HeroView          one per hero: how they're drawn, and the lights they carry
  ├─ EntityRenderer    draws the heroes, monsters and shots
- └─ Level             the loaded level: tiles, collision, doors, lights, regions, spawners, pickups, exits
+ └─ Level             the loaded level: tiles, collision, doors, lights, regions, spawners, pickups, exits, NPCs, bosses, quests
 ```
 
 `DungeonMain.OnShow` loads the level (asking `LevelAssets` to get its bundle ready first) and starts playing. The level ends when
@@ -1716,6 +1719,24 @@ Both lobbies emit `CHANGED` whenever someone joins, picks or leaves (redraw from
 it's over; a guest's also emits `STARTING` while the level is made ready, and during the run `DROPPED` and `REJOINED` as its connection
 goes and it gets back in.
 
+**Chat.** The players can talk the whole time, in the lobby and during the run: `lobby.Say(text)` says a line to everyone, and a line
+starting `@` and a player's name (`@sam over here`, any case) is whispered to them alone. Every lobby emits `CHAT` with each line its player
+hears and keeps the last 50 (`Chat`), so a chat box put up later can show what was said. `Say` returns null once the line is on its way,
+or why it can't be said, for the box to show: no one has that name, or a guest isn't connected to the host just now.
+
+```ts
+lobby.on(LobbyEvents.CHAT, (line: ChatLine) => box.Add({ head: ChatSpeaker(line, lobby.MySeat), text: line.text }));   // engine/net/Chat
+box.on("send", (text: string) => {
+    const problem = lobby.Say(text);
+    if (problem) box.Add({ text: problem, textColour: "danger" });
+});
+```
+
+Every line goes through the host, which reads it again, sends a whisper only to the one it's for (and back to who said it), and keeps
+each guest to 5 lines in 5 seconds. Names are made unique as players join ("Sam", "Sam 2"), so `@name` always means one player. The UI
+kit's `UiChatBox` ([14.5](#145-the-packs-other-pieces)) is a box to show it in. `in-dungeons-we-dwell` puts one in the bottom-left corner
+of its lobby and of the play area: T opens it, Enter sends, Escape closes, and lines fade a few seconds after they come.
+
 - **The same level.** A game's own level - `shipped: true` - is named by its bundle and `LevelHash`: each guest plays its own copy if the
   hash matches, and is sent the host's whole if it doesn't (another version of the game, say). Anything else - a dev build's editor level
   - is sent whole to everyone as the run starts, gzipped (`PackLevel`). So a host can play their editor save with friends.
@@ -1862,10 +1883,11 @@ A level is JSON that the editor writes and the engine reads (`LevelFile`):
 ```
 
 A **brush** is one placed thing: a tile (`name` is a bare sprite or animation name, `data` null) or a data brush (on a
-data layer). Layers draw in list order, later on top. The engine reads only what `LevelFormat.ts` types; the editor saves
-more of its own state alongside.
+data layer). Layers draw in list order, later on top. Beside the brushes, `levelData.quests` holds the level's quests
+([9.10](#910-npcs-dialogs-and-quests)); a level without it has none. The engine reads only what `LevelFormat.ts` types; the
+editor saves more of its own state alongside.
 
-There are exactly five **data brushes**, painted on the one `attributes` data layer:
+There are exactly seven **data brushes**, painted on the one `attributes` data layer:
 
 | Name | `data` | Effect |
 | --- | --- | --- |
@@ -1874,6 +1896,8 @@ There are exactly five **data brushes**, painted on the one `attributes` data la
 | `z-index` | number | The cell's **height** ([9.7](#97-heights)). |
 | `pickup` | a `PickupValue` | Turns whatever tile is on top at that cell into a pickup (it disappears when collected), for an item that isn't one by default. Edited with its popup - choose gold, health, a key, a weapon, an item or a light to carry. |
 | `exit` | - | A way out: the first hero to step on it ends the level (`LEVEL_COMPLETED`). It isn't drawn - paint stairs or a ladder there too. A level without one is played until everyone falls. |
+| `dialog` | `{ script }` | An NPC to talk to, painted over their tile: the cell is solid (but casts no shadow), and in a Quest walking into it starts a talk by its `script` ([9.10](#910-npcs-dialogs-and-quests)). In co-op and online the NPC only stands there. |
+| `boss` | a `BossValue` | One monster where it's painted - `{ monster, hitPoints?, quest? }`: the roster's type, its hit points (left out or 0: its kind's own) and the quest killing it counts for. It sleeps until a hero comes near it ([9.10](#910-npcs-dialogs-and-quests)). |
 
 Lights, spawners and doors are **not** brushes: they are ordinary tiles that carry their behaviour in
 `assets-meta.json` (a pickup can be either: a tile that is one by default, or a `pickup` brush over any other).
@@ -1906,7 +1930,7 @@ a deleted one is removed - with a warning if it had anything in it); you only fi
 | `light` | A point light: `brightness` (its strength at its own cell, added on top of the ambient light; 1 is a normal torch, clamped to 0..2), `tint` (hex colour as a number; a warm colour reads as firelight against the cool ambient), `range` (radius in tiles), and optionally `flicker` (how far its strength wavers either way, as a share of itself: 0.15 is a torch; left out or 0, it's steady). Its sprite gets a soft glow over its flame (centred across the art, a third of the way down), in the light's colour. Baked once at level load at the corners of the tile grid, so it is blended smoothly across tiles, and fades out smoothly to nothing at its range. Overlapping lights add up, and light can go above 1 to brighten the art (capped). Where no light reaches, a dim, cool ambient light. Sprites, and tiles taller than a cell such as doors, are lit by the floor under their feet. Walls and other light-blocking tiles cast soft shadows, and the floor is a little darker along the foot of a wall and in a room's corners. A torch placed on a wall shines from the wall's open side (south first), so it lights the room it faces and not what's behind it. Height counts: a ledge two or more steps above the light hides its top, while stairs (one step a tile) stay lit. Spawners and doors don't cast shadows. A hand-edited light missing a field is dropped with a console warning naming the sprite rather than baking black. |
 | `door` | `id` pairs a door's two sprites (closed and open); `open` says which half this is. The door swaps when a hero's tile enters any of its footprint cells and swaps back when the last of them leaves, so it reads as "walked open" - unless that placement is locked, when the team needs its key ([9.6.1](#961-keys-and-locked-doors)). |
 | `spawner` | Produces `monsters` (a pool, picked at random) every `interval` s, at most `maxAlive` at once, `total` in all (0 = unlimited), only while a hero is within `activationRange` tiles' walk (0 = always). `hitPoints` is the damage to destroy it (0 = indestructible). Its sprite's footprint is solid until destroyed. |
-| `pickup` | What walking over it gives: `gold` or `health` (an `amount`; health is in half-hearts and never goes past the maximum), a `key` (an `id`), a `weapon`, an inventory `item` (its `sprite`, or - left out - the tile's own), or a `light` to carry (a `light` value, and the `seconds` it burns for - 0 or left out for the rest of the level; see [9.6.2](#962-lights-in-play)). The tile then disappears, and if it gave off light its light goes with it. A malformed one is dropped with a console warning naming the sprite. |
+| `pickup` | What walking over it gives: `gold` or `health` (an `amount`; health is in half-hearts and never goes past the maximum), a `key` (an `id`), a `weapon`, an inventory `item` (its `sprite`, or - left out - the tile's own), or a `light` to carry (a `light` value, and the `seconds` it burns for - 0 or left out for the rest of the level; see [9.6.2](#962-lights-in-play)). Any kind can have a `quest`: the id of the quest it counts for when it's picked up ([9.10](#910-npcs-dialogs-and-quests)). The tile then disappears, and if it gave off light its light goes with it. A malformed one is dropped with a console warning naming the sprite. |
 
 A **specific placement** can override its light, spawner, pickup or door lock (the editor's data-select tool edits them per placement);
 `assets-meta` is the default for the sprite. Metadata is per bundle: a level's bundle can have its own
@@ -1973,9 +1997,13 @@ All on `game.dispatcher`; the constants are in `@logic-incubator/engine/Events`:
 | `SPAWNER_DESTROYED` | `(spawner)` | A spawner was shot to pieces. |
 | `PICKUP_COLLECTED` | `(hero, tileX, tileY)` | A hero picked up what was on that cell (gold, a key, a weapon...). |
 | `KEYS_DROPPED` | `(hero, tileX, tileY)` | A fallen hero's keys landed on that cell, for the others to pick up. |
+| `NPC_BUMPED` | `(hero, tileX, tileY)` | A hero walked into the NPC on that cell, where they can talk (a Quest); `DungeonMain` starts the talk. |
+| `TALK_STARTED` | `(hero, tileX, tileY)` | A talk began: play holds still until `TALK_ENDED`. A game's own UI should stop taking the keys meanwhile. |
+| `TALK_ENDED` | - | The talk is over, and play goes on. |
+| `QUEST_UPDATED` | `(id, state, progress, was)` | One of the level's quests was given, moved on, met or handed in: its state now, how far it has got, and its state before. |
 
 `hero` is the hero's slot, from 0 - their place in what `heroes` returned; a lone hero is 0. On an online guest these come from the
-host's snapshots ([9.3.2](#932-playing-online)), a moment after they happened there.
+host's snapshots ([9.3.2](#932-playing-online)), a moment after they happened there (`QUEST_UPDATED` too; there are no talks online).
 
 ```ts
 this.Listen(this.game.dispatcher, MONSTER_KILLED, (type: string, x: number, y: number) => this.SpawnLoot(x, y));
@@ -2015,6 +2043,118 @@ When the game switches `CurrentLevel` and restarts the scene, the engine loads t
 it is ready), builds the level, then releases the old one. Switching it when `LEVEL_COMPLETED` arrives is how a hero
 reaching an exit moves the party on: the start that follows the end of the level asks `level` and `levelBundle` again. Sprites a level redefines shadow `global`'s; see
 [5.8](#58-sprites-by-bare-name-scope-and-assetfactory).
+
+### 9.10 NPCs, dialogs and quests
+
+A level can have **quests** - what it asks of its players - and **NPCs** to talk to, who give quests out, hand them in and
+reward them. Talking is for a Quest: one hero, on one machine. In co-op and online an NPC only stands in the way, and a
+level's quests are its own, under way from the start: "kill the final boss".
+
+**Quests** are in the level file beside its brushes (`levelData.quests`), made with the editor's quest list (Q, [10.2](#102-using-it)):
+
+```jsonc
+"levelData": {
+    "levelData": [ ... ],
+    "quests": [
+        { "id": "rats", "name": "RATS IN THE CELLAR", "text": "Clear the cellar.", "goal": { "kind": "kill", "count": 5, "monster": "imp" } },
+        { "id": "demon", "name": "SLAY THE DEMON", "goal": { "kind": "kill" }, "start": true, "ends": true }
+    ]
+}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `id` | What pickups, bosses and dialog scripts name it by: one word of letters, digits, `-` and `_`. |
+| `name`, `text` | What the player sees: its name, and a line on what to do, under it in the quest tracker (optional). |
+| `goal` | What meets it - see below. |
+| `start` | Under way as the level starts: the level's own quest, and the only kind in co-op and online. Without it, an NPC's script gives it. |
+| `ends` | Meeting its goal clears the level, as reaching an exit does (`LEVEL_COMPLETED`, with the hero who met it). |
+
+| Goal | Met by |
+| --- | --- |
+| `{ "kind": "collect", "count"? }` | Picking up `count` of the pickups marked for the quest (a pickup's `quest`) - every one the level has, when `count` is 0 or left out. |
+| `{ "kind": "kill", "count"?, "monster"? }` | Killing `count` of the monsters marked for it (a boss's `quest`) - every one, without `count`. With `monster`, any monster of that type counts too, once the quest is under way. |
+| `{ "kind": "script" }` | A dialog script saying so (`complete QUEST`): talk to someone, find something out. |
+
+A quest goes from `none` (not given) to `active` (under way) to `complete` (its goal met) to `finished` (handed in to an NPC).
+What's marked for a quest counts before it's given, so a quest given once its gold has all been found is complete at once. The
+quests start over each time the level does. While a quest is under way or complete, the **quest tracker** in the play area's
+top-left corner lists it - its name, how far it has got (2/5, or DONE) and its text - and a toast in the top-right says as each
+is given and met, and, as the level starts, which are under way from the start. Every change emits `QUEST_UPDATED`.
+
+**NPCs.** Paint the `dialog` brush over an NPC's tile - any sprite: a dwarf standing in a doorway. Its cell becomes solid, and
+walking into it starts a talk by the brush's **script**, typed in its popup. While they talk, play holds still. The talk is a box
+across the bottom of the play area, the NPC's tile beside it as their portrait and who's speaking on a plate above it, with the
+player's choices in a menu over it once a line has come out in full. Accept (Space, or a gamepad's A) shows the rest of a line and goes on,
+the arrows and accept pick a choice, and cancel (Escape, B) walks away. A talk starts as the hero walks into the NPC, not again
+while they keep pushing against them.
+
+**Scripts** are read a line at a time:
+
+```
+# The miner, at the cellar door.
+if rats finished -> after
+if rats complete -> thanks
+if rats active -> waiting
+MINER: Rats! The cellar's crawling with them.
+> I'll clear them out. -> accept
+> Not now.
+
+accept:
+give rats
+MINER: Good. Mind the big one.
+
+waiting:
+MINER: Still squeaking down there...
+
+thanks:
+finish rats
+reward gold 50
+MINER: You did it! Here, for your trouble.
+
+after:
+MINER: Quiet as a tomb down there now.
+```
+
+| Line | Meaning |
+| --- | --- |
+| `WHO: text` | A line said, headed with who says it. A line of plain text is said with no name. |
+| `> text -> part` | A choice for the player, offered under the line said before it; choices one after another make one menu. Without `-> part` it carries on after the menu; with `if CONDITION` at the end it's only offered when that holds. |
+| `part:` | Starts a part, which `-> part` goes to. The talk starts at the top, and reaching the end of a part ends it. |
+| `-> part`, `end` | Goes there; ends the talk (as `-> end` does). `if CONDITION -> part` goes there only when the condition holds. |
+| `give QUEST`, `complete QUEST`, `finish QUEST` | Gives a quest; has its goal met, whatever it is; hands it in. |
+| `reward gold N`, `reward health N`, `reward key N [SPRITE]`, `reward item SPRITE` | Hands the hero something as if they'd picked it up (health in half-hearts; a key is shown as `SPRITE`). |
+| `set WORD`, `unset WORD` | Remembers a word for the rest of the level, or forgets it - for an NPC who remembers being met. |
+| `# ...` | A comment. Blank lines are skipped. |
+
+A condition is a quest and a state (`rats active`, `rats complete`) or a word that's been `set`; `not` before it turns it
+round. The editor reads a script as it's typed - a part that isn't there, a quest the level hasn't got, words it can't make out -
+and won't save it until it reads, naming the first line that doesn't. The engine leaves out a line it can't read, with a console warning.
+
+**Bosses.** The `boss` brush places one of the roster's monsters (`monster`) where it's painted, with `hitPoints` of its own
+(left out or 0, its kind's; a party's toughness raises it like any monster's), counted for `quest` when it's killed. It sleeps
+where it stands until a hero comes within 8 tiles' walk of it in sight (`BossWakeRange`), or shoots it, so a boss in the last
+room waits there - even in a level of open rooms, where everything is in sight. One whose monster the roster doesn't know
+is left out, with a console warning.
+
+**Online,** the host's world keeps the quests. Each change goes to the guests in the snapshots, and is lasting, so a guest
+coming back gets it in its catch-up ([9.3.2](#932-playing-online)).
+
+**More kinds.** `RegisterQuestGoal(kind, type)` (`engine/story/Quests`) adds a kind of goal: what its target is and what it counts
+(`QuestGoalType`). The editor offers it with the rest, starting it from its `Default()`. `RegisterDialogAction(name, type)` and
+`RegisterDialogCondition(name, type)` (`engine/story/DialogScript`) add words to the scripts. Anything new that happens in play is
+counted with `World.RecordQuest({ kind, quest?, ... }, hero)`.
+
+```ts
+// a goal of the game's own: reach a place the level marks for the quest
+RegisterQuestGoal("reach", {
+    label: "Reach",
+    Default: () => ({ kind: "reach" }),
+    IsValid: () => true,
+    Target: () => 1,
+    Advance: (_goal, quest, happening) => (happening.kind === "reach" && happening.quest === quest.id ? 1 : 0)
+});
+```
 
 ---
 
@@ -2091,7 +2231,7 @@ vertical **toolbar** of tools at the far right. Each palette tab ends in a **+**
 | --- | --- | --- |
 | `B` | Brush | Left paints; right erases; Ctrl+drag paints a filled rectangle. |
 | `X` | Erase | Erases from the selected layer; Ctrl+drag a rectangle. |
-| `A` | Attributes (data select) | Click a placed light, spawner, pickup, door or height - any cell of its sprite, not just the top-left - to edit its value in a dialog. Only offered while a data layer (the attributes layer) is selected; its button is hidden, and the key does nothing, with a tile layer selected. |
+| `A` | Attributes (data select) | Click a placed light, spawner, pickup, door, height, dialog or boss - any cell of its sprite, not just the top-left - to edit its value in a dialog. Only offered while a data layer (the attributes layer) is selected; its button is hidden, and the key does nothing, with a tile layer selected. |
 | `U` | Stamp | Drag a rectangle of the brush; hold Ctrl for just the border; right-drag erases a rectangle. Esc cancels. |
 | `I` | Dropper | Click a tile to paint with it (on the attributes layer, a data brush with its value). |
 | `G` | Fill | Flood-fills matching cells on the selected layer, up to the edge of the view. |
@@ -2105,6 +2245,7 @@ vertical **toolbar** of tools at the far right. Each palette tab ends in a **+**
 | `S` | Download the level as `dungeonLevel.txt` (JSON). |
 | `L` | Load a level file. |
 | `Ctrl+Z` | Undo. |
+| `Q` | The level's **quests**: a list with Edit and Remove for each, and Add quest. Each opens a popup: its name, what to do, its id, its goal (and how many, or which monster), and whether it's under way from the start and whether it ends the level ([9.10](#910-npcs-dialogs-and-quests)). Save keeps the lot as one undo step. |
 | `Ctrl+Q` | Clear the map (asks first). |
 | `H` / `V` / `R` | Flip the brush horizontally / vertically / rotate it. |
 | Arrow keys | Nudge the brush's pixel offset. |
@@ -2134,11 +2275,15 @@ vertical **toolbar** of tools at the far right. Each palette tab ends in a **+**
   panel asks whether the new layer is generic, floor or walls. The last floor layer and the last walls layer can't be removed.
 - Each layer remembers its own tool and tile: switch from the floor layer to the walls layer and back, and the floor tile and
   tool you were using are picked again (saved with the level). A layer you haven't used yet starts with no brush.
-- The one **attributes** layer is always present. Player start, collision, z-index, pickups and exits are painted on it, and it also
+- The one **attributes** layer is always present. Player start, collision, z-index, pickups, exits, NPCs' dialogs and bosses are painted on it, and it also
   draws a read-only overlay of what the game *derives* from tiles' metadata (collision, door footprints, lights,
   spawners) so a cell's whole picture - hand-placed and intrinsic - is in one place.
 - Painting a torch or a spawner **tile** is enough; its light or spawner values come from `assets-meta.json`. Use the
   Attributes tool to override them for one placement.
+- A `dialog` brush's popup is a box for its NPC's **script**, read as you type: the footer names the first line that doesn't
+  read (and how many more), and Save waits until it does. A `boss`'s popup picks its monster from the roster's pictures, its hit
+  points and its quest; a pickup's has a quest too. Each offers None and the level's quests, so make the quests (Q) first. On the
+  map a dialog is tagged D, a boss B, and a pickup or boss that counts for a quest has a Q after its tag (G10Q).
 
 ### 10.4 Generated maps and `IStyler`
 
@@ -2488,6 +2633,7 @@ ui.PopScope("options");
 ```
 
 What cancel does with nothing open is the root scope's `onCancel` - `ui.focus.ConfigureScope({ onCancel: () => OpenPause() })` is how `in-dungeons-we-dwell` pauses (Escape, B or the pad's Start).
+A scope's `onAccept` is what accept does while nothing in it is focused - a dialogue box with no choices showing, which the dungeon's talks go on from.
 Anything that animates (a dialogue typing, toasts, a text field's caret, a tile marker) is given to `ui.Track(widget)`; the mouse wheel is given to a scroll view with `ui.RegisterScroll(view)`.
 A window sized to what it holds asks `UiWindow.HeightFor(theme, variant, contentHeight)` for its height.
 
@@ -2497,7 +2643,8 @@ Nothing in a widget fixes a size, colour, font or frame: it comes from the skin 
 (the game's `wonky_*` bitmap fonts, drawn at their own size, plus `subtitle`, `wonky_medium` at 40 for a name that needs room round it), colours, each widget's frames and padding, and `metrics` for the few spacings no frame says. A different skin - one drawn at 2x,
 or a compact one for tools - re-dresses the same widgets. Optional parts let a skin say more than the widget's basics: a frame drawn
 beyond its box (`outset` - the selected tab standing proud), a fill that repeats its pattern (`fillMode: "tile"`), separate art for a vertical slider or a horizontal scrollbar, a fixed-size
-scrollbar grip (`thumbLength`), a dialogue's portrait beside the box and a name plate across its top.
+scrollbar grip (`thumbLength`), a dialogue's portrait beside the box and a name plate across its top (a line's `portraitScale` enlarges a
+small portrait by whole pixels to fill its frame, as the dungeon's talks do with an NPC's 16-pixel tile).
 
 The art is the **Tiny Dungeons UI pack** (`packages/ui/design/Tiny Dungeons - UI Pack`). It is drawn for a 480x270 screen, so `node packages/ui/tools/import-pack.mjs` enlarges every piece
 2x with nearest-neighbour scaling (each pixel a 2x2 block, never smoothed; `--scale=N` for another size) as it builds the bundle's sprites and `data/frames.json`: it copies the pieces, finds each stretchable frame's nine-slice insets from the art (the longest run of identical columns and rows is what stretches), and
@@ -2530,6 +2677,9 @@ Beyond the widgets the game's screens use, the kit has a component for each of t
 - **`UiTileMarker`** - the brackets that pulse round the tile under the pointer; it goes in the map's own layer (`SetTile(x, y)` in its pixels) and is driven by `Update(ms)`.
 - **Equipment slots** - `slot.SetPlaceholder("slot_icon_helmet")` shows what goes in an empty slot.
 - **Side tabs** - `new UiTabs(theme, "side", [{ icon: "icon_settings" }, ...], { mirror: true })` hangs icon tabs down a panel's left edge (without `mirror`, its right).
+- **`UiChatBox`** - a chat: lines newest at the bottom, each with who said it in a colour of its own (`Add({ head, text, headColour, textColour })`), wrapped to its
+  width. Closed it shows each line for a few seconds and fades it, so it stays out of play's way; `Open()` shows its last rows over a shade with a text field under them,
+  which takes the keys - Enter emits `send` and closes it, Escape closes it. It needs `Update(ms)` each frame. The online lobby's chat ([9.3.2](#932-playing-online)) is what it's for.
 
 ---
 

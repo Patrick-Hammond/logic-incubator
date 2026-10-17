@@ -19,7 +19,7 @@ import type { Vec2Like } from "@logic-incubator/lib/math/Geometry";
 import { RelayHost } from "@logic-incubator/lib/net/RelayRooms";
 import type RelaySession from "@logic-incubator/lib/net/RelaySession";
 import type { EncounterView } from "../Encounter";
-import { ALL_PLAYERS_DIED, KEYS_DROPPED, LEVEL_COMPLETED, MONSTER_KILLED, PICKUP_COLLECTED, PLAYER_DAMAGED, PLAYER_DIED, SPAWNER_DESTROYED } from "../Events";
+import { ALL_PLAYERS_DIED, KEYS_DROPPED, LEVEL_COMPLETED, MONSTER_KILLED, PICKUP_COLLECTED, PLAYER_DAMAGED, PLAYER_DIED, QUEST_UPDATED, SPAWNER_DESTROYED } from "../Events";
 import type { IPlayerInput } from "../input/PlayerControl";
 import MonsterRoster from "../level/entities/MonsterRoster";
 import { NoInput } from "../sim/World";
@@ -355,6 +355,14 @@ export default class GuestSession extends PlaySession {
             case "shot":
                 this.replica!.AddShot(event.index, event.setup);
                 break;
+            case "quest": {
+                // The host's quests are the run's: this machine's follow them, never moving on by themselves.
+                const was = world.quests.Follow(event.index, event.state, event.progress);
+                if (was !== null) {
+                    emit(QUEST_UPDATED, world.quests.Quests[event.index].def.id, event.state, event.progress, was);
+                }
+                break;
+            }
         }
     }
 

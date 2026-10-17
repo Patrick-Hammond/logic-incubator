@@ -12,6 +12,8 @@ export type Line = {
     text: string;
     /** The speaker's picture; the portrait is left out when absent. */
     portrait?: Texture;
+    /** How many times as big the picture is drawn - a whole number, for pixel art (a 16 pixel tile at 5 fills an 80 pixel portrait); 1 when absent. */
+    portraitScale?: number;
 };
 
 const ARROW_BOB_MS = 450;
@@ -76,6 +78,8 @@ export default class UiDialogue extends UiControl {
         if (line.portrait) {
             this.portrait.texture = line.portrait;
         }
+        const scale = Math.max(1, Math.floor(line.portraitScale || 1));
+        this.portrait.scale.set(scale);
         this.portrait.visible = this.portraitFrame.visible = hasPortrait;
 
         // The box, and the portrait: beside the box (bottom-aligned, the box tucked under its edge) or inside it.
@@ -87,7 +91,7 @@ export default class UiDialogue extends UiControl {
         this.portraitFrame.position.set(beside ? 0 : pad.left, beside ? this.BoxHeight - frameSize : pad.top);
         // The picture sits inside its frame, centred, at its own size (whole pixels, so it stays crisp).
         const inner = { x: this.portraitFrame.x + (frameSize - skin.portraitSize) / 2, y: this.portraitFrame.y + (frameSize - skin.portraitSize) / 2 };
-        this.portrait.position.set(Math.floor(inner.x + (skin.portraitSize - this.portrait.texture.width) / 2), Math.floor(inner.y + (skin.portraitSize - this.portrait.texture.height) / 2));
+        this.portrait.position.set(Math.floor(inner.x + (skin.portraitSize - this.portrait.texture.width * scale) / 2), Math.floor(inner.y + (skin.portraitSize - this.portrait.texture.height * scale) / 2));
 
         const left = this.boxLeft + pad.left + (hasPortrait && !beside ? skin.portraitSize + skin.gap : 0);
         const width = this.BoxWidth - left - pad.right;

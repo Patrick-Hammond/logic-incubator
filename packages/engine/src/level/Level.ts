@@ -6,7 +6,11 @@ import { AnimationSpeed, TileSize } from "../Constants";
 import {LEVEL_LOADED} from "../Events";
 import AssetMetadataStore from "./AssetMetadata";
 import {HeightAt} from "./Depth";
+import {DescribeDialogErrors, DialogScript, ParseDialog} from "../story/DialogScript";
+import {QuestDef, ReadQuests} from "../story/Quests";
+import {DialogValue, IsDialogValue} from "../story/Talk";
 import {DoorOpens, EffectiveDoorLock, FindDoorGroups} from "./Doors";
+import {Boss, IsBossValue} from "./entities/Bosses";
 import MonsterRoster from "./entities/MonsterRoster";
 import {IsPickupValue, PickupValue} from "./entities/Pickups";
 import {SanitiseSpawnerValue, Spawner, SpawnerCells} from "./entities/Spawners";
@@ -30,6 +34,9 @@ export type Door = { cells: Vec2Like[]; tile: Tile; isOpen: boolean; regionIds: 
 
 /** One pickup: a cell, what it gives, and the tile that stands for it (null for a `PICKUP` brush on an empty cell - collected the same, just nothing to hide) - see `CollectPickupsAt`. */
 export type Pickup = Vec2Like & { tile: Tile | null; value: PickupValue };
+
+/** An NPC to talk to: a `DIALOG` brush's cell (solid), its script as read, and the tile drawn there - the NPC, shown beside what they say (null for none). See `TalkerAt`. */
+export type Talker = Vec2Like & { value: DialogValue; script: DialogScript; tile: Tile | null };
 
 /** What `CollectPickupsAt` hands back: the pickup's value, and the name of the tile it was (null if it had none) - an item or key with no sprite of its own is shown as that. */
 export type CollectedPickup = { value: PickupValue; sprite: string | null };
@@ -88,6 +95,12 @@ export default class Level {
     public spawners: Spawner[] = [];
     /** Every tile with a `pickup` in its `AssetMetadata`, not yet collected. See `CollectPickupsAt`. */
     public pickups: Pickup[] = [];
+    /** Every NPC painted with the `DIALOG` data brush, in normalised map coordinates - each one's cell is solid (in `collisionData`). */
+    public talkers: Talker[] = [];
+    /** Every monster placed with the `BOSS` data brush, in normalised map coordinates - one the roster knows. See `Encounter.Reset`. */
+    public bosses: Boss[] = [];
+    /** The level's quests (see `Quests`): the well-formed ones in its file. */
+    public quests: QuestDef[] = [];
     /** Distinct painted `Z_INDEX` heights, ascending, always including the unpainted default (0). `TileMapView` builds one band per entry - sparse, so a stray tile at an extreme height doesn't force bands for every height in between. */
     public depths: number[] = [0];
 
@@ -138,6 +151,36 @@ export default class Level {
     /** Whether the cell is a way out of the level (an `EXIT` brush) - where a hero standing ends it. */
     IsExit(tileX: number, tileY: number): boolean {
         return this.exits.some(exit => exit.x === tileX && exit.y === tileY);
+    }
+
+    /** The NPC on the cell (a `DIALOG` brush), if there is one. */
+    TalkerAt(tileX: number, tileY: number): Talker | null {
+        for (let i = 0; i < this.talkers.length; i++) {
+            const talker = this.talkers[i];
+            if (talker.x === tileX && talker.y === tileY) {
+                return talker;
+            }
+        }
+        return null;
+    }
+
+    /** Whether there's an NPC on the cell. */
+    IsTalker(tileX: number, tileY: number): boolean {
+        return this.TalkerAt(tileX, tileY) !== null;
+    }
+
+    /**
+     * How many things of a kind the level marks for quest `quest` (see `QuestLevel`): `collect` counts the pickups not yet
+     * collected, `kill` the bosses.
+     */
+    Marked(kind: string, quest: string): number {
+        if (kind === "collect") {
+            return this.pickups.filter(pickup => pickup.value.quest === quest).length;
+        }
+        if (kind === "kill") {
+            return this.bosses.filter(boss => boss.value.quest === quest).length;
+        }
+        return 0;
     }
 
     /** Whether the cell is open floor: walkable and in a region - not a wall, a door, a spawner or off the map. Where heroes start and what's dropped lands. */
@@ -407,6 +450,9 @@ export default class Level {
         this.spawners = [];
         this.pickups = [];
         this.exits = [];
+        this.talkers = [];
+        this.bosses = [];
+        this.quests = ReadQuests(file.levelData.quests);
         const spawnerSprite = MonsterRoster.inst.SpawnerSprite;
         const hasSpawnerSprite = spawnerSprite != null && AssetFactory.inst.Has(spawnerSprite);
         if (spawnerSprite != null && !hasSpawnerSprite) {
@@ -417,6 +463,8 @@ export default class Level {
         const lights: LightSource[] = [];
         /** Every `PICKUP` data brush, in normalised map coordinates - resolved against the tiles once they're built, below. */
         const explicitPickups: { x: number; y: number; value: PickupValue }[] = [];
+        /** Every `DIALOG` data brush, likewise - its NPC is whatever tile is drawn there. */
+        const dialogs: { x: number; y: number; value: DialogValue }[] = [];
         /** Per-cell door id (parallel to `doorData`, but tagged with *which* door type) - `FindDoorGroups` needs this to keep two different door types on adjacent cells from merging into one group. */
         const doorIds: (number | undefined)[][] = [];
 
@@ -514,6 +562,20 @@ export default class Level {
                             explicitPickups.push({x: posX, y: posY, value: brush.data});
                         }
                         break;
+                    case DataBrushName.DIALOG:
+                        if(IsDialogValue(brush.data)) {
+                            dialogs.push({x: posX, y: posY, value: brush.data});
+                        }
+                        break;
+                    case DataBrushName.BOSS:
+                        if(IsBossValue(brush.data)) {
+                            if(MonsterRoster.inst.Has(brush.data.monster)) {
+                                this.bosses.push({x: posX, y: posY, value: brush.data});
+                            } else {
+                                console.warn(`A boss at ${posX},${posY} is a "${brush.data.monster}", which the monster roster hasn't got - it's left out.`);
+                            }
+                        }
+                        break;
                 }
             }
         });
@@ -568,6 +630,22 @@ export default class Level {
             doorIds[ posX ][ posY ] = doorId;
         });
         implicit.lights.forEach(({x, y, value}) => lights.push({x: x - bounds.x1, y: y - bounds.y1, value}));
+        // Solid, like a spawner, but added after the light's blockers: an NPC casts no shadow across the room.
+        const questIds = this.quests.map(quest => quest.id);
+        dialogs.forEach(({x, y, value}) => {
+            if (x < 0 || y < 0) {
+                return;
+            }
+            const read = ParseDialog(value.script, {quests: questIds});
+            if (read.errors.length) {
+                console.warn(`The dialog at ${x},${y} has lines that can't be read:\n` + DescribeDialogErrors(read.errors).join("\n"));
+            }
+            this.talkers.push({x, y, value, script: read.script, tile: this.FindTopTile(x, y)});
+            if(this.collisionData[ x ] == null) {
+                this.collisionData[ x ] = [];
+            }
+            this.collisionData[ x ][ y ] = true;
+        });
         implicit.spawners.forEach(({x, y, value}) => {
             const posX = x - bounds.x1;
             const posY = y - bounds.y1;

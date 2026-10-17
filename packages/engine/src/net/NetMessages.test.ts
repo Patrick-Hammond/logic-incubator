@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CleanName, DecodeMessage, EncodeMessage, LobbyMessage, NameLength } from "./NetMessages";
+import { CleanName, DecodeMessage, EncodeMessage, LobbyMessage, NameLength, UniqueName } from "./NetMessages";
 
 describe("EncodeMessage and DecodeMessage", () => {
     const messages: LobbyMessage[] = [
@@ -10,7 +10,10 @@ describe("EncodeMessage and DecodeMessage", () => {
         { t: "pick", character: null },
         { t: "start", seed: 1234, level: { bundle: "level1", hash: "0badf00d-10", sent: false }, seats: [{ peer: 0, name: "HOST", character: "witch" }] },
         { t: "start", seed: 5, level: { bundle: null, hash: "0badf00d-10", sent: true }, seats: [] },
-        { t: "need-level" }
+        { t: "need-level" },
+        { t: "say", text: "@Sam over here" },
+        { t: "chat", line: { seat: 1, from: "Sam", text: "hello" } },
+        { t: "chat", line: { seat: 0, from: "HOST", text: "psst", whisper: { seat: 2, name: "Ann" } } }
     ];
 
     messages.forEach(message => {
@@ -37,6 +40,40 @@ describe("EncodeMessage and DecodeMessage", () => {
         bytes[0] = EncodeMessage({ t: "pick", character: null })[0];
         bytes.set(pick, 1);
         expect(DecodeMessage(bytes)).toBeNull();
+    });
+});
+
+describe("a chat line", () => {
+    it("is turned away when it's too long, or missing what it needs", () => {
+        const kind = EncodeMessage({ t: "chat", line: { seat: 0, from: "A", text: "" } })[0];
+        const encode = (fields: unknown) => {
+            const body = new TextEncoder().encode(JSON.stringify(fields));
+            const bytes = new Uint8Array(body.length + 1);
+            bytes[0] = kind;
+            bytes.set(body, 1);
+            return bytes;
+        };
+        expect(DecodeMessage(encode({ line: { seat: 0, from: "A", text: "x".repeat(500) } }))).toBeNull();
+        expect(DecodeMessage(encode({ line: { seat: 0, text: "hi" } }))).toBeNull();
+        expect(DecodeMessage(encode({ line: { seat: 0, from: "A", text: "hi", whisper: { seat: 1 } } }))).toBeNull();
+    });
+
+    it("comes across with only its own fields", () => {
+        const decoded = DecodeMessage(EncodeMessage({ t: "chat", line: { seat: 0, from: "A", text: "hi", extra: 1 } as never }));
+        expect(decoded).toEqual({ t: "chat", line: { seat: 0, from: "A", text: "hi" } });
+    });
+});
+
+describe("UniqueName", () => {
+    it("keeps a name no one has, and numbers one that's taken, in any case", () => {
+        expect(UniqueName("Sam", ["Ann"])).toBe("Sam");
+        expect(UniqueName("Sam", ["SAM"])).toBe("Sam 2");
+        expect(UniqueName("Sam", ["Sam", "Sam 2"])).toBe("Sam 3");
+    });
+
+    it("cuts a long name to make room for its number", () => {
+        const long = "A".repeat(NameLength);
+        expect(UniqueName(long, [long])).toBe("A".repeat(NameLength - 2) + " 2");
     });
 });
 

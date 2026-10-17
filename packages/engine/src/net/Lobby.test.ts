@@ -5,6 +5,7 @@ import RelaySession, { RelayJoinOptions } from "@logic-incubator/lib/net/RelaySe
 import type { Transport } from "@logic-incubator/lib/net/Transport";
 import type { LevelFile } from "../level/LevelFormat";
 import { GuestLobby, HostLobby, LobbyClosedText, LobbyEvents, LobbyStart, QuietForMs, ReconnectForMs } from "./Lobby";
+import type { ChatLine } from "./Chat";
 import { DecodeMessage, EncodeMessage, NetVersion } from "./NetMessages";
 import { CreateNetPlay } from "./NetPlay";
 
@@ -50,6 +51,13 @@ function Started(lobby: HostLobby | GuestLobby): { start: LobbyStart | null } {
 /** The start, once the lobby has one - a level being packed and unpacked takes a little while. */
 function NextStart(lobby: HostLobby | GuestLobby): Promise<LobbyStart> {
     return new Promise(resolve => lobby.once(LobbyEvents.STARTED, resolve));
+}
+
+/** Every chat line `lobby` hears from now on. */
+function Heard(lobby: HostLobby | GuestLobby): ChatLine[] {
+    const lines: ChatLine[] = [];
+    lobby.on(LobbyEvents.CHAT, (line: ChatLine) => lines.push(line));
+    return lines;
 }
 
 function Closed(lobby: HostLobby | GuestLobby): string[] {
@@ -199,6 +207,87 @@ describe("HostLobby and GuestLobby", () => {
     });
 });
 
+describe("the chat", () => {
+    it("passes a line to everyone - its speaker included, once the host has it - and keeps it", async () => {
+        const { relay, host } = await Room();
+        const sam = await Guest(relay, host.Code, "Sam");
+        const kit = await Guest(relay, host.Code, "Kit");
+        await Settle();
+        const [toHost, toSam, toKit] = [Heard(host), Heard(sam), Heard(kit)];
+        expect(sam.Say("  hello   all ")).toBeNull();
+        await Settle();
+        expect(host.Say("welcome")).toBeNull();
+        await Settle();
+        const lines = [{ seat: 1, from: "Sam", text: "hello all" }, { seat: 0, from: "Hostess", text: "welcome" }];
+        expect(toHost).toEqual(lines);
+        expect(toSam).toEqual(lines);
+        expect(toKit).toEqual(lines);
+        expect(kit.Chat).toEqual(lines);
+        expect(sam.MySeat).toBe(1);
+    });
+
+    it("whispers a line only to who it's for, and back to who said it", async () => {
+        const { relay, host } = await Room();
+        const sam = await Guest(relay, host.Code, "Sam");
+        const kit = await Guest(relay, host.Code, "Kit");
+        await Settle();
+        const [toHost, toSam, toKit] = [Heard(host), Heard(sam), Heard(kit)];
+        sam.Say("@kit behind you");
+        await Settle();
+        host.Say("@SAM psst");
+        await Settle();
+        const toKitLine = { seat: 1, from: "Sam", text: "behind you", whisper: { seat: 2, name: "Kit" } };
+        const toSamLine = { seat: 0, from: "Hostess", text: "psst", whisper: { seat: 1, name: "Sam" } };
+        expect(toKit).toEqual([toKitLine]);
+        expect(toSam).toEqual([toKitLine, toSamLine]);
+        expect(toHost).toEqual([toSamLine]);
+    });
+
+    it("tells the player at once why a line can't be said, and sends nothing", async () => {
+        const { relay, host } = await Room();
+        const sam = await Guest(relay, host.Code, "Sam");
+        await Settle();
+        const toHost = Heard(host);
+        expect(sam.Say("@nobody hi")).toBe("No one here is called nobody.");
+        expect(host.Say("@Hostess hi")).toBe("You can't whisper to yourself.");
+        expect(sam.Say("   ")).toBeNull();
+        await Settle();
+        expect(toHost).toEqual([]);
+    });
+
+    it("keeps a guest from flooding the others", async () => {
+        const { relay, host } = await Room();
+        const sam = await Guest(relay, host.Code, "Sam");
+        await Settle();
+        const toHost = Heard(host);
+        for (let i = 0; i < 8; i++) {
+            sam.Say("spam " + i);
+        }
+        await Settle();
+        expect(toHost.map(line => line.text)).toEqual(["spam 0", "spam 1", "spam 2", "spam 3", "spam 4"]);
+    });
+
+    it("gives two players with one name different ones, so a whisper means one of them", async () => {
+        const { relay, host } = await Room();
+        await Guest(relay, host.Code, "Sam");
+        await Guest(relay, host.Code, "sam");
+        await Settle();
+        expect(host.Seats.map(seat => seat.name)).toEqual(["Hostess", "Sam", "sam 2"]);
+    });
+
+    it("is turned away from a player not let in", async () => {
+        const { relay, host } = await Room();
+        const session = await RelaySession.Join(relay.Connect(), "dungeon", host.Code);
+        await Settle();
+        const toHost = Heard(host);
+        session.Send(RelayHost, EncodeMessage({ t: "say", text: "let me in" }));
+        await Settle();
+        expect(toHost).toEqual([]);
+        const stranger = new GuestLobby(await RelaySession.Join(relay.Connect(), "dungeon", host.Code), { name: "X", shippedLevel: async () => undefined });
+        expect(stranger.Say("hi")).toBe("You're not in a game.");
+    });
+});
+
 describe("a guest whose connection goes during the run", () => {
     beforeEach(() => {
         vi.useFakeTimers();
@@ -271,6 +360,19 @@ describe("a guest whose connection goes during the run", () => {
         expect(host.Seats[1]).toEqual({ peer: sam.Session.You, name: "Sam", character: "warlock" });
         expect(sam.Mine).toEqual(host.Seats[1]);
         expect(changed).toBe(1);
+    });
+
+    it("keeps the chat going after getting back in, and says it can't be heard while it's away", async () => {
+        const { host, sam, cut } = await Running();
+        const toSam = Heard(sam);
+        cut();
+        await Wait();
+        expect(sam.Say("anyone?")).toBe("Not connected to the host - say it again once you're back.");
+        await Wait(600);
+        host.Say("welcome back");
+        expect(sam.Say("thanks")).toBeNull();
+        await Wait();
+        expect(toSam.map(line => line.text)).toEqual(["welcome back", "thanks"]);
     });
 
     it("moves the run to its new place in the room in time to hear what the host sends straight after letting it back", async () => {

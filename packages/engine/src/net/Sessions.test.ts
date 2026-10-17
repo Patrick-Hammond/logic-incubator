@@ -6,11 +6,12 @@ import { LinkMaker, PeerLink, PeerLinkBase } from "@logic-incubator/lib/net/Peer
 import { RelayHost } from "@logic-incubator/lib/net/RelayRooms";
 import RelaySession from "@logic-incubator/lib/net/RelaySession";
 import { TileSize } from "../Constants";
-import { ALL_PLAYERS_DIED, PICKUP_COLLECTED } from "../Events";
+import { ALL_PLAYERS_DIED, PICKUP_COLLECTED, QUEST_UPDATED } from "../Events";
 import type { IPlayerInput } from "../input/PlayerControl";
 import { Chase } from "../level/entities/Behaviours";
 import MonsterRoster, { MonsterDef } from "../level/entities/MonsterRoster";
 import { WeaponDef } from "../level/entities/Projectiles";
+import type { QuestDef } from "../story/Quests";
 import { SeededRandom } from "../Random";
 import World from "../sim/World";
 import { NetTestLevel } from "./__fixtures__/NetTestLevel";
@@ -60,6 +61,8 @@ class Run {
     now = 0;
     /** Machines that have stalled - nothing they do goes out, as a frozen tab's wouldn't. */
     stalled = new Set<Machine>();
+    /** The level's quests, on every machine. */
+    quests: QuestDef[] = [];
     private relay!: LoopbackRelay;
     private seats: LobbySeat[] = [];
 
@@ -114,7 +117,7 @@ class Run {
 
     /** Starts the level on `machine`, as its `LEVEL_CREATED` would. */
     Begin(machine: Machine): void {
-        const level = machine.level = NetTestLevel(MAP);
+        const level = machine.level = NetTestLevel(MAP, undefined, undefined, this.quests);
         machine.world = new World(level, {
             emit: (event, ...args) => {
                 machine.session.Record(event, args);
@@ -292,6 +295,25 @@ describe("an online run", () => {
         expect(run.host.world.Heroes[1].Gone).toBe(true);
         expect(run.guests[1].world.Heroes[1].Gone).toBe(true);
         expect(host.CanRejoin(1)).toBe(false);
+    });
+
+    it("moves each guest's quests on as the host's do - and catches a guest back up on them, quietly", async () => {
+        run.quests = [{ id: "gold", name: "GOLD", goal: { kind: "collect" }, start: true }];
+        await run.Open(2);
+        await run.BeginAll();
+        const [first, second] = run.guests;
+        second.relay.Drop("lost");
+        await run.Frames(70, hero => (hero === 1 ? Input(0.6, 0.4) : undefined));
+        await run.Frames(60, () => undefined);
+        expect(run.host.world.quests.State("gold")).toBe("complete");
+        expect(first.world.quests.Get("gold")).toMatchObject({ state: "complete", progress: 1 });
+        expect(first.events).toContainEqual([QUEST_UPDATED, "gold", "complete", 1, "active"]);
+        expect(second.world.quests.State("gold")).toBe("active");
+
+        await run.Rejoin(1);
+        await run.Frames(5, () => undefined);
+        expect(second.world.quests.State("gold")).toBe("complete");
+        expect(second.events.filter(event => event[0] === QUEST_UPDATED)).toEqual([]);
     });
 
     it("lets a guest whose connection went back in, caught up on what it missed, and plays on from where the host has them", async () => {
@@ -592,6 +614,8 @@ function MonsterAt(world: World, x: number, y: number) {
         rangedCooldown: 0,
         hitFlash: 0,
         spawner: null,
+        boss: false,
+        asleep: false,
         dead: false
     };
 }

@@ -9,6 +9,7 @@ const SHORTCUTS: [string, string][] = [
     ["Rotate", "R"],
     ["Nudge", "Arrows"],
     ["Edit data", "E"],
+    ["Quests", "Q"],
     ["Undo", "Ctrl+Z"],
     ["Zoom", "+/- or wheel"],
     ["Save", "S"],

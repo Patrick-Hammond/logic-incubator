@@ -35,6 +35,8 @@ export type FocusScopeOptions = {
     wrap?: boolean;
     /** What `cancel` does here (a modal closing); without it, `cancel` isn't handled. */
     onCancel?: () => void;
+    /** What `accept` does here while the scope has nothing in it to focus (a dialogue box waiting to go on); without it, `accept` isn't handled then. */
+    onAccept?: () => void;
     /** What the tab keys do here; step is -1 or 1. */
     onTab?: (step: -1 | 1) => void;
     /** The item to focus when the scope is pushed (the first enabled one by default). */
@@ -207,7 +209,11 @@ export default class FocusManager {
         }
 
         const items = this.entries.filter(e => e.scope === scope.id);
-        if (!items.length) return false;
+        if (!items.length) {
+            if (action !== "accept" || !scope.options.onAccept) return false;
+            scope.options.onAccept();
+            return true;
+        }
 
         if (!this.focused) {
             const first = scope.options.initial !== undefined ? this.EntryIn(scope.id, scope.options.initial) : this.FirstIn(scope.id);

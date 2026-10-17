@@ -3,6 +3,8 @@ import { TEST_MONSTERS } from "@logic-incubator/engine/level/__fixtures__/TestMo
 import MonsterRoster from "@logic-incubator/engine/level/entities/MonsterRoster";
 import { DefaultPickupValue, IsPickupValue, PickupKinds, PickupValue } from "@logic-incubator/engine/level/entities/Pickups";
 import { DefaultSpawnerValue } from "@logic-incubator/engine/level/entities/Spawners";
+import { DefaultBossValue } from "@logic-incubator/engine/level/entities/Bosses";
+import { DefaultDialogValue } from "@logic-incubator/engine/story/Talk";
 import { DataBrushName } from "@logic-incubator/engine/level/LevelFormat";
 import { DataBrushEditorFor } from "./DataBrushEditors";
 import { IsFieldVisible } from "./ui/dialog/FormDialog";
@@ -18,6 +20,8 @@ describe("DataBrushEditors", () => {
         expect(DataBrushEditorFor(DataBrushName.Z_INDEX)).toBeDefined();
         expect(DataBrushEditorFor(DataBrushName.PICKUP)).toBeDefined();
         expect(DataBrushEditorFor("door")).toBeDefined();
+        expect(DataBrushEditorFor(DataBrushName.DIALOG)).toBeDefined();
+        expect(DataBrushEditorFor(DataBrushName.BOSS)).toBeDefined();
         expect(DataBrushEditorFor(DataBrushName.COLLISION)).toBeUndefined();
         expect(DataBrushEditorFor(DataBrushName.PLAYER_START)).toBeUndefined();
     });
@@ -37,7 +41,7 @@ describe("DataBrushEditors", () => {
     });
 
     it("gives every form field a value, so no control starts blank", () => {
-        ["spawner", "light", DataBrushName.Z_INDEX, DataBrushName.PICKUP, "door"].forEach(name => {
+        ["spawner", "light", DataBrushName.Z_INDEX, DataBrushName.PICKUP, "door", DataBrushName.DIALOG, DataBrushName.BOSS].forEach(name => {
             const editor = DataBrushEditorFor(name);
             const form = editor.toForm(0);
             editor.fields(noImages).forEach(field => expect(form, `${name}.${field.key}`).toHaveProperty(field.key));
@@ -142,14 +146,14 @@ describe("the pickup editor", () => {
     });
 
     it("shows only the fields of the chosen kind", () => {
-        expect(visibleKeys(pickup.toForm({ kind: "gold", amount: 1 }))).toEqual(["kind", "goldAmount"]);
-        expect(visibleKeys(pickup.toForm({ kind: "health", amount: 2 }))).toEqual(["kind", "healthAmount"]);
-        expect(visibleKeys(pickup.toForm({ kind: "key", id: 3 }))).toEqual(["kind", "keyId"]);
-        expect(visibleKeys(pickup.toForm({ kind: "item" }))).toEqual(["kind", "itemSprite"]);
-        expect(visibleKeys(pickup.toForm(WEAPON))).toEqual(["kind", "weaponIcon", "shotSprite", "shotDamage", "shotSpeed", "shotRange", "shotCooldown", "shotTurns", "shotGlows"]);
+        expect(visibleKeys(pickup.toForm({ kind: "gold", amount: 1 }))).toEqual(["kind", "goldAmount", "quest"]);
+        expect(visibleKeys(pickup.toForm({ kind: "health", amount: 2 }))).toEqual(["kind", "healthAmount", "quest"]);
+        expect(visibleKeys(pickup.toForm({ kind: "key", id: 3 }))).toEqual(["kind", "keyId", "quest"]);
+        expect(visibleKeys(pickup.toForm({ kind: "item" }))).toEqual(["kind", "itemSprite", "quest"]);
+        expect(visibleKeys(pickup.toForm(WEAPON))).toEqual(["kind", "weaponIcon", "shotSprite", "shotDamage", "shotSpeed", "shotRange", "shotCooldown", "shotTurns", "shotGlows", "quest"]);
         expect(visibleKeys({ ...pickup.toForm(WEAPON), shotTurns: true })).toContain("shotAngle");
         expect(visibleKeys(pickup.toForm(GLOWING))).toEqual(expect.arrayContaining(["shotLightBrightness", "shotLightTint", "shotLightRange", "shotLightFlicker"]));
-        expect(visibleKeys(pickup.toForm(TORCH))).toEqual(["kind", "carriedBrightness", "carriedTint", "carriedRange", "carriedFlicker", "carriedSeconds"]);
+        expect(visibleKeys(pickup.toForm(TORCH))).toEqual(["kind", "carriedBrightness", "carriedTint", "carriedRange", "carriedFlicker", "carriedSeconds", "quest"]);
     });
 
     it("offers every kind, in order, as the choice", () => {
@@ -181,6 +185,90 @@ describe("the pickup editor", () => {
 
     it("skips the sheet check when there's no sheet to check against", () => {
         expect(pickup.validate(pickup.toForm(WEAPON))).toBeNull();
+    });
+});
+
+const QUESTS = [
+    { id: "gold", name: "THE MISER'S HOARD", goal: { kind: "collect" } },
+    { id: "demon", name: "SLAY THE DEMON", goal: { kind: "kill" } }
+];
+const withQuests = { ...noImages, quests: QUESTS };
+
+describe("a pickup's quest", () => {
+    it("round-trips, and None leaves it out", () => {
+        const tagged: PickupValue = { kind: "gold", amount: 5, quest: "gold" };
+        expect(pickup.fromForm(pickup.toForm(tagged))).toEqual(tagged);
+        expect(pickup.fromForm({ ...pickup.toForm(tagged), quest: "" })).toEqual({ kind: "gold", amount: 5 });
+        expect(pickup.toForm({ kind: "key", id: 2 }).quest).toBe("");
+        const weapon = pickup.fromForm({ ...pickup.toForm(WEAPON), quest: "demon" }) as PickupValue;
+        expect(weapon.quest).toBe("demon");
+        expect(IsPickupValue(weapon)).toBe(true);
+    });
+
+    it("offers None and the level's quests, by name", () => {
+        const field = pickup.fields(withQuests).find(f => f.key === "quest");
+        expect(field.type === "choice" && field.options.map(o => [o.value, o.label])).toEqual([
+            ["", "None"],
+            ["gold", "THE MISER'S HOARD"],
+            ["demon", "SLAY THE DEMON"]
+        ]);
+        const none = pickup.fields(noImages).find(f => f.key === "quest");
+        expect(none.type === "choice" && none.options.map(o => o.value)).toEqual([""]);
+        expect(none.hint).toMatch(/add them with Q/);
+    });
+
+    it("wants a quest the level has - one taken off its list since is caught - but can't check without the list", () => {
+        const form = pickup.toForm({ kind: "gold", amount: 5, quest: "gone" });
+        expect(pickup.validate(form, withQuests)).toMatch(/“gone” isn't one of the level's quests/);
+        expect(pickup.validate({ ...form, quest: "gold" }, withQuests)).toBeNull();
+        expect(pickup.validate(form, noImages)).toBeNull();
+    });
+});
+
+describe("the dialog editor", () => {
+    const dialog = DataBrushEditorFor(DataBrushName.DIALOG);
+
+    it("round-trips a script, and starts a new one with a line to show where it goes", () => {
+        const script = "MINER: Rats!\n> I'll go. -> yes\n> No.\n\nyes:\ngive gold";
+        expect(dialog.fromForm(dialog.toForm({ script }))).toEqual({ script });
+        expect(dialog.toForm(0).script).toBe(DefaultDialogValue().script);
+        expect(dialog.fields(noImages)[0].type).toBe("textarea");
+    });
+
+    it("wants something said, and the script readable - its first mistake, and how many more", () => {
+        expect(dialog.validate({ script: "  " }, withQuests)).toMatch(/something to say/);
+        expect(dialog.validate({ script: "MINER: Hello." }, withQuests)).toBeNull();
+        expect(dialog.validate({ script: "-> nowhere" }, withQuests)).toMatch(/^Line 1: /);
+        expect(dialog.validate({ script: "-> nowhere\nreward gold lots" }, withQuests)).toMatch(/^Line 1: .*\(and 1 more\)$/);
+    });
+
+    it("checks the quests a script names against the level's - when it has the list", () => {
+        expect(dialog.validate({ script: "give demon" }, withQuests)).toBeNull();
+        expect(dialog.validate({ script: "give dragon" }, withQuests)).toMatch(/no quest called "dragon"/);
+        expect(dialog.validate({ script: "give dragon" }, noImages)).toBeNull();
+    });
+});
+
+describe("the boss editor", () => {
+    const boss = DataBrushEditorFor(DataBrushName.BOSS);
+
+    it("round-trips a boss - 0 hit points is its kind's own, left out", () => {
+        const values = [{ monster: "ogre", hitPoints: 40, quest: "demon" }, { monster: "imp", hitPoints: 6 }, { monster: "goblin" }];
+        values.forEach(value => expect(boss.fromForm(boss.toForm(value)), JSON.stringify(value)).toEqual(value));
+        expect(boss.fromForm({ ...boss.toForm({ monster: "imp", hitPoints: 6 }), hitPoints: 0 })).toEqual({ monster: "imp" });
+    });
+
+    it("starts as the roster's first monster of its pool, three times as tough", () => {
+        expect(boss.fromForm(boss.toForm(0))).toEqual(DefaultBossValue());
+        expect(DefaultBossValue()).toEqual({ monster: "goblin", hitPoints: 6 });
+    });
+
+    it("offers every monster, and wants one the roster has and a quest the level has", () => {
+        const monster = boss.fields(noImages).find(f => f.key === "monster");
+        expect(monster.type === "choice" && monster.options.map(o => o.value)).toEqual([...TEST_MONSTERS.types]);
+        expect(boss.validate(boss.toForm({ monster: "ogre" }), withQuests)).toBeNull();
+        expect(boss.validate({ ...boss.toForm({ monster: "ogre" }), monster: "dragon" }, withQuests)).toMatch(/Pick a monster/);
+        expect(boss.validate(boss.toForm({ monster: "ogre", quest: "gone" }), withQuests)).toMatch(/isn't one of the level's quests/);
     });
 });
 

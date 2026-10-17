@@ -1,13 +1,15 @@
 /**
  * The dungeon's messages between players' machines, as they travel through
  * the relay (see lib's `RelaySession`): a byte for the kind, then the body -
- * JSON for the lobby's few small messages, bytes for a level. Play itself
+ * JSON for the lobby's few small messages and the chat, bytes for a level. Play itself
  * (inputs, snapshots) has kinds of its own, in `PlayMessages`. Pure - no pixi -
  * so it runs under the plain node test runner.
  */
 
+import { ChatLength, ChatLine } from "./Chat";
+
 /** The version of these messages: a guest on another is turned away (`refused`, "version"). Raise it whenever a message changes. */
-export const NetVersion = 4;
+export const NetVersion = 5;
 
 /** The most characters a player's name keeps. */
 export const NameLength = 12;
@@ -56,9 +58,13 @@ export type LobbyMessage =
     /** Host to guest: the level, packed (see `PackLevel`). */
     | { t: "level"; packed: Uint8Array }
     /** Host to a guest who said hello with a `rejoin` token it knows: they're back in the run, as the hero they were. */
-    | { t: "rejoined" };
+    | { t: "rejoined" }
+    /** Guest to host: a line its player typed in the chat, as they typed it - the host reads it (see `ParseChat`) and passes it on. */
+    | { t: "say"; text: string }
+    /** Host to a guest: a line of the chat for them - said to everyone, or whispered to or by them. */
+    | { t: "chat"; line: ChatLine };
 
-const Kinds: { [t: string]: number } = { hello: 1, refused: 2, lobby: 3, pick: 4, start: 5, "need-level": 6, level: 7, rejoined: 8 };
+const Kinds: { [t: string]: number } = { hello: 1, refused: 2, lobby: 3, pick: 4, start: 5, "need-level": 6, level: 7, rejoined: 8, say: 9, chat: 10 };
 const KindNames: string[] = [];
 Object.keys(Kinds).forEach(name => (KindNames[Kinds[name]] = name));
 
@@ -136,6 +142,11 @@ export function DecodeMessage(bytes: Uint8Array): LobbyMessage | null {
         case "need-level":
         case "rejoined":
             return { t };
+        case "say":
+            // Room for a whisper's @name on top of a whole line.
+            return typeof fields.text === "string" && fields.text.length <= ChatLength * 2 ? { t, text: fields.text } : null;
+        case "chat":
+            return IsChatLine(fields.line) ? { t, line: ChatLineOf(fields.line) } : null;
         default:
             return null;
     }
@@ -146,6 +157,39 @@ export function CleanName(name: string, fallback: string): string {
     const printable = name.split("").filter(ch => ch >= " " && ch !== "\u007f").join("");
     const clean = printable.replace(/\s+/g, " ").trim().slice(0, NameLength).trim();
     return clean || fallback;
+}
+
+/**
+ * `name` made different from every one of `taken` (any case) - "SAM 2", "SAM 3"... cut to keep within `NameLength` - so
+ * a whisper's `@name` always means one player.
+ */
+export function UniqueName(name: string, taken: ReadonlyArray<string>): string {
+    const used = (candidate: string) => taken.some(other => other.toLowerCase() === candidate.toLowerCase());
+    if (!used(name)) {
+        return name;
+    }
+    for (let n = 2; ; n++) {
+        const suffix = " " + n;
+        const candidate = name.slice(0, NameLength - suffix.length).trim() + suffix;
+        if (!used(candidate)) {
+            return candidate;
+        }
+    }
+}
+
+function IsChatLine(value: any): value is ChatLine {
+    const whisper = value && value.whisper;
+    return !!value && typeof value.seat === "number" && typeof value.from === "string" && typeof value.text === "string" && value.text.length <= ChatLength
+        && (whisper === undefined || (!!whisper && typeof whisper.seat === "number" && typeof whisper.name === "string"));
+}
+
+/** Just a chat line's own fields - nothing more that came with it. */
+function ChatLineOf(value: ChatLine): ChatLine {
+    const line: ChatLine = { seat: value.seat, from: value.from, text: value.text };
+    if (value.whisper) {
+        line.whisper = { seat: value.whisper.seat, name: value.whisper.name };
+    }
+    return line;
 }
 
 function IsToken(value: unknown): value is string {

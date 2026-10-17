@@ -53,7 +53,8 @@ function SnapshotOf(changes: Partial<Snapshot> = {}): Snapshot {
             { e: "died", hero: 0 },
             { e: "all-died" },
             { e: "completed", hero: 2 },
-            { e: "shot", index: 1, setup: { sprite: "arrow", speed: 6, damage: 1, range: 20, light: { brightness: 1, tint: 0xffaa00, range: 3 } } }
+            { e: "shot", index: 1, setup: { sprite: "arrow", speed: 6, damage: 1, range: 20, light: { brightness: 1, tint: 0xffaa00, range: 3 } } },
+            { e: "quest", index: 2, state: "complete", progress: 6 }
         ],
         ...changes
     };
@@ -114,7 +115,7 @@ describe("EncodePlay and DecodePlay", () => {
     it("carry a guest leaving, and catching one up that's back: the round, and what lastingly happened in it", () => {
         expect(DecodePlay(EncodePlay({ t: "leave" }))).toEqual({ t: "leave" });
         const lasting = SnapshotOf().events.filter(IsLastingEvent);
-        expect(lasting.map(event => event.e)).toEqual(["pickup", "keys", "spawner", "shot"]);
+        expect(lasting.map(event => event.e)).toEqual(["pickup", "keys", "spawner", "shot", "quest"]);
         expect(DecodePlay(EncodePlay({ t: "catch-up", round: 255, events: lasting }))).toEqual({ t: "catch-up", round: 255, events: lasting });
         expect(DecodePlay(EncodePlay({ t: "catch-up", round: 0, events: [] }))).toEqual({ t: "catch-up", round: 0, events: [] });
     });

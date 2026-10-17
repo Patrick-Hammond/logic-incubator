@@ -240,6 +240,18 @@ describe("FocusManager: accept, cancel and tabs", () => {
         expect(m.Handle("tabNext")).toBe(true);
         expect(log).toEqual(["cancel", "tab -1", "tab 1"]);
     });
+
+    it("hands accept to a scope with nothing in it to focus - a dialogue box waiting to go on - and not to one with something", () => {
+        const m = new FocusManager();
+        let accepted = 0;
+        expect(m.Handle("accept")).toBe(false);
+        m.PushScope("talk", { onAccept: () => accepted++ });
+        expect(m.Handle("accept")).toBe(true);
+        expect(accepted).toBe(1);
+        m.Register(new Item("choice", 0, 0), "talk");
+        m.Handle("accept");
+        expect(accepted).toBe(1);
+    });
 });
 
 describe("FocusManager: pointer and keyboard sharing focus", () => {
