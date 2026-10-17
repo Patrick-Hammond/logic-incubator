@@ -2173,7 +2173,7 @@ ignored.
 
 ## Quests and dialogs
 
-Pure modules under `story/` (no pixi), and the two brushes' values; the [user guide 9.10](user-guide.md#910-npcs-dialogs-and-quests) shows them at work.
+Pure modules under `story/` (no pixi), and the two brushes' values; the [user guide 9.10](user-guide.md#910-npcs-dialogs-and-quests) shows them at work, and [9.11](user-guide.md#911-quest-scripting-by-example) has a worked script for each kind of quest.
 
 `@logic-incubator/engine/story/Quests`:
 

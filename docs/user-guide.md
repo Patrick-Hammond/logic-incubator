@@ -2089,7 +2089,7 @@ player's choices in a menu over it once a line has come out in full. Accept (Spa
 the arrows and accept pick a choice, and cancel (Escape, B) walks away. A talk starts as the hero walks into the NPC, not again
 while they keep pushing against them.
 
-**Scripts** are read a line at a time:
+**Scripts** are read a line at a time ([9.11](#911-quest-scripting-by-example) works through one for each kind of quest):
 
 ```
 # The miner, at the cellar door.
@@ -2155,6 +2155,285 @@ RegisterQuestGoal("reach", {
     Advance: (_goal, quest, happening) => (happening.kind === "reach" && happening.quest === quest.id ? 1 : 0)
 });
 ```
+
+### 9.11 Quest scripting by example
+
+Each example here is a whole recipe: the quest as the quest list (Q) saves it, what to mark in the level, and the NPC's
+script, which goes into a `dialog` brush's popup as it stands. [9.10](#910-npcs-dialogs-and-quests) lists everything a line
+can be; [Mistakes to avoid](#mistakes-to-avoid) at the end covers what trips a script up.
+
+#### Setting one up in the editor
+
+1. **Add the quest first.** Press Q, then Add quest: its name, its id (what scripts call it - `hoard`), and its goal. The
+   pickup, boss and dialog popups only offer the level's quests, and a script that names one the level hasn't got won't save.
+2. **Mark what counts for it.** For a collect quest, select the attributes layer, pick the Attributes tool (A) and click each
+   pickup, then choose the quest under *Counts for quest*. A tile that isn't a pickup by default needs a `pickup` brush over
+   it first. For a boss, pick the `boss` brush on the Data tab, press E to choose its monster and *Killing it counts for
+   quest*, and paint it where it should wait. A script goal, and a kill goal of any monster of a type, need nothing marked.
+3. **Paint the NPC.** Put their sprite (a dwarf, from the Entities tab) on a tile layer, then paint the `dialog` brush over
+   the same cell on the attributes layer. Press E with the brush selected, or click a placed one with A, to type its script.
+   Save waits until every line reads, and the footer names the first that doesn't.
+4. **Play it** with Enter. The quests start over each time the level does.
+
+#### How a talk runs
+
+- **Every talk starts at the top.** Each time the hero walks into the NPC, the script runs from its first line, so a script
+  usually opens with `if` lines that pick a part by how the quest stands. The first `if` that holds wins, and the lines
+  after them are what the NPC says when none does.
+- **A part ends at the next `name:` line.** The talk doesn't run on into the next part: reaching it ends the talk. Use
+  `-> part` to go on somewhere else, and `end` (or `-> end`) to stop early.
+- **Actions happen silently**, as the talk passes them: `give`, `finish`, `reward` and `set` show nothing themselves, so
+  put a line after them. The quest tracker and the NEW QUEST and QUEST COMPLETE toasts show the player what changed.
+- **Choices go under the line before them.** The player picks one with the arrows and Space. A choice with `-> part` goes
+  there; one without carries on with whatever comes after the menu - and when that's the next part, the talk ends.
+
+#### A lost hoard (collect)
+
+The dwarf's gold has been stolen: three sacks, somewhere in the level. Bring them all back for a reward.
+
+```jsonc
+{ "id": "hoard", "name": "THE DWARF'S GOLD", "text": "Find his three sacks.", "goal": { "kind": "collect" } }
+```
+
+Mark three sacks of gold *Counts for quest: THE DWARF'S GOLD*. With no count, the goal is every pickup marked for it, so
+the tracker shows 0/3. The dwarf's script:
+
+```
+# Brog, by the start.
+if hoard finished -> after
+if hoard complete -> thanks
+if hoard active -> waiting
+BROG: Thieves took my gold! Three sacks of it.
+> I'll find them. -> accept
+> Not my problem.
+
+accept:
+give hoard
+# Found all three already? Then it was complete the moment it was given.
+if hoard complete -> thanks
+BROG: Bless you. Try down this hall, east.
+
+waiting:
+BROG: Any luck with my gold?
+
+thanks:
+finish hoard
+reward gold 50
+BROG: My gold! Take this for your trouble.
+
+after:
+BROG: Safe home now, thanks to you.
+```
+
+The first talk offers the quest. "Not my problem." has nowhere to go, so the talk carries on after the menu, reaches
+`accept:` and ends; next time Brog asks again. Once it's given, the hero hears "Any luck?" until the third sack is picked
+up, then gets 50 gold for handing it in, and after that only "Safe home now". Sacks picked up before the quest is given
+still count, which is why `accept` checks for `complete` straight after `give`.
+
+#### The demon below (kill a boss, reward a key)
+
+A guard won't open the vault until the demon in the deepest room is dead.
+
+```jsonc
+{ "id": "demon", "name": "SLAY THE DEMON", "text": "It sleeps in the deepest room.", "goal": { "kind": "kill" } }
+```
+
+Paint a `boss` brush in the deepest room: *Monster* big_demon, *Hit points* 120, *Killing it counts for quest* SLAY THE
+DEMON. Lock the vault's door with key id 2 ([9.6.1](#961-keys-and-locked-doors)). The guard's script:
+
+```
+if demon finished -> done
+if demon complete -> slain
+if demon active -> waiting
+GUARD: A demon sleeps below. Nobody opens this vault while it lives.
+> I'll kill it. -> take
+> I'd rather not.
+
+take:
+give demon
+GUARD: Tread softly. It wakes when you come near.
+
+waiting:
+GUARD: Still breathing down there, is it?
+
+slain:
+finish demon
+reward key 2 key_gold
+GUARD: You did it! Here, the key to the vault.
+
+done:
+GUARD: The vault's yours.
+```
+
+`reward key 2 key_gold` gives the key for lock 2, shown as `key_gold` in the HUD's Keys panel. The boss sleeps until a hero
+comes within 8 tiles' walk of it in sight, or shoots it (`BossWakeRange`).
+
+#### A letter for the smith (script goal, two NPCs)
+
+A quest one NPC gives and another meets. A `script` goal is met only when a script says so, with `complete`.
+
+```jsonc
+{ "id": "letter", "name": "A LETTER FOR THE SMITH", "text": "Take Mira's letter to the forge.", "goal": { "kind": "script" } }
+```
+
+Nothing to mark. Mira gives the letter and hands the quest in:
+
+```
+if letter finished -> after
+if letter complete -> answer
+if letter active -> waiting
+MIRA: Would you take this letter to the smith? He's in the forge, past the bridge.
+> Of course. -> take
+> Not today.
+
+take:
+give letter
+MIRA: Thank you! Come back and tell me what he says.
+
+waiting:
+MIRA: Have you seen the smith yet?
+
+answer:
+finish letter
+reward health 4
+MIRA: He said yes? Oh, thank you! Here, let me see to those cuts.
+
+after:
+MIRA: We're to be married in the spring!
+```
+
+The smith meets it, but only while the hero is carrying the letter:
+
+```
+if letter active -> letter
+SMITH: Hot work, this. Mind the sparks.
+
+letter:
+complete letter
+SMITH: A letter? From Mira? ...Tell her yes. A thousand times yes.
+```
+
+`reward health 4` heals two hearts (health is in half-hearts, and never goes past the maximum).
+
+#### Imp hunt (kill any monster of a type, choose a reward)
+
+```jsonc
+{ "id": "imps", "name": "IMP HUNT", "text": "Kill five imps.", "goal": { "kind": "kill", "count": 5, "monster": "imp" } }
+```
+
+Nothing to mark: with `monster`, every imp killed counts once the quest is under way (imps killed before it's given
+don't), and `count` is how many. The hunter's script lets the player ask a question first, and pick their reward:
+
+```
+if imps finished -> after
+if imps complete -> reward
+if imps active -> hunting
+HUNTER: Imps in the walls again. Kill five and I'll make it worth your while.
+> Five imps. Done. -> take
+> Why me? -> why
+> Goodbye.
+
+why:
+HUNTER: Because you've got a sword and I've got a bad knee.
+> Fine, I'll do it. -> take
+> Still no.
+
+take:
+give imps
+HUNTER: Off you go. The tracker in the corner keeps count.
+
+hunting:
+HUNTER: That's not five yet.
+
+reward:
+HUNTER: Five! Gold, or something for those wounds?
+> Gold. -> gold
+> Healing. -> heal
+
+gold:
+finish imps
+reward gold 40
+HUNTER: Spend it wisely.
+
+heal:
+finish imps
+reward health 6
+HUNTER: Hold still... there.
+
+after:
+HUNTER: Quiet in the walls now.
+```
+
+#### An NPC who remembers you (set, and a choice only sometimes)
+
+`set WORD` remembers a word for the rest of the level, and `if WORD` (or `if not WORD`) checks it. A choice can have an
+`if` too, after where it goes: it's only offered while that holds.
+
+```
+if met -> again
+set met
+FEN: Oh! A visitor. Nobody comes down here.
+FEN: They call me Fen. Mind the pits to the west.
+
+again:
+FEN: Back again? Still not fallen in a pit, I see.
+> Any advice? -> advice
+> Know anything about the demon? -> rumour if demon active
+> Goodbye.
+
+advice:
+FEN: Torches. Always carry a torch.
+
+rumour:
+FEN: Big as a door. Arrows, friend. Keep your distance.
+```
+
+The first talk is two lines, one after the other; every talk after that starts at `again`. The question about the demon
+is only there while the hero is hunting it (the `demon` quest above).
+
+#### One quest leads to the next
+
+Give the next quest in the same breath as handing one in:
+
+```
+thanks:
+finish rats
+reward gold 20
+give demon
+MINER: Thanks! But the rats were running from something. Something big...
+```
+
+`give` only gives a quest that hasn't been given, so a talk that runs it twice does no harm.
+
+#### The level's own quest (co-op and online)
+
+There are no talks in co-op and online, so there a level's quests are its own: under way from the start, with no script.
+Tick *Under way from the start*, and *Completing it clears the level* for the one that wins it:
+
+```jsonc
+{ "id": "king", "name": "SLAY THE DEMON KING", "text": "He waits in the throne room.", "goal": { "kind": "kill" }, "start": true, "ends": true }
+```
+
+Mark the boss on the throne *Killing it counts for quest*. Every player sees the quest in their tracker as the level
+starts, and killing the king clears the level as reaching an exit does. A `start` collect quest works the same way: "find
+the five relics", with an exit for after. A level made for both can have NPC quests as well; a Quest offers them, and in
+co-op and online the NPCs only stand there.
+
+#### Mistakes to avoid
+
+- **Check before you `finish`.** `finish` hands a quest in whatever state it's in, so put it in a part you reach with
+  `if QUEST complete`, as every example does. `complete` likewise meets a quest's goal even if it hasn't been given; check
+  `if QUEST active` first.
+- **Don't make a quest an NPC hands in `ends`.** An `ends` quest clears the level the moment its goal is met, before the
+  hero can walk back to hand it in.
+- **A choice's `if` comes after its `->`.** `> Ask about the demon -> rumour if demon active` works. Without the `->`, the
+  words are just part of what the choice says.
+- **A plain line can't start with an action word.** A line whose first word is `give`, `complete`, `finish`, `reward`,
+  `set`, `unset`, `if` or `end` (in lower case) is read as that. Give it a speaker (`BROG: give it back!`).
+- **`#` starts a comment, anywhere on a line**, so a line can't say it: `GUARD: Room #3` says "Room".
+- **Ids are exact.** `Hoard` isn't `hoard`. The popup names a quest the level hasn't got, and a part the script hasn't got.
+- **A kill goal's `monster` counts only once the quest is given,** while pickups and bosses marked for a quest count
+  before it is. So "kill five imps" means five after the hunter asks, but three sacks found early are three sacks found.
 
 ---
 
@@ -2280,7 +2559,8 @@ vertical **toolbar** of tools at the far right. Each palette tab ends in a **+**
   spawners) so a cell's whole picture - hand-placed and intrinsic - is in one place.
 - Painting a torch or a spawner **tile** is enough; its light or spawner values come from `assets-meta.json`. Use the
   Attributes tool to override them for one placement.
-- A `dialog` brush's popup is a box for its NPC's **script**, read as you type: the footer names the first line that doesn't
+- A `dialog` brush's popup is a box for its NPC's **script** (Edit, or `E`, with the brush picked; or click a placed one with
+  the Attributes tool), read as you type: the footer names the first line that doesn't
   read (and how many more), and Save waits until it does. A `boss`'s popup picks its monster from the roster's pictures, its hit
   points and its quest; a pickup's has a quest too. Each offers None and the level's quests, so make the quests (Q) first. On the
   map a dialog is tagged D, a boss B, and a pickup or boss that counts for a quest has a Q after its tag (G10Q).
@@ -2562,7 +2842,8 @@ mode ([10.6](#away-from-the-dev-server-downloads)). The service exists only unde
 `AssetsWebpackPlugin`'s `spriteApi` not switched off) and answers only to `localhost` - open the game at `http://localhost:<port>/`, not the
 machine's network address. `GET /__sprite-api/list` (with an `X-Sprite-Editor: 1` header) should answer.
 
-**There is no Edit or Clone button.** Both are absent for a data brush and for a texture made at run time, which are not from a bundle.
+**There is no Edit or Clone button.** Both are absent for a texture made at run time, which is not from a bundle. A data brush has no
+Clone, and its Edit opens its value's popup rather than the sprite editor (a data brush with nothing to set, like `exit`, has no Edit either).
 
 **Clone (or Edit) says "Frame 1 is 8x18 but frame 0 is 8x16".** The sprite editor needs every frame of an animation to be the same size, and this one's
 frames differ (in the sample game, `torch_1_anim` and `flame_1_anim`, whose frames were trimmed to their flame). Nothing was written. Copy those files
