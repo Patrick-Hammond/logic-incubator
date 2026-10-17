@@ -5,6 +5,7 @@ import { Scenes } from "@logic-incubator/engine/Constants";
 import { InitalScale } from "../Layout";
 import { DefaultBossValue } from "@logic-incubator/engine/level/entities/Bosses";
 import { DefaultPickupValue } from "@logic-incubator/engine/level/entities/Pickups";
+import { DefaultSpawnerValue } from "@logic-incubator/engine/level/entities/Spawners";
 import { Brush, DataBrushName, DataBrushValue, TileLayerKind } from "@logic-incubator/engine/level/LevelFormat";
 import { DefaultDialogValue } from "@logic-incubator/engine/story/Talk";
 import { Layer } from "./LevelDataStore";
@@ -233,7 +234,9 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
                 { name: DataBrushName.PICKUP, colour: 0xf15bb5, value: DefaultPickupValue() },
                 { name: DataBrushName.EXIT, colour: 0x4cc9f0, value: 0 },
                 { name: DataBrushName.DIALOG, colour: 0x8ac926, value: DefaultDialogValue() },
-                { name: DataBrushName.BOSS, colour: 0xd00000, value: DefaultBossValue() }
+                { name: DataBrushName.BOSS, colour: 0xd00000, value: DefaultBossValue() },
+                // The colour the editor has always outlined a spawner tile's footprint in.
+                { name: DataBrushName.SPAWNER, colour: 0x9b5de5, value: DefaultSpawnerValue() }
             ],
             layers: [],
             mouseButtonState: MouseButtonState.UP,
@@ -450,8 +453,8 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
                 return dataBrushes;
             }
             case EditorActions.PICK_BRUSH: {
-                // Picking a placed light/spawner picks up its settings too, so the palette brush (and its
-                // Edit dialog) carry on from them.
+                // Picking a placed data brush with settings (a pickup, a spawner, a boss...) picks them up too,
+                // so the palette brush (and its Edit dialog) carry on from them.
                 const picked = action.data.brush;
                 if (picked.data == null || !dataBrushes.some(db => db.name === picked.name)) {
                     return dataBrushes;
@@ -649,7 +652,7 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
         return ToolFitsLayer(tool, layers.find(layer => layer.selected)) ? tool : EditorTool.BRUSH;
     }
 
-    /** Plain +/- stepping only applies to a numeric data brush value - every remaining one (player-start, collision, height) is a number, but a save from before light/spawner moved off the data-brush model could still hand this a `LightValue`/`SpawnerValue`, so the guard stays. */
+    /** Plain +/- stepping only applies to a numeric data brush value (a height) - a pickup's, spawner's, dialog's or boss's is set in its popup instead. */
     private CalcDataBrushValue(value: DataBrushValue, actionType: EditorActions): DataBrushValue {
         if (typeof value !== "number") {
             return value;
