@@ -3,7 +3,7 @@ import { Scenes } from "@logic-incubator/engine/Constants";
 import { TEST_MONSTERS } from "@logic-incubator/engine/level/__fixtures__/TestMonsters";
 import MonsterRoster from "@logic-incubator/engine/level/entities/MonsterRoster";
 import { DataBrushName } from "@logic-incubator/engine/level/LevelFormat";
-import EditorStore, { DataBrushIcon, EditableLayerCount, EditorActions, EditorTool, IMPLICIT_LAYER_ID, IsRemovableLayer, MouseButtonState, PLAYER_LAYER_ID, PlayerLayerMoved, ToolFitsLayer } from "./EditorStore";
+import EditorStore, { DataBrushIcon, EditableLayerCount, EditorActions, EditorTool, IMPLICIT_LAYER_ID, IsRemovableLayer, MouseButtonState, PaintsWithBrush, PLAYER_LAYER_ID, PlayerLayerMoved, ToolFitsLayer } from "./EditorStore";
 
 MonsterRoster.inst.Load(TEST_MONSTERS);
 
@@ -575,7 +575,7 @@ describe("the data-select tool needs a data layer", () => {
         expect(store.state.tool).toBe(EditorTool.BRUSH);
     });
 
-    it("comes back with the attributes layer, which remembers it like any layer remembers its tool", () => {
+    it("comes back with the attributes layer", () => {
         const store = new EditorStore();
         selectAttributes(store);
         setTool(store, EditorTool.DATA_SELECT);
@@ -585,11 +585,39 @@ describe("the data-select tool needs a data layer", () => {
         expect(store.state.tool).toBe(EditorTool.DATA_SELECT);
     });
 
-    it("leaves every other tool alone when the layer changes to one with nothing remembered", () => {
-        [EditorTool.ERASE, EditorTool.STAMP, EditorTool.DROPPER, EditorTool.FILL, EditorTool.MOVE].forEach(tool => {
+    it("is picked whenever the attributes layer is selected, from any tool, first time or not - keeping the brush it was left with", () => {
+        [EditorTool.BRUSH, EditorTool.ERASE, EditorTool.STAMP, EditorTool.DROPPER, EditorTool.FILL, EditorTool.MOVE].forEach(tool => {
             const store = new EditorStore();
             setTool(store, tool);
             selectAttributes(store);
+            expect(store.state.tool, tool).toBe(EditorTool.DATA_SELECT);
+
+            // Left painting collision with the brush...
+            store.Dispatch({ type: EditorActions.BRUSH_CHANGED, data: { name: DataBrushName.COLLISION } });
+            expect(store.state.tool, tool).toBe(EditorTool.BRUSH);
+            store.Dispatch({ type: EditorActions.SELECT_LAYER, data: { layer: store.state.layers.find(layer => layer.kind === "floor") } });
+            setTool(store, tool);
+            // ...it comes back on the data arrow all the same, with collision still the brush for B.
+            selectAttributes(store);
+            expect(store.state.tool, tool).toBe(EditorTool.DATA_SELECT);
+            expect(store.state.currentBrush.name, tool).toBe(DataBrushName.COLLISION);
+        });
+    });
+
+    it("isn't picked when the dropper takes a data brush off the attributes layer - the dropper stays", () => {
+        const store = new EditorStore();
+        setTool(store, EditorTool.DROPPER);
+        const picked = { ...store.state.currentBrush, name: DataBrushName.COLLISION, layerId: IMPLICIT_LAYER_ID };
+        store.Dispatch({ type: EditorActions.PICK_BRUSH, data: { brush: picked } });
+        expect(store.SelectedLayer.id).toBe(IMPLICIT_LAYER_ID);
+        expect(store.state.tool).toBe(EditorTool.DROPPER);
+    });
+
+    it("leaves every other tool alone when the layer changes to a tile layer with nothing remembered", () => {
+        [EditorTool.ERASE, EditorTool.STAMP, EditorTool.DROPPER, EditorTool.FILL, EditorTool.MOVE].forEach(tool => {
+            const store = new EditorStore();
+            setTool(store, tool);
+            store.Dispatch({ type: EditorActions.SELECT_LAYER, data: { layer: store.state.layers.find(layer => layer.kind === "walls") } });
             expect(store.state.tool, tool).toBe(tool);
         });
     });
@@ -606,6 +634,46 @@ describe("the data-select tool needs a data layer", () => {
         const tileLayer = { id: 0, name: "layer 0", selected: true, visible: true, isData: false };
         store.Load({ ...store.state, layers: [{ ...attributes, selected: false }, tileLayer] });
         expect(store.state.tool).toBe(EditorTool.BRUSH);
+    });
+});
+
+describe("picking a brush in the palette", () => {
+    const setTool = (store: EditorStore, tool: EditorTool) => store.Dispatch({ type: EditorActions.SET_TOOL, data: { tool } });
+    const pick = (store: EditorStore, name: string) => store.Dispatch({ type: EditorActions.BRUSH_CHANGED, data: { name } });
+
+    it("switches a tool that doesn't paint (erase, the dropper, move) to the brush", () => {
+        [EditorTool.ERASE, EditorTool.DROPPER, EditorTool.MOVE].forEach(tool => {
+            const store = new EditorStore();
+            setTool(store, tool);
+            pick(store, "floor_1");
+            expect(store.state.tool, tool).toBe(EditorTool.BRUSH);
+            expect(store.state.currentBrush.name, tool).toBe("floor_1");
+        });
+    });
+
+    it("keeps the tools that paint with it: the brush, stamp and fill", () => {
+        [EditorTool.BRUSH, EditorTool.STAMP, EditorTool.FILL].forEach(tool => {
+            const store = new EditorStore();
+            setTool(store, tool);
+            pick(store, "floor_1");
+            expect(store.state.tool, tool).toBe(tool);
+        });
+    });
+
+    it("switches the data arrow to the brush when a data brush is picked on the attributes layer", () => {
+        const store = new EditorStore();
+        store.Dispatch({ type: EditorActions.SELECT_LAYER, data: { layer: implicitLayers(store)[0] } });
+        expect(store.state.tool).toBe(EditorTool.DATA_SELECT);
+        pick(store, DataBrushName.PICKUP);
+        expect(store.state.tool).toBe(EditorTool.BRUSH);
+    });
+
+    it("says which tools paint with the picked brush", () => {
+        expect([EditorTool.BRUSH, EditorTool.ERASE, EditorTool.DATA_SELECT, EditorTool.STAMP, EditorTool.DROPPER, EditorTool.FILL, EditorTool.MOVE].filter(PaintsWithBrush)).toEqual([
+            EditorTool.BRUSH,
+            EditorTool.STAMP,
+            EditorTool.FILL
+        ]);
     });
 });
 

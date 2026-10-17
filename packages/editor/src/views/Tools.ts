@@ -23,11 +23,6 @@ import { BoundsOfCells, CellRect, FloodFill, RectCells, SpanRect, TopmostBrushAt
  */
 type EditableTarget = { target: Brush; editorKey: string; value: DataBrushValue; context: string; cells: Vec2Like[] };
 
-/** Whether the brush sprite follows the cursor under this tool - only for the tools that paint with it. */
-export function ToolShowsBrush(tool: EditorTool): boolean {
-    return tool === EditorTool.BRUSH || tool === EditorTool.STAMP || tool === EditorTool.FILL;
-}
-
 const PAINT_COLOUR = 0x9b5de5;
 const ERASE_COLOUR = 0xff5d5d;
 const PICK_COLOUR = 0x4cc9f0;

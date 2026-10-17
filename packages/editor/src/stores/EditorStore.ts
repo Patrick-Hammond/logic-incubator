@@ -70,6 +70,11 @@ export function ToolFitsLayer(tool: EditorTool, layer: Layer | undefined): boole
     return tool !== EditorTool.DATA_SELECT || (layer !== undefined && layer.isData);
 }
 
+/** Whether `tool` paints with the picked brush - the brush itself, stamp and fill - so it's the one to keep when another brush is picked, and the brush sprite follows the cursor under it. */
+export function PaintsWithBrush(tool: EditorTool): boolean {
+    return tool === EditorTool.BRUSH || tool === EditorTool.STAMP || tool === EditorTool.FILL;
+}
+
 /** Max editable (non-attributes) layers - a sanity cap; the Layers panel's list scrolls past what fits. */
 export const MaxEditableLayers = 16;
 
@@ -362,9 +367,11 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
     /**
      * When the selected layer changes - picked in the panel, or by adding, removing or the dropper - the layer
      * being left remembers its tool and brush, and the one selected gets back its own (or, the first time, the
-     * empty brush and whatever tool was in use). The dropper's pick is the exception: it's the brush wanted next,
-     * so it's kept. `brush` and `tool` are what the action would otherwise leave. Memory of a layer that's gone is
-     * dropped.
+     * empty brush and whatever tool was in use). A data layer ("attributes") always comes back on the data arrow,
+     * though, keeping just its brush: it's where placed data is edited, and picking one of its data brushes to
+     * paint switches to the brush (see `UpdateTool`). The dropper's pick is the exception to both: it's the brush
+     * wanted next, so it's kept, with the dropper. `brush` and `tool` are what the action would otherwise leave.
+     * Memory of a layer that's gone is dropped.
      */
     private SwitchLayer(state: IEditorState, layers: Layer[], action: IAction<IActionData>, brush: Brush, tool: EditorTool): { brush: Brush; tool: EditorTool; layerMemory: { [layerId: string]: LayerMemory } } {
         let layerMemory = state.layerMemory || this.DefaultState().layerMemory;
@@ -380,7 +387,9 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
                 brush = remembered
                     ? { ...remembered.brush, layerId: to.id, position: state.currentBrush.position }
                     : { ...this.DefaultState().currentBrush, layerId: to.id, position: state.currentBrush.position };
-                if (remembered) {
+                if (to.isData) {
+                    tool = EditorTool.DATA_SELECT;
+                } else if (remembered) {
                     tool = remembered.tool;
                 }
             }
@@ -692,6 +701,11 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
         switch (action.type) {
             case EditorActions.SET_TOOL:
                 return action.data.tool;
+            case EditorActions.BRUSH_CHANGED: {
+                // A brush picked from the palette is wanted for painting: erase, the data arrow, the dropper and move give way to the brush.
+                const current = tool || this.DefaultState().tool;
+                return PaintsWithBrush(current) ? current : EditorTool.BRUSH;
+            }
             default:
                 return tool || this.DefaultState().tool;
         }

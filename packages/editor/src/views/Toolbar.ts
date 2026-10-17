@@ -12,7 +12,14 @@ type ToolInfo = { tool: EditorTool; icon: string; name: string; key: Key; keyLab
  * Data select is only shown while a data layer is selected (see `ToolFitsLayer`) - a tile layer has no data to select.
  */
 const TOOLS: ToolInfo[] = [
-    { tool: EditorTool.BRUSH, icon: "brush", name: "Brush", key: Key.B, keyLabel: "B", hint: "Paint the brush. Right-click erases; Ctrl+drag paints a rectangle." },
+    {
+        tool: EditorTool.BRUSH,
+        icon: "brush",
+        name: "Brush",
+        key: Key.B,
+        keyLabel: "B",
+        hint: "Paint the brush. Right-click erases; Ctrl+drag paints a rectangle. Picking a brush in the palette switches to this."
+    },
     { tool: EditorTool.ERASE, icon: "eraser", name: "Erase", key: Key.X, keyLabel: "X", hint: "Erase from the selected layer. Ctrl+drag erases a rectangle." },
     {
         tool: EditorTool.DATA_SELECT,
@@ -20,7 +27,7 @@ const TOOLS: ToolInfo[] = [
         name: "Data select",
         key: Key.A,
         keyLabel: "A",
-        hint: "Click a placed light, spawner, pickup, door, height, dialog or boss - any cell of it - to edit its value. Only available with the attributes layer selected."
+        hint: "Click a placed light, spawner, pickup, door, height, dialog or boss - any cell of it - to edit its value. Only available with the attributes layer selected, and selecting that layer switches to this."
     },
     {
         tool: EditorTool.STAMP,

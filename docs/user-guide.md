@@ -2561,9 +2561,9 @@ vertical **toolbar** of tools at the far right. Each palette tab ends in a **+**
 
 | Key | Tool | What it does |
 | --- | --- | --- |
-| `B` | Brush | Left paints; right erases; Ctrl+drag paints a filled rectangle. |
+| `B` | Brush | Left paints; right erases; Ctrl+drag paints a filled rectangle. Picking a brush in the palette (even the one already picked) switches to the Brush from Erase, Attributes, Dropper or Move; Stamp and Fill paint with it too, so they stay. |
 | `X` | Erase | Erases from the selected layer; Ctrl+drag a rectangle. |
-| `A` | Attributes (data select) | Click a placed light, spawner, pickup, door, height, dialog or boss - any cell of its sprite (or a spawner brush's footprint), not just the top-left - to edit its value in a dialog. Only offered while a data layer (the attributes layer) is selected; its button is hidden, and the key does nothing, with a tile layer selected. |
+| `A` | Attributes (data select) | Click a placed light, spawner, pickup, door, height, dialog or boss - any cell of its sprite (or a spawner brush's footprint), not just the top-left - to edit its value in a dialog. Only offered while a data layer (the attributes layer) is selected; its button is hidden, and the key does nothing, with a tile layer selected. Selecting the attributes layer switches to it. |
 | `U` | Stamp | Drag a rectangle of the brush; hold Ctrl for just the border; right-drag erases a rectangle. Esc cancels. |
 | `I` | Dropper | Click a tile to paint with it (on the attributes layer, a data brush with its value). |
 | `G` | Fill | Flood-fills matching cells on the selected layer, up to the edge of the view. |
@@ -2612,7 +2612,9 @@ vertical **toolbar** of tools at the far right. Each palette tab ends in a **+**
   tiles; a walls layer likewise only **Walls**. Any other tile layer shows every tab but those two. The **+** in the layer
   panel asks whether the new layer is generic, floor or walls. The last floor layer and the last walls layer can't be removed.
 - Each layer remembers its own tool and tile: switch from the floor layer to the walls layer and back, and the floor tile and
-  tool you were using are picked again (saved with the level). A layer you haven't used yet starts with no brush.
+  tool you were using are picked again (saved with the level). A layer you haven't used yet starts with no brush. The
+  attributes layer is the exception for the tool: it always opens on the Attributes tool, ready to edit what's placed, with
+  its data brush still picked, so `B` (or clicking the brush in the palette) paints with it again.
 - The one **attributes** layer is always present. Player start, collision, z-index, pickups, exits, NPCs' dialogs, bosses and spawners are painted on it, and it also
   draws a read-only overlay of what the game *derives* from tiles' metadata (collision, door footprints, lights,
   spawners) so a cell's whole picture - hand-placed and intrinsic - is in one place. A painted spawner is a square on its own

@@ -2,8 +2,7 @@ import {AnimatedSprite, Sprite} from "pixi.js";
 import { AnimationSpeed, TileSize } from "@logic-incubator/engine/Constants";
 import { GridBounds } from "../Layout";
 import EditorComponent from "../EditorComponent";
-import { IEditorState } from "../stores/EditorStore";
-import { ToolShowsBrush } from "./Tools";
+import { IEditorState, PaintsWithBrush } from "../stores/EditorStore";
 
 /** The brush sprite following the cursor over the map. */
 export default class BrushTool extends EditorComponent {
@@ -68,6 +67,6 @@ export default class BrushTool extends EditorComponent {
         }
 
         // visible - only for the tools that paint with it; painting itself is done by `Tools`
-        this.brush.visible = state.brushVisible && ToolShowsBrush(state.tool);
+        this.brush.visible = state.brushVisible && PaintsWithBrush(state.tool);
     }
 }

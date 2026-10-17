@@ -5,7 +5,7 @@ import AssetMetadataStore, { AssetCategory } from "@logic-incubator/engine/level
 import { TileLayerKind } from "@logic-incubator/engine/level/LevelFormat";
 import EditorComponent from "../EditorComponent";
 import { EditorIcon } from "../EditorAssets";
-import { DataBrushIcon, DataBrushIcons, EditorActions, IEditorState } from "../stores/EditorStore";
+import { DataBrushIcon, DataBrushIcons, EditorActions, EditorTool, IEditorState, PaintsWithBrush } from "../stores/EditorStore";
 import { ButtonEl, El, InjectStyles } from "../ui/dom/Dom";
 import EditorOverlay from "../ui/dom/EditorOverlay";
 import SpriteCanvas from "../ui/dom/SpriteCanvas";
@@ -204,8 +204,13 @@ export default class Palette extends EditorComponent {
             this.editorStore.Dispatch({ type: EditorActions.BRUSH_HOVERED, data: { name } });
         });
         item.addEventListener("click", () => {
-            if (name !== this.editorStore.state.currentBrush.name) {
+            const state = this.editorStore.state;
+            if (name !== state.currentBrush.name) {
+                // Which also switches to the brush tool, if the tool in use doesn't paint (see `EditorStore.UpdateTool`).
                 this.editorStore.Dispatch({ type: EditorActions.BRUSH_CHANGED, data: { name } });
+            } else if (!PaintsWithBrush(state.tool)) {
+                // Picking it again keeps its rotation and flips, but still means "paint with this".
+                this.editorStore.Dispatch({ type: EditorActions.SET_TOOL, data: { tool: EditorTool.BRUSH } });
             }
         });
         this.items[name] = item;
