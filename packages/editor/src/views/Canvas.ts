@@ -1,9 +1,8 @@
 import {AnimatedSprite, BitmapText, Container, Graphics, interaction} from "pixi.js";
 import { Key } from "@logic-incubator/lib/io/Keyboard";
 import AssetMetadataStore from "@logic-incubator/engine/level/AssetMetadata";
-import { FindImplicitPlacements } from "@logic-incubator/engine/level/ImplicitData";
+import { FindImplicitPlacements, FindSpawners } from "@logic-incubator/engine/level/ImplicitData";
 import MonsterRoster from "@logic-incubator/engine/level/entities/MonsterRoster";
-import { SpawnerCells } from "@logic-incubator/engine/level/entities/Spawners";
 import { Brush, DataBrushName, IsTileLayer } from "@logic-incubator/engine/level/LevelFormat";
 import AssetFactory from "@logic-incubator/lib/loading/AssetFactory";
 import { MapLabel } from "../DataLabels";
@@ -16,10 +15,9 @@ import { EditorFontName } from "../EditorAssets";
 import { EditorActions, EditorTool, IEditorState, IMPLICIT_LAYER_ID, MouseButtonState } from "../stores/EditorStore";
 import { LevelDataActions, LevelDataState } from "../stores/LevelDataStore";
 
-/** Doors, lights and spawners aren't paintable data brushes any more, so they have no palette colour of their own to borrow - these match their old ones (LIGHT's/SPAWNER's former swatch colours) so the map looks the same as before the change. A pickup does have one - the PICKUP brush's, whether it's painted or a tile's own. */
+/** Doors and lights aren't paintable data brushes any more, so they have no palette colour of their own to borrow - these match their old ones (LIGHT's former swatch colour) so the map looks the same as before the change. A pickup and a spawner do have one - the PICKUP or SPAWNER brush's, whether it's painted or a tile's own. */
 const IMPLICIT_DOOR_COLOUR = 0x4cc9f0;
 const IMPLICIT_LIGHT_COLOUR = 0xff8100;
-const IMPLICIT_SPAWNER_COLOUR = 0x9b5de5;
 
 export default class Canvas extends EditorComponent {
     private grid: Graphics = new Graphics();
@@ -147,12 +145,14 @@ export default class Canvas extends EditorComponent {
 
     /**
      * Outlines every placement the game derives from tiles' `AssetMetadata`
-     * (see `FindImplicitPlacements` - the same function `Level` uses, so this
-     * is exactly what the game will get): collision, each cell of a door's
+     * (see `FindImplicitPlacements` and `FindSpawners` - the same functions `Level`
+     * uses, so this is exactly what the game will get): collision, each cell of a door's
      * sprite footprint (labelled with its lock), intrinsic lights labelled with their
      * range, spawners with their monster count and pickups with their kind. Drawn
      * outlined over a faint fill, so it reads differently from the solid
-     * squares of hand-painted data brushes.
+     * squares of hand-painted data brushes. A painted spawner's square is just
+     * its own cell, so the overlay outlines the whole footprint it makes solid too -
+     * the tile it turns into a spawner, or the roster's sprite.
      */
     private DrawImplicitLayer(levelData: Brush[]): void {
         this.implicitContainer.removeChildren();
@@ -166,10 +166,12 @@ export default class Canvas extends EditorComponent {
             return;
         }
 
-        const tileLayerIds = new Set(state.layers.filter(IsTileLayer).map(layer => layer.id));
+        /** Each tile layer's place in the drawing order - the game draws them in the same order. */
+        const tileLayerOrder = new Map<number, number>();
+        state.layers.filter(IsTileLayer).forEach((layer, order) => tileLayerOrder.set(layer.id, order));
         const placements = FindImplicitPlacements(
             levelData,
-            layerId => tileLayerIds.has(layerId),
+            layerId => tileLayerOrder.has(layerId),
             name => AssetMetadataStore.inst.Get(name),
             name => AssetFactory.inst.CreateTexture(name),
             TileSize
@@ -236,14 +238,23 @@ export default class Canvas extends EditorComponent {
         });
         const spawnerSprite = MonsterRoster.inst.SpawnerSprite;
         const spawnerSize = spawnerSprite && this.assetFactory.Has(spawnerSprite) ? this.assetFactory.CreateTexture(spawnerSprite) : undefined;
-        placements.spawners.forEach(spawner => {
-            const cells = SpawnerCells(spawner, spawnerSize, TileSize);
+        const spawnerColour = colourOf(DataBrushName.SPAWNER);
+        const spawners = FindSpawners(
+            levelData,
+            layerId => tileLayerOrder.get(layerId),
+            name => AssetMetadataStore.inst.Get(name),
+            name => (this.assetFactory.Has(name) ? this.assetFactory.CreateTexture(name) : undefined),
+            TileSize,
+            spawnerSize
+        );
+        spawners.forEach(spawner => {
             let labelPos: { x: number; y: number } | null = null;
-            cells.forEach(cell => {
-                const pos = drawCell(cell.x, cell.y, IMPLICIT_SPAWNER_COLOUR);
+            spawner.cells.forEach(cell => {
+                const pos = drawCell(cell.x, cell.y, spawnerColour);
                 labelPos = labelPos || pos;
             });
-            if (labelPos) {
+            // A painted spawner's own square has its label already.
+            if (labelPos && !spawner.brush) {
                 const text = this.textPool.Get();
                 text.text = spawner.value.monsters.length.toString();
                 text.scale.set(state.viewScale);

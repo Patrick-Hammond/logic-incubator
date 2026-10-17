@@ -64,7 +64,8 @@ const StandingFootInset = 2 / TileSize;
  * doesn't stay pinned at a perfect 1:1 - though it eases back to 1 if the
  * player stays put. A tile that gives off light has a glow drawn over it, in
  * its own band (see `Glow`). The player, monsters and spawners render into their
- * own layer (`EntitiesLayer`), over the glows of lights that move
+ * own layer (`EntitiesLayer`) - a tile a spawner is drawn as too (see
+ * `Level.SpawnerTile`) - over the glows of lights that move
  * (`GlowsLayer`) and under those that float (`OrbsLayer`), and shots into one
  * above that (`ProjectilesLayer`); all four get the same `EffectiveZoom` factor
  * so they grow/shrink in step with the world. Those figures' layers go where the
@@ -282,13 +283,16 @@ export default class TileMapView extends GameComponent {
                             const tile = tiles[t];
                             const texture = tile.anim ? tile.anim.texture : tile.texture;
                             if (texture) {
-                                const light = texture.height > TileSize ? this.StandingLight(x, y, tile.pixelOffset, texture) : this.cornerLight;
                                 const left = (x - originX) * TileSize - tile.pixelOffset.x;
                                 const top = (y - originY) * TileSize - tile.pixelOffset.y;
-                                // A new options object per tile: `tile()` writes the texture's frame into it.
-                                layer.tile(texture, left, top, { cornerTints: light });
-                                if (tile.rotation || tile.scale.x < 0 || tile.scale.y < 0) {
-                                    layer.tileRotate(TileGD8Rotation(tile.rotation, tile.scale.x, tile.scale.y));
+                                // A spawner's tile is drawn with the figures, where it can flash when hit (see `EntityRenderer`) - only its glow is drawn here.
+                                if (!tile.spawner) {
+                                    const light = texture.height > TileSize ? this.StandingLight(x, y, tile.pixelOffset, texture) : this.cornerLight;
+                                    // A new options object per tile: `tile()` writes the texture's frame into it.
+                                    layer.tile(texture, left, top, { cornerTints: light });
+                                    if (tile.rotation || tile.scale.x < 0 || tile.scale.y < 0) {
+                                        layer.tileRotate(TileGD8Rotation(tile.rotation, tile.scale.x, tile.scale.y));
+                                    }
                                 }
                                 if (tile.light !== undefined) {
                                     const lights = this.level.lights;

@@ -406,12 +406,6 @@ describe("EditorStore data brush icons", () => {
     });
 });
 
-// Reconciling a saved spawner value, and +/- vs. the dialog on a SET_DATA_BRUSH_VALUE-carried object
-// value, used to be tested here against the SPAWNER data brush - it isn't one any more (see
-// LevelFormat.ts and DataBrushEditors.ts), so there's nothing left in `dataBrushes` an object value
-// like a spawner's could ever reach. `ImplicitData.test.ts` covers a spawner's own value now
-// (EffectiveSpawner/SanitiseSpawnerValue), and `Tools.EditableTargetAt`'s dialog-and-SET_DATA path.
-
 describe("EditorStore currentScene", () => {
     it("starts on the editor, the scene shown at boot, so its shortcuts work straight away", () => {
         expect(new EditorStore().state.currentScene).toBe(Scenes.EDITOR);
@@ -657,5 +651,30 @@ describe("the pickup data brush", () => {
         store.Dispatch({ type: EditorActions.DATA_BRUSH_INC });
         store.Dispatch({ type: EditorActions.DATA_BRUSH_DEC });
         expect(store.SelectedDataBrush.value).toEqual(before);
+    });
+});
+
+describe("the spawner data brush", () => {
+    it("is one of the palette's data brushes, starting as a new spawner of the roster's default pool", () => {
+        const brush = new EditorStore().state.dataBrushes.find(db => db.name === DataBrushName.SPAWNER);
+        expect(brush).toBeDefined();
+        expect(brush.value).toEqual({ monsters: ["goblin"], interval: 3, maxAlive: 4, total: 0, activationRange: 10, hitPoints: 10 });
+    });
+
+    it("is added to a map saved before it existed", () => {
+        const store = new EditorStore();
+        store.Load({ ...store.state, dataBrushes: store.state.dataBrushes.filter(db => db.name !== DataBrushName.SPAWNER) });
+        expect(store.state.dataBrushes.find(db => db.name === DataBrushName.SPAWNER)).toBeDefined();
+    });
+
+    it("takes the value its popup sets, carried onto the brush that's painted, and isn't stepped by + and -", () => {
+        const store = new EditorStore();
+        store.Dispatch({ type: EditorActions.SELECT_LAYER, data: { layer: implicitLayers(store)[0] } });
+        store.Dispatch({ type: EditorActions.BRUSH_CHANGED, data: { name: DataBrushName.SPAWNER } });
+        const value = { monsters: ["imp", "ogre"], interval: 1, maxAlive: 2, total: 5, activationRange: 0, hitPoints: 0 };
+        store.Dispatch({ type: EditorActions.SET_DATA_BRUSH_VALUE, data: { value } });
+        store.Dispatch({ type: EditorActions.DATA_BRUSH_INC });
+        expect(store.SelectedDataBrush.value).toEqual(value);
+        expect(store.state.currentBrush.data).toEqual(value);
     });
 });

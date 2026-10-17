@@ -15,12 +15,18 @@ import type { DoorLockValue } from "./Doors";
 import type { LightValue } from "./Lighting";
 
 /**
- * The data brushes: painted on data layers, and read by the engine rather than drawn. A light or a
- * spawner is no longer among them - both are placed as an ordinary tile brush instead, carrying
- * their value via `AssetMetadata` (a default per asset name) or, per placement, an override in that
- * tile's own `Brush.data` (see `ImplicitData.EffectiveLight`/`EffectiveSpawner`). "light"/"spawner"
- * still identify their kind of value wherever one's edited (see `DataBrushEditors`) - just not as a
- * paintable brush name any more.
+ * The data brushes: painted on data layers, and read by the engine rather than drawn. A light is no
+ * longer among them - it's placed as an ordinary tile brush instead, carrying its value via
+ * `AssetMetadata` (a default per asset name) or, per placement, an override in that tile's own
+ * `Brush.data` (see `ImplicitData.EffectiveLight`). "light" still identifies its kind of value
+ * wherever one's edited (see `DataBrushEditors`) - just not as a paintable brush name any more.
+ *
+ * `SPAWNER` puts a monster spawner on its cell: the same as painting a spawner tile (one whose asset
+ * has a `spawner` in `AssetMetadata`, see `ImplicitData.EffectiveSpawner`), but with its settings in
+ * the brush, where the editor shows them. Like `PICKUP`, it makes the tile on its cell the spawner -
+ * the top one that isn't floor, drawn as itself and gone when it's destroyed - and on bare floor it's
+ * drawn as the roster's `spawnerSprite`. Painted over a spawner tile, the brush's settings are that
+ * spawner's (see `ImplicitData.FindSpawners`).
  *
  * `PICKUP` turns whatever tile is at its cell into a pickup, for items that aren't one by default
  * (their asset has no `pickup` in `AssetMetadata`); a tile that is one can be edited, via the same
@@ -43,7 +49,8 @@ export const enum DataBrushName {
     PICKUP = "pickup",
     EXIT = "exit",
     DIALOG = "dialog",
-    BOSS = "boss"
+    BOSS = "boss",
+    SPAWNER = "spawner"
 }
 
 /** A data brush's value - a number (`Z_INDEX`'s height), or a light's, spawner's, pickup's, door lock's, dialog's or boss's settings. */
