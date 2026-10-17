@@ -3,7 +3,7 @@ import { AddTypes } from "@logic-incubator/lib/patterns/EnumerateTypes";
 import Store, { IAction } from "@logic-incubator/lib/patterns/redux/Store";
 import AssetMetadataStore from "@logic-incubator/engine/level/AssetMetadata";
 import { OrphanedExplicitData } from "@logic-incubator/engine/level/ImplicitData";
-import { Brush, DataBrushValue, LevelLayer } from "@logic-incubator/engine/level/LevelFormat";
+import { Brush, DataBrushValue, IsTileLayer, LevelLayer } from "@logic-incubator/engine/level/LevelFormat";
 import type { QuestDef } from "@logic-incubator/engine/story/Quests";
 
 /**
@@ -180,7 +180,7 @@ export default class LevelDataStore extends Store<LevelDataState, ActionData> {
         if (!erased.length || !layers) {
             return levelData;
         }
-        const tileLayerIds = new Set(layers.filter(layer => !layer.isData).map(layer => layer.id));
+        const tileLayerIds = new Set(layers.filter(IsTileLayer).map(layer => layer.id));
         const orphans = new Set(
             OrphanedExplicitData(
                 erased,

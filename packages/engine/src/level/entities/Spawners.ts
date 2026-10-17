@@ -1,7 +1,8 @@
 /**
  * A monster spawner's authored properties - the value of the `SPAWNER` data
- * brush. Pure - no pixi - so it runs under the plain node test runner, same
- * reasoning as Lighting.ts.
+ * brush, or of a spawner tile (its asset's `spawner` in `AssetMetadata`, or its
+ * own override). Pure - no pixi - so it runs under the plain node test runner,
+ * same reasoning as Lighting.ts.
  */
 
 import { Vec2Like } from "@logic-incubator/lib/math/Geometry";
@@ -24,8 +25,22 @@ export type SpawnerValue = {
     hitPoints: number;
 };
 
-/** A placed spawner: its (normalised) map cell plus its authored `SpawnerValue`, and the solid cells its sprite covers (see `SpawnerCells`). See `Level.spawners`. */
+/** A placed spawner: its (normalised) map cell plus its authored `SpawnerValue`, and the solid cells its picture covers (see `ImplicitData.FindSpawners`). See `Level.spawners`. */
 export type Spawner = Vec2Like & { value: SpawnerValue; cells: Vec2Like[] };
+
+/**
+ * Where a level's spawners are, one to a cell: each spawner tile's (see `ImplicitData.EffectiveSpawner`), unless a
+ * `SPAWNER` brush is painted on that cell - then the brush's, so painting one over a spawner tile sets what that
+ * spawner does rather than adding a second. In the tiles' order, then the brushes on cells of their own: the same
+ * on every machine, as an online run's spawner events name a spawner by its place in this list.
+ */
+export function SpawnerPlacements<T extends Vec2Like>(fromTiles: ReadonlyArray<T>, fromBrushes: ReadonlyArray<T>): T[] {
+    const byCell = new Map<string, T>();
+    fromTiles.concat(fromBrushes).forEach(placement => byCell.set(placement.x + "," + placement.y, placement));
+    const placements: T[] = [];
+    byCell.forEach(placement => placements.push(placement));
+    return placements;
+}
 
 /** A new spawner's value. A function, not a constant: its pool is the default one from the `MonsterRoster` the game loads at boot. */
 export function DefaultSpawnerValue(): SpawnerValue {
@@ -66,12 +81,18 @@ export function SanitiseSpawnerValue(value: Partial<SpawnerValue> | null | undef
 }
 
 /**
- * The solid cells a spawner's sprite covers when drawn top-left on its own cell - the same
- * rule as a door's footprint (`DoorFootprint`), so a 32x32 sprite on 16px tiles fills the
- * 2x2 block right of and below it. Just its own cell without a sprite.
+ * The solid cells a spawner's sprite covers when drawn top-left on its own cell, nudged by
+ * `pixelOffset` as a tile is - the same rule as a door's footprint (`DoorFootprint`), so a
+ * 32x32 sprite on 16px tiles fills the 2x2 block right of and below it. Just its own cell
+ * without a sprite.
  */
-export function SpawnerCells(anchor: Vec2Like, spriteSize: { width: number; height: number } | undefined, tileSize: number): Vec2Like[] {
-    return spriteSize ? DoorFootprint(anchor, spriteSize, { x: 0, y: 0 }, tileSize) : [{ x: anchor.x, y: anchor.y }];
+export function SpawnerCells(
+    anchor: Vec2Like,
+    spriteSize: { width: number; height: number } | undefined,
+    tileSize: number,
+    pixelOffset: Vec2Like = { x: 0, y: 0 }
+): Vec2Like[] {
+    return spriteSize ? DoorFootprint(anchor, spriteSize, pixelOffset, tileSize) : [{ x: anchor.x, y: anchor.y }];
 }
 
 /** A spawner in play. See `StepSpawner`. */

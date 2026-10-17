@@ -8,8 +8,9 @@ import { DataBrushEditorFor } from "../DataBrushEditors";
 import EditorComponent from "../EditorComponent";
 import AssetMetadataStore from "@logic-incubator/engine/level/AssetMetadata";
 import { DoorFootprint, EffectiveDoorLock } from "@logic-incubator/engine/level/Doors";
-import { EffectiveLight, EffectivePickup, EffectiveSpawner } from "@logic-incubator/engine/level/ImplicitData";
-import { Brush, DataBrushValue } from "@logic-incubator/engine/level/LevelFormat";
+import MonsterRoster from "@logic-incubator/engine/level/entities/MonsterRoster";
+import { EffectiveLight, EffectivePickup, EffectiveSpawner, FindSpawners } from "@logic-incubator/engine/level/ImplicitData";
+import { Brush, DataBrushName, DataBrushValue, IsTileLayer } from "@logic-incubator/engine/level/LevelFormat";
 import { EditorActions, EditorTool, IEditorState, MouseButtonState } from "../stores/EditorStore";
 import { Layer, LevelDataActions } from "../stores/LevelDataStore";
 import { TakesCategory } from "./PaletteCategories";
@@ -336,10 +337,16 @@ export default class Tools extends EditorComponent {
         return TopmostBrushAt(this.levelDataStore.state.levelData, layers, cell);
     }
 
-    /** The data brush on top at `cell` (on any visible data layer) whose value has a dialog. */
+    /** The data brush on top at `cell` (on any visible data layer) whose value has a dialog - a spawner at any cell of its footprint. */
     private EditableDataAt(state: IEditorState, cell: Vec2Like): Brush | undefined {
         const layers = state.layers.filter(layer => layer.isData);
-        return TopmostBrushAt(this.levelDataStore.state.levelData, layers, cell, brush => DataBrushEditorFor(brush.name) != null);
+        return TopmostBrushCovering(
+            this.levelDataStore.state.levelData,
+            layers,
+            cell,
+            brush => this.DataFootprintOf(state, brush),
+            brush => DataBrushEditorFor(brush.name) != null
+        );
     }
 
     /**
@@ -359,11 +366,11 @@ export default class Tools extends EditorComponent {
                 editorKey: explicit.name,
                 value: explicit.data,
                 context: `At ${explicit.position.x}, ${explicit.position.y} on “${layer ? layer.name : explicit.layerId}”.`,
-                cells: [explicit.position]
+                cells: this.DataFootprintOf(state, explicit)
             };
         }
 
-        const tileLayers = state.layers.filter(layer => !layer.isData);
+        const tileLayers = state.layers.filter(IsTileLayer);
         const implicit = TopmostBrushCovering(
             this.levelDataStore.state.levelData,
             tileLayers,
@@ -381,6 +388,27 @@ export default class Tools extends EditorComponent {
                 cells: this.FootprintOf(implicit)
             }
         );
+    }
+
+    /** The cells a data brush stands for in play: a spawner's whole footprint - the tile on its cell it makes the spawner, or the roster's sprite (see `FindSpawners`) - any other's own cell. */
+    private DataFootprintOf(state: IEditorState, brush: Brush): Vec2Like[] {
+        if (brush.name !== DataBrushName.SPAWNER) {
+            return [brush.position];
+        }
+        const tileLayerOrder = new Map<number, number>();
+        state.layers.filter(IsTileLayer).forEach((layer, order) => tileLayerOrder.set(layer.id, order));
+        const { x, y } = brush.position;
+        const tilesHere = this.levelDataStore.state.levelData.filter(b => b.position.x === x && b.position.y === y && tileLayerOrder.has(b.layerId));
+        const sprite = MonsterRoster.inst.SpawnerSprite;
+        const [spawner] = FindSpawners(
+            tilesHere.concat([brush]),
+            layerId => tileLayerOrder.get(layerId),
+            name => AssetMetadataStore.inst.Get(name),
+            name => (this.assetFactory.Has(name) ? this.assetFactory.CreateTexture(name) : undefined),
+            TileSize,
+            sprite && this.assetFactory.Has(sprite) ? this.assetFactory.CreateTexture(sprite) : undefined
+        );
+        return spawner ? spawner.cells : [brush.position];
     }
 
     /** Every cell the brush's sprite covers on the map - the same footprint the engine gives a door or a collidable tile (see `DoorFootprint`); just its own cell if the sheet doesn't have the sprite. */

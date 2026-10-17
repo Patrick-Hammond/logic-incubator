@@ -1,8 +1,8 @@
 /**
  * The level file: what the editor saves (its S export, and the localStorage copy Enter plays) and
  * the engine loads (`Level.LoadLevel`). The engine owns it - the editor is only its writer, and
- * saves more of its own state alongside, which the engine ignores. Types plus one enum, so
- * importing it pulls in no other module at runtime.
+ * saves more of its own state alongside, which the engine ignores. Types, one enum and two small
+ * helpers, so importing it pulls in no other module at runtime.
  */
 
 import type { Vec2Like } from "@logic-incubator/lib/math/Geometry";
@@ -15,12 +15,18 @@ import type { DoorLockValue } from "./Doors";
 import type { LightValue } from "./Lighting";
 
 /**
- * The data brushes: painted on data layers, and read by the engine rather than drawn. A light or a
- * spawner is no longer among them - both are placed as an ordinary tile brush instead, carrying
- * their value via `AssetMetadata` (a default per asset name) or, per placement, an override in that
- * tile's own `Brush.data` (see `ImplicitData.EffectiveLight`/`EffectiveSpawner`). "light"/"spawner"
- * still identify their kind of value wherever one's edited (see `DataBrushEditors`) - just not as a
- * paintable brush name any more.
+ * The data brushes: painted on data layers, and read by the engine rather than drawn. A light is no
+ * longer among them - it's placed as an ordinary tile brush instead, carrying its value via
+ * `AssetMetadata` (a default per asset name) or, per placement, an override in that tile's own
+ * `Brush.data` (see `ImplicitData.EffectiveLight`). "light" still identifies its kind of value
+ * wherever one's edited (see `DataBrushEditors`) - just not as a paintable brush name any more.
+ *
+ * `SPAWNER` puts a monster spawner on its cell: the same as painting a spawner tile (one whose asset
+ * has a `spawner` in `AssetMetadata`, see `ImplicitData.EffectiveSpawner`), but with its settings in
+ * the brush, where the editor shows them. Like `PICKUP`, it makes the tile on its cell the spawner -
+ * the top one that isn't floor, drawn as itself and gone when it's destroyed - and on bare floor it's
+ * drawn as the roster's `spawnerSprite`. Painted over a spawner tile, the brush's settings are that
+ * spawner's (see `ImplicitData.FindSpawners`).
  *
  * `PICKUP` turns whatever tile is at its cell into a pickup, for items that aren't one by default
  * (their asset has no `pickup` in `AssetMetadata`); a tile that is one can be edited, via the same
@@ -43,7 +49,8 @@ export const enum DataBrushName {
     PICKUP = "pickup",
     EXIT = "exit",
     DIALOG = "dialog",
-    BOSS = "boss"
+    BOSS = "boss",
+    SPAWNER = "spawner"
 }
 
 /** A data brush's value - a number (`Z_INDEX`'s height), or a light's, spawner's, pickup's, door lock's, dialog's or boss's settings. */
@@ -67,8 +74,38 @@ export type Brush = {
  */
 export type TileLayerKind = "floor" | "walls";
 
-/** A layer, as far as the engine reads one: tile layers draw in list order, data layers (`isData`) hold data brushes and aren't drawn. `kind` is the editor's (see `TileLayerKind`). */
-export type LevelLayer = { id: number; name: string; isData: boolean; kind?: TileLayerKind };
+/**
+ * A layer, as far as the engine reads one: tile layers draw in list order, data layers (`isData`) hold data brushes and
+ * aren't drawn, and the player layer (`isPlayer`) holds nothing - it marks where the heroes, monsters and shots are drawn
+ * among the tile layers: those before it under them, those after it over them (see `TileLayerOrder`). `kind` is the
+ * editor's (see `TileLayerKind`).
+ */
+export type LevelLayer = { id: number; name: string; isData: boolean; kind?: TileLayerKind; isPlayer?: boolean };
+
+/** Whether `layer` is a tile layer - one with tiles painted on it, drawn - rather than a data layer or the player layer. */
+export function IsTileLayer(layer: LevelLayer): boolean {
+    return !layer.isData && !layer.isPlayer;
+}
+
+/**
+ * A level's tile layers in drawing order, and where the player layer sits among them: the first `playerLayer` are drawn
+ * under the heroes, monsters and shots, the rest over them. In a level without a player layer - every level saved before
+ * there was one - that's all of them, as it always was. Should a hand-edited file have more than one, the first counts.
+ */
+export function TileLayerOrder(layers: ReadonlyArray<LevelLayer>): { tileLayers: LevelLayer[]; playerLayer: number } {
+    const tileLayers: LevelLayer[] = [];
+    let playerLayer = -1;
+    layers.forEach(layer => {
+        if (layer.isPlayer) {
+            if (playerLayer < 0) {
+                playerLayer = tileLayers.length;
+            }
+        } else if (IsTileLayer(layer)) {
+            tileLayers.push(layer);
+        }
+    });
+    return { tileLayers, playerLayer: playerLayer < 0 ? tileLayers.length : playerLayer };
+}
 
 /**
  * A saved level. The nesting is the editor's - `editorData` is its whole state and `levelData`

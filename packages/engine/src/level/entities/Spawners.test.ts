@@ -14,6 +14,7 @@ import {
     SpawnCell,
     Spawner,
     SpawnerCells,
+    SpawnerPlacements,
     SpawnerState,
     SpawnerValue,
     StepSpawner
@@ -165,5 +166,23 @@ describe("SpawnCell", () => {
     it("falls back to any open bordering cell when the player can't be reached, and null when there's none", () => {
         expect(SpawnCell(cells, open, () => UNREACHABLE)).not.toBeNull();
         expect(SpawnCell(cells, () => false, () => 1)).toBeNull();
+    });
+});
+
+describe("SpawnerPlacements", () => {
+    const tile = (x: number, y: number, interval: number) => ({ x, y, value: { ...DefaultSpawnerValue(), interval } });
+
+    it("lets a SPAWNER brush decide what the spawner tile on its cell does, rather than adding a second", () => {
+        const placements = SpawnerPlacements([tile(1, 1, 3), tile(5, 5, 3)], [tile(1, 1, 8)]);
+        expect(placements.map(p => [p.x, p.y, p.value.interval])).toEqual([[1, 1, 8], [5, 5, 3]]);
+    });
+
+    it("keeps the tiles' order, then the brushes on cells of their own - the same list on every machine", () => {
+        const placements = SpawnerPlacements([tile(4, 0, 1), tile(2, 0, 1)], [tile(9, 9, 2), tile(2, 0, 2), tile(0, 0, 2)]);
+        expect(placements.map(p => [p.x, p.y])).toEqual([[4, 0], [2, 0], [9, 9], [0, 0]]);
+    });
+
+    it("needs no tile - brushes alone are spawners", () => {
+        expect(SpawnerPlacements([], [tile(3, 3, 2)])).toHaveLength(1);
     });
 });

@@ -13,9 +13,9 @@ import {DoorOpens, EffectiveDoorLock, FindDoorGroups} from "./Doors";
 import {Boss, IsBossValue} from "./entities/Bosses";
 import MonsterRoster from "./entities/MonsterRoster";
 import {IsPickupValue, PickupValue} from "./entities/Pickups";
-import {SanitiseSpawnerValue, Spawner, SpawnerCells} from "./entities/Spawners";
-import {EffectiveLight, FindImplicitPlacements} from "./ImplicitData";
-import {Brush, DataBrushName, LevelFile, LevelLayer} from "./LevelFormat";
+import {SanitiseSpawnerValue, Spawner} from "./entities/Spawners";
+import {EffectiveLight, FindImplicitPlacements, FindSpawners} from "./ImplicitData";
+import {Brush, DataBrushName, LevelFile, LevelLayer, TileLayerOrder} from "./LevelFormat";
 import {AmbientLightGrid, BakeLights, ComposeLighting, LightBake, LightBlockersFor, LightGrid, LightSource, OpenLightBlockers} from "./Lighting";
 import {FindMapBounds} from "./MapBounds";
 import {FindRegions, Region, RegionIdsTouching} from "./Regions";
@@ -27,6 +27,8 @@ export type Tile = Brush & {
     anim?: AnimatedSprite;
     /** Set for a tile that gives off light (see `ImplicitData.EffectiveLight`): which of the level's baked lights is its own - see `SceneLights`. */
     light?: number;
+    /** Set for the tile a spawner is drawn as (see `Level.SpawnerTile`): `EntityRenderer` draws it, with the figures, so `TileMapView` leaves it out. */
+    spawner?: boolean;
 };
 
 /** One door: the cell(s) whose tile has a `door` id in its `AssetMetadata`, and the visual tile whose texture is swapped between `closedSprite`/`openSprite` (that door's own pair, resolved via `AssetMetadataStore.GetDoorPartner`) when the player overlaps any of them - if they hold a key for it. `lockId` is what that key has to match (see `EffectiveDoorLock`, `Keys.CanOpen`). `regionIds` is the (possibly empty) set of regions this door borders - see `Regions.ts`. */
@@ -61,6 +63,8 @@ export default class Level {
     /** [layer][x][y] -> every tile painted at that cell, in paint order (later = drawn on top). */
     public levelData: Tile[][][][] = [];
     public tileLayers: LevelLayer[] = [];
+    /** How many of `tileLayers` (from the first) are drawn under the heroes, monsters and shots - the player layer's place among them (see `TileLayerOrder`); the rest are drawn over them. All of them in a level without a player layer. */
+    public playerLayer = 0;
     /** Per-cell collision: `true` if any tile placed there has `collidable: true` in `AssetMetadata`, or the cell was painted with the `COLLISION` data brush (an explicit override/addition on top of the intrinsic default). */
     public collisionData: boolean[][] = [];
     /** Per-cell height painted with the `Z_INDEX` data brush. */
@@ -91,8 +95,10 @@ export default class Level {
     public playerStartPosition: Vec2Like | undefined;
     /** Every cell painted with the `EXIT` data brush, in normalised map coordinates - see `IsExit`. */
     public exits: Vec2Like[] = [];
-    /** Every cell painted with the `SPAWNER` data brush, in normalised map coordinates. Each one's `cells` - the footprint of the roster's `spawnerSprite` - are solid (in `collisionData`) until `RemoveSpawner`. */
+    /** Every spawner tile and `SPAWNER` brush, one to a cell (see `ImplicitData.FindSpawners`), in normalised map coordinates. Each one's `cells` - the footprint of the tile it's drawn as, or of the roster's `spawnerSprite` - are solid (in `collisionData`) until `RemoveSpawner`. */
     public spawners: Spawner[] = [];
+    /** The tile each spawner is drawn as, if it has one - see `SpawnerTile`. */
+    private spawnerTiles = new Map<Spawner, Tile>();
     /** Every tile with a `pickup` in its `AssetMetadata`, not yet collected. See `CollectPickupsAt`. */
     public pickups: Pickup[] = [];
     /** Every NPC painted with the `DIALOG` data brush, in normalised map coordinates - each one's cell is solid (in `collisionData`). */
@@ -192,9 +198,15 @@ export default class Level {
     /**
      * Opens up a destroyed spawner's cells: no longer solid, and each one joined to a region
      * it borders - without that, the player standing there would be in no region at all, and
-     * `UpdateVisibleRegions` would hide everything but open doors.
+     * `UpdateVisibleRegions` would hide everything but open doors. The tile it's drawn as goes
+     * with it (see `SpawnerTile`).
      */
     RemoveSpawner(spawner: Spawner): void {
+        const tile = this.spawnerTiles.get(spawner);
+        if (tile) {
+            this.RemoveTile(spawner.x, spawner.y, tile);
+            this.spawnerTiles.delete(spawner);
+        }
         spawner.cells.forEach(({x, y}) => {
             if (this.collisionData[ x ]) {
                 this.collisionData[ x ][ y ] = false;
@@ -225,18 +237,11 @@ export default class Level {
     CollectPickupsAt(tileX: number, tileY: number): CollectedPickup[] {
         const here = this.pickups.filter(p => p.x === tileX && p.y === tileY);
         here.forEach(pickup => {
-            this.levelData.forEach(layer => {
-                const stack = layer[pickup.x] && layer[pickup.x][pickup.y];
-                const index = stack && pickup.tile ? stack.indexOf(pickup.tile) : -1;
-                if (index > -1) {
-                    stack.splice(index, 1);
-                }
-            });
-            this.pickups.splice(this.pickups.indexOf(pickup), 1);
             // A lit pickup - a torch on the floor - takes its light with it.
-            if (pickup.tile && pickup.tile.light !== undefined) {
-                this.lights.SetOn(pickup.tile.light, false);
+            if (pickup.tile) {
+                this.RemoveTile(pickup.x, pickup.y, pickup.tile);
             }
+            this.pickups.splice(this.pickups.indexOf(pickup), 1);
         });
         return here.map(p => ({ value: p.value, sprite: p.tile ? p.tile.name : null }));
     }
@@ -319,13 +324,13 @@ export default class Level {
     /**
      * Puts a pickup down where a hero fell: on their cell, or the nearest open floor to it (see `IsFloor`)
      * when that's a door or a wall - a key left in a doorway that then shut would be out of everyone's
-     * reach. Drawn as `sprite` on the top tile layer (nothing is drawn without one); collected like any
-     * other. Returns the cell it landed on.
+     * reach. Drawn as `sprite` on the top tile layer under the heroes (the bottom one, if every layer is over them;
+     * nothing is drawn without a sprite); collected like any other. Returns the cell it landed on.
      */
     DropPickup(tileX: number, tileY: number, value: PickupValue, sprite: string | null): Vec2Like {
         const cell = this.NearestFloor(tileX, tileY);
         let tile: Tile | null = null;
-        const layer = this.levelData[this.levelData.length - 1];
+        const layer = this.levelData[Math.max(this.playerLayer, 1) - 1];
         if (sprite && layer) {
             tile = CreateTile({ name: sprite, position: {x: cell.x, y: cell.y}, pixelOffset: {x: 0, y: 0}, rotation: 0, scale: {x: 1, y: 1}, layerId: -1, data: null });
             if (tile) {
@@ -393,16 +398,42 @@ export default class Level {
         return null;
     }
 
-    /** The tile drawn on top at the given cell - the last layer with one there, its last-painted tile - or null for an empty cell. What a `PICKUP` brush turns into a pickup. */
+    /**
+     * The tile drawn on top at the given cell - the last layer with one there, its last-painted tile - or null for an empty
+     * cell. What a `PICKUP` brush turns into a pickup, and the NPC a `DIALOG` brush stands for: something on the ground, so
+     * the layers under the heroes are looked in first, and only then those drawn over them (an arch, a treetop).
+     */
     private FindTopTile(x: number, y: number): Tile | null {
-        for (let i = this.levelData.length - 1; i >= 0; i--) {
-            const layer = this.levelData[i];
-            const stack = layer && layer[x] && layer[x][y];
-            if (stack && stack.length) {
-                return stack[stack.length - 1];
+        const top = (from: number, to: number): Tile | null => {
+            for (let i = from - 1; i >= to; i--) {
+                const layer = this.levelData[i];
+                const stack = layer && layer[x] && layer[x][y];
+                if (stack && stack.length) {
+                    return stack[stack.length - 1];
+                }
             }
+            return null;
+        };
+        return top(this.playerLayer, 0) || top(this.levelData.length, this.playerLayer);
+    }
+
+    /** The tile a spawner is drawn as - the one on its cell that `ImplicitData.FindSpawners` picked - or null for one the roster's `spawnerSprite` stands in for. */
+    SpawnerTile(spawner: Spawner): Tile | null {
+        return this.spawnerTiles.get(spawner) || null;
+    }
+
+    /** Takes a tile out of its stack at the given cell, so it's no longer drawn, and puts out its light if it gives one. */
+    private RemoveTile(x: number, y: number, tile: Tile): void {
+        this.levelData.forEach(layer => {
+            const stack = layer[x] && layer[x][y];
+            const index = stack ? stack.indexOf(tile) : -1;
+            if (index > -1) {
+                stack.splice(index, 1);
+            }
+        });
+        if (tile.light !== undefined) {
+            this.lights.SetOn(tile.light, false);
         }
-        return null;
     }
 
     /** Finds the tile that is a pickup at the given cell - by its asset's `AssetMetadata`, or by its own placement's `data` - searching every tile layer. Null if none is. */
@@ -448,6 +479,7 @@ export default class Level {
         this.doorData = [];
         this.doorAt = [];
         this.spawners = [];
+        this.spawnerTiles.clear();
         this.pickups = [];
         this.exits = [];
         this.talkers = [];
@@ -465,18 +497,16 @@ export default class Level {
         const explicitPickups: { x: number; y: number; value: PickupValue }[] = [];
         /** Every `DIALOG` data brush, likewise - its NPC is whatever tile is drawn there. */
         const dialogs: { x: number; y: number; value: DialogValue }[] = [];
+        /** The tile made from each tile brush - a spawner is drawn as one of them, found among the brushes. */
+        const tileOfBrush = new Map<Brush, Tile>();
         /** Per-cell door id (parallel to `doorData`, but tagged with *which* door type) - `FindDoorGroups` needs this to keep two different door types on adjacent cells from merging into one group. */
         const doorIds: (number | undefined)[][] = [];
 
+        const order = TileLayerOrder(file.editorData.layers);
+        this.tileLayers = order.tileLayers;
+        this.playerLayer = order.playerLayer;
         const idMap: {[ id: number ]: number} = {};
-        let id = 0;
-        file.editorData.layers.forEach(layer => {
-            if(!layer.isData) {
-                this.tileLayers[ id ] = layer;
-                idMap[ layer.id ] = id;
-                id++;
-            }
-        });
+        this.tileLayers.forEach((layer, index) => idMap[ layer.id ] = index);
 
         const levelData = file.levelData.levelData;
 
@@ -527,6 +557,7 @@ export default class Level {
                 if(!tile) {
                     return;
                 }
+                tileOfBrush.set(brush, tile);
                 if(this.levelData[ index ][ posX ] == null) {
                     this.levelData[ index ][ posX ] = [];
                 }
@@ -646,11 +677,26 @@ export default class Level {
             }
             this.collisionData[ x ][ y ] = true;
         });
-        implicit.spawners.forEach(({x, y, value}) => {
-            const posX = x - bounds.x1;
-            const posY = y - bounds.y1;
-            const cells = SpawnerCells({x: posX, y: posY}, spawnerSize, TileSize);
-            this.spawners.push({x: posX, y: posY, value: SanitiseSpawnerValue(value), cells});
+        // Only the tiles that were made: one missing from the sprite sheet can't be drawn as a spawner.
+        FindSpawners(
+            levelData.filter(brush => idMap[ brush.layerId ] == null || tileOfBrush.has(brush)),
+            layerId => idMap[ layerId ],
+            name => AssetMetadataStore.inst.Get(name),
+            name => AssetFactory.inst.CreateTexture(name),
+            TileSize,
+            spawnerSize
+        ).forEach(placement => {
+            const x = placement.x - bounds.x1;
+            const y = placement.y - bounds.y1;
+            // A sprite nudged past the map's top/left edge - nothing to mark there.
+            const cells = placement.cells.map(cell => ({x: cell.x - bounds.x1, y: cell.y - bounds.y1})).filter(cell => cell.x >= 0 && cell.y >= 0);
+            const spawner: Spawner = {x, y, value: SanitiseSpawnerValue(placement.value), cells};
+            this.spawners.push(spawner);
+            const tile = placement.tile && tileOfBrush.get(placement.tile);
+            if (tile) {
+                tile.spawner = true;
+                this.spawnerTiles.set(spawner, tile);
+            }
             cells.forEach(cell => {
                 if(this.collisionData[ cell.x ] == null) {
                     this.collisionData[ cell.x ] = [];

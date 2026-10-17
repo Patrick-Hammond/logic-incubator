@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { AssetMetadata } from "./AssetMetadata";
-import { FindImplicitPlacements, ImplicitBrush, OrphanedExplicitData } from "./ImplicitData";
+import { FindImplicitPlacements, FindSpawners, ImplicitBrush, OrphanedExplicitData } from "./ImplicitData";
 
 const TILE = 16;
 const TILE_LAYER = 0;
@@ -12,7 +12,8 @@ const GOLD_PICKUP: AssetMetadata["pickup"] = { kind: "gold", amount: 10 };
 const META: { [name: string]: AssetMetadata } = {
     wall: { collidable: true },
     big_wall: { collidable: true },
-    floor: {},
+    floor: { category: "floor" },
+    statue: { category: "misc" },
     door: { door: { id: 1, open: false } },
     torch: { light: { brightness: 1, tint: 0xff8100, range: 5 } },
     goblin_camp: { spawner: SPAWNER_VALUE },
@@ -20,7 +21,11 @@ const META: { [name: string]: AssetMetadata } = {
     table: { collidable: true, blocksLight: false },
     curtain: { blocksLight: true }
 };
-const SIZES: { [name: string]: { width: number; height: number } } = { door: { width: 32, height: 32 }, big_wall: { width: 32, height: 32 } };
+const SIZES: { [name: string]: { width: number; height: number } } = {
+    door: { width: 32, height: 32 },
+    big_wall: { width: 32, height: 32 },
+    statue: { width: 16, height: 32 }
+};
 
 function brush(name: string, x: number, y: number, layerId = TILE_LAYER, extra: Partial<ImplicitBrush> = {}): ImplicitBrush {
     return { name, position: { x, y }, pixelOffset: { x: 0, y: 0 }, layerId, ...extra };
@@ -81,16 +86,6 @@ describe("FindImplicitPlacements", () => {
         expect(find([brush("torch", 2, 2, TILE_LAYER, { data: null })]).lights).toEqual([{ x: 2, y: 2, value: META.torch.light }]);
     });
 
-    it("reports a tile's intrinsic spawner", () => {
-        expect(find([brush("goblin_camp", 4, 4)]).spawners).toEqual([{ x: 4, y: 4, value: SPAWNER_VALUE }]);
-    });
-
-    it("prefers a placement's own override over its asset's intrinsic spawner - see EffectiveSpawner", () => {
-        const override = { ...SPAWNER_VALUE, monsters: ["ogre"] };
-        const result = find([brush("goblin_camp", 4, 4, TILE_LAYER, { data: override })]);
-        expect(result.spawners).toEqual([{ x: 4, y: 4, value: override }]);
-    });
-
     it("reports a tile's intrinsic pickup - no per-instance override, unlike light/spawner", () => {
         expect(find([brush("sack_gold", 6, 6)]).pickups).toEqual([{ x: 6, y: 6, value: GOLD_PICKUP }]);
     });
@@ -106,8 +101,76 @@ describe("FindImplicitPlacements", () => {
         expect(result.collision).toEqual([]);
         expect(result.doors).toEqual([]);
         expect(result.lights).toEqual([]);
-        expect(result.spawners).toEqual([]);
         expect(result.pickups).toEqual([]);
+    });
+});
+
+describe("FindSpawners", () => {
+    /** Tile layers 0 and up, drawn in that order; anything below is a data layer. */
+    /** `spawnerSprite` null for a roster with none. */
+    const spawners = (brushes: ImplicitBrush[], spawnerSprite: { width: number; height: number } | null = { width: 32, height: 32 }) =>
+        FindSpawners(
+            brushes,
+            layerId => (layerId >= 0 ? layerId : undefined),
+            name => META[name],
+            name => SIZES[name] || { width: TILE, height: TILE },
+            TILE,
+            spawnerSprite || undefined
+        );
+    const cellsOf = (placement: { cells: { x: number; y: number }[] }) => placement.cells.map(c => `${c.x},${c.y}`).sort();
+    const OGRES = { ...SPAWNER_VALUE, monsters: ["ogre"] };
+
+    it("makes a spawner tile a spawner, drawn as itself and as big as its sprite", () => {
+        const camp = brush("goblin_camp", 4, 4);
+        expect(spawners([brush("floor", 4, 4), camp])).toEqual([{ x: 4, y: 4, value: SPAWNER_VALUE, tile: camp, brush: null, cells: [{ x: 4, y: 4 }] }]);
+    });
+
+    it("prefers a placement's own override over its asset's spawner - see EffectiveSpawner", () => {
+        const result = spawners([brush("goblin_camp", 4, 4, TILE_LAYER, { data: OGRES })]);
+        expect(result.map(s => s.value)).toEqual([OGRES]);
+    });
+
+    it("turns the top tile that isn't floor into the spawner a brush makes, with that tile's footprint", () => {
+        const statue = brush("statue", 3, 3, 1, { pixelOffset: { x: 0, y: 16 } });
+        const marker = brush("spawner", 3, 3, DATA_LAYER, { data: OGRES });
+        const [placement] = spawners([brush("floor", 3, 3), statue, brush("floor", 3, 3, 0), marker]);
+        expect(placement.tile).toBe(statue);
+        expect(placement.brush).toBe(marker);
+        expect(placement.value).toBe(OGRES);
+        // Nudged up a cell, the 16x32 statue covers its own cell and the one above.
+        expect(cellsOf(placement)).toEqual(["3,2", "3,3"]);
+    });
+
+    it("picks the tile drawn last - the later layer, and on one layer the later brush", () => {
+        const marker = brush("spawner", 1, 1, DATA_LAYER, { data: OGRES });
+        const lower = brush("statue", 1, 1, 0);
+        const upper = brush("table", 1, 1, 2);
+        expect(spawners([upper, lower, marker])[0].tile).toBe(upper);
+        const first = brush("statue", 1, 1, 0);
+        const second = brush("table", 1, 1, 0);
+        expect(spawners([first, second, marker])[0].tile).toBe(second);
+    });
+
+    it("keeps a spawner tile the spawner a brush on its cell sets up, even under another tile", () => {
+        const camp = brush("goblin_camp", 2, 2, 0);
+        const marker = brush("spawner", 2, 2, DATA_LAYER, { data: OGRES });
+        const result = spawners([camp, brush("statue", 2, 2, 1), marker]);
+        expect(result).toHaveLength(1);
+        expect(result[0].tile).toBe(camp);
+        expect(result[0].value).toBe(OGRES);
+    });
+
+    it("never turns floor into a spawner: on bare floor, or nothing, the roster's sprite stands in", () => {
+        const onFloor = spawners([brush("floor", 5, 5), brush("spawner", 5, 5, DATA_LAYER, { data: OGRES })]);
+        expect(onFloor[0].tile).toBeNull();
+        expect(cellsOf(onFloor[0])).toEqual(["5,5", "5,6", "6,5", "6,6"]);
+        const alone = spawners([brush("spawner", 5, 5, DATA_LAYER, { data: OGRES })], null);
+        expect(alone[0].tile).toBeNull();
+        expect(alone[0].cells).toEqual([{ x: 5, y: 5 }]);
+    });
+
+    it("leaves out a spawner brush whose value isn't one, and spawner tiles painted on a data layer", () => {
+        expect(spawners([brush("spawner", 1, 1, DATA_LAYER, { data: 3 }), brush("goblin_camp", 2, 2, DATA_LAYER)])).toEqual([]);
     });
 });
 
@@ -121,7 +184,7 @@ describe("OrphanedExplicitData", () => {
         expect(orphans([brush("wall", 1, 1)], [under, elsewhere])).toEqual([under]);
     });
 
-    it("never orphans a light or spawner - neither lives on a data layer any more, so there's nothing left to outlive the tile (its override just goes with it)", () => {
+    it("never orphans a light or a spawner brush - a light lives on its tile now, so goes with it, and a spawner brush is a spawner with or without a tile", () => {
         const light = brush("light", 2, 2, DATA_LAYER, { data: { brightness: 0.5, tint: 0xffffff, range: 3 } });
         const spawner = brush("spawner", 4, 4, DATA_LAYER, { data: SPAWNER_VALUE });
         expect(orphans([brush("torch", 2, 2)], [light])).toEqual([]);

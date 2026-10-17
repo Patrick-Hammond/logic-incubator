@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LEVEL_CREATED } from "../Events";
 import type { Camera } from "./Camera";
 import Effects from "./Effects";
+import { EntitiesLayer, ProjectilesLayer } from "./helpers/FigureLayers";
 
 // A hand-cranked game: a ticker whose frames the tests run, and a dispatcher.
 const game = vi.hoisted(() => {
@@ -84,10 +85,19 @@ vi.mock("pixi.js", () => {
         parent: Container | null = null;
         children: Container[] = [];
         addChild(child: Container): Container {
+            return this.addChildAt(child, this.children.length);
+        }
+        addChildAt(child: Container, index: number): Container {
             child.parent?.removeChild(child);
             child.parent = this;
-            this.children.push(child);
+            this.children.splice(index, 0, child);
             return child;
+        }
+        getChildIndex(child: Container): number {
+            return this.children.indexOf(child);
+        }
+        getChildByName(name: string): Container | null {
+            return this.children.find(c => c.name === name) || null;
         }
         removeChild(child: Container): void {
             this.children = this.children.filter(c => c !== child);
@@ -271,6 +281,21 @@ describe("level", () => {
 
         expect(cameraRoot.children[cameraRoot.children.length - 1]).toBe(effects.root);
         expect(cameraRoot.children.filter(c => c === effects.root)).toHaveLength(1);
+    });
+
+    it("goes just above the shots, under the tile layers drawn over the figures", async () => {
+        const { Container } = await import("pixi.js");
+        const named = (name: string) => Object.assign(new Container(), { name });
+        const band = named("z-0");
+        const shots = named(ProjectilesLayer);
+        const over = named("z-0 over");
+        // Where the last level left it - under the new level's layers, at the bottom.
+        cameraRoot.addChild(effects.root);
+        [band, named(EntitiesLayer), shots, over].forEach(layer => cameraRoot.addChild(layer));
+
+        game.dispatcher.emit(LEVEL_CREATED);
+
+        expect(cameraRoot.children.map(c => (c === effects.root ? "effects" : (c as { name: string }).name))).toEqual(["z-0", EntitiesLayer, ProjectilesLayer, "effects", "z-0 over"]);
     });
 
     it("leaves the layer non-interactive", () => {

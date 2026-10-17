@@ -3,7 +3,7 @@ import { Scenes } from "@logic-incubator/engine/Constants";
 import { TEST_MONSTERS } from "@logic-incubator/engine/level/__fixtures__/TestMonsters";
 import MonsterRoster from "@logic-incubator/engine/level/entities/MonsterRoster";
 import { DataBrushName } from "@logic-incubator/engine/level/LevelFormat";
-import EditorStore, { DataBrushIcon, EditableLayerCount, EditorActions, EditorTool, IMPLICIT_LAYER_ID, IsRemovableLayer, MouseButtonState, ToolFitsLayer } from "./EditorStore";
+import EditorStore, { DataBrushIcon, EditableLayerCount, EditorActions, EditorTool, IMPLICIT_LAYER_ID, IsRemovableLayer, MouseButtonState, PLAYER_LAYER_ID, PlayerLayerMoved, ToolFitsLayer } from "./EditorStore";
 
 MonsterRoster.inst.Load(TEST_MONSTERS);
 
@@ -25,8 +25,8 @@ describe("EditorStore implicit layer", () => {
         const saved = { ...store.state, layers: [{ id: 0, name: "layer 0", selected: true, visible: true, isData: false }] };
         store.Load(saved);
         expect(implicitLayers(store)).toHaveLength(1);
-        // ...and the default floor and walls layers.
-        expect(store.state.layers).toHaveLength(4);
+        // ...and the default floor and walls layers, and the player layer.
+        expect(store.state.layers).toHaveLength(5);
 
         // Re-loading state that already has it doesn't add a second.
         store.Load(store.state);
@@ -93,12 +93,12 @@ describe("EditorStore implicit layer", () => {
 });
 
 describe("EditorStore default floor and walls layers", () => {
-    const kinds = (store: EditorStore) => store.state.layers.map(layer => (layer.id === IMPLICIT_LAYER_ID ? "attributes" : layer.kind || "generic"));
+    const kinds = (store: EditorStore) => store.state.layers.map(layer => (layer.id === IMPLICIT_LAYER_ID ? "attributes" : layer.isPlayer ? "player" : layer.kind || "generic"));
 
-    it("are what a new level starts with, after \"attributes\", with the floor selected", () => {
+    it("are what a new level starts with, after \"attributes\" and under the player layer, with the floor selected", () => {
         const store = new EditorStore();
-        expect(kinds(store)).toEqual(["attributes", "floor", "walls"]);
-        expect(store.state.layers.map(layer => layer.name)).toEqual(["attributes", "floor", "walls"]);
+        expect(kinds(store)).toEqual(["attributes", "floor", "walls", "player"]);
+        expect(store.state.layers.map(layer => layer.name)).toEqual(["attributes", "floor", "walls", "player"]);
         expect(store.SelectedLayer.kind).toBe("floor");
     });
 
@@ -106,14 +106,14 @@ describe("EditorStore default floor and walls layers", () => {
         const store = new EditorStore();
         store.Dispatch({ type: EditorActions.ADD_LAYER });
         store.Dispatch({ type: EditorActions.RESET, data: {} });
-        expect(kinds(store)).toEqual(["attributes", "floor", "walls"]);
+        expect(kinds(store)).toEqual(["attributes", "floor", "walls", "player"]);
     });
 
     it("are added to a level saved before layers had kinds, under its own layers, with fresh ids", () => {
         const store = new EditorStore();
         store.Load({ ...store.state, layers: [{ id: 3, name: "layer 3", selected: true, visible: true, isData: false }] });
-        expect(kinds(store)).toEqual(["attributes", "floor", "walls", "generic"]);
-        expect(store.state.layers.map(layer => layer.id)).toEqual([IMPLICIT_LAYER_ID, 4, 5, 3]);
+        expect(kinds(store)).toEqual(["attributes", "floor", "walls", "generic", "player"]);
+        expect(store.state.layers.map(layer => layer.id)).toEqual([IMPLICIT_LAYER_ID, 4, 5, 3, PLAYER_LAYER_ID]);
         expect(store.SelectedLayer.id).toBe(3);
 
         // Loading it again adds nothing more.
@@ -131,7 +131,7 @@ describe("EditorStore default floor and walls layers", () => {
                 { id: 1, name: "props", selected: true, visible: true, isData: false }
             ]
         });
-        expect(kinds(store)).toEqual(["attributes", "floor", "walls", "generic"]);
+        expect(kinds(store)).toEqual(["attributes", "floor", "walls", "generic", "player"]);
         expect(store.state.layers[1].name).toBe("ground");
     });
 
@@ -149,7 +149,113 @@ describe("EditorStore default floor and walls layers", () => {
     it("would come back if removed anyway", () => {
         const store = new EditorStore();
         store.Dispatch({ type: EditorActions.REMOVE_LAYER });
-        expect(kinds(store)).toEqual(["attributes", "floor", "walls"]);
+        expect(kinds(store)).toEqual(["attributes", "floor", "walls", "player"]);
+    });
+});
+
+describe("EditorStore player layer", () => {
+    const names = (store: EditorStore) => store.state.layers.map(layer => layer.name);
+    const player = (store: EditorStore) => store.state.layers.find(layer => layer.isPlayer);
+    /** A level with its figures between its floor and its walls, and a generic layer over the walls. */
+    function Store(): EditorStore {
+        const store = new EditorStore();
+        store.Load({
+            ...store.state,
+            layers: [
+                { id: IMPLICIT_LAYER_ID, name: "attributes", selected: false, visible: true, isData: true },
+                { id: 0, name: "floor", selected: true, visible: true, isData: false, kind: "floor" },
+                { id: PLAYER_LAYER_ID, name: "player", selected: false, visible: true, isData: false, isPlayer: true },
+                { id: 1, name: "walls", selected: false, visible: true, isData: false, kind: "walls" },
+                { id: 2, name: "arches", selected: false, visible: true, isData: false }
+            ]
+        });
+        return store;
+    }
+
+    it("is a divider that isn't a tile layer or a data layer, and doesn't count as editable", () => {
+        const store = new EditorStore();
+        expect(player(store)).toMatchObject({ id: PLAYER_LAYER_ID, name: "player", isData: false, isPlayer: true });
+        expect(EditableLayerCount(store.state.layers)).toBe(2);
+    });
+
+    it("is kept where a loaded level has it, exactly once", () => {
+        const store = Store();
+        expect(names(store)).toEqual(["attributes", "floor", "player", "walls", "arches"]);
+        const before = store.state.layers;
+        store.Load(store.state);
+        expect(store.state.layers).toBe(before);
+    });
+
+    it("can't be selected, so nothing is ever painted on it", () => {
+        const store = Store();
+        const before = store.state;
+        store.Dispatch({ type: EditorActions.SELECT_LAYER, data: { layer: player(store) } });
+        expect(store.state).toBe(before);
+        expect(store.SelectedLayer.name).toBe("floor");
+    });
+
+    it("can't be removed or duplicated, and comes back after a reset", () => {
+        const store = Store();
+        expect(IsRemovableLayer(store.state.layers, player(store))).toBe(false);
+        store.Dispatch({ type: EditorActions.SELECT_LAYER, data: { layer: store.state.layers[4] } });
+        store.Dispatch({ type: EditorActions.DUPLICATE_LAYER });
+        expect(store.state.layers.filter(layer => layer.isPlayer)).toHaveLength(1);
+        store.Dispatch({ type: EditorActions.RESET, data: {} });
+        expect(store.state.layers.filter(layer => layer.isPlayer)).toHaveLength(1);
+    });
+
+    it("moves past the next tile layer up or down, stepping over \"attributes\"", () => {
+        const store = Store();
+        store.Dispatch({ type: EditorActions.MOVE_PLAYER_LAYER_DOWN });
+        expect(names(store)).toEqual(["attributes", "floor", "walls", "player", "arches"]);
+        store.Dispatch({ type: EditorActions.MOVE_PLAYER_LAYER_DOWN });
+        expect(names(store)).toEqual(["attributes", "floor", "walls", "arches", "player"]);
+        store.Dispatch({ type: EditorActions.MOVE_PLAYER_LAYER_UP });
+        store.Dispatch({ type: EditorActions.MOVE_PLAYER_LAYER_UP });
+        store.Dispatch({ type: EditorActions.MOVE_PLAYER_LAYER_UP });
+        expect(names(store)).toEqual(["attributes", "player", "floor", "walls", "arches"]);
+
+        // "attributes" moved in among the tile layers: one step goes past it and the floor both, as just past it the game would draw the same.
+        store.Dispatch({ type: EditorActions.MOVE_PLAYER_LAYER_DOWN });
+        expect(store.SelectedLayer.name).toBe("floor");
+        store.Dispatch({ type: EditorActions.MOVE_LAYER_UP });
+        expect(names(store)).toEqual(["floor", "attributes", "player", "walls", "arches"]);
+        store.Dispatch({ type: EditorActions.MOVE_PLAYER_LAYER_UP });
+        expect(names(store)).toEqual(["player", "floor", "attributes", "walls", "arches"]);
+    });
+
+    it("stays put at either end, as the same layers (so its buttons can tell they've nowhere to go)", () => {
+        const store = Store();
+        store.Dispatch({ type: EditorActions.MOVE_PLAYER_LAYER_UP });
+        const top = store.state.layers;
+        expect(PlayerLayerMoved(top, true)).toBe(top);
+        store.Dispatch({ type: EditorActions.MOVE_PLAYER_LAYER_UP });
+        expect(store.state.layers).toBe(top);
+
+        const fresh = new EditorStore();
+        expect(PlayerLayerMoved(fresh.state.layers, false)).toBe(fresh.state.layers);
+        expect(PlayerLayerMoved(fresh.state.layers, true)).not.toBe(fresh.state.layers);
+    });
+
+    it("is moved past when the selected layer is moved, like any other", () => {
+        const store = Store();
+        store.Dispatch({ type: EditorActions.SELECT_LAYER, data: { layer: store.state.layers[3] } });
+        store.Dispatch({ type: EditorActions.MOVE_LAYER_UP });
+        expect(names(store)).toEqual(["attributes", "floor", "walls", "player", "arches"]);
+    });
+
+    it("stays on top when a layer is added or duplicated while it's last, so the new one is drawn under the figures", () => {
+        const store = new EditorStore();
+        store.Dispatch({ type: EditorActions.ADD_LAYER });
+        expect(names(store)).toEqual(["attributes", "floor", "walls", "layer 2", "player"]);
+        store.Dispatch({ type: EditorActions.DUPLICATE_LAYER });
+        expect(names(store)).toEqual(["attributes", "floor", "walls", "layer 2", "layer 2", "player"]);
+    });
+
+    it("leaves a layer added while it's elsewhere to go last, over the figures", () => {
+        const store = Store();
+        store.Dispatch({ type: EditorActions.ADD_LAYER });
+        expect(names(store)).toEqual(["attributes", "floor", "player", "walls", "arches", "layer 3"]);
     });
 });
 
@@ -299,12 +405,6 @@ describe("EditorStore data brush icons", () => {
         expect(DataBrushIcon({}, "not-a-brush")).toBeUndefined();
     });
 });
-
-// Reconciling a saved spawner value, and +/- vs. the dialog on a SET_DATA_BRUSH_VALUE-carried object
-// value, used to be tested here against the SPAWNER data brush - it isn't one any more (see
-// LevelFormat.ts and DataBrushEditors.ts), so there's nothing left in `dataBrushes` an object value
-// like a spawner's could ever reach. `ImplicitData.test.ts` covers a spawner's own value now
-// (EffectiveSpawner/SanitiseSpawnerValue), and `Tools.EditableTargetAt`'s dialog-and-SET_DATA path.
 
 describe("EditorStore currentScene", () => {
     it("starts on the editor, the scene shown at boot, so its shortcuts work straight away", () => {
@@ -551,5 +651,30 @@ describe("the pickup data brush", () => {
         store.Dispatch({ type: EditorActions.DATA_BRUSH_INC });
         store.Dispatch({ type: EditorActions.DATA_BRUSH_DEC });
         expect(store.SelectedDataBrush.value).toEqual(before);
+    });
+});
+
+describe("the spawner data brush", () => {
+    it("is one of the palette's data brushes, starting as a new spawner of the roster's default pool", () => {
+        const brush = new EditorStore().state.dataBrushes.find(db => db.name === DataBrushName.SPAWNER);
+        expect(brush).toBeDefined();
+        expect(brush.value).toEqual({ monsters: ["goblin"], interval: 3, maxAlive: 4, total: 0, activationRange: 10, hitPoints: 10 });
+    });
+
+    it("is added to a map saved before it existed", () => {
+        const store = new EditorStore();
+        store.Load({ ...store.state, dataBrushes: store.state.dataBrushes.filter(db => db.name !== DataBrushName.SPAWNER) });
+        expect(store.state.dataBrushes.find(db => db.name === DataBrushName.SPAWNER)).toBeDefined();
+    });
+
+    it("takes the value its popup sets, carried onto the brush that's painted, and isn't stepped by + and -", () => {
+        const store = new EditorStore();
+        store.Dispatch({ type: EditorActions.SELECT_LAYER, data: { layer: implicitLayers(store)[0] } });
+        store.Dispatch({ type: EditorActions.BRUSH_CHANGED, data: { name: DataBrushName.SPAWNER } });
+        const value = { monsters: ["imp", "ogre"], interval: 1, maxAlive: 2, total: 5, activationRange: 0, hitPoints: 0 };
+        store.Dispatch({ type: EditorActions.SET_DATA_BRUSH_VALUE, data: { value } });
+        store.Dispatch({ type: EditorActions.DATA_BRUSH_INC });
+        expect(store.SelectedDataBrush.value).toEqual(value);
+        expect(store.state.currentBrush.data).toEqual(value);
     });
 });

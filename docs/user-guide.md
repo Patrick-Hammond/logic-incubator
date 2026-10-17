@@ -1504,7 +1504,7 @@ DungeonMain (a scene)
  │   ├─ Encounter     spawners, monsters (bosses among them), projectiles
  │   └─ QuestLog      how the level's quests stand
  ├─ HeroView          one per hero: how they're drawn, and the lights they carry
- ├─ EntityRenderer    draws the heroes, monsters and shots
+ ├─ EntityRenderer    draws the heroes, monsters, spawners and shots
  └─ Level             the loaded level: tiles, collision, doors, lights, regions, spawners, pickups, exits, NPCs, bosses, quests
 ```
 
@@ -1831,7 +1831,7 @@ export const Monsters: IMonsterRoster<MonsterType> = {
     types: Types,                 // the order the editor's spawner dialog lists them
     defaultPool: ["goblin"],      // a new spawner's pool (default: the first type)
     defs: Defs,
-    spawnerSprite: "mob_spawner", // drawn over a spawner's cells; its size sets the (solid) footprint
+    spawnerSprite: "mob_spawner", // drawn as a spawner brush on bare floor; its size sets that one's (solid) footprint
 };
 
 MonsterRoster.inst.Load(Monsters);
@@ -1874,7 +1874,8 @@ A level is JSON that the editor writes and the engine reads (`LevelFile`):
 
 ```jsonc
 {
-  "editorData": { "layers": [ { "id": 1, "name": "Layer 1", "isData": false }, { "id": -99999, "name": "attributes", "isData": true } ] },
+  "editorData": { "layers": [ { "id": -99999, "name": "attributes", "isData": true }, { "id": 1, "name": "Layer 1", "isData": false },
+                               { "id": -99998, "name": "player", "isData": false, "isPlayer": true }, { "id": 2, "name": "arches", "isData": false } ] },
   "levelData":  { "levelData": [
       { "name": "floor_1", "position": { "x": 3, "y": 2 }, "pixelOffset": { "x": 0, "y": 0 }, "rotation": 0, "scale": { "x": 1, "y": 1 }, "layerId": 1, "data": null },
       { "name": "player-start", "position": { "x": 1, "y": 1 }, "pixelOffset": { "x": 0, "y": 0 }, "rotation": 0, "scale": { "x": 1, "y": 1 }, "layerId": -99999, "data": null }
@@ -1883,11 +1884,13 @@ A level is JSON that the editor writes and the engine reads (`LevelFile`):
 ```
 
 A **brush** is one placed thing: a tile (`name` is a bare sprite or animation name, `data` null) or a data brush (on a
-data layer). Layers draw in list order, later on top. Beside the brushes, `levelData.quests` holds the level's quests
+data layer). Layers draw in list order, later on top. The **player layer** (`isPlayer`) has no brushes: it marks where the
+heroes, monsters, spawners, shots and particle effects are drawn among the tile layers - those before it under them, those after it
+over them (above, "arches" is drawn over the heroes as they walk beneath). A level without one draws every tile layer under them. Beside the brushes, `levelData.quests` holds the level's quests
 ([9.10](#910-npcs-dialogs-and-quests)); a level without it has none. The engine reads only what `LevelFormat.ts` types; the
 editor saves more of its own state alongside.
 
-There are exactly seven **data brushes**, painted on the one `attributes` data layer:
+There are exactly eight **data brushes**, painted on the one `attributes` data layer:
 
 | Name | `data` | Effect |
 | --- | --- | --- |
@@ -1898,9 +1901,11 @@ There are exactly seven **data brushes**, painted on the one `attributes` data l
 | `exit` | - | A way out: the first hero to step on it ends the level (`LEVEL_COMPLETED`). It isn't drawn - paint stairs or a ladder there too. A level without one is played until everyone falls. |
 | `dialog` | `{ script }` | An NPC to talk to, painted over their tile: the cell is solid (but casts no shadow), and in a Quest walking into it starts a talk by its `script` ([9.10](#910-npcs-dialogs-and-quests)). In co-op and online the NPC only stands there. |
 | `boss` | a `BossValue` | One monster where it's painted - `{ monster, hitPoints?, quest? }`: the roster's type, its hit points (left out or 0: its kind's own) and the quest killing it counts for. It sleeps until a hero comes near it ([9.10](#910-npcs-dialogs-and-quests)). |
+| `spawner` | a `SpawnerValue` | A monster spawner where it's painted, set in its popup - the same settings as a spawner tile's (see `spawner` in [9.6](#96-assets-metajson-tile-behaviour-by-sprite-name)). Any sprite can be one: the brush makes the top tile on its cell that isn't floor (a gravestone, a statue, a wall) the spawner, drawn as itself, solid over its sprite's footprint and gone when it's destroyed. On bare floor it's drawn as the roster's `spawnerSprite` instead. Painted on a spawner tile's cell, it sets what that spawner does, rather than adding a second. |
 
-Lights, spawners and doors are **not** brushes: they are ordinary tiles that carry their behaviour in
-`assets-meta.json` (a pickup can be either: a tile that is one by default, or a `pickup` brush over any other).
+Lights and doors are **not** brushes: they are ordinary tiles that carry their behaviour in
+`assets-meta.json`. A pickup or a spawner can be either: a tile that is one by default, or a brush over any other tile -
+a `spawner` brush on bare floor too.
 
 ### 9.6 `assets-meta.json`: tile behaviour by sprite name
 
@@ -1929,7 +1934,7 @@ a deleted one is removed - with a warning if it had anything in it); you only fi
 | `blocksLight` | Whether the sprite stops light, where that should differ from `collidable`: `false` lets light past a solid tile (a table, a fence, a window), `true` stops it at one you can walk through. Left out, a tile stops light if it is collidable. Where tiles on one cell disagree, `true` wins. A value that isn't `true` or `false` is dropped with a console warning. |
 | `light` | A point light: `brightness` (its strength at its own cell, added on top of the ambient light; 1 is a normal torch, clamped to 0..2), `tint` (hex colour as a number; a warm colour reads as firelight against the cool ambient), `range` (radius in tiles), and optionally `flicker` (how far its strength wavers either way, as a share of itself: 0.15 is a torch; left out or 0, it's steady). Its sprite gets a soft glow over its flame (centred across the art, a third of the way down), in the light's colour. Baked once at level load at the corners of the tile grid, so it is blended smoothly across tiles, and fades out smoothly to nothing at its range. Overlapping lights add up, and light can go above 1 to brighten the art (capped). Where no light reaches, a dim, cool ambient light. Sprites, and tiles taller than a cell such as doors, are lit by the floor under their feet. Walls and other light-blocking tiles cast soft shadows, and the floor is a little darker along the foot of a wall and in a room's corners. A torch placed on a wall shines from the wall's open side (south first), so it lights the room it faces and not what's behind it. Height counts: a ledge two or more steps above the light hides its top, while stairs (one step a tile) stay lit. Spawners and doors don't cast shadows. A hand-edited light missing a field is dropped with a console warning naming the sprite rather than baking black. |
 | `door` | `id` pairs a door's two sprites (closed and open); `open` says which half this is. The door swaps when a hero's tile enters any of its footprint cells and swaps back when the last of them leaves, so it reads as "walked open" - unless that placement is locked, when the team needs its key ([9.6.1](#961-keys-and-locked-doors)). |
-| `spawner` | Produces `monsters` (a pool, picked at random) every `interval` s, at most `maxAlive` at once, `total` in all (0 = unlimited), only while a hero is within `activationRange` tiles' walk (0 = always). `hitPoints` is the damage to destroy it (0 = indestructible). Its sprite's footprint is solid until destroyed. |
+| `spawner` | Produces `monsters` (a pool, picked at random) every `interval` s, at most `maxAlive` at once, `total` in all (0 = unlimited), only while a hero is within `activationRange` tiles' walk (0 = always). `hitPoints` is the damage to destroy it (0 = indestructible). Its sprite's footprint is solid until destroyed, when the tile goes too. The `spawner` data brush ([9.5](#95-the-level-file)) makes any other sprite one. |
 | `pickup` | What walking over it gives: `gold` or `health` (an `amount`; health is in half-hearts and never goes past the maximum), a `key` (an `id`), a `weapon`, an inventory `item` (its `sprite`, or - left out - the tile's own), or a `light` to carry (a `light` value, and the `seconds` it burns for - 0 or left out for the rest of the level; see [9.6.2](#962-lights-in-play)). Any kind can have a `quest`: the id of the quest it counts for when it's picked up ([9.10](#910-npcs-dialogs-and-quests)). The tile then disappears, and if it gave off light its light goes with it. A malformed one is dropped with a console warning naming the sprite. |
 
 A **specific placement** can override its light, spawner, pickup or door lock (the editor's data-select tool edits them per placement);
@@ -2010,7 +2015,8 @@ this.Listen(this.game.dispatcher, MONSTER_KILLED, (type: string, x: number, y: n
 this.Listen(this.game.dispatcher, LEVEL_COMPLETED, () => (CurrentLevel = NextLevel(CurrentLevel)));   // level() hands it back on the next start
 ```
 
-**Particle effects.** `DungeonMain` has an `Effects` layer over the world, under the HUD; `main.Effects.Play(art, config, x, y)` starts an
+**Particle effects.** `DungeonMain` has an `Effects` layer over the figures - under any tile layers drawn over them (after the
+level's player layer, [10.3](#103-layers-data-brushes-and-palette-categories)) and the HUD; `main.Effects.Play(art, config, x, y)` starts an
 effect at a position in world pixels - the space these events and `Monster.position` use - with `art` a sprite or animation name and
 `config` an emitter config from the particle editor. A one-off burst cleans itself up; a continuous effect runs until you set
 `emitter.emit = false` on what `Play` returns. Effects pause with the scene and are dropped when a level (re)starts.
@@ -2539,6 +2545,7 @@ export const EditorSetup: IDungeonEditorOptions = {
         [DataBrushName.Z_INDEX]: "floor_stairs",
         [DataBrushName.PICKUP]: "sack_gold",
         [DataBrushName.EXIT]: "floor_ladder",
+        [DataBrushName.SPAWNER]: "mob_spawner",
     },
     mapStyle: new MyStyle(),                   // the game's tiles for generated maps (keys 1-8); without it those keys do nothing
 };
@@ -2556,7 +2563,7 @@ vertical **toolbar** of tools at the far right. Each palette tab ends in a **+**
 | --- | --- | --- |
 | `B` | Brush | Left paints; right erases; Ctrl+drag paints a filled rectangle. |
 | `X` | Erase | Erases from the selected layer; Ctrl+drag a rectangle. |
-| `A` | Attributes (data select) | Click a placed light, spawner, pickup, door, height, dialog or boss - any cell of its sprite, not just the top-left - to edit its value in a dialog. Only offered while a data layer (the attributes layer) is selected; its button is hidden, and the key does nothing, with a tile layer selected. |
+| `A` | Attributes (data select) | Click a placed light, spawner, pickup, door, height, dialog or boss - any cell of its sprite (or a spawner brush's footprint), not just the top-left - to edit its value in a dialog. Only offered while a data layer (the attributes layer) is selected; its button is hidden, and the key does nothing, with a tile layer selected. |
 | `U` | Stamp | Drag a rectangle of the brush; hold Ctrl for just the border; right-drag erases a rectangle. Esc cancels. |
 | `I` | Dropper | Click a tile to paint with it (on the attributes layer, a data brush with its value). |
 | `G` | Fill | Flood-fills matching cells on the selected layer, up to the edge of the view. |
@@ -2594,17 +2601,28 @@ vertical **toolbar** of tools at the far right. Each palette tab ends in a **+**
 - The categories are read when the editor is created, so the game's metadata must already be loaded then - add the game scene
   (which binds the metadata, [9.1](#91-how-the-pieces-fit)) before the editor scene, and load `global` first.
 - Tile layers draw in list order; add, rename, hide (the eye), reorder and duplicate them in the layer panel.
-- Every level has a **floor** and a **walls** layer as well as attributes (a new level starts with just those three, and an
+- The **player** row (its badge is PLAYER, its name in italics beside a dashed line) isn't a layer to paint on but a divider: it shows
+  where the heroes, monsters, shots and effects are drawn in the game. Layers listed above it are drawn under them; layers below it are
+  drawn over them, so an arch, a treetop or the top of a column put on a layer below the line hides a hero walking behind it. It can't
+  be selected, hidden, renamed or removed; move it with the arrows on its own row (each step moves it past one tile layer), or move a
+  tile layer past it with the panel's arrows. Every level has one: a new level starts with it last, and an older level gets it last when
+  opened, which draws everything under the figures, as before. A layer added while it's last goes in just above it.
+- Every level has a **floor** and a **walls** layer as well as attributes and the player row (a new level starts with just those four, and an
   older level gets an empty one of each when opened). A floor layer shows only the **Floor** tab and paints only `floor`
   tiles; a walls layer likewise only **Walls**. Any other tile layer shows every tab but those two. The **+** in the layer
   panel asks whether the new layer is generic, floor or walls. The last floor layer and the last walls layer can't be removed.
 - Each layer remembers its own tool and tile: switch from the floor layer to the walls layer and back, and the floor tile and
   tool you were using are picked again (saved with the level). A layer you haven't used yet starts with no brush.
-- The one **attributes** layer is always present. Player start, collision, z-index, pickups, exits, NPCs' dialogs and bosses are painted on it, and it also
+- The one **attributes** layer is always present. Player start, collision, z-index, pickups, exits, NPCs' dialogs, bosses and spawners are painted on it, and it also
   draws a read-only overlay of what the game *derives* from tiles' metadata (collision, door footprints, lights,
-  spawners) so a cell's whole picture - hand-placed and intrinsic - is in one place.
+  spawners) so a cell's whole picture - hand-placed and intrinsic - is in one place. A painted spawner is a square on its own
+  cell, with the footprint it makes solid outlined: the sprite it turns into a spawner, or the roster's spawner sprite.
 - Painting a torch or a spawner **tile** is enough; its light or spawner values come from `assets-meta.json`. Use the
   Attributes tool to override them for one placement.
+- Or paint a **spawner** brush over any sprite - a gravestone, a statue - to make that sprite the spawner: it's drawn as
+  itself, its footprint is solid, and it's gone once destroyed. Floor never becomes one: on bare floor the brush is drawn as the
+  roster's spawner sprite. Its popup (Edit, or `E`, with the brush picked) has the same settings as a spawner tile's, and the
+  Attributes tool edits one already placed. Painted over a spawner tile, it sets what that spawner does.
 - A `dialog` brush's popup is a box for its NPC's **script** (Edit, or `E`, with the brush picked; or click a placed one with
   the Attributes tool), read as you type: the footer names the first line that doesn't
   read (and how many more), and Save waits until it does. A `boss`'s popup picks its monster from the roster's pictures, its hit
