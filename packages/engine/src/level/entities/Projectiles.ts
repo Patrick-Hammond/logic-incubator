@@ -156,6 +156,51 @@ export function SpriteBox(position: Vec2Like, size: { width: number; height: num
     };
 }
 
+/**
+ * A sprite's frame size, in pixels, and the part of it that isn't see-through, if that's known (`trim`, from its frame's
+ * top-left) - a pixi `Texture` from a trimmed atlas is one. Without `trim`, the whole frame counts.
+ */
+export type SpriteSize = { width: number; height: number; trim?: RectangleLike | null };
+
+/**
+ * One `SpriteSize` for every frame of an animation: the largest frame, and every pixel any frame draws (the union of
+ * their `trim`s - a frame without one counts whole). Undefined for no frames.
+ */
+export function ArtBounds(frames: ReadonlyArray<SpriteSize>): SpriteSize | undefined {
+    if (!frames.length) {
+        return undefined;
+    }
+    let width = 0;
+    let height = 0;
+    let left = Infinity;
+    let top = Infinity;
+    let right = -Infinity;
+    let bottom = -Infinity;
+    frames.forEach(frame => {
+        width = Math.max(width, frame.width);
+        height = Math.max(height, frame.height);
+        const art = frame.trim || { x: 0, y: 0, width: frame.width, height: frame.height };
+        left = Math.min(left, art.x);
+        top = Math.min(top, art.y);
+        right = Math.max(right, art.x + art.width);
+        bottom = Math.max(bottom, art.y + art.height);
+    });
+    const whole = left <= 0 && top <= 0 && right >= width && bottom >= height;
+    return whole ? { width, height } : { width, height, trim: { x: left, y: top, width: right - left, height: bottom - top } };
+}
+
+/**
+ * The pixels a sprite of `size` draws for an entity whose one-tile box is at `position`: its frame placed as
+ * `SpriteDrawPosition` places it - feet on the bottom of the box, centred across it - less what's see-through
+ * round it (`trim`). What a hero picks things up with (see `Hero.Figure`).
+ */
+export function FigureBox(position: Vec2Like, size: SpriteSize, tileSize: number): RectangleLike {
+    const x = position.x + (tileSize - size.width) * 0.5;
+    const y = position.y + tileSize - size.height;
+    const art = size.trim;
+    return art ? { x: x + art.x, y: y + art.y, width: art.width, height: art.height } : { x, y, width: size.width, height: size.height };
+}
+
 export function Overlaps(a: RectangleLike, b: RectangleLike): boolean {
     return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
 }

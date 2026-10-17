@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Vec2, Vec2Like } from "@logic-incubator/lib/math/Geometry";
 import { TileSize } from "../Constants";
-import { ALL_PLAYERS_DIED, LEVEL_COMPLETED, NPC_BUMPED, QUEST_UPDATED } from "../Events";
+import { ALL_PLAYERS_DIED, LEVEL_COMPLETED, NPC_BUMPED, PICKUP_COLLECTED, QUEST_UPDATED } from "../Events";
 import type { IPlayerInput } from "../input/PlayerControl";
 import { DoorOpens } from "../level/Doors";
 import type { CollectedPickup } from "../level/Level";
@@ -9,7 +9,7 @@ import { Chase } from "../level/entities/Behaviours";
 import { NoLock } from "../level/entities/Keys";
 import { LightSpell } from "../level/entities/LightSpell";
 import type { MonsterDef } from "../level/entities/MonsterRoster";
-import { PickupValue } from "../level/entities/Pickups";
+import { PickupArea, PickupSpot, PickupValue } from "../level/entities/Pickups";
 import { WeaponDef } from "../level/entities/Projectiles";
 import type { QuestDef } from "../story/Quests";
 import World, { StartCells, WarpDistance, WorldLevel } from "./World";
@@ -26,8 +26,13 @@ const SETUP = { hitPoints: 6, weapons: [BOW] };
 const SPELL: LightSpell = { light: { brightness: 1, tint: 0xffffff, range: 5 }, seconds: 10, recharge: 5 };
 const Walker: MonsterDef = { idle: "walker_idle", run: "walker_run", hitPoints: 2, speed: 0.5, contactDamage: 1, contactCooldown: 1, behaviour: () => new Chase() };
 
-type Pickup = Vec2Like & { value: PickupValue; sprite: string | null };
-type TestLevel = WorldLevel & { door: { cells: Vec2Like[]; isOpen: boolean; lockId: number }; pickups: Pickup[]; visibleFrom: Vec2Like[] };
+type Pickup = PickupSpot & { value: PickupValue; sprite: string | null };
+type TestLevel = Omit<WorldLevel, "pickups"> & { door: { cells: Vec2Like[]; isOpen: boolean; lockId: number }; pickups: Pickup[]; visibleFrom: Vec2Like[] };
+
+/** Where a pickup on cell `x`, `y` with nothing drawn lies - the whole cell is what's touched. */
+function Spot(x: number, y: number): PickupSpot {
+    return { x, y, area: PickupArea({ x, y }, TileSize) };
+}
 
 function Level(rows: string[], lockId = NoLock, quests: QuestDef[] = []): TestLevel {
     const collisionData: boolean[][] = [];
@@ -92,7 +97,7 @@ function Level(rows: string[], lockId = NoLock, quests: QuestDef[] = []): TestLe
             return here.map(p => ({ value: p.value, sprite: p.sprite }));
         },
         DropPickup(x, y, value, sprite) {
-            level.pickups.push({ x, y, value, sprite });
+            level.pickups.push({ ...Spot(x, y), value, sprite });
             return { x, y };
         }
     };
@@ -200,10 +205,64 @@ describe("World", () => {
         const { level, world } = Setup(ROOM, 2);
         Put(world, 0, { x: 6, y: 2 });
         Put(world, 1, { x: 6, y: 2 });
-        level.pickups.push({ x: 6, y: 2, value: { kind: "gold", amount: 5 }, sprite: null });
+        level.pickups.push({ ...Spot(6, 2), value: { kind: "gold", amount: 5 }, sprite: null });
         world.Step([], 1, FRAME);
         expect(world.Heroes[0].Gold.amount).toBe(5);
         expect(world.Heroes[1].Gold.amount).toBe(0);
+    });
+
+    it("picks up what any part of a hero's sprite overlaps, off their own cell - a tall hero's head reaching into the cell above", () => {
+        const { level, world, events } = Setup(ROOM, 1);
+        level.pickups.push({ ...Spot(6, 1), value: { kind: "gold", amount: 5 }, sprite: null });
+        Put(world, 0, { x: 6, y: 2 });
+        world.Step([], 1, FRAME);
+        // A one-tile sprite only meets the cell's edge.
+        expect(world.Heroes[0].Gold.amount).toBe(0);
+        world.Heroes[0].SetFigure({ width: TileSize, height: 28 });
+        world.Step([], 1, FRAME);
+        expect(world.Heroes[0].Gold.amount).toBe(5);
+        expect(level.pickups).toEqual([]);
+        expect(events.filter(e => e.event === PICKUP_COLLECTED).map(e => e.args)).toEqual([[0, 6, 1]]);
+    });
+
+    it("picks up from every cell a hero's sprite overlaps at once, telling of each", () => {
+        const { level, world, events } = Setup(ROOM, 1);
+        level.pickups.push({ ...Spot(5, 2), value: { kind: "gold", amount: 1 }, sprite: null });
+        level.pickups.push({ ...Spot(6, 2), value: { kind: "gold", amount: 2 }, sprite: null });
+        level.pickups.push({ ...Spot(7, 2), value: { kind: "gold", amount: 4 }, sprite: null });
+        Put(world, 0, { x: 5.5, y: 2 });
+        world.Step([], 1, FRAME);
+        expect(world.Heroes[0].Gold.amount).toBe(3);
+        expect(level.pickups.map(p => p.x)).toEqual([7]);
+        expect(events.filter(e => e.event === PICKUP_COLLECTED).map(e => e.args)).toEqual([[0, 5, 2], [0, 6, 2]]);
+    });
+
+    it("touches a pickup where it's drawn, not anywhere on its cell", () => {
+        const { level, world } = Setup(ROOM, 1);
+        // A coin drawn at the right of its cell.
+        level.pickups.push({ x: 6, y: 2, area: { x: 6 * TileSize + 10, y: 2 * TileSize, width: 6, height: 7 }, value: { kind: "gold", amount: 5 }, sprite: "coin" });
+        // Half over its cell, from the left, short of the coin.
+        Put(world, 0, { x: 5.5, y: 2 });
+        world.Step([], 1, FRAME);
+        expect(world.Heroes[0].Gold.amount).toBe(0);
+        // From the right, a pixel over it.
+        Put(world, 0, { x: 7 - 1 / TileSize, y: 2 });
+        world.Step([], 1, FRAME);
+        expect(world.Heroes[0].Tile).toEqual({ x: 7, y: 2 });
+        expect(world.Heroes[0].Gold.amount).toBe(5);
+    });
+
+    it("doesn't reach a pickup up on a ledge too high to step onto, until the hero is up there", () => {
+        const { level, world } = Setup(ROOM, 1);
+        level.HeightAt = (_x, y) => (y === 1 ? 2 : 0);
+        level.pickups.push({ ...Spot(6, 1), value: { kind: "gold", amount: 5 }, sprite: null });
+        world.Heroes[0].SetFigure({ width: TileSize, height: 28 });
+        Put(world, 0, { x: 6, y: 2 });
+        world.Step([], 1, FRAME);
+        expect(world.Heroes[0].Gold.amount).toBe(0);
+        Put(world, 0, { x: 6, y: 1 });
+        world.Step([], 1, FRAME);
+        expect(world.Heroes[0].Gold.amount).toBe(5);
     });
 
     it("opens a locked door for every hero once any of them carries its key", () => {
@@ -224,7 +283,8 @@ describe("World", () => {
         world.Step([], 1, FRAME);
         expect(world.Living.map(h => h.Index)).toEqual([0]);
         expect(world.Heroes[1].Keys.keys).toEqual([]);
-        expect(level.pickups).toEqual([{ ...world.Heroes[1].Tile, value: { kind: "key", id: 7 }, sprite: "key" }]);
+        const fell = world.Heroes[1].Tile;
+        expect(level.pickups).toEqual([{ ...Spot(fell.x, fell.y), value: { kind: "key", id: 7 }, sprite: "key" }]);
         expect(world.TeamCanOpen(7)).toBe(false);
         expect(events.some(e => e.event === ALL_PLAYERS_DIED)).toBe(false);
 
@@ -313,7 +373,7 @@ describe("World", () => {
         const { level, world } = Setup(ROOM, 2);
         Put(world, 0, { x: 2, y: 2 });
         Put(world, 1, { x: 6, y: 2 });
-        level.pickups.push({ x: 6, y: 2, value: { kind: "gold", amount: 5 }, sprite: null });
+        level.pickups.push({ ...Spot(6, 2), value: { kind: "gold", amount: 5 }, sprite: null });
         const walker = WalkerAt(7, 2);
         world.encounter.monsters.push(walker);
         world.SetAway(1, true);
@@ -381,8 +441,8 @@ describe("World's quests and talk", () => {
 
     it("counts the pickups marked for a quest, and tells of it", () => {
         const { level, world, events } = Setup(ROOM, 1, NoLock, [Mushrooms]);
-        level.pickups.push({ x: 5, y: 2, value: { kind: "item", quest: "mushrooms" }, sprite: "mushroom" });
-        level.pickups.push({ x: 6, y: 2, value: { kind: "item", quest: "mushrooms" }, sprite: "mushroom" });
+        level.pickups.push({ ...Spot(5, 2), value: { kind: "item", quest: "mushrooms" }, sprite: "mushroom" });
+        level.pickups.push({ ...Spot(6, 2), value: { kind: "item", quest: "mushrooms" }, sprite: "mushroom" });
         world.Reset(SETUP, [undefined]);
         expect(world.quests.Get("mushrooms")).toMatchObject({ state: "active", target: 2 });
         Put(world, 0, { x: 5, y: 2 });
@@ -399,7 +459,7 @@ describe("World's quests and talk", () => {
 
     it("ends the level when a quest that ends it is complete - the hero who did it got there", () => {
         const { level, world, events } = Setup(ROOM, 2, NoLock, [{ ...Mushrooms, ends: true }]);
-        level.pickups.push({ x: 7, y: 2, value: { kind: "item", quest: "mushrooms" }, sprite: null });
+        level.pickups.push({ ...Spot(7, 2), value: { kind: "item", quest: "mushrooms" }, sprite: null });
         world.Reset(SETUP, [undefined, undefined]);
         Put(world, 1, { x: 7, y: 2 });
         world.Step([Input(), Input()], 1, FRAME);

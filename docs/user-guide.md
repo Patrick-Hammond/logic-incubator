@@ -1611,6 +1611,13 @@ who has strayed far from the rest of the party to the nearest of them ([9.3.1](#
 `PlayerSetup` is every hero's: a party shares its hit points, hearts and weapons, and each hero's `HeroSlot` can give them
 their own animation and light spell.
 
+A hero picks up a pickup as soon as **any part of their sprite overlaps it**, as both are drawn - or they stand on its cell.
+Only the art counts, not the see-through edges of a frame (the atlas build's trim says where the art is; a sprite without it
+counts whole), and a `pickup` brush on an empty cell is its whole cell. So nobody has to line up with an item exactly: a hero
+walking just under a sack takes it with the top of their head, and one brushing past a potion takes it with their side.
+Whatever else lies on that cell comes too. Nothing is picked up off a ledge too high or low to step to ([9.7](#97-heights));
+in a party the first hero, by slot, to reach it gets it.
+
 #### 9.3.1 Playing together
 
 Up to four heroes can play on one screen. Tell `DungeonMain` who plays with `heroes`, asked for on every start and restart:
@@ -1935,7 +1942,7 @@ a deleted one is removed - with a warning if it had anything in it); you only fi
 | `light` | A point light: `brightness` (its strength at its own cell, added on top of the ambient light; 1 is a normal torch, clamped to 0..2), `tint` (hex colour as a number; a warm colour reads as firelight against the cool ambient), `range` (radius in tiles), and optionally `flicker` (how far its strength wavers either way, as a share of itself: 0.15 is a torch; left out or 0, it's steady). Its sprite gets a soft glow over its flame (centred across the art, a third of the way down), in the light's colour. Baked once at level load at the corners of the tile grid, so it is blended smoothly across tiles, and fades out smoothly to nothing at its range. Overlapping lights add up, and light can go above 1 to brighten the art (capped). Where no light reaches, a dim, cool ambient light. Sprites, and tiles taller than a cell such as doors, are lit by the floor under their feet. Walls and other light-blocking tiles cast soft shadows, and the floor is a little darker along the foot of a wall and in a room's corners. A torch placed on a wall shines from the wall's open side (south first), so it lights the room it faces and not what's behind it. Height counts: a ledge two or more steps above the light hides its top, while stairs (one step a tile) stay lit. Spawners and doors don't cast shadows. A hand-edited light missing a field is dropped with a console warning naming the sprite rather than baking black. |
 | `door` | `id` pairs a door's two sprites (closed and open); `open` says which half this is. The door swaps when a hero's tile enters any of its footprint cells and swaps back when the last of them leaves, so it reads as "walked open" - unless that placement is locked, when the team needs its key ([9.6.1](#961-keys-and-locked-doors)). |
 | `spawner` | Produces `monsters` (a pool, picked at random) every `interval` s, at most `maxAlive` at once, `total` in all (0 = unlimited), only while a hero is within `activationRange` tiles' walk (0 = always). `hitPoints` is the damage to destroy it (0 = indestructible). Its sprite's footprint is solid until destroyed, when the tile goes too. The `spawner` data brush ([9.5](#95-the-level-file)) makes any other sprite one. |
-| `pickup` | What walking over it gives: `gold` or `health` (an `amount`; health is in half-hearts and never goes past the maximum), a `key` (an `id`), a `weapon`, an inventory `item` (its `sprite`, or - left out - the tile's own), or a `light` to carry (a `light` value, and the `seconds` it burns for - 0 or left out for the rest of the level; see [9.6.2](#962-lights-in-play)). Any kind can have a `quest`: the id of the quest it counts for when it's picked up ([9.10](#910-npcs-dialogs-and-quests)). The tile then disappears, and if it gave off light its light goes with it. A malformed one is dropped with a console warning naming the sprite. |
+| `pickup` | What a hero who touches it gets ([9.3](#93-the-player)): `gold` or `health` (an `amount`; health is in half-hearts and never goes past the maximum), a `key` (an `id`), a `weapon`, an inventory `item` (its `sprite`, or - left out - the tile's own), or a `light` to carry (a `light` value, and the `seconds` it burns for - 0 or left out for the rest of the level; see [9.6.2](#962-lights-in-play)). Any kind can have a `quest`: the id of the quest it counts for when it's picked up ([9.10](#910-npcs-dialogs-and-quests)). The tile then disappears, and if it gave off light its light goes with it. A malformed one is dropped with a console warning naming the sprite. |
 
 A **specific placement** can override its light, spawner, pickup or door lock (the editor's data-select tool edits them per placement);
 `assets-meta` is the default for the sprite. Metadata is per bundle: a level's bundle can have its own
@@ -1981,7 +1988,7 @@ with a bright core.
 ### 9.7 Heights
 
 The `z-index` data brush paints an integer height per cell. Height is **visual only** - movement and collision stay on one
-flat grid (a step of more than one height is blocked) - but it drives a distinctive look: tiles are drawn in bands by
+flat grid (a step of more than one height is blocked, and nothing is picked up across one) - but it drives a distinctive look: tiles are drawn in bands by
 height, the band the hero stands on is always 1:1 (with a party, the first hero still standing), bands above are larger
 and bands below recede and fade, and the camera zooms a little as they climb. Tunables are in `engine/level/Depth.ts`.
 
@@ -2000,7 +2007,7 @@ All on `game.dispatcher`; the constants are in `@logic-incubator/engine/Events`:
 | `LEVEL_COMPLETED` | `(hero)` | A hero stepped onto an `exit`: the level is over, and the next start (whatever `level` returns then) brings every hero back. |
 | `MONSTER_KILLED` | `(type, x, y, hero)` | A monster died (pixel position), killed by that hero's shot (-1 if by none). |
 | `SPAWNER_DESTROYED` | `(spawner)` | A spawner was shot to pieces. |
-| `PICKUP_COLLECTED` | `(hero, tileX, tileY)` | A hero picked up what was on that cell (gold, a key, a weapon...). |
+| `PICKUP_COLLECTED` | `(hero, tileX, tileY)` | A hero picked up what was on that cell (gold, a key, a weapon...) - once for each cell their sprite reached. |
 | `KEYS_DROPPED` | `(hero, tileX, tileY)` | A fallen hero's keys landed on that cell, for the others to pick up. |
 | `NPC_BUMPED` | `(hero, tileX, tileY)` | A hero walked into the NPC on that cell, where they can talk (a Quest); `DungeonMain` starts the talk. |
 | `TALK_STARTED` | `(hero, tileX, tileY)` | A talk began: play holds still until `TALK_ENDED`. A game's own UI should stop taking the keys meanwhile. |

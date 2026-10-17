@@ -57,7 +57,7 @@ export type AssetMetadata = {
     door?: DoorValue;
     light?: LightValue;
     spawner?: SpawnerValue;
-    /** What the player gets for walking over this tile - it then disappears (see `Level.CollectPickupsAt`). */
+    /** What a hero gets for touching this tile - it then disappears (see `PickupCellsReached`, `Level.CollectPickupsAt`). */
     pickup?: PickupValue;
 };
 

@@ -9,7 +9,7 @@ import AssetMetadataStore from "./level/AssetMetadata";
 import { AssetMetadataBinding, BindAssetMetadata } from "./level/AssetMetadataBinding";
 import LevelAssets from "./level/LevelAssets";
 import {LightSpell} from "./level/entities/LightSpell";
-import {WeaponDef} from "./level/entities/Projectiles";
+import {ArtBounds, SpriteSize, WeaponDef} from "./level/entities/Projectiles";
 import Level from "./level/Level";
 import {LevelFile} from "./level/LevelFormat";
 import { MovingLight } from "./level/SceneLights";
@@ -333,6 +333,7 @@ export class DungeonMain extends GameComponent {
         this.views.splice(slots.length).forEach(view => view.Destroy());
         this.world.Heroes.forEach((hero, i) => {
             const sprite = slots[i].sprite || setup.sprite;
+            hero.SetFigure(ArtOf(sprite));
             const view = this.views[i];
             if (view) {
                 view.SetSprite(sprite);
@@ -605,4 +606,9 @@ export class DungeonMain extends GameComponent {
 /** Pixel size of a sprite, or undefined if there's no such thing - what a monster's shootable box is sized from. */
 function SizeOf(name: string): {width: number; height: number} | undefined {
     return AssetFactory.inst.Has(name) ? AssetFactory.inst.CreateTexture(name) : undefined;
+}
+
+/** A sprite's frame size and where its art is, over every frame of an animation (`ArtBounds`) - what a hero picks things up with. Undefined if there's no such thing. */
+function ArtOf(name: string): SpriteSize | undefined {
+    return AssetFactory.inst.Has(name) ? ArtBounds(AssetFactory.inst.CreateTextures(name)) : undefined;
 }

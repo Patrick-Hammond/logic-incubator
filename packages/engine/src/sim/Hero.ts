@@ -5,7 +5,8 @@
  * pixi - so it runs under the plain node test runner.
  */
 
-import { Vec2Like } from "@logic-incubator/lib/math/Geometry";
+import { RectangleLike, Vec2Like } from "@logic-incubator/lib/math/Geometry";
+import { TileSize } from "../Constants";
 import type { PlayerSetup } from "../DungeonMain";
 import type { EncounterPlayer } from "../Encounter";
 import type { IPlayerInput } from "../input/PlayerControl";
@@ -16,7 +17,7 @@ import { Inventory } from "../level/entities/Inventory";
 import { CanOpen, HeldKey, KeyRing } from "../level/entities/Keys";
 import { LightSpell, LightSpellState } from "../level/entities/LightSpell";
 import { ApplyPickup, CreatePlayerState, DamagePlayer, EquippedWeapon, PlayerState, StepPlayer, TakePlayerShot } from "../level/entities/PlayerState";
-import { WeaponDef } from "../level/entities/Projectiles";
+import { FigureBox, SpriteSize, WeaponDef } from "../level/entities/Projectiles";
 import { BoxCentre, CentreTile, MoveCollider } from "../view/helpers/PlayerMovement";
 
 export default class Hero implements EncounterPlayer {
@@ -25,6 +26,8 @@ export default class Hero implements EncounterPlayer {
     private gone = false;
     /** Whether their player's connection to an online game has gone, for now - see `SetAway`. */
     private away = false;
+    /** How big their sprite's frames are, and where its art is in them - see `SetFigure`. */
+    private figure: SpriteSize = { width: TileSize, height: TileSize };
 
     /** `Index` is their slot, from 0; `setup` is what every hero starts a level with. */
     constructor(readonly Index: number, private setup: Pick<PlayerSetup, "hitPoints" | "weapons">) {
@@ -73,6 +76,15 @@ export default class Hero implements EncounterPlayer {
     /** The tile their centre sits over - what opens doors, collects pickups and draws the monsters. */
     get Tile(): Vec2Like {
         return CentreTile(this.state.position);
+    }
+
+    /**
+     * What their sprite draws, in pixels, as of their last step (see `FigureBox`): their frame (see `SetFigure`) placed
+     * as `SpriteDrawPosition` places it - feet on the bottom of their box, centred across it - less what's see-through
+     * round its art. Any pickup it overlaps is theirs (see `World.Step`).
+     */
+    get Figure(): RectangleLike {
+        return FigureBox(this.state.position, this.figure, TileSize);
     }
 
     get FacingX(): number {
@@ -126,6 +138,18 @@ export default class Hero implements EncounterPlayer {
     /** Their player's connection has gone (true) or come back (false) - see `Away`. `World.SetAway` is how the host's world does it. */
     SetAway(away: boolean): void {
         this.away = away;
+    }
+
+    /**
+     * How big the frames they're drawn with are, and where in them the art is, in pixels (see `Figure`) - a whole tile
+     * until told, and for `undefined`. `DungeonMain` tells each hero as a level starts, from every frame of the animation
+     * they're drawn with (`ArtBounds`).
+     */
+    SetFigure(size: SpriteSize | undefined): void {
+        const trim = size && size.trim;
+        this.figure = size
+            ? { width: size.width, height: size.height, trim: trim ? { x: trim.x, y: trim.y, width: trim.width, height: trim.height } : undefined }
+            : { width: TileSize, height: TileSize };
     }
 
     /** Puts them at `position` (a top-left, in pixels) at once - nothing drawn between - their mage-light, if lit, moving with them. */

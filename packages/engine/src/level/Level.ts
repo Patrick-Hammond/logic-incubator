@@ -1,7 +1,7 @@
 import {AnimatedSprite, Texture} from "pixi.js";
 import Game from "@logic-incubator/lib/game/Game";
 import AssetFactory from "@logic-incubator/lib/loading/AssetFactory";
-import {Rectangle, Vec2Like} from "@logic-incubator/lib/math/Geometry";
+import {Rectangle, RectangleLike, Vec2Like} from "@logic-incubator/lib/math/Geometry";
 import { AnimationSpeed, TileSize } from "../Constants";
 import {LEVEL_LOADED} from "../Events";
 import AssetMetadataStore from "./AssetMetadata";
@@ -12,7 +12,8 @@ import {DialogValue, IsDialogValue} from "../story/Talk";
 import {DoorOpens, EffectiveDoorLock, FindDoorGroups} from "./Doors";
 import {Boss, IsBossValue} from "./entities/Bosses";
 import MonsterRoster from "./entities/MonsterRoster";
-import {IsPickupValue, PickupValue} from "./entities/Pickups";
+import {IsPickupValue, PickupArea, PickupSpot, PickupValue} from "./entities/Pickups";
+import {ArtBounds} from "./entities/Projectiles";
 import {SanitiseSpawnerValue, Spawner} from "./entities/Spawners";
 import {EffectiveLight, FindImplicitPlacements, FindSpawners} from "./ImplicitData";
 import {Brush, DataBrushName, LevelFile, LevelLayer, TileLayerOrder} from "./LevelFormat";
@@ -34,8 +35,12 @@ export type Tile = Brush & {
 /** One door: the cell(s) whose tile has a `door` id in its `AssetMetadata`, and the visual tile whose texture is swapped between `closedSprite`/`openSprite` (that door's own pair, resolved via `AssetMetadataStore.GetDoorPartner`) when the player overlaps any of them - if they hold a key for it. `lockId` is what that key has to match (see `EffectiveDoorLock`, `Keys.CanOpen`). `regionIds` is the (possibly empty) set of regions this door borders - see `Regions.ts`. */
 export type Door = { cells: Vec2Like[]; tile: Tile; isOpen: boolean; regionIds: number[]; openSprite: string; closedSprite: string; lockId: number };
 
-/** One pickup: a cell, what it gives, and the tile that stands for it (null for a `PICKUP` brush on an empty cell - collected the same, just nothing to hide) - see `CollectPickupsAt`. */
-export type Pickup = Vec2Like & { tile: Tile | null; value: PickupValue };
+/**
+ * One pickup: a cell, what it gives, the tile that stands for it (null for a `PICKUP` brush on an empty cell - collected the same,
+ * just nothing to hide), and the pixels that tile is drawn over (the cell, for none - see `PickupArea`), which a hero picks it up by
+ * touching - see `CollectPickupsAt`.
+ */
+export type Pickup = PickupSpot & { tile: Tile | null; value: PickupValue };
 
 /** An NPC to talk to: a `DIALOG` brush's cell (solid), its script as read, and the tile drawn there - the NPC, shown beside what they say (null for none). See `TalkerAt`. */
 export type Talker = Vec2Like & { value: DialogValue; script: DialogScript; tile: Tile | null };
@@ -57,6 +62,12 @@ function CreateTile(brush: Brush): Tile | null {
         return {...brush, texture: anim.texture, anim};
     }
     return {...brush, texture: AssetFactory.inst.CreateTexture(brush.name)};
+}
+
+/** The pixels a pickup on `cell` drawn as `tile` covers (see `PickupArea`) - every frame's, for an animated one. */
+function PickupAreaOf(cell: Vec2Like, tile: Tile | null): RectangleLike {
+    const size = tile && (tile.anim ? ArtBounds(tile.anim.textures) : tile.texture);
+    return PickupArea(cell, TileSize, tile && size ? {size, pixelOffset: tile.pixelOffset} : null);
 }
 
 export default class Level {
@@ -99,7 +110,7 @@ export default class Level {
     public spawners: Spawner[] = [];
     /** The tile each spawner is drawn as, if it has one - see `SpawnerTile`. */
     private spawnerTiles = new Map<Spawner, Tile>();
-    /** Every tile with a `pickup` in its `AssetMetadata`, not yet collected. See `CollectPickupsAt`. */
+    /** Every pickup not yet collected: each tile with a `pickup` in its `AssetMetadata`, each `PICKUP` brush, each key dropped. See `CollectPickupsAt`. */
     public pickups: Pickup[] = [];
     /** Every NPC painted with the `DIALOG` data brush, in normalised map coordinates - each one's cell is solid (in `collisionData`). */
     public talkers: Talker[] = [];
@@ -229,10 +240,11 @@ export default class Level {
     }
 
     /**
-     * Collects every pickup at the given cell (call once per step with each living
-     * hero's tile, in turn - the first there gets it): each one's tile stops drawing
-     * and it won't be offered again. Returns what was collected, for the caller to
-     * apply - `Level` itself has no notion of a hero's gold/inventory/weapons.
+     * Collects every pickup at the given cell (`World.Step` calls it for each cell a
+     * living hero reaches - see `PickupCellsReached` - hero by hero, so the first there
+     * gets it): each one's tile stops drawing and it won't be offered again. Returns
+     * what was collected, for the caller to apply - `Level` itself has no notion of a
+     * hero's gold/inventory/weapons.
      */
     CollectPickupsAt(tileX: number, tileY: number): CollectedPickup[] {
         const here = this.pickups.filter(p => p.x === tileX && p.y === tileY);
@@ -338,7 +350,7 @@ export default class Level {
                 (column[cell.y] || (column[cell.y] = [])).push(tile);
             }
         }
-        this.pickups.push({x: cell.x, y: cell.y, tile, value});
+        this.pickups.push({x: cell.x, y: cell.y, tile, value, area: PickupAreaOf(cell, tile)});
         return cell;
     }
 
@@ -715,13 +727,14 @@ export default class Level {
             }
             const tile = this.FindPickupTile(posX, posY);
             if (tile) {
-                pickupsByCell.set(posX + "," + posY, {x: posX, y: posY, tile, value});
+                pickupsByCell.set(posX + "," + posY, {x: posX, y: posY, tile, value, area: PickupAreaOf({x: posX, y: posY}, tile)});
             }
         });
         // A PICKUP brush decides what its cell gives, over whatever the tile there would on its own.
         explicitPickups.forEach(({x, y, value}) => {
             if (x >= 0 && y >= 0) {
-                pickupsByCell.set(x + "," + y, {x, y, tile: this.FindTopTile(x, y), value});
+                const tile = this.FindTopTile(x, y);
+                pickupsByCell.set(x + "," + y, {x, y, tile, value, area: PickupAreaOf({x, y}, tile)});
             }
         });
         pickupsByCell.forEach(pickup => this.pickups.push(pickup));

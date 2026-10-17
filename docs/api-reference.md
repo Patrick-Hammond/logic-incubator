@@ -1244,7 +1244,7 @@ await relay.close();         // ends every connection and stops
 | `GAME_RESUMED` | `"gameResumed"` | - (`DungeonMain.Resume()` set it going again) |
 | `MONSTER_KILLED` | `"monsterKilled"` | `(type, x, y, hero)` - `hero` is whose shot killed it (-1 for none) |
 | `SPAWNER_DESTROYED` | `"spawnerDestroyed"` | `(spawner)` |
-| `PICKUP_COLLECTED` | `"pickupCollected"` | `(hero, tileX, tileY)` - a hero picked up what was on that cell |
+| `PICKUP_COLLECTED` | `"pickupCollected"` | `(hero, tileX, tileY)` - a hero picked up what was on that cell; once for each cell, when their sprite reaches more than one in a step (`PickupCellsReached`) |
 | `KEYS_DROPPED` | `"keysDropped"` | `(hero, tileX, tileY)` - a fallen hero's keys landed on that cell |
 | `NPC_BUMPED` | `"npcBumped"` | `(hero, tileX, tileY)` - a hero walked into the NPC on that cell (a `DIALOG` brush), where talking is on (`World.SetTalk`); `DungeonMain` starts the talk |
 | `TALK_STARTED` | `"talkStarted"` | `(hero, tileX, tileY)` - a talk with that cell's NPC began: play holds still until `TALK_ENDED` |
@@ -1366,7 +1366,8 @@ on by having `level` (and `levelBundle`) return the next one. On `LEVEL_CREATED`
 ```ts
 type Tile = Brush & { texture: Texture; anim?: AnimatedSprite; light?: number; spawner?: boolean };   // light: its baked light's index, for a tile that gives off light; spawner: a spawner is drawn as it (EntityRenderer draws it, not TileMapView)
 type Door = { cells: Vec2Like[]; tile: Tile; isOpen: boolean; regionIds: number[]; openSprite: string; closedSprite: string; lockId: number };
-type Pickup = Vec2Like & { tile: Tile | null; value: PickupValue };      // tile is null for a PICKUP brush on an empty cell
+type Pickup = PickupSpot & { tile: Tile | null; value: PickupValue };    // tile is null for a PICKUP brush on an empty cell; area (PickupSpot) the pixels
+                                                                         // its tile draws - every frame's, for an animation - or the cell, with none (PickupArea)
 type CollectedPickup = { value: PickupValue; sprite: string | null };    // sprite = the tile it was, for an item or key with none of its own
 type Talker = Vec2Like & { value: DialogValue; script: DialogScript; tile: Tile | null };   // an NPC: its script as read, and the tile drawn there
 ```
@@ -1388,7 +1389,8 @@ type Talker = Vec2Like & { value: DialogValue; script: DialogScript; tile: Tile 
 | `playerStartPosition` | `Vec2Like \| undefined` | |
 | `exits` | `Vec2Like[]` | Every cell painted with the `exit` data brush - see `IsExit`. |
 | `spawners` | `Spawner[]` | Every spawner tile and `SPAWNER` brush, one to a cell (`FindSpawners`) - a brush on a spawner tile's cell decides what it does. Each is drawn as a tile on its cell (`SpawnerTile`) - a spawner tile, else the top one that isn't floor - or, with none, as the roster's `spawnerSprite`; that picture's footprint (`cells`) is solid until `RemoveSpawner`. |
-| `pickups`, `depths` | | |
+| `pickups` | `Pickup[]` | Every pickup not yet collected: each tile with a `pickup` in its metadata, each `PICKUP` brush (one to a cell, the brush winning), each key dropped (`DropPickup`). |
+| `depths` | | |
 | `talkers` | `Talker[]` | Every `DIALOG` brush: an NPC's cell (solid in `collisionData`, though it blocks no light), its script read against the level's quests (lines with mistakes left out, each warned of), and the top tile there. |
 | `bosses` | `Boss[]` | Every `BOSS` brush whose monster the roster has (`Boss = Vec2Like & { value: BossValue }`); one it hasn't is left out with a warning. `Encounter.Reset` places them. |
 | `quests` | `QuestDef[]` | The level's quests: the well-formed ones in `levelData.quests` (`ReadQuests`). |
@@ -1405,7 +1407,7 @@ type Talker = Vec2Like & { value: DialogValue; script: DialogScript; tile: Tile 
 | `RemoveSpawner(spawner)` | Opens a destroyed spawner's cells, and takes away the tile it's drawn as (`SpawnerTile`), putting out its light if it gives one. |
 | `SpawnerTile(spawner): Tile \| null` | The tile a spawner is drawn as - the one `FindSpawners` picked on its cell - or null for one the roster's `spawnerSprite` stands in for. |
 | `IsDoorLocked(x, y, canOpen): boolean` | A closed door that doesn't open for the heroes (`canOpen(lockId)` says whether a lock does: it's unlocked, or one of them holds its key - `World.TeamCanOpen`) - what their collider treats as a wall. A closed door that opens for them isn't: they walk onto it to open it. |
-| `CollectPickupsAt(x, y): CollectedPickup[]` | Collects and hides every pickup at the cell; the caller applies them. Called each step for each living hero's tile, in slot order, so the first there gets it. A pickup whose tile gives off light (a torch) takes its light with it: that baked light is switched off. |
+| `CollectPickupsAt(x, y): CollectedPickup[]` | Collects and hides every pickup at the cell; the caller applies them. `World.Step` calls it for each cell a hero in play reaches (`PickupCellsReached`), hero by hero in slot order, so the first there gets it; an online guest, for each cell the host's `PICKUP_COLLECTED` names. A pickup whose tile gives off light (a torch) takes its light with it: that baked light is switched off. |
 | `DropPickup(x, y, value: PickupValue, sprite): Vec2Like` | Puts a pickup down - a fallen hero's keys: on that cell, or the nearest open floor (`IsFloor`) when it's a door or a wall, so it can't be shut away. Drawn as `sprite` on the top tile layer under the heroes (`playerLayer`; the bottom one if every layer is over them; nothing is drawn for `null`); collected like any other. Returns the cell it landed on. |
 | `UpdateLights(time, moving)` | Rebuilds `lightGrid` for `time` seconds of play, with `moving: MovingLight[]` cast where they are now (`SceneLights.Update`). Call once a frame, before the level is drawn. |
 | `UpdateDoors(tiles: Vec2Like[], canOpen?)` | Opens/closes doors by the tiles the living heroes stand on (call each step): a door is open while any of them is in one of its cells and `canOpen(door.lockId)` (with none given, every door does - so with the team's keys, an unlocked door always does), and shut once the last leaves. One that's open stays open while anyone is in it, even if the key went with a hero who fell (`DoorOpens`). Bumps `doorVersion` for each that changes. |
@@ -1727,6 +1729,11 @@ type Projectile = { id, x, y, px, py, vx, vy, owner, hero, damage, sprite, sprit
 CreateProjectile(from, direction, shot, owner, tileSize, id = 0, hero = -1): Projectile          // px, py start at from
 StepProjectile(projectile, dt, isBlocked, tileSize): Vec2Like | null    // the blocking cell it hit, else null; sets px, py first
 ProjectileBox(p), ContactBox(position, tileSize), SpriteBox(position, size, tileSize), Overlaps(a, b)
+type SpriteSize = { width; height; trim?: RectangleLike | null }   // a frame's size, and where its art is in it (a pixi Texture from a trimmed atlas)
+ArtBounds(frames: SpriteSize[]): SpriteSize | undefined   // every frame of an animation at once: the largest frame, the union of their art
+FigureBox(position, size: SpriteSize, tileSize)           // the pixels a sprite draws for a one-tile box at position: its frame placed as
+                                                          // SpriteDrawPosition does (feet on the box's bottom, centred across it), less what's
+                                                          // see-through round it (trim) - a hero's Figure
 ProjectileSize = 6;  ContactInset = 2
 ```
 
@@ -1739,7 +1746,7 @@ Pure modules under `level/entities/`:
 | `Health` | `type Health = { hitPoints, max, invulnerable }`; `InvulnerableTime = 1`; `CreateHealth(max)`, `IsDead(h)`, `DamageHealth(h, damage, invulnerableTime?): boolean` (false while invulnerable/dead), `HealHealth(h, amount): boolean` (restores up to the maximum; nothing for the dead), `TickHealth(h, dt)` |
 | `Gold` | `type Gold = { amount }`; `CreateGold()`, `AddGold(gold, amount)` (never below 0) |
 | `Inventory` | `InventorySize = 8`; `type Inventory = { slots: (string \| null)[] }`; `CreateInventory()`, `AddItem(inventory, sprite): boolean` |
-| `Pickups` | `type PickupValue = { kind: "gold"; amount } \| { kind: "health"; amount } \| { kind: "key"; id } \| { kind: "weapon"; weapon: WeaponDef } \| { kind: "item"; sprite? } \| { kind: "light"; light: LightValue; seconds? }` (an item with no `sprite` is shown as its own tile; a light is carried from then on, in place of any other, for `seconds` - 0 or left out for the rest of the level); `PickupKinds`; `IsPickupValue(v)` (strict: a known kind with the fields it needs, finite numbers, a key id that's a whole number from 0, a complete light - also what tells a pickup from a light or spawner in a tile's `data`); `DefaultPickupValue(kind?)` (a light: a torch that burns for 120 s) |
+| `Pickups` | `type PickupValue = { kind: "gold"; amount } \| { kind: "health"; amount } \| { kind: "key"; id } \| { kind: "weapon"; weapon: WeaponDef } \| { kind: "item"; sprite? } \| { kind: "light"; light: LightValue; seconds? }` (an item with no `sprite` is shown as its own tile; a light is carried from then on, in place of any other, for `seconds` - 0 or left out for the rest of the level); `PickupKinds`; `IsPickupValue(v)` (strict: a known kind with the fields it needs, finite numbers, a key id that's a whole number from 0, a complete light - also what tells a pickup from a light or spawner in a tile's `data`); `DefaultPickupValue(kind?)` (a light: a torch that burns for 120 s). Which a hero reaches: `type PickupSpot = Vec2Like & { area: RectangleLike }` (a pickup's cell, and the pixels it's drawn over); `PickupArea(cell, tileSize, sprite?: { size: SpriteSize, pixelOffset } \| null)` (what its sprite draws: a frame of `size` at the cell's top-left less `pixelOffset`, as `TileMap` draws a tile, less what's see-through round it - `size.trim`; the whole cell without a sprite); `PickupCellsReached(figure, tile, pickups, isHeightGap): Vec2Like[]` (each cell, once and in the pickups' order, with a pickup that `figure` - the hero's sprite, `Hero.Figure` - overlaps, unless `isHeightGap(tile, cell)` - a ledge too high or low to step to from `tile`, the cell under their centre - and always `tile` itself) |
 | `CarriedLight` | `type CarriedLight = { value, seconds, left }`; `GutterTime = 8`; `CreateCarriedLight(value, seconds?)` (0, negative or left out: burns for the rest of the level), `TickCarriedLight(light, seconds): boolean` (false once it's out), `CarriedLightScale(light)` (1, falling to 0 over its last `GutterTime` seconds) |
 | `LightSpell` | `type LightSpell = { light: LightValue; seconds; recharge }` (lit for `seconds` - 0 for good - then `recharge` seconds before it can be cast again); `type LightSpellState = { spell, lit: CarriedLight \| null, recharging }`; `CreateLightSpellState(spell)`, `IsLightSpellReady(state)`, `CastLightSpell(state): boolean` (false unless ready), `TickLightSpell(state, seconds)`, `LightSpellScale(state)` (0 while not lit), `LightSpellStatusOf(state): { state: "ready" \| "lit" \| "recharging"; fill; seconds }` (what the HUD shows: a lit one's bar empties as it burns, a recharging one's fills back up) |
 | `PlayerState` | A hero's whole state and one step of it. `type PlayerState = { position, previous, velocity, facingX, health, gold, inventory, keys, weapons, equippedIndex, fireCooldown, shot, carried, spell, orb, previousOrb, orbTime }` (`position` the top-left of their one-tile box in pixels, `previous` where it was before the last step; `orb` the floor under their mage-light). `CreatePlayerState(setup, startTile, lightSpell?)` (on `startTile`, at full health, with a **copy** of `setup.weapons`, so a weapon picked up is gone when the level starts over); `StepPlayer(state, input: IPlayerInput, dt, seconds, collider: MoveCollider)` (timers tick, `input` turns and moves them, a shot fired waits in `shot`, the mage-light drifts after them - it reads no device, so it runs the same for input from anywhere); `TakePlayerShot(state): Vec2Like \| null` (once), `DamagePlayer(state, n): boolean`, `EquippedWeapon(state)`, `ApplyPickup(state, pickup: CollectedPickup)` (gold, health, a key, a weapon - added and equipped -, an item, a light) |
@@ -1796,7 +1803,7 @@ each hero's input every step and draws it; a game rarely touches it directly.
 ```ts
 interface WorldLevel extends EncounterLevel, QuestLevel {   // the parts of Level a world uses
     playerStartPosition; quests; IsFloor(x, y); IsExit(x, y); IsTalker(x, y); IsDoorLocked(x, y, canOpen); UpdateDoors(tiles, canOpen);
-    UpdateVisibleRegions(tiles); CollectPickupsAt(x, y); DropPickup(x, y, value, sprite);
+    UpdateVisibleRegions(tiles); pickups: PickupSpot[]; CollectPickupsAt(x, y); DropPickup(x, y, value, sprite);
 }
 
 new World(level: WorldLevel, options: EncounterOptions)
@@ -1841,8 +1848,10 @@ size (`Encounter.Reset(seed, heroes)`).
    them is at least `WarpDistance` tiles away. With a leash, the others' positions bound where they can go (`LeashBoxFor`) and the edge stops
    them like a wall (`Leashed`).
 2. Doors open and shut by where the heroes in play stand (`UpdateDoors`, with `TeamCanOpen`), and the regions they can see are recomputed together.
-3. Each picks up what's under them, in slot order, so the first there gets it (`PICKUP_COLLECTED(hero, x, y)` when there was anything), and each
-   thing picked up is counted toward the quests (a `collect` happening, with the pickup's `quest`). With talking on, a hero who has just walked into
+3. Each picks up what their sprite touches, in slot order, so the first there gets it: every cell `PickupCellsReached` gives for their `Figure`
+   and `Tile` - a pickup whose art any part of theirs overlaps, as both are drawn, unless it's up or down a step too high to climb
+   (`IsHeightBlocked`), and anything on the cell they stand on. Each cell is collected whole (`CollectPickupsAt`, then `PICKUP_COLLECTED(hero, x, y)` with that
+   cell), as an online guest does it from the event. Each thing picked up is counted toward the quests (a `collect` happening, with the pickup's `quest`). With talking on, a hero who has just walked into
    an NPC (`BumpedNpc`) emits `NPC_BUMPED` - once as they reach it, not again while they keep pushing.
 4. A hero on an exit ends the level: `Completed` is set, `LEVEL_COMPLETED(hero)` emitted, and nothing else happens this step.
 5. Each fires the shots they took, if any (`Encounter.Fire` with their slot and the input's `seq`), and the encounter steps with the heroes in
@@ -1864,6 +1873,10 @@ new Hero(index: number, setup: Pick<PlayerSetup, "hitPoints" | "weapons">)
 hero.Index                    // their slot, from 0
 hero.State: Readonly<PlayerState>
 hero.Alive, Position, Centre, Tile, FacingX, Health, Gold, Inventory, Keys, EquippedWeapon, Spell
+hero.Figure: RectangleLike                    // what their sprite draws, in pixels, where they stand (FigureBox) - what they pick things up with
+hero.SetFigure(size: SpriteSize | undefined): void   // their frames' size and where the art is in them - a whole tile until told, and for
+                                              // undefined; DungeonMain sets it as each level starts (World.Reset makes the heroes anew)
+                                              // from every frame of the animation they're drawn with (ArtBounds)
 hero.HasKeyFor(lockId): boolean
 hero.Reset(startTile, lightSpell?): void      // a fresh PlayerState there
 hero.WarpTo(position): void                   // there at once (a top-left, in pixels) - nothing drawn between - their mage-light with them

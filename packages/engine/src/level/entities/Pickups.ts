@@ -1,11 +1,13 @@
 /**
- * What a pickup gives the player when they walk over it. Pure - no pixi - so
- * it runs under the plain node test runner, same as Spawners.ts.
+ * What a pickup gives the player when they walk over it, and which pickups a
+ * hero reaches. Pure - no pixi - so it runs under the plain node test runner,
+ * same as Spawners.ts.
  */
 
+import {RectangleLike, Vec2Like} from "@logic-incubator/lib/math/Geometry";
 import {IsQuestId} from "../../story/Quests";
 import {IsCompleteLightValue, LightValue} from "../Lighting";
-import {WeaponDef} from "./Projectiles";
+import {Overlaps, SpriteSize, WeaponDef} from "./Projectiles";
 
 /** Any pickup can be marked for a quest: picking it up counts for that one (see `Quests`). */
 export type PickupValue = PickupKindValue & {
@@ -94,4 +96,47 @@ export function DefaultPickupValue(kind: PickupKind = "gold"): PickupValue {
         default:
             return { kind: "gold", amount: 1 };
     }
+}
+
+/** Where a pickup lies, for telling which a hero reaches (see `PickupCellsReached`): its cell, and the pixels it's drawn over (see `PickupArea`). */
+export type PickupSpot = Vec2Like & { area: RectangleLike };
+
+/**
+ * The pixels a pickup on `cell` draws: its sprite's frame of `size` at the cell's top-left less `pixelOffset` (as `TileMap`
+ * draws a tile), less what's see-through round it (`size.trim`) - or, with no sprite (a `PICKUP` brush on an empty cell, a key
+ * dropped with none), the whole cell.
+ */
+export function PickupArea(cell: Vec2Like, tileSize: number, sprite?: { size: SpriteSize; pixelOffset: Vec2Like } | null): RectangleLike {
+    if (!sprite) {
+        return { x: cell.x * tileSize, y: cell.y * tileSize, width: tileSize, height: tileSize };
+    }
+    const x = cell.x * tileSize - sprite.pixelOffset.x;
+    const y = cell.y * tileSize - sprite.pixelOffset.y;
+    const art = sprite.size.trim;
+    return art ? { x: x + art.x, y: y + art.y, width: art.width, height: art.height } : { x, y, width: sprite.size.width, height: sprite.size.height };
+}
+
+/**
+ * The cells whose pickups a hero picks up, each once, in the order `pickups` has them: any cell with a pickup that some
+ * part of their sprite overlaps (`figure`, see `Hero.Figure`) - unless it's a step too high or low to climb to from
+ * `tile`, the cell under their centre (`isHeightGap`, see `Depth.IsHeightGap`), so nothing is reached up onto a ledge -
+ * and always the cell they stand on.
+ */
+export function PickupCellsReached(
+    figure: RectangleLike,
+    tile: Vec2Like,
+    pickups: ReadonlyArray<PickupSpot>,
+    isHeightGap: (from: Vec2Like, to: Vec2Like) => boolean
+): Vec2Like[] {
+    const cells: Vec2Like[] = [];
+    pickups.forEach(pickup => {
+        if (cells.some(cell => cell.x === pickup.x && cell.y === pickup.y)) {
+            return;
+        }
+        const on = pickup.x === tile.x && pickup.y === tile.y;
+        if (on || (Overlaps(figure, pickup.area) && !isHeightGap(tile, pickup))) {
+            cells.push({ x: pickup.x, y: pickup.y });
+        }
+    });
+    return cells;
 }

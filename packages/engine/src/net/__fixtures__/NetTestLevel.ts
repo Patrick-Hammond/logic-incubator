@@ -9,18 +9,19 @@
  */
 
 import { Vec2Like } from "@logic-incubator/lib/math/Geometry";
+import { TileSize } from "../../Constants";
 import { DoorOpens } from "../../level/Doors";
 import type { CollectedPickup } from "../../level/Level";
 import { NoLock } from "../../level/entities/Keys";
-import { PickupValue } from "../../level/entities/Pickups";
+import { PickupArea, PickupSpot, PickupValue } from "../../level/entities/Pickups";
 import { DefaultSpawnerValue, Spawner } from "../../level/entities/Spawners";
 import type { QuestDef } from "../../story/Quests";
 import type { NetLevel } from "../NetPlay";
 
-type Pickup = Vec2Like & { value: PickupValue; sprite: string | null };
+type Pickup = PickupSpot & { value: PickupValue; sprite: string | null };
 type Door = { cells: Vec2Like[]; isOpen: boolean; lockId: number };
 
-export type NetTestLevel = NetLevel & { door: Door; pickups: Pickup[]; visibleFrom: Vec2Like[] };
+export type NetTestLevel = Omit<NetLevel, "pickups"> & { door: Door; pickups: Pickup[]; visibleFrom: Vec2Like[] };
 
 export function NetTestLevel(rows: string[], lockId = NoLock, monsters: string[] = ["walker"], quests: QuestDef[] = []): NetTestLevel {
     const collisionData: boolean[][] = [];
@@ -38,9 +39,9 @@ export function NetTestLevel(rows: string[], lockId = NoLock, monsters: string[]
         } else if (c === "E") {
             exits.push({ x, y });
         } else if (c === "$") {
-            pickups.push({ x, y, value: { kind: "gold", amount: 5, quest: "gold" }, sprite: "coin" });
+            pickups.push({ x, y, area: PickupArea({ x, y }, TileSize), value: { kind: "gold", amount: 5, quest: "gold" }, sprite: "coin" });
         } else if (c === "k") {
-            pickups.push({ x, y, value: { kind: "key", id: lockId }, sprite: "key" });
+            pickups.push({ x, y, area: PickupArea({ x, y }, TileSize), value: { kind: "key", id: lockId }, sprite: "key" });
         } else if (c === "@") {
             spawners.push({ x, y, cells: [{ x, y }], value: { ...DefaultSpawnerValue(), monsters: monsters.slice(), hitPoints: 3 } });
         }
@@ -99,7 +100,7 @@ export function NetTestLevel(rows: string[], lockId = NoLock, monsters: string[]
             return here.map(p => ({ value: p.value, sprite: p.sprite }));
         },
         DropPickup(x, y, value, sprite) {
-            level.pickups.push({ x, y, value, sprite });
+            level.pickups.push({ x, y, area: PickupArea({ x, y }, TileSize), value, sprite });
             return { x, y };
         }
     };

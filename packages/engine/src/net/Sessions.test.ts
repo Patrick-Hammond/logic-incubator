@@ -248,6 +248,22 @@ describe("an online run", () => {
         expect(guest.level.door.isOpen).toBe(run.host.level.door.isOpen);
     });
 
+    it("gives a guest's copy a pickup the host's hero only reached into, by its own cell", async () => {
+        await run.Open(1);
+        await run.BeginAll();
+        // A tall hero standing just under the gold, their head over it.
+        const hero = run.host.world.Heroes[0];
+        hero.SetFigure({ width: 16, height: 28 });
+        hero.WarpTo({ x: 4 * 16, y: 4 * 16 });
+        await run.Frames(30, () => undefined);
+        const guest = run.guests[0];
+        expect(hero.Tile).toEqual({ x: 4, y: 4 });
+        expect(run.host.level.pickups).toEqual([]);
+        expect(guest.level.pickups).toEqual([]);
+        expect(guest.world.Heroes[0].Gold.amount).toBe(5);
+        expect(guest.events).toContainEqual([PICKUP_COLLECTED, 0, 4, 3]);
+    });
+
     it("draws the host's monsters on each guest", async () => {
         await run.Open(1);
         await run.BeginAll();

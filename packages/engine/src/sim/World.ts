@@ -24,7 +24,7 @@ import { ALL_PLAYERS_DIED, KEYS_DROPPED, LEVEL_COMPLETED, NPC_BUMPED, PICKUP_COL
 import type { IPlayerInput } from "../input/PlayerControl";
 import type { CollectedPickup } from "../level/Level";
 import { LightSpell } from "../level/entities/LightSpell";
-import { PickupValue } from "../level/entities/Pickups";
+import { PickupCellsReached, PickupSpot, PickupValue } from "../level/entities/Pickups";
 import TileCollision from "../level/TileCollision";
 import QuestLog, { QuestDef, QuestHappening, QuestLevel, QuestState, QuestStatus } from "../story/Quests";
 import { BumpedNpc } from "../story/Talk";
@@ -44,6 +44,8 @@ export interface WorldLevel extends EncounterLevel, QuestLevel {
     IsDoorLocked(tileX: number, tileY: number, canOpen: (lockId: number) => boolean): boolean;
     UpdateDoors(tiles: ReadonlyArray<Vec2Like>, canOpen: (lockId: number) => boolean): void;
     UpdateVisibleRegions(tiles: ReadonlyArray<Vec2Like>): void;
+    /** Every pickup not yet collected - where it lies, for telling which a hero reaches (see `PickupCellsReached`). */
+    readonly pickups: ReadonlyArray<PickupSpot>;
     CollectPickupsAt(tileX: number, tileY: number): CollectedPickup[];
     DropPickup(tileX: number, tileY: number, value: PickupValue, sprite: string | null): Vec2Like;
 }
@@ -237,7 +239,8 @@ export default class World {
     /**
      * One step of play: each hero in play (`Active`) moves with their input (by slot - see `HeroInput`), or warps if they
      * asked to and may (see `WarpDistance`); the doors and what the team can see follow where they stand, each
-     * picks up what's under them (in slot order, so the first there gets it - `PICKUP_COLLECTED`) and fires;
+     * picks up every pickup their sprite touches (`PickupCellsReached`; in slot order, so the first there gets it -
+     * `PICKUP_COLLECTED`, once a cell) and fires;
      * then the encounter. A hero on a way out ends the level there and then. `dt` in frames (1 at 60 a second),
      * `seconds` for timers.
      */
@@ -272,12 +275,16 @@ export default class World {
         this.level.UpdateDoors(tiles, lock => this.TeamCanOpen(lock));
         this.level.UpdateVisibleRegions(tiles);
         living.forEach((hero, i) => {
-            const collected = this.level.CollectPickupsAt(tiles[i].x, tiles[i].y);
-            if (collected.length) {
-                collected.forEach(pickup => hero.ApplyPickup(pickup));
-                this.options.emit(PICKUP_COLLECTED, hero.Index, tiles[i].x, tiles[i].y);
-                collected.forEach(pickup => this.RecordQuest({ kind: "collect", quest: pickup.value.quest, pickup: pickup.value }, hero.Index));
-            }
+            // A whole cell at a time, as an online guest does it from `PICKUP_COLLECTED`.
+            const reached = PickupCellsReached(hero.Figure, tiles[i], this.level.pickups, (from, to) => this.collision.IsHeightBlocked(from, to));
+            reached.forEach(cell => {
+                const collected = this.level.CollectPickupsAt(cell.x, cell.y);
+                if (collected.length) {
+                    collected.forEach(pickup => hero.ApplyPickup(pickup));
+                    this.options.emit(PICKUP_COLLECTED, hero.Index, cell.x, cell.y);
+                    collected.forEach(pickup => this.RecordQuest({ kind: "collect", quest: pickup.value.quest, pickup: pickup.value }, hero.Index));
+                }
+            });
         });
         const out = living.find((hero, i) => this.level.IsExit(tiles[i].x, tiles[i].y));
         if (out) {

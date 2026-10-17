@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ContactBox, CreateProjectile, Overlaps, ProjectileBox, ShotSetup, SpriteBox, StepProjectile } from "./Projectiles";
+import { ArtBounds, ContactBox, CreateProjectile, FigureBox, Overlaps, ProjectileBox, ShotSetup, SpriteBox, StepProjectile } from "./Projectiles";
 
 const TILE = 16;
 const ARROW: ShotSetup = { sprite: "weapon_arrow", speed: 6, damage: 1, range: 10 };
@@ -70,5 +70,33 @@ describe("hit boxes", () => {
         const box = SpriteBox({ x: 100, y: 100 }, { width: 32, height: 36 }, TILE);
         expect(box.x + box.width / 2).toBe(100 + TILE / 2);
         expect(box.y + box.height).toBeLessThanOrEqual(100 + TILE);
+    });
+
+});
+
+describe("A figure's box", () => {
+    it("is the frame, feet on the bottom of its tile and centred across it, when where its art is isn't known", () => {
+        expect(FigureBox({ x: 100, y: 100 }, { width: 16, height: 28 }, TILE)).toEqual({ x: 100, y: 88, width: 16, height: 28 });
+        expect(FigureBox({ x: 100, y: 100 }, { width: 32, height: 36 }, TILE)).toEqual({ x: 92, y: 80, width: 32, height: 36 });
+        expect(FigureBox({ x: 100, y: 100 }, { width: TILE, height: TILE }, TILE)).toEqual({ x: 100, y: 100, width: TILE, height: TILE });
+    });
+
+    it("leaves out what's see-through round the art - a wizard's frame is ten pixels of air over their hat", () => {
+        const wizard = { width: 16, height: 28, trim: { x: 1, y: 10, width: 15, height: 18 } };
+        expect(FigureBox({ x: 100, y: 100 }, wizard, TILE)).toEqual({ x: 101, y: 98, width: 15, height: 18 });
+    });
+
+    it("covers every frame of an animation, the art of each", () => {
+        const run = ArtBounds([
+            { width: 16, height: 28, trim: { x: 1, y: 10, width: 15, height: 18 } },
+            { width: 16, height: 28, trim: { x: 0, y: 11, width: 15, height: 17 } }
+        ]);
+        expect(run).toEqual({ width: 16, height: 28, trim: { x: 0, y: 10, width: 16, height: 18 } });
+    });
+
+    it("counts a frame with no trim whole, and gives no trim when the art fills the frame", () => {
+        expect(ArtBounds([{ width: 6, height: 7 }, { width: 6, height: 7, trim: null }])).toEqual({ width: 6, height: 7 });
+        expect(ArtBounds([{ width: 16, height: 16, trim: { x: 4, y: 3, width: 8, height: 11 } }, { width: 16, height: 16 }])).toEqual({ width: 16, height: 16 });
+        expect(ArtBounds([])).toBeUndefined();
     });
 });
