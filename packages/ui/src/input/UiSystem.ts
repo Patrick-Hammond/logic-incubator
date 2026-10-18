@@ -216,8 +216,11 @@ export default class UiSystem {
     private OnAction(action: UiAction, source: InputSource): void {
         if (source === "pointer") return;
         const was = this.focus.Focused;
+        // Pressing a control that can't be pressed now is heard as refused rather than lost - with the ring showing, as a press that only brings it back does nothing else.
+        const refused = action === "accept" && !!was && this.focus.FocusVisible && !was.Enabled() && !!was.Rect();
         if (!this.focus.Handle(action)) return;
         if (action === "cancel") this.Sound("back");
+        else if (refused) this.Sound("denied");
         else if (IsDirection(action) && this.focus.Focused !== was) this.Sound("focus");
     }
 

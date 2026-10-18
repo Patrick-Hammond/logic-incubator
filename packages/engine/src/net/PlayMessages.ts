@@ -123,7 +123,9 @@ export type NetEvent =
     /** The spawner at `index` was hit and stands (`SPAWNER_HIT`). */
     | { e: "spawner-hit"; index: number }
     /** Hero `hero` cast their light spell (`LIGHT_SPELL_CAST`). */
-    | { e: "cast"; hero: number };
+    | { e: "cast"; hero: number }
+    /** Hero `hero` walked into the door on this cell, which no one has the key for (`DOOR_LOCKED`). */
+    | { e: "locked"; hero: number; x: number; y: number };
 
 /** Host to every guest, 20 times a second and as a level ends: the world after step `tick` of level `round`, and what happened since the last one. */
 export type Snapshot = {
@@ -166,12 +168,17 @@ export function IsLastingEvent(event: NetEvent): boolean {
 /**
  * Whether `event` is only heard - a shot fired, a hit - and changes nothing a guest shows for longer than a sound: a
  * snapshot with only these in it may still go by a direct link's fast lane (see `MayBeLost`), as losing one loses a sound.
+ * A boss waking isn't one: it puts the boss music on (`SoundTable.bossMusic`) until the boss falls.
  */
 export function IsFleetingEvent(event: NetEvent): boolean {
-    return event.e === "fired" || event.e === "stopped" || event.e === "hit" || event.e === "spawned" || event.e === "woke" || event.e === "spawner-hit" || event.e === "cast";
+    return (
+        event.e === "fired" || event.e === "stopped" || event.e === "hit" || event.e === "spawned" || event.e === "spawner-hit" || event.e === "cast" || event.e === "locked"
+    );
 }
 
-const EventKinds = ["pickup", "keys", "spawner", "killed", "damaged", "died", "all-died", "completed", "shot", "quest", "fired", "stopped", "hit", "spawned", "woke", "spawner-hit", "cast"];
+const EventKinds = [
+    "pickup", "keys", "spawner", "killed", "damaged", "died", "all-died", "completed", "shot", "quest", "fired", "stopped", "hit", "spawned", "woke", "spawner-hit", "cast", "locked"
+];
 
 const HeroGone = 1;
 const HeroFacingLeft = 2;
@@ -345,6 +352,7 @@ function WriteEvents(writer: ByteWriter, events: ReadonlyArray<NetEvent>): void 
         switch (event.e) {
             case "pickup":
             case "keys":
+            case "locked":
                 writer.U8(event.hero).U16(event.x).U16(event.y);
                 break;
             case "spawner":
@@ -479,6 +487,7 @@ function ReadEvent(reader: ByteReader): NetEvent {
     switch (kind) {
         case "pickup":
         case "keys":
+        case "locked":
             return { e: kind, hero: reader.U8(), x: reader.U16(), y: reader.U16() };
         case "spawner":
         case "spawner-hit":

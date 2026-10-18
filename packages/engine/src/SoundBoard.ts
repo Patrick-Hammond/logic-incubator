@@ -2,7 +2,7 @@
  * What play sounds like (`DungeonMainOptions.sounds`): one listener on the engine's events (see Events.ts) that plays
  * each one's sound - offline, on the host, and on an online guest alike, as a guest hears the host's events as its own
  * (see `GuestSession`). The thing it happens to names its own sound where it has one - a shot (`ShotSetup.sound`), a
- * kind of monster (`MonsterDef.sounds`), a pickup's or a door's sprite (`AssetMetadata.sound`) - and the game's
+ * kind of monster (`MonsterDef.sounds`), a hero (`HeroSlot.sounds`), a pickup's or a door's sprite (`AssetMetadata.sound`) - and the game's
  * `SoundTable` has the rest. Every sound is by name, and one the build has no sound for gives way to the next, then to
  * silence (see `NamedSounds`): a game names them all before it has the files, and each is heard once its file is in.
  * Pure - no pixi - so it runs under the plain node test runner.
@@ -10,7 +10,7 @@
 
 import type NamedSounds from "@logic-incubator/lib/assets/NamedSounds";
 import {
-    ALL_PLAYERS_DIED, BOSS_WOKE, DOOR_CLOSED, DOOR_OPENED, GAME_PAUSED, KEYS_DROPPED, LEVEL_COMPLETED, LIGHT_SPELL_CAST, MONSTER_HIT, MONSTER_KILLED,
+    ALL_PLAYERS_DIED, BOSS_WOKE, DOOR_CLOSED, DOOR_LOCKED, DOOR_OPENED, GAME_PAUSED, KEYS_DROPPED, LEVEL_COMPLETED, LIGHT_SPELL_CAST, MONSTER_HIT, MONSTER_KILLED,
     MONSTER_SPAWNED, NPC_SHOUTED, PICKUP_COLLECTED, PLAYER_DAMAGED, PLAYER_DIED, QUEST_UPDATED, SHOT_FIRED, SHOT_STOPPED, SPAWNER_DESTROYED, SPAWNER_HIT,
     TALK_LINE, TALK_STARTED
 } from "./Events";
@@ -29,6 +29,7 @@ export type SoundTable = {
     monsterShot?: string;
     /** A shot stopping against a wall, a closed door or the dark, for one whose `ShotSetup` names no `wallSound`. */
     shotWall?: string;
+    /** A hero taking a hit, and falling - for one whose `HeroSounds` don't say. */
     heroHurt?: string;
     heroDeath?: string;
     /** A hero cast their light spell. */
@@ -52,6 +53,8 @@ export type SoundTable = {
     /** For a door whose sprite's metadata names no `sound`. */
     doorOpen?: string;
     doorClose?: string;
+    /** A hero walks into a door no one in the team has the key for. */
+    doorLocked?: string;
     /** Picking something up, by what it is - for a pickup whose sprite's metadata names no `sound`. */
     pickup?: Partial<Record<PickupKind, string>>;
     questGiven?: string;
@@ -65,14 +68,23 @@ export type SoundTable = {
     /** An NPC calls out something new. */
     shout?: string;
     pause?: string;
+    /** Each step a hero takes (see `Footsteps`) - played by `DungeonMain`, not for an event. */
+    footstep?: string;
+    /** The level's sound, under its music, on a loop everywhere - a level's bundle can have its own (see `AmbientSounds`). */
+    ambience?: string;
+    /** In place of the level's music while a boss is awake (see `DungeonMainOptions.music`); give it the music volume, as the game does its own tracks. */
+    bossMusic?: string;
 };
 
 /** The events a `SoundBoard` plays sounds for. */
 export const SoundEvents: ReadonlyArray<string> = [
     SHOT_FIRED, SHOT_STOPPED, PLAYER_DAMAGED, PLAYER_DIED, LIGHT_SPELL_CAST, KEYS_DROPPED, ALL_PLAYERS_DIED, LEVEL_COMPLETED, MONSTER_HIT, MONSTER_KILLED,
-    MONSTER_SPAWNED, BOSS_WOKE, SPAWNER_HIT, SPAWNER_DESTROYED, DOOR_OPENED, DOOR_CLOSED, PICKUP_COLLECTED, QUEST_UPDATED, TALK_STARTED, TALK_LINE,
-    NPC_SHOUTED, GAME_PAUSED
+    MONSTER_SPAWNED, BOSS_WOKE, SPAWNER_HIT, SPAWNER_DESTROYED, DOOR_OPENED, DOOR_CLOSED, DOOR_LOCKED, PICKUP_COLLECTED, QUEST_UPDATED, TALK_STARTED,
+    TALK_LINE, NPC_SHOUTED, GAME_PAUSED
 ];
+
+/** What one hero sounds like, by name (see `HeroSlot.sounds`) - a character's own voice. Either left out, the game's `SoundTable` has it. */
+export type HeroSounds = { hurt?: string; death?: string };
 
 export type SoundBoardOptions = {
     /** What plays them - `NamedSounds` over the game's assets. */
@@ -82,6 +94,8 @@ export type SoundBoardOptions = {
     monster: (type: MonsterType) => MonsterDef | undefined;
     /** A sprite's metadata - `AssetMetadataStore.inst.Get`. */
     metadata: (sprite: string) => AssetMetadata | undefined;
+    /** What the hero in a slot sounds like - from `DungeonMainOptions.heroes`. Without it, every hero sounds as the table says. */
+    hero?: (slot: number) => HeroSounds | undefined;
 };
 
 export default class SoundBoard {
@@ -104,10 +118,10 @@ export default class SoundBoard {
                 this.Play((args[0] as ShotSetup).wallSound, table.shotWall);
                 break;
             case PLAYER_DAMAGED:
-                this.Play(table.heroHurt);
+                this.Play(this.HeroSound(args[2], "hurt"), table.heroHurt);
                 break;
             case PLAYER_DIED:
-                this.Play(table.heroDeath);
+                this.Play(this.HeroSound(args[0], "death"), table.heroDeath);
                 break;
             case LIGHT_SPELL_CAST:
                 this.Play(table.lightSpell);
@@ -152,6 +166,9 @@ export default class SoundBoard {
             case DOOR_CLOSED:
                 this.Play(this.SpriteSound(args[0] as string), table.doorClose);
                 break;
+            case DOOR_LOCKED:
+                this.Play(table.doorLocked);
+                break;
             case PICKUP_COLLECTED: {
                 const kinds = table.pickup || {};
                 ((args[3] as CollectedPickup[] | undefined) || []).forEach(pickup => {
@@ -186,6 +203,11 @@ export default class SoundBoard {
 
     private Play(...names: Array<string | undefined>): void {
         this.options.sounds.Play(names);
+    }
+
+    private HeroSound(slot: unknown, which: keyof HeroSounds): string | undefined {
+        const sounds = this.options.hero && typeof slot === "number" ? this.options.hero(slot) : undefined;
+        return sounds && sounds[which];
     }
 
     private MonsterSound(type: unknown, which: keyof MonsterSounds): string | undefined {

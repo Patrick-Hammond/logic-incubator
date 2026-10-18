@@ -17,7 +17,7 @@
 import { RelayHost } from "@logic-incubator/lib/net/RelayRooms";
 import type { EncounterView } from "../Encounter";
 import {
-    ALL_PLAYERS_DIED, BOSS_WOKE, KEYS_DROPPED, LEVEL_COMPLETED, MONSTER_HIT, MONSTER_KILLED, MONSTER_SPAWNED, PICKUP_COLLECTED, PLAYER_DAMAGED, PLAYER_DIED,
+    ALL_PLAYERS_DIED, BOSS_WOKE, DOOR_LOCKED, KEYS_DROPPED, LEVEL_COMPLETED, MONSTER_HIT, MONSTER_KILLED, MONSTER_SPAWNED, PICKUP_COLLECTED, PLAYER_DAMAGED, PLAYER_DIED,
     LIGHT_SPELL_CAST, QUEST_UPDATED, SHOT_FIRED, SHOT_STOPPED, SPAWNER_DESTROYED, SPAWNER_HIT
 } from "../Events";
 import { StepSeconds } from "../FixedStep";
@@ -168,6 +168,9 @@ export default class HostSession extends PlaySession {
                 break;
             case KEYS_DROPPED:
                 this.events.push({ e: "keys", hero: n(0), x: n(1), y: n(2) });
+                break;
+            case DOOR_LOCKED:
+                this.events.push({ e: "locked", hero: n(0), x: n(1), y: n(2) });
                 break;
             case SPAWNER_DESTROYED:
             case SPAWNER_HIT: {

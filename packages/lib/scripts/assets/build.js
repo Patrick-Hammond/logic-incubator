@@ -150,7 +150,10 @@ function BuildBundle(model, hasher, cacheDir, usedKeys, diagnostics) {
                     put(rel, { src: abs(f.rel) });
                     return rel;
                 });
-                assets[asset.id] = { kind: "sound", urls, bytes: fs.statSync(abs(asset.files[0].rel)).size, tier: asset.tier };
+                assets[asset.id] = Object.assign(
+                    { kind: "sound", urls, bytes: fs.statSync(abs(asset.files[0].rel)).size, tier: asset.tier },
+                    asset.volume === undefined ? {} : { volume: asset.volume }
+                );
                 break;
             }
             case "font": {

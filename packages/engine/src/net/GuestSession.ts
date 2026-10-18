@@ -20,7 +20,7 @@ import { RelayHost } from "@logic-incubator/lib/net/RelayRooms";
 import type RelaySession from "@logic-incubator/lib/net/RelaySession";
 import type { EncounterView } from "../Encounter";
 import {
-    ALL_PLAYERS_DIED, BOSS_WOKE, KEYS_DROPPED, LEVEL_COMPLETED, MONSTER_HIT, MONSTER_KILLED, MONSTER_SPAWNED, PICKUP_COLLECTED, PLAYER_DAMAGED, PLAYER_DIED,
+    ALL_PLAYERS_DIED, BOSS_WOKE, DOOR_LOCKED, KEYS_DROPPED, LEVEL_COMPLETED, MONSTER_HIT, MONSTER_KILLED, MONSTER_SPAWNED, PICKUP_COLLECTED, PLAYER_DAMAGED, PLAYER_DIED,
     LIGHT_SPELL_CAST, QUEST_UPDATED, SHOT_FIRED, SHOT_STOPPED, SPAWNER_DESTROYED, SPAWNER_HIT
 } from "../Events";
 import type { IPlayerInput } from "../input/PlayerControl";
@@ -378,6 +378,9 @@ export default class GuestSession extends PlaySession {
                 if (event.hero !== this.You) {
                     emit(LIGHT_SPELL_CAST, event.hero);
                 }
+                break;
+            case "locked":
+                emit(DOOR_LOCKED, event.hero, event.x, event.y);
                 break;
             case "stopped": {
                 const setup = this.replica!.Shot(event.shot);

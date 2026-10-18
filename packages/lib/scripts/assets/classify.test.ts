@@ -117,6 +117,22 @@ describe("ClassifyBundle", () => {
         expect(classify("level1", []).preload).toBe("manual");
     });
 
+    it("gives a sound its own volume, a name with takes setting every take, and checks the setting", () => {
+        const model = classify("global", ["sounds/door.ogg", "sounds/coin_1.ogg", "sounds/coin_2.ogg", "sounds/hit.ogg"], {
+            assets: { door: { volume: 0.6 }, coin: { volume: 0.3, tier: "background" } }
+        });
+        expect(errors(model)).toEqual([]);
+        const of = (id: string) => model.assets.find((a: { id: string }) => a.id === id) as { volume?: number; tier: string };
+        expect(of("global.door").volume).toBe(0.6);
+        expect([of("global.coin_1").volume, of("global.coin_2").volume]).toEqual([0.3, 0.3]);
+        expect(of("global.coin_2").tier).toBe("background");
+        expect(of("global.hit").volume).toBeUndefined();
+
+        expect(errors(classify("global", ["sounds/a.ogg"], { assets: { a: { volume: 2 } } }))[0]).toContain("from 0 to 1");
+        expect(errors(classify("global", ["images/a.png"], { assets: { a: { volume: 0.5 } } }))[0]).toContain("only a sound has a volume");
+        expect(errors(classify("global", ["sounds/a.ogg"], { assets: { a: { volum: 0.5 } } }))[0]).toContain('did you mean "volume"');
+    });
+
     it("rejects bad names", () => {
         expect(errors(classify("Level 1", []))).toHaveLength(1);
         expect(errors(classify("global", ["images/a.b.png"]))).toHaveLength(1);

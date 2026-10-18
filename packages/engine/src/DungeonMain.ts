@@ -3,9 +3,11 @@ import NamedSounds from "@logic-incubator/lib/assets/NamedSounds";
 import GameComponent from "@logic-incubator/lib/game/GameComponent";
 import AssetFactory from "@logic-incubator/lib/loading/AssetFactory";
 import {Vec2Like} from "@logic-incubator/lib/math/Geometry";
+import AmbientSounds from "./AmbientSounds";
 import { TileSize } from "./Constants";
-import {ALL_PLAYERS_DIED, GAME_PAUSED, GAME_RESUMED, LEVEL_COMPLETED, LEVEL_CREATED, NPC_BUMPED, TALK_ENDED, TALK_LINE, TALK_STARTED} from "./Events";
+import {ALL_PLAYERS_DIED, BOSS_WOKE, GAME_PAUSED, GAME_RESUMED, LEVEL_COMPLETED, LEVEL_CREATED, MONSTER_KILLED, NPC_BUMPED, TALK_ENDED, TALK_LINE, TALK_STARTED} from "./Events";
 import FixedStep, {StepSeconds} from "./FixedStep";
+import Footsteps from "./Footsteps";
 import PlayerControl, {DefaultInput, InputDevice} from "./input/PlayerControl";
 import AssetMetadataStore from "./level/AssetMetadata";
 import { AssetMetadataBinding, BindAssetMetadata } from "./level/AssetMetadataBinding";
@@ -19,7 +21,7 @@ import {LevelFile} from "./level/LevelFormat";
 import { MovingLight } from "./level/SceneLights";
 import type {NetPlay} from "./net/NetPlay";
 import World from "./sim/World";
-import SoundBoard, {SoundEvents, SoundTable} from "./SoundBoard";
+import SoundBoard, {HeroSounds, SoundEvents, SoundTable} from "./SoundBoard";
 import DialogRunner, {DialogLine} from "./story/DialogRunner";
 import type {EncounterView} from "./Encounter";
 import {Camera} from "./view/Camera";
@@ -45,6 +47,8 @@ export type PlayerSetup = {
     weapons: WeaponDef[];
     /** A light they can call up with the cast control (see `PlayerControl`) - a mage-light that floats beside them. Leave out for a hero who can't. */
     lightSpell?: LightSpell;
+    /** What they sound like when hurt and when they fall - left out, the game's `sounds` table has it. */
+    sounds?: HeroSounds;
 };
 
 /** One hero in a level and who plays them - see `DungeonMainOptions.heroes`. */
@@ -58,6 +62,8 @@ export type HeroSlot = {
     sprite?: string;
     /** Their light spell: null for none, `PlayerSetup.lightSpell` when left out. */
     lightSpell?: LightSpell | null;
+    /** What they sound like when hurt and when they fall - a character's own voice. `PlayerSetup.sounds` when left out. */
+    sounds?: HeroSounds;
     /** What their row in the HUD is headed - "PLAYER n" when left out. */
     name?: string;
 };
@@ -99,13 +105,15 @@ export type DungeonMainOptions = {
     /**
      * The track the level plays to, on a loop - usually one in `levelBundle`'s bundle - asked for with each start like
      * `level`. It plays while the scene is showing and stops when it's hidden; a restart, or a next level, that asks for
-     * the same track lets it carry on rather than start it over. Undefined, or without it, the level has no music.
+     * the same track lets it carry on rather than start it over. Undefined, or without it, the level has no music. While a
+     * boss is awake, `sounds.bossMusic` plays in its place, if the build has it.
      */
     music?: () => SoundId | undefined;
     /**
      * What play sounds like, where the thing it happens to doesn't name its own sound (see `SoundBoard`): each by name, a
      * name the build has no sound for being skipped, so every one can be named before its file exists. Without it, only
-     * what names its own (shots, monsters, sprites' metadata) is heard.
+     * what names its own (shots, monsters, sprites' metadata) is heard. The scene plays a few itself: the heroes' `footstep`,
+     * the level's `ambience` and every tile's metadata `loop` (see `AmbientSounds`), and the `bossMusic`.
      */
     sounds?: SoundTable;
     /**
@@ -158,6 +166,16 @@ export class DungeonMain extends GameComponent {
     private readonly hearers: Vec2Like[] = [];
     private levelAssets: LevelAssets | undefined;
     private music: LevelMusic | undefined;
+    /** The level's loops - its ambience, its torches' crackle. */
+    private ambient: AmbientSounds | undefined;
+    /** Plays the sounds the scene plays itself, by name - see `sounds`. */
+    private sounds: NamedSounds | undefined;
+    private footsteps = new Footsteps();
+    /** `hearers` in tiles, and by slot where the heroes who walk here are (see `Walkers`) - gathered into the same arrays each frame. */
+    private readonly tileHearers: Vec2Like[] = [];
+    private readonly walkers: Array<Vec2Like | null> = [];
+    /** By slot, what each hero sounds like - from the slots the level started with. */
+    private heroSounds: Array<HeroSounds | undefined> = [];
     /** Seconds until the next start after the level ended - 0 while it's being played. */
     private restartIn = 0;
     private restarting = false;
@@ -289,11 +307,26 @@ export class DungeonMain extends GameComponent {
         this.levelAssets = new LevelAssets(this.game.assets, metadata);
         const music = this.music = new LevelMusic(this.game.assets);
         this.WhileShown(() => music.Show(), () => music.Hide());
+        const assets = this.game.assets;
+        const sounds = this.sounds = new NamedSounds(assets);
+        const ambient = this.ambient = new AmbientSounds({
+            Find: name => sounds.Find(name),
+            PlaySound: (id, options) => assets.PlaySound(id, options),
+            StopSound: id => assets.StopSound(id)
+        });
+        this.WhileShown(() => ambient.Show(), () => ambient.Hide());
+        this.ListenWhileShown(this.game.dispatcher, BOSS_WOKE, () => music.BossWoke());
+        this.ListenWhileShown(this.game.dispatcher, MONSTER_KILLED, (...args: unknown[]) => {
+            if (args[4]) {
+                music.BossFell();
+            }
+        });
         const board = new SoundBoard({
-            sounds: new NamedSounds(this.game.assets),
+            sounds,
             table: this.options.sounds,
             monster: type => MonsterRoster.inst.Def(type),
-            metadata: sprite => AssetMetadataStore.inst.Get(sprite)
+            metadata: sprite => AssetMetadataStore.inst.Get(sprite),
+            hero: slot => this.heroSounds[slot]
         });
         // What happens while the dungeon isn't showing (the editor's own goings-on) isn't heard.
         SoundEvents.forEach(event => this.ListenWhileShown(this.game.dispatcher, event, (...args: unknown[]) => board.Heard(event, args)));
@@ -325,7 +358,7 @@ export class DungeonMain extends GameComponent {
             this.game.assets.UseLevelBundle().catch(() => undefined);
         }
         // Drops anything a `Reload` still waiting on its assets would otherwise carry on with.
-        this.level = this.camera = this.world = this.renderer = this.hud = this.tracker = this.dialog = this.effects = this.shouts = this.levelAssets = this.music = undefined;
+        this.level = this.camera = this.world = this.renderer = this.hud = this.tracker = this.dialog = this.effects = this.shouts = this.levelAssets = this.music = this.ambient = this.sounds = undefined;
         this.talk = null;
     }
 
@@ -346,6 +379,7 @@ export class DungeonMain extends GameComponent {
         const net = (this.options.net && this.options.net()) || null;
         this.EndTalk();
         this.world.Reset(setup, slots.map(slot => (slot.lightSpell === undefined ? setup.lightSpell : slot.lightSpell || undefined)), seed);
+        this.heroSounds = slots.map(slot => slot.sounds || setup.sounds);
         // Talking is for a Quest: one hero, on this machine alone - and so is hearing the NPCs shout.
         const talk = !net && slots.length === 1;
         this.world.SetTalk(talk);
@@ -373,6 +407,7 @@ export class DungeonMain extends GameComponent {
         this.hud.SetNames(slots.map((slot, i) => ({ name: slot.name || "PLAYER " + (i + 1), own: !allHere && this.local[i] })));
         this.renderer.Reset();
         this.fixedStep.Reset();
+        this.footsteps.Reset();
         this.restartIn = 0;
         this.restarting = false;
         this.waitingForRestart = false;
@@ -476,9 +511,14 @@ export class DungeonMain extends GameComponent {
             this.hud.RenderHeroes(this.world.Heroes);
         }
         this.tracker.Render(this.world.quests);
+        const hearers = this.Hearers();
         // A talk holds the NPCs' shouts where they are, hushed.
         if (!this.talk) {
-            this.shouts.Render(seconds, this.Hearers());
+            this.shouts.Render(seconds, hearers);
+        }
+        this.ambient.Update(this.InTiles(hearers), seconds);
+        if (this.footsteps.Update(this.Walkers()) > 0) {
+            this.sounds.Play(this.options.sounds && this.options.sounds.footstep);
         }
     }
 
@@ -492,6 +532,26 @@ export class DungeonMain extends GameComponent {
             }
         });
         return hearers;
+    }
+
+    /** `pixels` (the `hearers`), in tiles - what `AmbientSounds` measures by. */
+    private InTiles(pixels: ReadonlyArray<Vec2Like>): ReadonlyArray<Vec2Like> {
+        const tiles = this.tileHearers;
+        tiles.length = pixels.length;
+        pixels.forEach((point, i) => {
+            const tile = tiles[i] || (tiles[i] = { x: 0, y: 0 });
+            tile.x = point.x / TileSize;
+            tile.y = point.y / TileSize;
+        });
+        return tiles;
+    }
+
+    /** By slot: the centres of the heroes played here who are still standing, and null for the rest - whose feet are heard (see `Footsteps`). */
+    private Walkers(): ReadonlyArray<Vec2Like | null> {
+        const walkers = this.walkers;
+        walkers.length = 0;
+        this.world.Heroes.forEach((hero, i) => walkers.push(this.local[i] && hero.Alive && !hero.Gone ? hero.Centre : null));
+        return walkers;
     }
 
     /**
@@ -619,8 +679,8 @@ export class DungeonMain extends GameComponent {
     }
 
     /**
-     * Gets the level's assets ready (see `LevelAssets`), then builds the level and puts its music on - at
-     * the start of every visit and after every restart.
+     * Gets the level's assets ready (see `LevelAssets`), then builds the level and puts its music and loops on -
+     * at the start of every visit and after every restart.
      */
     private async Reload(): Promise<void> {
         const ready = await this.levelAssets.Prepare(this.options.levelBundle && this.options.levelBundle());
@@ -628,7 +688,11 @@ export class DungeonMain extends GameComponent {
         // The scene may have been destroyed while the assets loaded.
         if (ready && file && this.level) {
             this.level.LoadLevel(file);
-            this.music.Play((this.options.music && this.options.music()) || null);
+            const table = this.options.sounds || {};
+            // Looked up now, as the level's bundle may have its own.
+            const boss = table.bossMusic ? this.sounds.Find(table.bossMusic)[0] : undefined;
+            this.music.Play((this.options.music && this.options.music()) || null, boss || null);
+            this.ambient.Begin(table.ambience, this.level.soundLoops);
         }
     }
 }

@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
-    ALL_PLAYERS_DIED, BOSS_WOKE, DOOR_CLOSED, DOOR_OPENED, MONSTER_HIT, MONSTER_KILLED, MONSTER_SPAWNED, NPC_SHOUTED, PICKUP_COLLECTED, PLAYER_DAMAGED,
-    QUEST_UPDATED, SHOT_FIRED, SHOT_STOPPED, SPAWNER_DESTROYED, TALK_LINE
+    ALL_PLAYERS_DIED, BOSS_WOKE, DOOR_CLOSED, DOOR_LOCKED, DOOR_OPENED, MONSTER_HIT, MONSTER_KILLED, MONSTER_SPAWNED, NPC_SHOUTED, PICKUP_COLLECTED, PLAYER_DAMAGED,
+    PLAYER_DIED, QUEST_UPDATED, SHOT_FIRED, SHOT_STOPPED, SPAWNER_DESTROYED, TALK_LINE
 } from "./Events";
 import type { AssetMetadata } from "./level/AssetMetadata";
 import type { MonsterDef } from "./level/entities/MonsterRoster";
 import type { ShotSetup } from "./level/entities/Projectiles";
-import SoundBoard, { SoundEvents, SoundTable } from "./SoundBoard";
+import SoundBoard, { HeroSounds, SoundEvents, SoundTable } from "./SoundBoard";
 
 /** The sound names the build has. */
 let have: Set<string>;
@@ -18,6 +18,7 @@ const Table: SoundTable = {
     monsterShot: "caster_throw",
     shotWall: "shot_wall",
     heroHurt: "hero_hurt",
+    heroDeath: "hero_death",
     gameOver: "game_over",
     monsterHit: "monster_hit",
     monsterDeath: "small_death",
@@ -27,6 +28,7 @@ const Table: SoundTable = {
     spawnerBreak: "spawner_break",
     doorOpen: "door_open",
     doorClose: "door_close",
+    doorLocked: "door_locked",
     pickup: { gold: "coin", key: "key_pickup" },
     questGiven: "quest_given",
     questProgress: "quest_progress",
@@ -44,6 +46,9 @@ const Metadata: { [sprite: string]: AssetMetadata } = {
     sack_gold: { sound: "gold_sack" },
     doors_leaf_open: { sound: "heavy_door_open" }
 };
+
+/** By slot: a witch, a dwarf who sounds like the table, a warlock. */
+const Heroes: Array<HeroSounds | undefined> = [{ hurt: "hero_hurt_female", death: "hero_death_female" }, undefined, { hurt: "hero_hurt_male", death: "hero_death_male" }];
 
 const Arrow: ShotSetup = { sprite: "arrow", speed: 6, damage: 1, range: 20 };
 
@@ -69,7 +74,8 @@ beforeEach(() => {
         },
         table: Table,
         monster: type => Monsters[type] as MonsterDef | undefined,
-        metadata: sprite => Metadata[sprite]
+        metadata: sprite => Metadata[sprite],
+        hero: slot => Heroes[slot]
     });
 });
 
@@ -117,6 +123,7 @@ describe("SoundBoard", () => {
         have.add("heavy_door_open");
         expect(Hear(DOOR_OPENED, "doors_leaf_open", 0)).toEqual(["heavy_door_open"]);
         expect(Hear(DOOR_CLOSED, "doors_leaf_closed", 0)).toEqual(["door_close"]);
+        expect(Hear(DOOR_LOCKED, 0, 4, 2)).toEqual(["door_locked"]);
     });
 
     it("tells a quest given from a step toward it and from its end", () => {
@@ -124,6 +131,16 @@ describe("SoundBoard", () => {
         expect(Hear(QUEST_UPDATED, "rats", "active", 2, "active")).toEqual(["quest_progress"]);
         expect(Hear(QUEST_UPDATED, "rats", "complete", 5, "active")).toEqual(["quest_done"]);
         expect(Hear(QUEST_UPDATED, "rats", "finished", 5, "complete")).toEqual(["quest_done"]);
+    });
+
+    it("plays a hero's own hurt and death, else the game's", () => {
+        have.add("hero_hurt_female").add("hero_death_female");
+        expect(Hear(PLAYER_DAMAGED, 1, 3, 0)).toEqual(["hero_hurt_female"]);
+        expect(Hear(PLAYER_DIED, 0)).toEqual(["hero_death_female"]);
+        // One without, and one whose files aren't in yet.
+        expect(Hear(PLAYER_DAMAGED, 1, 3, 1)).toEqual(["hero_hurt"]);
+        expect(Hear(PLAYER_DAMAGED, 1, 3, 2)).toEqual(["hero_hurt"]);
+        expect(Hear(PLAYER_DIED, 2)).toEqual(["hero_death"]);
     });
 
     it("plays the game's sounds for heroes, the level and the story", () => {

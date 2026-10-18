@@ -400,5 +400,5 @@
 	"tileMarkers": {
 		"default": { "frames": ["tile_marker_0", "tile_marker_1"], "frameMs": 400, "tileX": 32, "tileY": 32 }
 	},
-	"sounds": { "focus": "focus", "confirm": "confirm", "back": "back", "slider": "slider", "toggle": "toggle" }
+	"sounds": { "focus": "focus", "confirm": "confirm", "back": "back", "slider": "slider", "toggle": "toggle", "denied": "denied" }
 }

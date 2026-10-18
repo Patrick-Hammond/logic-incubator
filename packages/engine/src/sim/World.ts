@@ -20,7 +20,7 @@ import { Vec2, Vec2Like } from "@logic-incubator/lib/math/Geometry";
 import { TileSize } from "../Constants";
 import type { PlayerSetup } from "../DungeonMain";
 import Encounter, { EncounterLevel, EncounterOptions, Monster } from "../Encounter";
-import { ALL_PLAYERS_DIED, KEYS_DROPPED, LEVEL_COMPLETED, LIGHT_SPELL_CAST, NPC_BUMPED, PICKUP_COLLECTED, QUEST_UPDATED } from "../Events";
+import { ALL_PLAYERS_DIED, DOOR_LOCKED, KEYS_DROPPED, LEVEL_COMPLETED, LIGHT_SPELL_CAST, NPC_BUMPED, PICKUP_COLLECTED, QUEST_UPDATED } from "../Events";
 import type { IPlayerInput } from "../input/PlayerControl";
 import type { CollectedPickup } from "../level/Level";
 import { LightSpell } from "../level/entities/LightSpell";
@@ -132,6 +132,8 @@ export default class World {
     private talk = false;
     /** By slot: whether that hero was walking into an NPC last step - a talk starts as they first do, not again while they keep at it. */
     private bumping: boolean[] = [];
+    /** By slot: whether that hero was walking into a door the team has no key for last step - `DOOR_LOCKED` is once, as they first do. */
+    private locked: boolean[] = [];
     /** The slot of the hero who met the goal of a quest that `ends` the level, since the last step - -1 for none. */
     private questEnd = -1;
     /** The slot of the hero whose doing is being recorded - who gets the credit for a quest it completes. */
@@ -192,6 +194,7 @@ export default class World {
         });
         this.fallen = this.heroes.map(() => false);
         this.bumping = this.heroes.map(() => false);
+        this.locked = this.heroes.map(() => false);
         this.allDown = !this.heroes.length;
         this.completed = false;
         this.questEnd = -1;
@@ -358,6 +361,13 @@ export default class World {
 
     /** Asks for a talk (`NPC_BUMPED`) if `hero`, given `input`, has just walked into an NPC - and talking is on. */
     private Bump(hero: Hero, input: IPlayerInput): void {
+        // A door is walked into the way an NPC is.
+        const door = BumpedNpc(hero.Position, input.direction, (x, y) => this.IsLockedOut(x, y), TileSize);
+        const wasLocked = this.locked[hero.Index];
+        this.locked[hero.Index] = !!door;
+        if (door && !wasLocked) {
+            this.options.emit(DOOR_LOCKED, hero.Index, door.x, door.y);
+        }
         if (!this.talk) {
             return;
         }

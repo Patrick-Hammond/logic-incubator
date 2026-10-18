@@ -12,8 +12,11 @@ export type SpriteAsset = { kind: "sprite"; frames: string[] };
 export type AnimationAsset = { kind: "animation"; frames: string[] };
 export type FrameAsset = SpriteAsset | AnimationAsset;
 export type FileAsset = { kind: "image" | "data" | "binary"; url: string; bytes: number; tier: AssetTier };
-/** `urls` are one file per encoding, most preferred first: the runtime plays the first its browser supports. */
-export type SoundAsset = { kind: "sound"; urls: string[]; bytes: number; tier: AssetTier };
+/**
+ * `urls` are one file per encoding, most preferred first: the runtime plays the first its browser supports. `volume`, 0 to 1, is how loud
+ * the sound is of itself (its `bundle.json` setting) - every volume set on it is scaled by it. Left out, 1.
+ */
+export type SoundAsset = { kind: "sound"; urls: string[]; bytes: number; tier: AssetTier; volume?: number };
 export type FontAsset = { kind: "font"; url: string; face: string; bytes: number; tier: AssetTier };
 export type AssetEntry = FrameAsset | FileAsset | SoundAsset | FontAsset;
 
@@ -75,6 +78,10 @@ export function ValidateManifest(json: unknown): Manifest {
             }
             if (asset.kind !== "sprite" && asset.kind !== "animation" && TIERS.indexOf(asset.tier) < 0) {
                 Fail(`asset "${id}" has an unknown tier.`);
+            }
+            const volume = asset.kind === "sound" ? asset.volume : undefined;
+            if (volume !== undefined && !(typeof volume === "number" && volume >= 0 && volume <= 1)) {
+                Fail(`sound "${id}" has a volume that isn't a number from 0 to 1.`);
             }
         });
     });

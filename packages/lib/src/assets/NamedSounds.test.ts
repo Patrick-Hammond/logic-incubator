@@ -24,6 +24,7 @@ beforeEach(() => {
         CanPlaySound: (id: string): id is SoundId => have.has(id),
         PlaySound: async id => {
             played.push(id);
+            return undefined;
         }
     };
     sounds = new NamedSounds(player, { random: () => roll, now: () => time });

@@ -345,9 +345,10 @@ export type TileMarkerSkin = { frames: string[]; frameMs: number; tileX: number;
 
 /**
  * The sounds a UI makes: `focus` as focus moves to another control (or tab), `confirm` as a button is pressed, `back` as a screen is backed out of, `slider` as a slider or
- * selector steps, and `toggle` as a checkbox or radio button is pressed.
+ * selector steps, `toggle` as a checkbox or radio button is pressed, and `denied` as the player presses what can't be pressed now (a focused control that's disabled, or
+ * what a game refuses - `UiTheme.Sound`).
  */
-export type UiSound = "focus" | "confirm" | "back" | "slider" | "toggle";
+export type UiSound = "focus" | "confirm" | "back" | "slider" | "toggle" | "denied";
 
 export type Skin = {
     name: string;

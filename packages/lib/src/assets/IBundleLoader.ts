@@ -44,6 +44,14 @@ export interface IBundleLoader {
 
 export type SoundPlayOptions = { loop?: boolean; volume?: number };
 
+/** One play of a sound, while it goes on: a loop is made louder or quieter as it plays (a torch's crackle as a hero walks up to it), or stopped on its own. */
+export interface SoundInstance {
+    /** How loud this play is, 0 to 1, on top of the sound's own volume (`SetVolume`). */
+    SetVolume(volume: number): void;
+    /** Stops this play, and only this one. Safe to call more than once. */
+    Stop(): void;
+}
+
 /** The sound side: a global, process-wide library in practice (pixi-sound), so every method works by alias. */
 export interface ISoundAdapter {
     /** The first of `urls` (one per encoding, most preferred first) this browser can play, or undefined if none. */
@@ -53,7 +61,8 @@ export interface ISoundAdapter {
     Has(alias: string): boolean;
     /** Stops and forgets `alias`. Safe if it isn't registered. */
     Remove(alias: string): void;
-    Play(alias: string, options?: SoundPlayOptions): void;
+    /** Plays `alias`, and hands back the play when it can (see `SoundInstance`). */
+    Play(alias: string, options?: SoundPlayOptions): SoundInstance | void;
     /** Stops every playing instance of `alias`. Safe if it isn't registered. */
     Stop(alias: string): void;
     /** Sets how loud `alias` is, 0 to 1, for what is playing now and what plays later (on top of a play's own `volume`). Safe if it isn't registered. */

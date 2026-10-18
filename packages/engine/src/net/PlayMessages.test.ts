@@ -63,7 +63,8 @@ function SnapshotOf(changes: Partial<Snapshot> = {}): Snapshot {
             { e: "spawned", type: 1 },
             { e: "woke", type: 4 },
             { e: "spawner-hit", index: 2 },
-            { e: "cast", hero: 1 }
+            { e: "cast", hero: 1 },
+            { e: "locked", hero: 0, x: 12, y: 30 }
         ],
         ...changes
     };
@@ -132,7 +133,7 @@ describe("EncodePlay and DecodePlay", () => {
     it("tell what is only heard from what changes the world, and send a snapshot of only that by the fast lane", () => {
         const events = SnapshotOf().events;
         const fleeting = events.filter(IsFleetingEvent);
-        expect(fleeting.map(event => event.e)).toEqual(["fired", "fired", "stopped", "hit", "spawned", "woke", "spawner-hit", "cast"]);
+        expect(fleeting.map(event => event.e)).toEqual(["fired", "fired", "stopped", "hit", "spawned", "spawner-hit", "cast", "locked"]);
         expect(fleeting.some(IsLastingEvent)).toBe(false);
         expect(MayBeLost(SnapshotOf({ events: [] }))).toBe(true);
         expect(MayBeLost(SnapshotOf({ events: fleeting }))).toBe(true);

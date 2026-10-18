@@ -33,7 +33,7 @@ const manifest: Manifest = {
                 "global.fire": { kind: "binary", url: "global/binary/fire.gif", bytes: 5, tier: "boot" },
                 "global.numbers": { kind: "font", url: "global/fonts/numbers.fnt", face: "numbers-export", bytes: 5, tier: "boot" },
                 "global.click": { kind: "sound", urls: ["global/sounds/click.ogg", "global/sounds/click.m4a"], bytes: 20, tier: "boot" },
-                "global.theme": { kind: "sound", urls: ["global/sounds/theme.ogg"], bytes: 30, tier: "background" },
+                "global.theme": { kind: "sound", urls: ["global/sounds/theme.ogg"], bytes: 30, tier: "background", volume: 0.5 },
             },
         },
         level1: {
@@ -429,6 +429,24 @@ describe("sounds", () => {
     it("plays a loaded sound straight away", async () => {
         await assets.PlaySound("global.click", { loop: true });
         expect(sound.played).toEqual([{ alias: "global.click", options: { loop: true } }]);
+    });
+
+    it("hands back the play, for a loop to be made louder or stopped on its own", async () => {
+        const instance = { SetVolume: () => undefined, Stop: () => undefined };
+        sound.Play = (alias: string) => (alias === "global.click" ? instance : undefined);
+        expect(await assets.PlaySound("global.click", { loop: true })).toBe(instance);
+        // An adapter that hands none back.
+        expect(await assets.PlaySound("level1.music")).toBeUndefined();
+    });
+
+    it("scales a sound by its own volume: as it loads, and whatever it's set to", async () => {
+        await assets.Load("global.theme");
+        expect(sound.volumes.get("global.theme")).toBe(0.5);
+        assets.SetSoundVolume("global.theme", 0.8);
+        expect(sound.volumes.get("global.theme")).toBe(0.4);
+        // One without its own volume is as loud as it's set to.
+        assets.SetSoundVolume("global.click", 0.8);
+        expect(sound.volumes.get("global.click")).toBe(0.8);
     });
 
     it("sets how loud a sound is", async () => {

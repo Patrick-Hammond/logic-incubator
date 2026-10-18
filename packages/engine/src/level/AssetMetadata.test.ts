@@ -139,6 +139,22 @@ describe("asset categories", () => {
         warn.mockRestore();
     });
 
+    it("drops a loop that isn't a name, and a loopRange that isn't a number of tiles, keeping the rest of the entry", () => {
+        const store = new AssetMetadataStore();
+        const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+        store.Load({
+            torch: { loop: "torch_crackle", loopRange: 6 },
+            brazier: { loop: 3 as never, collidable: true },
+            candle: { loop: "candle", loopRange: -1 }
+        });
+        expect(store.Get("torch")).toEqual({ loop: "torch_crackle", loopRange: 6 });
+        expect(store.Get("brazier").loop).toBeUndefined();
+        expect(store.Get("brazier").collidable).toBe(true);
+        expect(store.Get("candle")).toEqual({ loop: "candle", loopRange: undefined });
+        expect(warn).toHaveBeenCalledTimes(2);
+        warn.mockRestore();
+    });
+
     it("looks a category up through the scope, the level's bundle first", () => {
         const store = new AssetMetadataStore();
         store.Add("global", { torch: { category: "items" } });

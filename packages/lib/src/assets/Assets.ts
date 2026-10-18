@@ -6,7 +6,7 @@ import { AssetLoadError, AssetsDestroyedError, LoadFailure, Suggest } from "./As
 import { AnimationId, AssetId, BinaryId, BundleId, DataId, DataOf, FontId, ImageId, SoundId, SpriteId } from "./AssetIds";
 import { AssetEntry, AssetTier, BundleEntry, FileAsset, FontAsset, FrameAsset, Manifest, SoundAsset, ValidateManifest } from "./AssetManifest";
 import BundleRefs from "./BundleRefs";
-import { IBundleLoader, ISoundAdapter, LoadItem, LoadResult, SoundPlayOptions } from "./IBundleLoader";
+import { IBundleLoader, ISoundAdapter, LoadItem, LoadResult, SoundInstance, SoundPlayOptions } from "./IBundleLoader";
 
 export interface AssetsOptions {
     loader: IBundleLoader;
@@ -357,32 +357,33 @@ export default class Assets extends EventEmitter {
 
     /**
      * Plays a sound, loading it first if it hasn't been (a `lazy` or `background` one). A
-     * `StopSound` before it has loaded cancels the play.
+     * `StopSound` before it has loaded cancels the play. Resolves to the play (see `SoundInstance`),
+     * or undefined when it was cancelled or the sound adapter can't hand plays back.
      */
-    async PlaySound(id: SoundId, options?: SoundPlayOptions): Promise<void> {
+    async PlaySound(id: SoundId, options?: SoundPlayOptions): Promise<SoundInstance | undefined> {
         const adapter = this.SoundAdapter(id);
         if (this.IsLoaded(id)) {
-            adapter.Play(id, options);
-            return;
+            return adapter.Play(id, options) || undefined;
         }
         const token = {};
         this.playing.set(id, token);
         await this.Load(id);
         if (this.destroyed || this.playing.get(id) !== token) {
-            return;
+            return undefined;
         }
         this.playing.delete(id);
-        adapter.Play(id, options);
+        return adapter.Play(id, options) || undefined;
     }
 
     /**
-     * How loud a sound is, 0 to 1 - what a volume setting does to the sounds it covers. A sound that isn't loaded yet (a
-     * level's, a `lazy` one) is that loud when it loads, and so is one that loads again with its bundle.
+     * How loud a sound is, 0 to 1 - what a volume setting does to the sounds it covers - scaled by the sound's own volume, from its
+     * `bundle.json`. A sound that isn't loaded yet (a level's, a `lazy` one) is that loud when it loads, and so is one that loads
+     * again with its bundle.
      */
     SetSoundVolume(id: SoundId, volume: number): void {
         this.volumes.set(id, volume);
         if (this.sound && !this.destroyed) {
-            this.sound.SetVolume(id, volume);
+            this.sound.SetVolume(id, volume * this.OwnVolume(id));
         }
     }
 
@@ -639,9 +640,17 @@ export default class Assets extends EventEmitter {
             throw new AssetsDestroyedError();
         }
         const volume = this.volumes.get(id);
-        if (volume !== undefined) {
-            this.sound.SetVolume(id, volume);
+        if (volume !== undefined || asset.volume !== undefined) {
+            this.sound.SetVolume(id, (volume === undefined ? 1 : volume) * this.OwnVolume(id));
         }
+    }
+
+    /** How loud a sound is of itself - its `bundle.json` `volume`, 1 for one without (or for an id that isn't a sound). */
+    private OwnVolume(id: string): number {
+        const dot = id.indexOf(".");
+        const entry = this.manifest && this.manifest.bundles[dot > 0 ? id.slice(0, dot) : ""];
+        const asset = entry && entry.assets[id];
+        return asset && asset.kind === "sound" && asset.volume !== undefined ? asset.volume : 1;
     }
 
     private EmitProgress(state: BundleState): void {

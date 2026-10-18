@@ -80,12 +80,13 @@ describe("ValidateManifest", () => {
         expect(() => ValidateManifest({ ...valid(), version: 2 })).toThrow("npm run assets");
     });
 
-    it("rejects malformed bundles, unknown dependencies, assets outside their bundle, unknown kinds and tiers", () => {
+    it("rejects malformed bundles, unknown dependencies, assets outside their bundle, unknown kinds and tiers, and bad volumes", () => {
         expect(() => ValidateManifest(null)).toThrow("not an object");
         expect(() => ValidateManifest({ version: 1, bundles: { a: {} } })).toThrow('bundle "a" is malformed');
         expect(() => ValidateManifest({ version: 1, bundles: { a: { ...bundle, dependsOn: ["b"] } } })).toThrow('depends on "b"');
         expect(() => ValidateManifest({ version: 1, bundles: { a: { ...bundle, assets: { "b.x": { kind: "image", tier: "boot" } } } } })).toThrow("isn't named under its bundle");
         expect(() => ValidateManifest({ version: 1, bundles: { a: { ...bundle, assets: { "a.x": { kind: "mesh" } } } } })).toThrow("unknown kind");
         expect(() => ValidateManifest({ version: 1, bundles: { a: { ...bundle, assets: { "a.x": { kind: "image", tier: "soon" } } } } })).toThrow("unknown tier");
+        expect(() => ValidateManifest({ version: 1, bundles: { a: { ...bundle, assets: { "a.x": { kind: "sound", urls: [], bytes: 1, tier: "boot", volume: 1.5 } } } } })).toThrow("from 0 to 1");
     });
 });

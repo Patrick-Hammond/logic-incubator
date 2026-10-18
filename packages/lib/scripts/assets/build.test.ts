@@ -44,7 +44,7 @@ beforeEach(() => {
     write("assets/global/sounds/click.ogg", "ogg-bytes");
     write("assets/global/sounds/click.m4a", "m4a-bytes");
     write("assets/global/data/assets-meta.json", JSON.stringify({ crate: { collidable: true } }));
-    write("assets/level1/bundle.json", JSON.stringify({ dependsOn: ["global"], assets: { music: { tier: "lazy" } } }));
+    write("assets/level1/bundle.json", JSON.stringify({ dependsOn: ["global"], assets: { music: { tier: "lazy", volume: 0.7 } } }));
     write("assets/level1/sounds/music.ogg", "music-bytes");
     write("assets/level1/data/level.json", JSON.stringify({ tiles: [] }));
     write("editor/editor/images/square.png", framePng(8, 8, 50));
@@ -74,6 +74,9 @@ describe("BuildAssets", () => {
         expect(global.atlases).toHaveLength(1);
         expect(manifest.bundles.level1.dependsOn).toEqual(["global"]);
         expect(manifest.bundles.level1.assets["level1.music"].tier).toBe("lazy");
+        // A sound's own volume, only where bundle.json gives one.
+        expect(manifest.bundles.level1.assets["level1.music"].volume).toBe(0.7);
+        expect("volume" in global.assets["global.click"]).toBe(false);
 
         const atlas = JSON.parse(fs.readFileSync(path.join(dir, ".assets/public", global.atlases[0].json), "utf8"));
         expect(Object.keys(atlas.frames)).toEqual(["global.bomb_f0", "global.bomb_f1", "global.crate"]);

@@ -40,6 +40,8 @@ export const SHOT_STOPPED = "shotStopped";
 export const DOOR_OPENED = "doorOpened";
 /** `(sprite: string, index: number)` - door `index` shut, and is drawn as `sprite` now. */
 export const DOOR_CLOSED = "doorClosed";
+/** `(hero: number, tileX: number, tileY: number)` - a hero walked into a door on that cell that no one in the team has the key for. Once, until they walk away from it. */
+export const DOOR_LOCKED = "doorLocked";
 /** `(spawner: Spawner)` - a spawner shot to pieces; its cells are open floor from now on. */
 export const SPAWNER_DESTROYED = "spawnerDestroyed";
 /**

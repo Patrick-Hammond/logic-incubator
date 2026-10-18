@@ -11,6 +11,7 @@ beforeEach(() => {
     player = {
         PlaySound: async (id, options) => {
             calls.push("play " + id + (options && options.loop ? " (loop)" : ""));
+            return undefined;
         },
         StopSound: id => {
             calls.push("stop " + id);
@@ -66,6 +67,36 @@ describe("LevelMusic", () => {
         music.Show();
         music.Hide();
         music.Play("level1.secret_door");
+        expect(calls).toEqual([]);
+    });
+
+    it("plays the boss's track while a boss is awake, and the level's again from the top once every one has fallen", () => {
+        music.Show();
+        music.Play("level1.secret_door", "global.boss");
+        music.BossWoke();
+        music.BossWoke();
+        music.BossFell();
+        expect(calls).toEqual(["play level1.secret_door (loop)", "stop level1.secret_door", "play global.boss (loop)"]);
+        music.BossFell();
+        // A boss can't fall twice, but a guest back after a drop may hear a fall without the waking.
+        music.BossFell();
+        music.BossWoke();
+        expect(calls.slice(3)).toEqual(["stop global.boss", "play level1.secret_door (loop)", "stop level1.secret_door", "play global.boss (loop)"]);
+    });
+
+    it("starts every level, and every visit, with the bosses asleep - and has nothing to change to without a boss track", () => {
+        music.Show();
+        music.Play("level1.secret_door", "global.boss");
+        music.BossWoke();
+        music.Play("level1.secret_door", "global.boss");
+        expect(calls.slice(-2)).toEqual(["stop global.boss", "play level1.secret_door (loop)"]);
+        music.BossWoke();
+        music.Hide();
+        music.Show();
+        expect(calls.slice(-2)).toEqual(["stop global.boss", "play level1.secret_door (loop)"]);
+        calls = [];
+        music.Play("level1.secret_door");
+        music.BossWoke();
         expect(calls).toEqual([]);
     });
 

@@ -65,6 +65,12 @@ export type AssetMetadata = {
      * `SoundTable` has it.
      */
     sound?: string;
+    /**
+     * A sound the tile makes all the time, by bare name (see `AmbientSounds`) - a torch's crackle - heard on a loop near it, the louder
+     * the closer a hero is, and silent from `loopRange` tiles away (4 if left out). It stops when the tile goes (a torch picked up).
+     */
+    loop?: string;
+    loopRange?: number;
 };
 
 export type AssetMetadataMap = { [assetName: string]: AssetMetadata };
@@ -98,7 +104,7 @@ export default class AssetMetadataStore {
      * same entry) and warn with the asset name, rather than reject the whole file over one typo.
      * A `blocksLight` that isn't a boolean and an unrecognised `category` are dropped the same way, so the sprite is just listed under `misc`, and so is a
      * malformed `pickup` (an unknown kind, a missing amount) - the tile is then no pickup, rather than one
-     * that hands the player `undefined` - and a `sound` that isn't a string.
+     * that hands the player `undefined` - and a `sound` or `loop` that isn't a string, or a `loopRange` that isn't a number above 0.
      */
     Add(bundle: string, map: AssetMetadataMap): void {
         const clean: AssetMetadataMap = {};
@@ -129,6 +135,14 @@ export default class AssetMetadataStore {
             if (meta.sound !== undefined && typeof meta.sound !== "string") {
                 console.warn(`assets-meta.json: "${name}" has a sound that isn't a name - ignoring it until fixed:`, meta.sound);
                 meta = { ...meta, sound: undefined };
+            }
+            if (meta.loop !== undefined && typeof meta.loop !== "string") {
+                console.warn(`assets-meta.json: "${name}" has a loop that isn't a sound's name - ignoring it until fixed:`, meta.loop);
+                meta = { ...meta, loop: undefined };
+            }
+            if (meta.loopRange !== undefined && !(typeof meta.loopRange === "number" && meta.loopRange > 0)) {
+                console.warn(`assets-meta.json: "${name}" has a loopRange that isn't a number of tiles above 0 - using the default until fixed:`, meta.loopRange);
+                meta = { ...meta, loopRange: undefined };
             }
             if (meta.category !== undefined && !IsAssetCategory(meta.category)) {
                 console.warn(

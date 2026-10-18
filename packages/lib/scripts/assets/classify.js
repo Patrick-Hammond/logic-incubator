@@ -19,6 +19,8 @@ const { DEFAULT_ATLAS_OPTIONS } = require("./atlas");
 const TIERS = ["boot", "background", "lazy"];
 const BUNDLE_KEYS = ["dependsOn", "preload", "ignore", "overrides", "animPattern", "atlas", "assets"];
 const ATLAS_KEYS = ["maxSize", "padding", "extrude", "trim", "alphaThreshold", "pot", "scaleMode", "sheets"];
+/** What a bundle.json `assets` entry can set: when it loads, and - a sound - how loud it is of itself. */
+const ASSET_KEYS = ["tier", "volume"];
 /** Source files and tool droppings that are never assets - skipped without a warning. */
 const BUILT_IN_IGNORE = ["*.sbx", "*.psd", "*.ase", "*.aseprite", "*.kra", "*.xcf", "*.md", "*.txt", "Thumbs.db", ".DS_Store", ".gitkeep"];
 const DEFAULT_SOUND_FORMATS = ["ogg", "m4a", "mp3", "wav"];
@@ -60,6 +62,18 @@ function BaseNameOf(rel) {
     const base = rel.slice(rel.lastIndexOf("/") + 1);
     const dot = base.lastIndexOf(".");
     return dot < 0 ? base : base.slice(0, dot);
+}
+
+/** The takes of `name` - the assets `name_1`, `name_2`... counted from 1 to the first missing, as the game plays them (see `NamedSounds`). */
+function TakesOf(name, assets) {
+    const takes = [];
+    for (let take = 1; ; take++) {
+        const found = assets.find(a => a.local === name + "_" + take);
+        if (!found) {
+            return takes;
+        }
+        takes.push(found);
+    }
 }
 
 function JoinPosix(dir, file) {
@@ -318,22 +332,39 @@ function ClassifyBundle(args) {
         diag("error", `image "${a.id}" has the same name as a frame of the sprite sheets (${frameOwners.get(a.local)}) - both are texture ids.`, a.files[0].rel);
     });
 
-    // Per-asset settings: tiers.
+    // Per-asset settings: tiers and sounds' volumes. A name with takes (`coin` for coin_1, coin_2...) sets them all, unless it's an asset itself.
     Object.keys(config.assets).forEach(local => {
         const asset = assets.find(a => a.local === local);
+        const takes = asset ? [] : TakesOf(local, assets);
         const settings = config.assets[local] || {};
-        if (!asset) {
+        if (!asset && !takes.length) {
             const hint = Suggest(local, assets.map(a => a.local));
             diag("error", `bundle.json: "assets.${local}" doesn't match any asset${hint ? ` - did you mean "${hint}"?` : ""}`, "bundle.json");
             return;
         }
+        Object.keys(settings).forEach(key => {
+            if (ASSET_KEYS.indexOf(key) < 0) {
+                const hint = Suggest(key, ASSET_KEYS);
+                diag("error", `bundle.json: unknown key "assets.${local}.${key}"${hint ? ` - did you mean "${hint}"?` : ""}`, "bundle.json");
+            }
+        });
+        const targets = asset ? [asset] : takes;
         if (settings.tier !== undefined) {
             if (TIERS.indexOf(settings.tier) < 0) {
                 diag("error", `bundle.json: "assets.${local}.tier" must be one of ${TIERS.join(", ")}.`, "bundle.json");
-            } else if (asset.kind === "sprite" || asset.kind === "animation") {
-                diag("error", `bundle.json: "assets.${local}" is a ${asset.kind} - sprites load with their bundle, they have no tier.`, "bundle.json");
+            } else if (targets.some(a => a.kind === "sprite" || a.kind === "animation")) {
+                diag("error", `bundle.json: "assets.${local}" is a ${targets[0].kind} - sprites load with their bundle, they have no tier.`, "bundle.json");
             } else {
-                asset.tier = settings.tier;
+                targets.forEach(a => (a.tier = settings.tier));
+            }
+        }
+        if (settings.volume !== undefined) {
+            if (!(typeof settings.volume === "number" && settings.volume >= 0 && settings.volume <= 1)) {
+                diag("error", `bundle.json: "assets.${local}.volume" must be a number from 0 to 1.`, "bundle.json");
+            } else if (targets.some(a => a.kind !== "sound")) {
+                diag("error", `bundle.json: "assets.${local}" is a ${targets.find(a => a.kind !== "sound").kind} - only a sound has a volume.`, "bundle.json");
+            } else {
+                targets.forEach(a => (a.volume = settings.volume));
             }
         }
     });

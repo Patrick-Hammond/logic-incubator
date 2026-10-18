@@ -4,12 +4,37 @@ import PixiSoundAdapter from "./PixiSoundAdapter";
 type FakeSound = { alias: string; isLoaded: boolean; destroyed: boolean; destroy: () => void };
 
 /** pixi-sound's library, with the decode left for the test to finish - which is the moment that matters. */
-const lib = vi.hoisted(() => ({
-    sounds: new Map<string, any>(),
-    decodes: [] as (() => void)[],
-    supported: {} as { [ext: string]: boolean },
-    calls: [] as string[],
-}));
+/** A play as pixi-sound hands it back: a volume, `stop`, and the events it ends with. */
+type FakeInstance = { volume: number; once(event: string, fn: () => void): void; stop(): void; Emit(event: string): void };
+
+const lib = vi.hoisted(() => {
+    const lib = {
+        sounds: new Map<string, any>(),
+        decodes: [] as (() => void)[],
+        supported: {} as { [ext: string]: boolean },
+        calls: [] as string[],
+        instances: [] as FakeInstance[],
+        Instance(alias: string): FakeInstance {
+            const listeners: { [event: string]: Array<() => void> } = {};
+            const instance: FakeInstance = {
+                volume: 1,
+                once: (event, fn) => (listeners[event] = (listeners[event] || []).concat(fn)),
+                stop: () => {
+                    lib.calls.push("stop instance " + alias);
+                    instance.Emit("stop");
+                },
+                Emit: event => {
+                    const fns = listeners[event] || [];
+                    delete listeners[event];
+                    fns.forEach(fn => fn());
+                }
+            };
+            lib.instances.push(instance);
+            return instance;
+        }
+    };
+    return lib;
+});
 
 vi.mock("pixi-sound", () => ({
     default: {
@@ -34,7 +59,10 @@ vi.mock("pixi-sound", () => ({
             lib.sounds.delete(alias);
             sound.destroy();
         },
-        play: (alias: string, options: unknown) => lib.calls.push(`play ${alias} ${JSON.stringify(options)}`),
+        play: (alias: string, options: unknown) => {
+            lib.calls.push(`play ${alias} ${JSON.stringify(options)}`);
+            return lib.Instance(alias);
+        },
         stop: (alias: string) => lib.calls.push("stop " + alias),
     },
 }));
@@ -49,6 +77,7 @@ beforeEach(() => {
     lib.sounds.clear();
     lib.decodes.length = 0;
     lib.calls.length = 0;
+    lib.instances.length = 0;
     Object.keys(lib.supported).forEach(ext => delete lib.supported[ext]);
     vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, arrayBuffer: async () => new ArrayBuffer(8) })));
 });
@@ -128,6 +157,44 @@ describe("PixiSoundAdapter", () => {
         lib.decodes[0]();
         expect(old.destroyed).toBe(true);
         expect(lib.sounds.get("global.blocky").alias).toBe("new");
+    });
+
+    it("hands back the play: louder or quieter, kept 0 to 1, and stopped once", async () => {
+        const adapter = new PixiSoundAdapter();
+        const loading = adapter.Load("global.click", "a.ogg");
+        await settle();
+        lib.decodes[0]();
+        await loading;
+        const play = adapter.Play("global.click", { loop: true });
+        const instance = lib.instances[0];
+        if (!play) throw new Error("no play handed back");
+        play.SetVolume(0.25);
+        expect(instance.volume).toBe(0.25);
+        play.SetVolume(3);
+        expect(instance.volume).toBe(1);
+        play.Stop();
+        play.Stop();
+        expect(lib.calls.filter(call => call === "stop instance global.click")).toHaveLength(1);
+        // Over now: pixi-sound may hand that instance to another play, which this one leaves alone.
+        play.SetVolume(0.5);
+        expect(instance.volume).toBe(1);
+    });
+
+    it("leaves a play alone once it has ended by itself", async () => {
+        const adapter = new PixiSoundAdapter();
+        const loading = adapter.Load("global.click", "a.ogg");
+        await settle();
+        lib.decodes[0]();
+        await loading;
+        const play = adapter.Play("global.click");
+        expect(play).toBeTruthy();
+        lib.instances[0].Emit("end");
+        if (play) {
+            play.SetVolume(0.5);
+            play.Stop();
+        }
+        expect(lib.instances[0].volume).toBe(1);
+        expect(lib.calls).not.toContain("stop instance global.click");
     });
 
     it("plays and stops by alias, ignoring a stop for a sound it doesn't have", async () => {

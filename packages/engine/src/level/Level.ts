@@ -30,7 +30,12 @@ export type Tile = Brush & {
     light?: number;
     /** Set for the tile a spawner is drawn as (see `Level.SpawnerTile`): `EntityRenderer` draws it, with the figures, so `TileMapView` leaves it out. */
     spawner?: boolean;
+    /** Set once the tile has been taken out of the level (a torch picked up): what it made, its `loop` for one, is over. */
+    gone?: boolean;
 };
+
+/** A tile whose `AssetMetadata` names a `loop` - a torch's crackle - with the sound, the centre of its cell, in tiles, and how far it's heard (see `AmbientSounds`). */
+export type SoundLoop = { sound: string; x: number; y: number; range?: number; tile: Tile };
 
 /** One door: the cell(s) whose tile has a `door` id in its `AssetMetadata`, and the visual tile whose texture is swapped between `closedSprite`/`openSprite` (that door's own pair, resolved via `AssetMetadataStore.GetDoorPartner`) when the player overlaps any of them - if they hold a key for it. `lockId` is what that key has to match (see `EffectiveDoorLock`, `Keys.CanOpen`). `regionIds` is the (possibly empty) set of regions this door borders - see `Regions.ts`. */
 export type Door = { cells: Vec2Like[]; tile: Tile; isOpen: boolean; regionIds: number[]; openSprite: string; closedSprite: string; lockId: number };
@@ -118,6 +123,8 @@ export default class Level {
     public bosses: Boss[] = [];
     /** The level's quests (see `Quests`): the well-formed ones in its file. */
     public quests: QuestDef[] = [];
+    /** Every tile that makes a sound all the time (its `AssetMetadata.loop`) - see `AmbientSounds`. */
+    public soundLoops: SoundLoop[] = [];
     /** Distinct painted `Z_INDEX` heights, ascending, always including the unpainted default (0). `TileMapView` builds one band per entry - sparse, so a stray tile at an extreme height doesn't force bands for every height in between. */
     public depths: number[] = [0];
 
@@ -448,6 +455,7 @@ export default class Level {
         if (tile.light !== undefined) {
             this.lights.SetOn(tile.light, false);
         }
+        tile.gone = true;
     }
 
     /** Finds the tile that is a pickup at the given cell - by its asset's `AssetMetadata`, or by its own placement's `data` - searching every tile layer. Null if none is. */
@@ -752,6 +760,19 @@ export default class Level {
                 tile.light = i;
             }
         });
+        this.soundLoops = [];
+        this.levelData.forEach(layer =>
+            layer.forEach((column, x) =>
+                column.forEach((stack, y) =>
+                    stack.forEach(tile => {
+                        const meta = AssetMetadataStore.inst.Get(tile.name);
+                        if (meta && meta.loop) {
+                            this.soundLoops.push({ sound: meta.loop, x: x + 0.5, y: y + 0.5, range: meta.loopRange, tile });
+                        }
+                    })
+                )
+            )
+        );
 
         const regionMap = FindRegions(this.collisionData, this.doorData, this.boundRect.width, this.boundRect.height);
         this.regionData = regionMap.regionData;

@@ -1,5 +1,5 @@
 import sound from "pixi-sound";
-import { ISoundAdapter, SoundPlayOptions } from "./IBundleLoader";
+import { ISoundAdapter, SoundInstance, SoundPlayOptions } from "./IBundleLoader";
 
 type PixiSound = ReturnType<typeof sound.find>;
 
@@ -81,8 +81,30 @@ export default class PixiSoundAdapter implements ISoundAdapter {
         sound.remove(alias);
     }
 
-    Play(alias: string, options?: SoundPlayOptions): void {
-        sound.play(alias, options || {});
+    Play(alias: string, options?: SoundPlayOptions): SoundInstance | void {
+        const played = sound.play(alias, options || {});
+        // A promise only for a sound still loading, which `Assets` never plays.
+        if (!played || typeof (played as Promise<unknown>).then === "function") {
+            return;
+        }
+        const instance = played as Exclude<typeof played, Promise<unknown>>;
+        // pixi-sound hands a finished instance to its next play: once this one is over, it's left alone.
+        let over = false;
+        instance.once("end", () => (over = true));
+        instance.once("stop", () => (over = true));
+        return {
+            SetVolume: volume => {
+                if (!over) {
+                    instance.volume = Math.max(0, Math.min(1, volume));
+                }
+            },
+            Stop: () => {
+                if (!over) {
+                    over = true;
+                    instance.stop();
+                }
+            }
+        };
     }
 
     Stop(alias: string): void {

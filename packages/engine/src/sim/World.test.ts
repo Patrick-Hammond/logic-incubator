@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Vec2, Vec2Like } from "@logic-incubator/lib/math/Geometry";
 import { TileSize } from "../Constants";
-import { ALL_PLAYERS_DIED, LEVEL_COMPLETED, LIGHT_SPELL_CAST, NPC_BUMPED, PICKUP_COLLECTED, QUEST_UPDATED } from "../Events";
+import { ALL_PLAYERS_DIED, DOOR_LOCKED, LEVEL_COMPLETED, LIGHT_SPELL_CAST, NPC_BUMPED, PICKUP_COLLECTED, QUEST_UPDATED } from "../Events";
 import type { IPlayerInput } from "../input/PlayerControl";
 import { DoorOpens } from "../level/Doors";
 import type { CollectedPickup } from "../level/Level";
@@ -287,6 +287,30 @@ describe("World", () => {
         Put(world, 0, { x: 4, y: 1 });
         world.Step([], 1, FRAME);
         expect(level.door.isOpen).toBe(true);
+    });
+
+    it("tells of a hero walking into a door no one has the key for - once, until they walk away from it", () => {
+        const { world, events } = Setup(DOORED, 1, 7);
+        const locked = () => events.filter(e => e.event === DOOR_LOCKED).map(e => e.args);
+        Put(world, 0, { x: 3, y: 2 });
+        for (let i = 0; i < 20; i++) {
+            world.Step([Input(1, 0)], 1, FRAME);
+        }
+        expect(locked()).toEqual([[0, 4, 2]]);
+        for (let i = 0; i < 20; i++) {
+            world.Step([Input(-1, 0)], 1, FRAME);
+        }
+        for (let i = 0; i < 40; i++) {
+            world.Step([Input(1, 0)], 1, FRAME);
+        }
+        expect(locked()).toHaveLength(2);
+        // With its key, the door opens instead.
+        events.length = 0;
+        world.Heroes[0].ApplyPickup({ value: { kind: "key", id: 7 }, sprite: "key" });
+        for (let i = 0; i < 20; i++) {
+            world.Step([Input(1, 0)], 1, FRAME);
+        }
+        expect(locked()).toEqual([]);
     });
 
     it("drops a fallen hero's keys where they fell, and the rest play on", () => {

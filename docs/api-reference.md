@@ -421,10 +421,10 @@ in that window cancels the unload. Its dependencies are released then and unload
 | `Data<I extends DataId>(id: I): DataOf<I>` | Parsed JSON (typed by `DataTypeRegistry`, else `unknown`). |
 | `Binary(id: BinaryId): ArrayBuffer` | |
 | `FontName(id: FontId): string` | The font's `face` - what `BitmapText` is given as `font.name`. |
-| `PlaySound(id: SoundId, options?: SoundPlayOptions): Promise<void>` | Plays at once if loaded; otherwise loads, then plays unless `StopSound(id)` was called meanwhile. Rejects if loading fails; throws if no sound adapter was given. |
+| `PlaySound(id: SoundId, options?: SoundPlayOptions): Promise<SoundInstance \| undefined>` | Plays at once if loaded; otherwise loads, then plays unless `StopSound(id)` was called meanwhile. Resolves with the play (`SoundInstance`: `SetVolume(volume)` for this play alone, 0 to 1, on top of the sound's own, and `Stop()`), or undefined when it was cancelled or the adapter hands none back. Rejects if loading fails; throws if no sound adapter was given. |
 | `StopSound(id: SoundId): void` | Stops playing instances and cancels a pending play. |
 | `CanPlaySound(id: string): id is SoundId` | Whether `id` is a sound `PlaySound` can play now: in the manifest, of a bundle that is loaded or loading, with a sound adapter. Takes any string, for an id put together at run time (`NamedSounds`). |
-| `SetSoundVolume(id: SoundId, volume: number): void` | How loud a sound is, 0 to 1, for what is playing now and what plays later (on top of a play's own `volume`). Kept: a sound that isn't loaded yet gets it when it loads, and again each time its bundle loads again. |
+| `SetSoundVolume(id: SoundId, volume: number): void` | How loud a sound is, 0 to 1, for what is playing now and what plays later (on top of a play's own `volume`), scaled by the sound's own `volume` from its `bundle.json`. Kept: a sound that isn't loaded yet gets it when it loads, and again each time its bundle loads again. |
 | `Reload(id: DataId \| BinaryId): Promise<void>` | Re-fetches (bypassing cache), replaces the value, emits `asset:reloaded`. Other kinds throw. |
 | `Stats()` | `{ loadJobs: number; bundles: { [name]: { refs, loaded, pinned, bytes } } }`. For the dev console and tests. |
 | `Destroy(): void` | See below. |
@@ -497,7 +497,7 @@ type AssetTier = "boot" | "background" | "lazy";
 type SpriteAsset    = { kind: "sprite";    frames: string[] };            // texture keys "<bundle>.<frame>"
 type AnimationAsset = { kind: "animation"; frames: string[] };            // in order
 type FileAsset  = { kind: "image" | "data" | "binary"; url: string; bytes: number; tier: AssetTier };
-type SoundAsset = { kind: "sound"; urls: string[]; bytes: number; tier: AssetTier };   // one per encoding, preferred first
+type SoundAsset = { kind: "sound"; urls: string[]; bytes: number; tier: AssetTier; volume?: number };   // urls: one per encoding, preferred first; volume: its bundle.json one, 0 to 1 (left out, 1)
 type FontAsset  = { kind: "font"; url: string; face: string; bytes: number; tier: AssetTier };
 type AssetEntry = SpriteAsset | AnimationAsset | FileAsset | SoundAsset | FontAsset;
 
@@ -518,7 +518,7 @@ function ValidateManifest(json: unknown): Manifest   // throws "Invalid asset ma
 ```
 
 `ValidateManifest` rejects: a non-object; a version other than 1 (telling you to rebuild); malformed bundles; a
-`dependsOn` naming a bundle that isn't there; an asset id not prefixed by its bundle; an unknown kind; an unknown tier.
+`dependsOn` naming a bundle that isn't there; an asset id not prefixed by its bundle; an unknown kind; an unknown tier; a sound's `volume` that isn't a number from 0 to 1.
 
 ---
 
@@ -565,12 +565,17 @@ interface IBundleLoader { Load(items: LoadItem[], options: LoadOptions): LoadHan
 
 type SoundPlayOptions = { loop?: boolean; volume?: number };
 
+interface SoundInstance {
+    SetVolume(volume: number): void;   // this play alone, 0 to 1, on top of the sound's own volume
+    Stop(): void;                      // this play alone; safe to call more than once
+}
+
 interface ISoundAdapter {
     Pick(urls: string[]): string | undefined;   // first url this browser can play
     Load(alias: string, url: string): Promise<void>;
     Has(alias: string): boolean;
     Remove(alias: string): void;                // safe if absent
-    Play(alias: string, options?: SoundPlayOptions): void;
+    Play(alias: string, options?: SoundPlayOptions): SoundInstance | void;   // the play, where the adapter can hand one back
     Stop(alias: string): void;
     SetVolume(alias: string, volume: number): void;   // 0 to 1, for what is playing now and what plays later
 }
@@ -593,7 +598,7 @@ imports `pixi-sound` (an optional peer dependency of lib).
 | --- | --- |
 | `Pick(urls)` | First url whose extension (read past any `?query`) `sound.utils.supported` allows. |
 | `Load(alias, url)` | `fetch`es the file, replaces any sound under `alias`, registers the bytes with `preload: true`, resolves when decoded. Rejects with `404 Not Found`-style text on a bad response. |
-| `Has(alias)` / `Play(alias, options?)` / `Stop(alias)` | By alias; `Stop` ignores an unknown alias. |
+| `Has(alias)` / `Play(alias, options?)` / `Stop(alias)` | By alias; `Stop` ignores an unknown alias. `Play` hands back the play (pixi-sound's `IMediaInstance`, wrapped): its `SetVolume` is kept to 0 to 1, and once the play has ended by itself, or been stopped, neither it nor `Stop` touches the instance again (pixi-sound reuses them). |
 | `Remove(alias)` | Removes a loaded sound at once. If it is **still being decoded**, the removal waits for the decode to finish (pixi-sound throws from its audio callback if the sound is destroyed under it). |
 
 Requires Web Audio (the file's bytes are passed to pixi-sound as an `ArrayBuffer`).
@@ -706,7 +711,7 @@ Paths are relative to the file. Unknown keys are an error (with a suggestion).
 | `overrides` | `string[]` | Sprite/animation names allowed to shadow ones in a bundle this depends on (or `global`). |
 | `animPattern` | `string` | Regex source with **two groups** (animation name, frame index). Default `^(.+)_f(\d+)$`. |
 | `atlas` | object | `maxSize` (4096), `padding` (0), `extrude` (1), `trim` (true), `alphaThreshold` (0), `pot` (false), `scaleMode` (`"nearest"`/`"linear"`), `sheets` (`{ [sheet]: <any of the above> }`). |
-| `assets` | `{ [localName]: { tier } }` | `tier`: `"boot"` (default), `"background"`, `"lazy"`. Unknown names are an error; sprites/animations have no tier. |
+| `assets` | `{ [localName]: { tier?, volume? } }` | `tier`: `"boot"` (default), `"background"`, `"lazy"`. `volume` (a sound only): how loud it is of itself, 0 to 1 - every volume set on it is scaled by it. A name with takes (`coin` for `coin_1`, `coin_2`...) that isn't an asset itself sets every take. Unknown names and keys are errors with a "did you mean"; sprites/animations have no tier. |
 
 ### Classification and ids
 
@@ -728,7 +733,7 @@ The manifest's atlas resource names are `~atlas.<bundle>.<sheet>.<page>`. Every 
 ### Diagnostics
 
 `{ level: "error" | "warning"; bundle?: string; file?: string; message: string }`. Errors: invalid names; duplicate ids; an image id
-equal to a frame; animation gaps/duplicates; invalid `bundle.json` (unknown keys, bad `preload`/`tier`); missing font pages or
+equal to a frame; animation gaps/duplicates; invalid `bundle.json` (unknown keys, bad `preload`/`tier`/`volume`, a `volume` on what isn't a sound); missing font pages or
 face; unknown/cyclic `dependsOn`; a font face used twice; invalid data JSON; a frame larger than `maxSize`; an unreadable PNG; the
 same bundle in two roots; stale declarations under `--check`. Warnings: unclassified files; shadowed sprites; unused
 `overrides`; oversized assets/bundles; a fully transparent frame; a data file that looks like a packed sheet.
@@ -760,7 +765,7 @@ exports.afterScan = function (context) { ... }
 
 | `context` field | |
 | --- | --- |
-| `bundles` | Classified bundle models: `{ name, dir, devOnly, dependsOn, preload, overrides, animPattern, sheets, assets, frameLocals }`; each `assets` item is `{ id, local, kind, tier, files: [{rel, ext}], frames?, face?, pages?, bytes }`. |
+| `bundles` | Classified bundle models: `{ name, dir, devOnly, dependsOn, preload, overrides, animPattern, sheets, assets, frameLocals }`; each `assets` item is `{ id, local, kind, tier, volume?, files: [{rel, ext}], frames?, face?, pages?, bytes }`. |
 | `config` | The loaded config. |
 | `check` | `true` under `--check`: report instead of writing. |
 | `production` | `true` under `--production`. |
@@ -1278,6 +1283,7 @@ await relay.close();         // ends every connection and stops
 | `SHOT_STOPPED` | `"shotStopped"` | `(shot: ShotSetup)` - against a wall, a closed door or the dark (not a spawner it damages, a monster or a hero) |
 | `LIGHT_SPELL_CAST` | `"lightSpellCast"` | `(hero)` - their mage-light is lit |
 | `DOOR_OPENED` / `DOOR_CLOSED` | `"doorOpened"` / `"doorClosed"` | `(sprite, index)` - door `index` of `Level.doors` opened or shut, and is drawn as `sprite` now (`Level.SetDoorOpen`, on every machine) |
+| `DOOR_LOCKED` | `"doorLocked"` | `(hero, tileX, tileY)` - a hero walked into the door on that cell, and no one in the team has its key (`World.Step`); once, until they walk away from it |
 | `PICKUP_COLLECTED` | `"pickupCollected"` | `(hero, tileX, tileY, collected: CollectedPickup[])` - a hero picked up what was on that cell, each thing with the sprite it was drawn as; once for each cell, when their sprite reaches more than one in a step (`PickupCellsReached`) |
 | `KEYS_DROPPED` | `"keysDropped"` | `(hero, tileX, tileY)` - a fallen hero's keys landed on that cell |
 | `NPC_BUMPED` | `"npcBumped"` | `(hero, tileX, tileY)` - a hero walked into the NPC on that cell (a `DIALOG` brush), where talking is on (`World.SetTalk`); `DungeonMain` starts the talk |
@@ -1303,6 +1309,7 @@ type PlayerSetup = {
     hearts?: { full: string; half: string; empty: string };// sprite names; without them the HUD draws the UI skin's hearts
     weapons: WeaponDef[];                                 // the first is equipped; fired while a fire direction is held; copied for each level start
     lightSpell?: LightSpell;                              // a mage-light they call up with the cast control; none if left out
+    sounds?: HeroSounds;                                  // { hurt?, death? } by name (see SoundBoard); left out, the game's sounds table has them
 };
 
 type HeroSlot = {
@@ -1310,6 +1317,7 @@ type HeroSlot = {
     sprite?: string;                                      // the animation they're drawn with, in place of player.sprite
     lightSpell?: LightSpell | null;                       // null for none; left out, player.lightSpell
     name?: string;                                        // what heads their row in the HUD; left out, "PLAYER n"
+    sounds?: HeroSounds;                                  // their own hurt and death (a character's voice); left out, player.sounds
 };
 
 type DungeonMainOptions = {
@@ -1317,8 +1325,8 @@ type DungeonMainOptions = {
     heroes?: () => ReadonlyArray<HeroSlot> | undefined;   // who plays, one slot per hero (hero 0 first), asked on every start and restart; none or empty: one hero
     level: () => LevelFile | undefined;                   // asked on every start and restart
     levelBundle?: () => string | undefined;               // the asset bundle the level plays in
-    music?: () => SoundId | undefined;                    // the track the level plays to, on a loop while the scene is showing, asked on every start and restart; the same track carries on
-    sounds?: SoundTable;                                  // what play sounds like where the thing it happens to names no sound of its own (see SoundBoard)
+    music?: () => SoundId | undefined;                    // the track the level plays to, on a loop while the scene is showing, asked on every start and restart; the same track carries on; sounds.bossMusic takes over while a boss is awake
+    sounds?: SoundTable;                                  // what play sounds like where the thing it happens to names no sound of its own (see SoundBoard); the scene plays footstep, ambience and bossMusic itself
     seed?: () => number | undefined;                      // what the level's random numbers start from, asked on every start and restart; undefined: a new one
     net?: () => NetPlay | undefined;                      // online: the run this machine plays in (CreateNetPlay), asked on every start and restart; undefined: offline
     playerSprite?: () => string | undefined;              // a lone hero's animation, in place of player.sprite (only without heroes)
@@ -1391,8 +1399,8 @@ given the host's seed, spawn the same monsters.
 Lifecycle: `OnInitialise` builds the `Level`, attaches `Camera`, `TileMapView`, `Effects` (into the camera) and `Hud`, creates the `EntityRenderer` and
 the `World`, binds asset metadata (`BindAssetMetadata`) and listens for `LEVEL_CREATED`, `ALL_PLAYERS_DIED` and `LEVEL_COMPLETED`. `OnShow` and each
 restart (1.5 s after the level ends, or when told to with `manualRestart`) call `Reload`: prepare the assets (`LevelAssets.Prepare` - refresh dev metadata,
-then `UseLevelBundle(levelBundle())`), then `Level.LoadLevel(level())` and `LevelMusic.Play(music())` unless the scene was destroyed meanwhile - so after `LEVEL_COMPLETED` a game moves
-on by having `level` (and `levelBundle`, and `music`) return the next one. The music plays only while the scene is shown (a `WhileShown`), so it stops behind the editor or the title. On `LEVEL_CREATED` it resets the world for the slots `heroes` gives and keeps one
+then `UseLevelBundle(levelBundle())`), then `Level.LoadLevel(level())`, `LevelMusic.Play(music(), bossMusic)` and `AmbientSounds.Begin(sounds.ambience, level.soundLoops)` unless the scene was destroyed meanwhile - so after `LEVEL_COMPLETED` a game moves
+on by having `level` (and `levelBundle`, and `music`) return the next one. The music and loops play only while the scene is shown (a `WhileShown`), so they stop behind the editor or the title; `BOSS_WOKE` and a boss's `MONSTER_KILLED` switch the music to the boss's track and back (`LevelMusic.BossWoke` / `BossFell`). Each frame it updates the loops with the centres of the standing heroes played on this machine, and plays `sounds.footstep` when one of them takes a step (`Footsteps`). On `LEVEL_CREATED` it resets the world for the slots `heroes` gives and keeps one
 `HeroView` per slot from level to level. `OnDestroy` destroys the hero views, disposes the level and releases the level bundle (when `levelBundle` was given).
 
 ---
@@ -1402,7 +1410,8 @@ on by having `level` (and `levelBundle`, and `music`) return the next one. The m
 `@logic-incubator/engine/level/Level` - `default class Level`. Built by `DungeonMain`; `LoadLevel` fills it.
 
 ```ts
-type Tile = Brush & { texture: Texture; anim?: AnimatedSprite; light?: number; spawner?: boolean };   // light: its baked light's index, for a tile that gives off light; spawner: a spawner is drawn as it (EntityRenderer draws it, not TileMapView)
+type Tile = Brush & { texture: Texture; anim?: AnimatedSprite; light?: number; spawner?: boolean; gone?: boolean };   // light: its baked light's index, for a tile that gives off light; spawner: a spawner is drawn as it (EntityRenderer draws it, not TileMapView); gone: taken out of the level (RemoveTile - a torch picked up)
+type SoundLoop = { sound: string; x: number; y: number; range?: number; tile: Tile };   // a tile whose metadata names a loop: its sound, its cell's centre in tiles, its loopRange
 type Door = { cells: Vec2Like[]; tile: Tile; isOpen: boolean; regionIds: number[]; openSprite: string; closedSprite: string; lockId: number };
 type Pickup = PickupSpot & { tile: Tile | null; value: PickupValue };    // tile is null for a PICKUP brush on an empty cell; area (PickupSpot) the pixels
                                                                          // its tile draws - every frame's, for an animation - or the cell, with none (PickupArea)
@@ -1432,6 +1441,7 @@ type Talker = Vec2Like & { value: DialogValue; script: DialogScript; tile: Tile 
 | `talkers` | `Talker[]` | Every `DIALOG` brush: an NPC's cell (solid in `collisionData`, though it blocks no light), its script read against the level's quests (lines with mistakes left out, each warned of), and the top tile there. |
 | `bosses` | `Boss[]` | Every `BOSS` brush whose monster the roster has (`Boss = Vec2Like & { value: BossValue }`); one it hasn't is left out with a warning. `Encounter.Reset` places them. |
 | `quests` | `QuestDef[]` | The level's quests: the well-formed ones in `levelData.quests` (`ReadQuests`). |
+| `soundLoops` | `SoundLoop[]` | Every tile whose `AssetMetadata` names a `loop` (a torch's crackle), on any layer - what `AmbientSounds` plays. |
 
 | Method | Description |
 | --- | --- |
@@ -1526,6 +1536,8 @@ type AssetMetadata = {
     spawner?: SpawnerValue;
     pickup?: PickupValue;
     sound?: string;             // by name (NamedSounds): a pickup's as it's picked up, a door sprite's as the door turns into it (see SoundBoard)
+    loop?: string;              // by name: what the tile sounds like all the time, on a loop, louder as a hero comes near (see AmbientSounds)
+    loopRange?: number;         // how far, in tiles, its loop is heard; left out, 4
 };
 type AssetMetadataMap = { [assetName: string]: AssetMetadata };
 ```
@@ -1534,7 +1546,7 @@ type AssetMetadataMap = { [assetName: string]: AssetMetadata };
 
 | Method | Description |
 | --- | --- |
-| `Add(bundle, map)` | Adds or replaces a bundle's metadata. A `light` that isn't complete (`brightness`, `tint`, `range`, all finite numbers), a `blocksLight` that isn't a boolean, a `sound` that isn't a string or a `category` that isn't one of `AssetCategories` is dropped with a console warning naming the asset; the entry's other fields are kept. |
+| `Add(bundle, map)` | Adds or replaces a bundle's metadata. A `light` that isn't complete (`brightness`, `tint`, `range`, all finite numbers), a `blocksLight` that isn't a boolean, a `sound` or `loop` that isn't a string, a `loopRange` that isn't a number above 0, or a `category` that isn't one of `AssetCategories` is dropped with a console warning naming the asset; the entry's other fields are kept. |
 | `Remove(bundle)` | |
 | `SetScope(chain: string[])` | The bundles searched, nearest first (then the unscoped bucket). |
 | `Load(map)` | Replaces everything with one unscoped map - for a game or test with metadata but no bundles. |
@@ -1559,9 +1571,33 @@ then `UseLevelBundle`; resolves `false` (quietly if the game was destroyed, with
 `true` if the game has no asset bundles at all.
 
 `@logic-incubator/engine/level/LevelMusic` (pure) - `default class LevelMusic`: `new LevelMusic(player: MusicPlayer)`, where
-`type MusicPlayer = Pick<Assets, "PlaySound" | "StopSound">`. `Play(track: SoundId | null)` - the track the level plays to, on a loop (null: none);
-`Show()` / `Hide()` - whether it can be heard. A track asked for again while it plays carries on; a different one stops the old first; a track
+`type MusicPlayer = Pick<Assets, "PlaySound" | "StopSound">`. `Play(track: SoundId | null, bossTrack: SoundId | null = null)` - the track the level plays to, on a loop (null: none),
+and the one that takes over from it while a boss is awake; every boss starts asleep; `BossWoke()` / `BossFell()` - a boss woke, or one fell: the boss track
+plays while any is awake, and the level's comes back from the top once none is; `Show()` / `Hide()` - whether it can be heard (a `Hide` also puts
+the bosses back to sleep, as the next visit starts the level over). A track asked for again while it plays carries on; a different one stops the old first; a track
 that can't be played is a `console.warn`, not an error.
+
+`@logic-incubator/engine/AmbientSounds` (pure) - the sounds a level makes all the time, each on a loop while the dungeon is showing: its ambience
+(`SoundTable.ambience`, heard the same everywhere) and each `Level.soundLoops` tile's `loop`, heard as `(1 - distance / range)^2` from the nearest
+hearer to the nearest such tile that isn't `gone`. One loop per sound however many tiles make it; volumes ease by 2 a second rather than jump.
+
+```ts
+type AmbientPlayer = { Find(name): ReadonlyArray<SoundId>; PlaySound(id, options?): Promise<SoundInstance | undefined>; StopSound(id): void };   // NamedSounds.Find, Assets
+type LoopSource = Vec2Like & { sound: string; range?: number; tile: { gone?: boolean } };   // in tiles
+const DefaultLoopRange = 4;
+const ambient = new AmbientSounds(player);
+ambient.Begin(ambience: string | undefined, sources: ReadonlyArray<LoopSource>);   // a level started: a loop both levels have plays on, the rest stop
+ambient.Show(); ambient.Hide();                                                     // a Hide stops every loop
+ambient.Update(hearers: ReadonlyArray<Vec2Like>, seconds);                          // once a frame, hearers in tiles
+```
+
+A loop starts once it would be heard, and stays playing (at 0, when no one is near) until the level or the visit ends. A sound with no file is
+silent until the next `Begin`, as a level's bundle may have it; one that is still starting when it's no longer wanted is stopped as it arrives.
+
+`@logic-incubator/engine/Footsteps` (pure) - when the heroes' feet land. `new Footsteps(stride = DefaultStride)` (48 pixels, about five steps a second at a hero's full speed); `Update(positions:
+ReadonlyArray<Vec2Like | null>): number` - once a frame, each hero's position by slot (null for one not walking), and how many steps were taken: one
+each `stride` walked, the first at half of one, so a hero who sets off is heard at once. Standing still, or a jump of more than a stride (a warp,
+a restart), starts that hero afresh. `Reset()` forgets everyone's walking.
 
 `@logic-incubator/engine/SoundBoard` (pure) - what play sounds like. `DungeonMain` makes one over `NamedSounds(game.assets)` and plays it from
 the dispatcher while the scene is shown (`ListenWhileShown` on each of `SoundEvents`); an online guest hears the host's events as its own.
@@ -1570,10 +1606,13 @@ the dispatcher while the scene is shown (`ListenWhileShown` on each of `SoundEve
 type SoundTable = {   // each a sound by name (NamedSounds); one left out, or with no file, is silent
     heroShot?, monsterShot?, shotWall?, heroHurt?, heroDeath?, lightSpell?, keysDropped?, gameOver?, levelComplete?,
     monsterHit?, monsterDeath?, monsterSpawn?, bossWake?, bossDeath?, spawnerHit?, spawnerBreak?, doorOpen?, doorClose?,
-    pickup?: Partial<Record<PickupKind, string>>, questGiven?, questProgress?, questDone?, talkStart?, talkLine?, shout?, pause?: string;
+    doorLocked?, pickup?: Partial<Record<PickupKind, string>>, questGiven?, questProgress?, questDone?, talkStart?, talkLine?, shout?, pause?,
+    footstep?, ambience?, bossMusic?: string;   // these three DungeonMain plays itself, not for an event; give bossMusic the music volume
 };
 const SoundEvents: ReadonlyArray<string>;   // the events it plays for
-new SoundBoard({ sounds: Pick<NamedSounds, "Play">, table?: SoundTable, monster: type => MonsterDef | undefined, metadata: sprite => AssetMetadata | undefined })
+type HeroSounds = { hurt?: string; death?: string };   // one hero's (HeroSlot.sounds), by name
+new SoundBoard({ sounds: Pick<NamedSounds, "Play">, table?: SoundTable, monster: type => MonsterDef | undefined, metadata: sprite => AssetMetadata | undefined,
+                 hero?: slot => HeroSounds | undefined })   // DungeonMain's: each slot's sounds, as the level started
 board.Heard(event: string, args: ReadonlyArray<unknown>): void
 ```
 
@@ -1581,12 +1620,14 @@ board.Heard(event: string, args: ReadonlyArray<unknown>): void
 | --- | --- |
 | `SHOT_FIRED` | `shot.sound`, then `heroShot` (a hero's) or `monsterShot` |
 | `SHOT_STOPPED` | `shot.wallSound`, `shotWall` |
+| `PLAYER_DAMAGED`, `PLAYER_DIED` | that hero's `HeroSounds.hurt` / `death`, then `heroHurt` / `heroDeath` |
 | `MONSTER_HIT`, `MONSTER_SPAWNED`, `BOSS_WOKE` | its kind's `MonsterDef.sounds.hit` / `spawn` / `wake`, then `monsterHit` / `monsterSpawn` / `bossWake` |
 | `MONSTER_KILLED` | a boss: `bossDeath`, then as any other - its kind's `sounds.death`, `monsterDeath` |
 | `DOOR_OPENED`, `DOOR_CLOSED` | the `sound` of the sprite the door turns into (`AssetMetadata`), `doorOpen` / `doorClose` |
+| `DOOR_LOCKED` | `doorLocked` |
 | `PICKUP_COLLECTED` | for each thing collected: its sprite's `sound`, then `pickup[kind]` |
 | `QUEST_UPDATED` | `questGiven` (now active, it wasn't), `questProgress` (active, it was), `questDone` (complete or finished, it wasn't) |
-| the rest | `PLAYER_DAMAGED` `heroHurt`, `PLAYER_DIED` `heroDeath`, `LIGHT_SPELL_CAST` `lightSpell`, `KEYS_DROPPED` `keysDropped`, `ALL_PLAYERS_DIED` `gameOver`, `LEVEL_COMPLETED` `levelComplete`, `SPAWNER_HIT` `spawnerHit`, `SPAWNER_DESTROYED` `spawnerBreak`, `TALK_STARTED` `talkStart`, `TALK_LINE` `talkLine`, `NPC_SHOUTED` `shout`, `GAME_PAUSED` `pause` |
+| the rest | `LIGHT_SPELL_CAST` `lightSpell`, `KEYS_DROPPED` `keysDropped`, `ALL_PLAYERS_DIED` `gameOver`, `LEVEL_COMPLETED` `levelComplete`, `SPAWNER_HIT` `spawnerHit`, `SPAWNER_DESTROYED` `spawnerBreak`, `TALK_STARTED` `talkStart`, `TALK_LINE` `talkLine`, `NPC_SHOUTED` `shout`, `GAME_PAUSED` `pause` |
 
 ---
 
@@ -2049,7 +2090,7 @@ same level onto every machine, and the host's and guests' lobbies. All pure.
 `@logic-incubator/engine/net/NetMessages` - a kind byte, then JSON (a `level`'s body is its bytes).
 
 ```ts
-NetVersion = 7;     // a guest on another is refused ("version"); raise it whenever a message changes - this file's or PlayMessages' - or how a level sent in one is read
+NetVersion = 8;     // a guest on another is refused ("version"); raise it whenever a message changes - this file's or PlayMessages' - or how a level sent in one is read
 NameLength = 12;
 
 type LobbySeat = { peer: number; name: string; character: string | null };   // host's seat first; character: a game's id, null while choosing
@@ -2258,11 +2299,11 @@ type PingMessage = { t: "ping" | "pong"; id: number };
 type CatchUpMessage = { t: "catch-up"; round: number; events: NetEvent[] };   // host -> a guest back in: the round, every lasting event in it, then its end if it's over
 type LeaveMessage = { t: "leave" };                                          // guest -> host: leaving for good
 type NetEvent = pickup | keys | spawner | killed | damaged | died | all-died | completed | shot | quest   // the engine's events, and a new kind of shot's setup
-             | fired | stopped | hit | spawned | woke | spawner-hit | cast   // only heard: SHOT_FIRED (shot by its number, hero), SHOT_STOPPED, MONSTER_HIT, MONSTER_SPAWNED, BOSS_WOKE, SPAWNER_HIT, LIGHT_SPELL_CAST
+             | fired | stopped | hit | spawned | woke | spawner-hit | cast | locked   // heard: SHOT_FIRED (shot by its number, hero), SHOT_STOPPED, MONSTER_HIT, MONSTER_SPAWNED, BOSS_WOKE, SPAWNER_HIT, LIGHT_SPELL_CAST, DOOR_LOCKED (hero, x, y)
                                          // quest: { e: "quest"; index; state: QuestState; progress } - quest index of the level's moved on (QUEST_UPDATED)
                                          // killed carries boss; pickup carries no more than the cell - a guest finds what was there on its own copy
 IsLastingEvent(event): boolean           // pickup, keys, spawner, shot, quest - what changes the level or a hero for good, and goes in a catch-up
-IsFleetingEvent(event): boolean          // fired, stopped, hit, spawned, woke, spawner-hit, cast - a sound lost is nothing to wait for
+IsFleetingEvent(event): boolean          // fired, stopped, hit, spawned, spawner-hit, cast, locked - a sound lost is nothing to wait for (not woke: it puts the boss music on)
 
 QuantiseInput(input, seq): IPlayerInput   // what the host will have of it: each axis to 1/127 - a guest steps its own hero with this, so both agree
 ```
@@ -2417,7 +2458,7 @@ are PascalCase like the rest.
 | `Track(widget: { Update(ms) }): () => void` | Calls `widget.Update(ms)` every frame while the system is active (dialogue typing, toasts, a text field's caret, a tile marker). |
 | `RegisterScroll(view): () => void` | The mouse wheel scrolls `view` while the pointer is over it. |
 | `BindTabs(tabs, scope?)` | The tab keys (Q and E, the pad's shoulder buttons) step through a `UiTabs`. |
-| Sounds | It plays the skin's `sounds` (`UiTheme.Sound`) while active: `focus` as the player moves focus to another control (keys, pad or pointer; a screen putting it on its first item makes none) or the tab keys step; `back` as a scope's `onCancel` takes a cancel; and each registered control's own (its `sound` event). |
+| Sounds | It plays the skin's `sounds` (`UiTheme.Sound`) while active: `focus` as the player moves focus to another control (keys, pad or pointer; a screen putting it on its first item makes none) or the tab keys step; `back` as a scope's `onCancel` takes a cancel; `denied` as the keys or pad press a focused control that is disabled, with the ring showing; and each registered control's own (its `sound` event). |
 | `SetActive(active)` / `Destroy()` | Whether it listens (a scene's UI shouldn't answer keys while another scene is up); tear-down. |
 
 Keys: arrows and WASD move, Enter and Space accept, Escape and Backspace cancel, Q/E and Page Up/Down step tabs. Pad: d-pad and left stick move (past a dead zone of 0.5), A accepts, B and Start cancel, the
@@ -2433,7 +2474,7 @@ shoulder buttons step tabs. Held directions repeat (350 ms, then every 120 ms).
 | `NineSliceSkin` | `{ frame, insets, edges?, centre?, outset? }`: `edges` and `centre` are `"stretch"` or `"tile"`; `outset` draws the frame beyond the widget's box (a selected tab standing proud) without changing its size. |
 | Optional parts | `BarSkin.fillMode: "tile"` repeats a patterned fill; `SliderSkin.vertical` and `ScrollbarSkin.horizontal` are art for the other axis (without them the widget is turned on its side); `ScrollbarSkin.trackThickness` (a rail thinner than the grip) and `thumbLength` (a fixed grip); `TabSkin.width` (tabs of one size) and `vertical` (a column of side tabs); `TooltipSkin.tailDown`/`tailUp` are optional; `DialogueSkin.portraitBeside`, `portraitPadding`, `portraitOverlap` and `nameFrame`, `nameHeight`, `namePadding`, `nameInset`, `nameOffset`, `nameRaise` (a name plate across the box's top); `WindowSkin.titleRaise`, and `close.icon` is optional (a button whose art is the glyph). |
 | `Skin.metrics` | Spacings no frame or font sets, by name, in UI pixels: `iconGap`, `lineGap`, `slotGap`, `scrollGap`, `scrollMargin`, `scrollStep`, `caretWidth`, `caretMargin`, `tailMargin`, `tailOverlap`, `slide`, `bob`, `ringGap`, `ringThickness`, `statusGap`. A skin may leave any out. |
-| `Skin.sounds` | `Partial<Record<UiSound, string>>`, `type UiSound = "focus" \| "confirm" \| "back" \| "slider" \| "toggle"`: each a sound's name in the skin's bundle (`confirm` is `ui.confirm`). One left out, or with no file in the bundle, is silent. The game skin names each after itself. |
+| `Skin.sounds` | `Partial<Record<UiSound, string>>`, `type UiSound = "focus" \| "confirm" \| "back" \| "slider" \| "toggle" \| "denied"`: each a sound's name in the skin's bundle (`confirm` is `ui.confirm`). One left out, or with no file in the bundle, is silent. The game skin names each after itself. |
 | `LoadSkin(assets, bundle = "ui"): Skin` | The data asset `<bundle>.skin`, parsed, with each nine-slice's insets taken from `<bundle>.frames` (the frame index the art tools write) unless the skin gives them. |
 | `GameUiAssets(assets, bundle): UiAssets` | The skin's frames, fonts and sounds as the game's loaded bundle has them (`UiAssets.PlaySound?(name)`, through `NamedSounds`; a `UiAssets` without it is a silent UI). |
 | `ValidateLoadedSkin(skin, assets): string[]` / `ValidateSkin` | What is wrong with a skin: a missing frame or font, an inset that leaves nothing of its frame, a pointer's hot spot outside its picture, a tooltip with one tail. Empty when fine. |
