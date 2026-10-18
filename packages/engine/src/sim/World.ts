@@ -20,7 +20,7 @@ import { Vec2, Vec2Like } from "@logic-incubator/lib/math/Geometry";
 import { TileSize } from "../Constants";
 import type { PlayerSetup } from "../DungeonMain";
 import Encounter, { EncounterLevel, EncounterOptions, Monster } from "../Encounter";
-import { ALL_PLAYERS_DIED, KEYS_DROPPED, LEVEL_COMPLETED, NPC_BUMPED, PICKUP_COLLECTED, QUEST_UPDATED } from "../Events";
+import { ALL_PLAYERS_DIED, KEYS_DROPPED, LEVEL_COMPLETED, LIGHT_SPELL_CAST, NPC_BUMPED, PICKUP_COLLECTED, QUEST_UPDATED } from "../Events";
 import type { IPlayerInput } from "../input/PlayerControl";
 import type { CollectedPickup } from "../level/Level";
 import { LightSpell } from "../level/entities/LightSpell";
@@ -261,7 +261,11 @@ export default class World {
                     hero.WarpTo(to.Position);
                 }
                 const box = this.leash && LeashBoxFor(others.map(other => other.Position), this.leash);
+                const wasLit = !!hero.Spell && !!hero.Spell.lit;
                 hero.Step(input, dt, seconds, box ? Leashed(this.collision, box) : this.collision);
+                if (!wasLit && hero.Spell && hero.Spell.lit) {
+                    this.options.emit(LIGHT_SPELL_CAST, hero.Index);
+                }
                 this.Bump(hero, input);
                 // Taken as it's fired: a hero given two steps at once can fire in each.
                 const shot = hero.TakeShot();
@@ -281,7 +285,7 @@ export default class World {
                 const collected = this.level.CollectPickupsAt(cell.x, cell.y);
                 if (collected.length) {
                     collected.forEach(pickup => hero.ApplyPickup(pickup));
-                    this.options.emit(PICKUP_COLLECTED, hero.Index, cell.x, cell.y);
+                    this.options.emit(PICKUP_COLLECTED, hero.Index, cell.x, cell.y, collected);
                     collected.forEach(pickup => this.RecordQuest({ kind: "collect", quest: pickup.value.quest, pickup: pickup.value }, hero.Index));
                 }
             });

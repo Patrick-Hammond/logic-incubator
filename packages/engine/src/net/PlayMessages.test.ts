@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { Vec2 } from "@logic-incubator/lib/math/Geometry";
 import type { IPlayerInput } from "../input/PlayerControl";
 import { DecodeMessage, EncodeMessage } from "./NetMessages";
-import { DecodePlay, EncodePlay, HeroSnapshot, IsLastingEvent, QuantiseInput, Snapshot } from "./PlayMessages";
+import { DecodePlay, EncodePlay, HeroSnapshot, IsFleetingEvent, IsLastingEvent, QuantiseInput, Snapshot } from "./PlayMessages";
+import { MayBeLost } from "./PlaySession";
 
 function Input(x: number, y: number, extra: Partial<IPlayerInput> = {}): IPlayerInput {
     return { direction: new Vec2(x, y), firing: false, aimX: 0, casting: false, ...extra };
@@ -47,14 +48,22 @@ function SnapshotOf(changes: Partial<Snapshot> = {}): Snapshot {
             { e: "pickup", hero: 1, x: 10, y: 20 },
             { e: "keys", hero: 0, x: 11, y: 21 },
             { e: "spawner", index: 3 },
-            { e: "killed", type: 2, x: 100.5, y: 200.25, hero: 1 },
-            { e: "killed", type: 1, x: 5, y: 6, hero: -1 },
+            { e: "killed", type: 2, x: 100.5, y: 200.25, hero: 1, boss: false },
+            { e: "killed", type: 1, x: 5, y: 6, hero: -1, boss: true },
             { e: "damaged", damage: 2, hitPoints: 3, hero: 0 },
             { e: "died", hero: 0 },
             { e: "all-died" },
             { e: "completed", hero: 2 },
             { e: "shot", index: 1, setup: { sprite: "arrow", speed: 6, damage: 1, range: 20, light: { brightness: 1, tint: 0xffaa00, range: 3 } } },
-            { e: "quest", index: 2, state: "complete", progress: 6 }
+            { e: "quest", index: 2, state: "complete", progress: 6 },
+            { e: "fired", shot: 1, hero: 2 },
+            { e: "fired", shot: 0, hero: -1 },
+            { e: "stopped", shot: 1 },
+            { e: "hit", type: 3 },
+            { e: "spawned", type: 1 },
+            { e: "woke", type: 4 },
+            { e: "spawner-hit", index: 2 },
+            { e: "cast", hero: 1 }
         ],
         ...changes
     };
@@ -118,6 +127,16 @@ describe("EncodePlay and DecodePlay", () => {
         expect(lasting.map(event => event.e)).toEqual(["pickup", "keys", "spawner", "shot", "quest"]);
         expect(DecodePlay(EncodePlay({ t: "catch-up", round: 255, events: lasting }))).toEqual({ t: "catch-up", round: 255, events: lasting });
         expect(DecodePlay(EncodePlay({ t: "catch-up", round: 0, events: [] }))).toEqual({ t: "catch-up", round: 0, events: [] });
+    });
+
+    it("tell what is only heard from what changes the world, and send a snapshot of only that by the fast lane", () => {
+        const events = SnapshotOf().events;
+        const fleeting = events.filter(IsFleetingEvent);
+        expect(fleeting.map(event => event.e)).toEqual(["fired", "fired", "stopped", "hit", "spawned", "woke", "spawner-hit", "cast"]);
+        expect(fleeting.some(IsLastingEvent)).toBe(false);
+        expect(MayBeLost(SnapshotOf({ events: [] }))).toBe(true);
+        expect(MayBeLost(SnapshotOf({ events: fleeting }))).toBe(true);
+        expect(MayBeLost(SnapshotOf({ events: [...fleeting, { e: "died", hero: 0 }] }))).toBe(false);
     });
 
     it("are told apart from the lobby's messages both ways", () => {

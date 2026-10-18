@@ -59,6 +59,12 @@ export type AssetMetadata = {
     spawner?: SpawnerValue;
     /** What a hero gets for touching this tile - it then disappears (see `PickupCellsReached`, `Level.CollectPickupsAt`). */
     pickup?: PickupValue;
+    /**
+     * What the tile sounds like doing what it does, by bare name (see `SoundBoard`): a pickup's as it's picked up, a door
+     * sprite's as the door turns into it (its open sprite's as it opens, its closed one's as it shuts). Left out, the game's
+     * `SoundTable` has it.
+     */
+    sound?: string;
 };
 
 export type AssetMetadataMap = { [assetName: string]: AssetMetadata };
@@ -92,7 +98,7 @@ export default class AssetMetadataStore {
      * same entry) and warn with the asset name, rather than reject the whole file over one typo.
      * A `blocksLight` that isn't a boolean and an unrecognised `category` are dropped the same way, so the sprite is just listed under `misc`, and so is a
      * malformed `pickup` (an unknown kind, a missing amount) - the tile is then no pickup, rather than one
-     * that hands the player `undefined`.
+     * that hands the player `undefined` - and a `sound` that isn't a string.
      */
     Add(bundle: string, map: AssetMetadataMap): void {
         const clean: AssetMetadataMap = {};
@@ -119,6 +125,10 @@ export default class AssetMetadataStore {
                     meta.blocksLight
                 );
                 meta = { ...meta, blocksLight: undefined };
+            }
+            if (meta.sound !== undefined && typeof meta.sound !== "string") {
+                console.warn(`assets-meta.json: "${name}" has a sound that isn't a name - ignoring it until fixed:`, meta.sound);
+                meta = { ...meta, sound: undefined };
             }
             if (meta.category !== undefined && !IsAssetCategory(meta.category)) {
                 console.warn(

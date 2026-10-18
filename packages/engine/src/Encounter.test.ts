@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { Vec2Like } from "@logic-incubator/lib/math/Geometry";
 import { TileSize } from "./Constants";
 import Encounter, { BossWakeRange, EncounterLevel, EncounterPlayer, PartyToughness } from "./Encounter";
-import { MONSTER_KILLED, PLAYER_DAMAGED, PLAYER_DIED, SPAWNER_DESTROYED } from "./Events";
+import { BOSS_WOKE, MONSTER_HIT, MONSTER_KILLED, MONSTER_SPAWNED, PLAYER_DAMAGED, PLAYER_DIED, SHOT_FIRED, SHOT_STOPPED, SPAWNER_DESTROYED, SPAWNER_HIT } from "./Events";
 import { Chase, KeepDistance } from "./level/entities/Behaviours";
 import { UNREACHABLE } from "./level/entities/FlowField";
 import { CreateHealth, DamageHealth, Health, TickHealth } from "./level/entities/Health";
@@ -246,6 +246,7 @@ describe("Encounter monsters", () => {
         run(240, () => fired(PLAYER_DAMAGED).length > 0);
         expect(fired(PLAYER_DAMAGED)).toHaveLength(1);
         expect(encounter.monsters[0].def).toBe(Shooter);
+        expect(fired(SHOT_FIRED)[0].args).toEqual([Shooter.ranged, -1]);
     });
 
     it("kill the player - once", () => {
@@ -378,7 +379,12 @@ describe("Encounter shots", () => {
         }
         expect(fired(MONSTER_KILLED)).toHaveLength(1);
         expect(fired(MONSTER_KILLED)[0].args[0]).toBe("walker");
+        expect(fired(MONSTER_KILLED)[0].args[4]).toBe(false);
         expect(encounter.monsters).not.toContain(monster);
+        // Two hit points, one a shot: hit, then killed - each shot heard as it's fired, and the monster as it came.
+        expect(fired(MONSTER_HIT).map(e => e.args)).toEqual([["walker"]]);
+        expect(fired(SHOT_FIRED).map(e => e.args)).toEqual([[ARROW, -1], [ARROW, -1]]);
+        expect(fired(MONSTER_SPAWNED).map(e => e.args)).toEqual([["walker"]]);
 
         run(2);
         expect(encounter.monsters).toHaveLength(1);
@@ -391,7 +397,10 @@ describe("Encounter shots", () => {
             encounter.Fire(player.Centre, { x: 1, y: 0 }, ARROW, "player");
             run(60);
         }
+        expect(fired(SPAWNER_HIT).map(e => e.args)).toEqual([[encounter.spawners[0].spawner]]);
         expect(fired(SPAWNER_DESTROYED)).toHaveLength(1);
+        // It made its own sound: the shot didn't stop against a wall.
+        expect(fired(SHOT_STOPPED)).toHaveLength(0);
         expect(encounter.spawners[0].destroyed).toBe(true);
         expect(level.spawners).toHaveLength(0);
         expect(level.IsSolid(12, 3)).toBe(false);
@@ -407,12 +416,15 @@ describe("Encounter shots", () => {
             run(60);
         }
         expect(fired(SPAWNER_DESTROYED)).toHaveLength(0);
+        expect(fired(SPAWNER_HIT)).toHaveLength(0);
+        // As against a wall.
+        expect(fired(SHOT_STOPPED).map(e => e.args)).toEqual([[ARROW], [ARROW], [ARROW], [ARROW], [ARROW]]);
         expect(encounter.projectiles).toHaveLength(0);
     });
 
     it("stop at the edge of what the player can see", () => {
         const player = new TestPlayer(At(2, 3));
-        const { encounter, run } = Setup(ROOM, [], player, x => x < 6);
+        const { encounter, run, fired } = Setup(ROOM, [], player, x => x < 6);
         encounter.Fire(player.Centre, { x: 1, y: 0 }, ARROW, "player");
         run(1);
         let furthest = 0;
@@ -422,6 +434,7 @@ describe("Encounter shots", () => {
         }
         expect(encounter.projectiles).toHaveLength(0);
         expect(furthest).toBeLessThan(6 * TileSize);
+        expect(fired(SHOT_STOPPED)).toHaveLength(1);
     });
 });
 
@@ -545,7 +558,7 @@ describe("Bosses", () => {
     it("stand where they were placed, as tough as they're made, asleep until a hero comes near in sight of them", () => {
         let seen = false;
         const hero = new TestPlayer(At(2, 3));
-        const { level, encounter, run } = Setup(ROOM, [], hero, x => seen || x < 10);
+        const { level, encounter, run, fired } = Setup(ROOM, [], hero, x => seen || x < 10);
         level.bosses.push({ x: 15, y: 3, value: { monster: "walker", hitPoints: 9, quest: "king" } });
         encounter.Reset();
         const boss = encounter.monsters[0];
@@ -557,16 +570,18 @@ describe("Bosses", () => {
         run(60);
         expect(boss.asleep).toBe(true);
         expect(boss.position).toEqual(At(15, 3));
+        expect(fired(BOSS_WOKE)).toHaveLength(0);
         hero.Position = At(15 - BossWakeRange, 3);
         run(60);
         expect(boss.asleep).toBe(false);
         expect(boss.position.x).toBeLessThan(15 * TileSize);
+        expect(fired(BOSS_WOKE).map(e => e.args)).toEqual([["walker"]]);
     });
 
     it("stay asleep out of sight however near a hero is, and wake when one shoots them from afar", () => {
         let seen = false;
         const hero = new TestPlayer(At(12, 3));
-        const { level, encounter, run } = Setup(ROOM, [], hero, x => seen || x < 14);
+        const { level, encounter, run, fired } = Setup(ROOM, [], hero, x => seen || x < 14);
         level.bosses.push({ x: 15, y: 3, value: { monster: "walker", hitPoints: 9 } });
         encounter.Reset();
         const boss = encounter.monsters[0];
@@ -580,6 +595,9 @@ describe("Bosses", () => {
         run(60);
         expect(boss.hitPoints).toBeLessThan(9);
         expect(boss.asleep).toBe(false);
+        // Woken once, by the shot that hurt it.
+        expect(fired(BOSS_WOKE)).toHaveLength(1);
+        expect(fired(MONSTER_HIT)).toHaveLength(1);
     });
 
     it("are as tough as their kind without hit points of their own - and tougher for a bigger party", () => {

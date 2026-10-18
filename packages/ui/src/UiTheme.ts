@@ -1,9 +1,10 @@
 import type { Texture } from "pixi.js";
 import type Assets from "@logic-incubator/lib/assets/Assets";
 import type { FontId, SpriteId } from "@logic-incubator/lib/assets/AssetIds";
+import NamedSounds from "@logic-incubator/lib/assets/NamedSounds";
 import { ParseSkin } from "./skin/ParseSkin";
 import { FrameIndex, ResolveFrames } from "./skin/ResolveFrames";
-import { Skin } from "./skin/Skin";
+import { Skin, UiSound } from "./skin/Skin";
 import { ValidateSkin } from "./skin/ValidateSkin";
 
 /** What the kit needs from the asset system, so widgets can be given a fake of it in a test. */
@@ -12,13 +13,19 @@ export interface UiAssets {
     Texture(frame: string): Texture;
     /** The name a `BitmapText` knows a skin font by. */
     FontName(fontId: string): string;
+    /** Plays one of the skin's sounds by its bare name (`confirm`), if the bundle has it; without this, the UI is silent. */
+    PlaySound?(name: string): void;
 }
 
-/** The skin's frames and fonts as the game's loaded asset bundle has them (`ui.btn_primary_normal`, `ui.body`). */
+/** The skin's frames, fonts and sounds as the game's loaded asset bundle has them (`ui.btn_primary_normal`, `ui.body`, `ui.confirm`). */
 export function GameUiAssets(assets: Assets, bundle: string): UiAssets {
+    const sounds = new NamedSounds(assets);
     return {
         Texture: frame => assets.Texture((bundle + "." + frame) as SpriteId),
-        FontName: fontId => assets.FontName((bundle + "." + fontId) as FontId)
+        FontName: fontId => assets.FontName((bundle + "." + fontId) as FontId),
+        PlaySound: name => {
+            sounds.Play(bundle + "." + name);
+        }
     };
 }
 
@@ -97,6 +104,14 @@ export default class UiTheme {
     Metric(name: string, fallback: number): number {
         const value = this.skin.metrics && this.skin.metrics[name];
         return value === undefined ? fallback : value;
+    }
+
+    /** Plays the skin's sound for `sound` (see `Skin.sounds`) - nothing if it names none, or its bundle hasn't the file. */
+    Sound(sound: UiSound): void {
+        const name = this.skin.sounds && this.skin.sounds[sound];
+        if (name && this.assets.PlaySound) {
+            this.assets.PlaySound(name);
+        }
     }
 
     Colour(name: string): number {

@@ -138,6 +138,7 @@ export default class UiSlider extends UiControl {
         if (snapped !== this.value) {
             this.value = snapped;
             this.Redraw();
+            this.Sound("slider");
             this.emit("change", this.value, this);
         }
     }

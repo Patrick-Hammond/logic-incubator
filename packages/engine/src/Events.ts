@@ -17,11 +17,35 @@ export const LEVEL_COMPLETED = "levelCompleted";
 export const GAME_PAUSED = "gamePaused";
 /** `DungeonMain.Resume()` set play going again. */
 export const GAME_RESUMED = "gameResumed";
-/** `(type: MonsterType, x: number, y: number, hero: number)` - the monster's type and pixel position when it died, and the slot of the hero whose shot killed it (-1 for none). */
+/**
+ * `(type: MonsterType, x: number, y: number, hero: number, boss: boolean)` - the monster's type and pixel position when it died, the
+ * slot of the hero whose shot killed it (-1 for none), and whether it was a boss (placed by a `BOSS` brush).
+ */
 export const MONSTER_KILLED = "monsterKilled";
+/** `(type: MonsterType)` - a shot hit a monster, and it lived (`MONSTER_KILLED` when it doesn't). */
+export const MONSTER_HIT = "monsterHit";
+/** `(type: MonsterType)` - a spawner made a monster. */
+export const MONSTER_SPAWNED = "monsterSpawned";
+/** `(type: MonsterType)` - a boss woke: a hero came near it, or shot it. */
+export const BOSS_WOKE = "bossWoke";
+/** `(spawner: Spawner)` - a shot hit a spawner, and it stands (`SPAWNER_DESTROYED` when it doesn't). */
+export const SPAWNER_HIT = "spawnerHit";
+/** `(hero: number)` - hero `hero` (their slot) cast their light spell: their mage-light is lit. */
+export const LIGHT_SPELL_CAST = "lightSpellCast";
+/** `(shot: ShotSetup, hero: number)` - a shot was fired, by hero `hero` (their slot) or by a monster (-1). */
+export const SHOT_FIRED = "shotFired";
+/** `(shot: ShotSetup)` - a shot stopped against a wall, a closed door or the dark. */
+export const SHOT_STOPPED = "shotStopped";
+/** `(sprite: string, index: number)` - door `index` (of `Level.doors`) opened, and is drawn as `sprite` now. */
+export const DOOR_OPENED = "doorOpened";
+/** `(sprite: string, index: number)` - door `index` shut, and is drawn as `sprite` now. */
+export const DOOR_CLOSED = "doorClosed";
 /** `(spawner: Spawner)` - a spawner shot to pieces; its cells are open floor from now on. */
 export const SPAWNER_DESTROYED = "spawnerDestroyed";
-/** `(hero: number, tileX: number, tileY: number)` - a hero picked up everything lying on that cell (see `Level.CollectPickupsAt`). */
+/**
+ * `(hero: number, tileX: number, tileY: number, collected: CollectedPickup[])` - a hero picked up everything lying on that cell (see
+ * `Level.CollectPickupsAt`): what that was, each with the sprite it was drawn as.
+ */
 export const PICKUP_COLLECTED = "pickupCollected";
 /** `(hero: number, tileX: number, tileY: number)` - a hero who fell (or left) dropped the keys they carried, all on that cell, for the others to pick up. */
 export const KEYS_DROPPED = "keysDropped";
@@ -34,6 +58,10 @@ export const NPC_BUMPED = "npcBumped";
 export const TALK_STARTED = "talkStarted";
 /** The talk is over, and play goes on. */
 export const TALK_ENDED = "talkEnded";
+/** The talk went on to its next line (`TALK_STARTED` is its first). */
+export const TALK_LINE = "talkLine";
+/** `(tileX: number, tileY: number)` - the NPC on that cell called out something new, in a speech bubble (see `Shouts`). */
+export const NPC_SHOUTED = "npcShouted";
 /**
  * `(id: string, state: QuestState, progress: number, was: QuestState)` - one of the level's quests was given, moved on, met its
  * goal or was handed in (see `Quests`): where it is now, how far toward its target, and the state it was in before.

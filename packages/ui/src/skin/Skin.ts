@@ -343,6 +343,12 @@ export type SkillTreeSkin = {
 /** The marker that pulses round a tile under the pointer: its frames (played in a loop), how long each shows, and where the tile sits in a frame (its top-left). */
 export type TileMarkerSkin = { frames: string[]; frameMs: number; tileX: number; tileY: number };
 
+/**
+ * The sounds a UI makes: `focus` as focus moves to another control (or tab), `confirm` as a button is pressed, `back` as a screen is backed out of, `slider` as a slider or
+ * selector steps, and `toggle` as a checkbox or radio button is pressed.
+ */
+export type UiSound = "focus" | "confirm" | "back" | "slider" | "toggle";
+
 export type Skin = {
     name: string;
     /** The bundle the frames and fonts are in. */
@@ -382,6 +388,11 @@ export type Skin = {
     abilities?: Record<string, AbilitySkin>;
     skillTrees?: Record<string, SkillTreeSkin>;
     tileMarkers?: Record<string, TileMarkerSkin>;
+    /**
+     * What the UI sounds like (see `UiSound`): each a sound's name in the skin's bundle (`confirm` is `ui.confirm`). One left out, or with no file in the bundle yet, is
+     * silent - so a skin can name its sounds before they exist.
+     */
+    sounds?: Partial<Record<UiSound, string>>;
 };
 
 export function InsetsWidth(insets: Insets): number {

@@ -10,6 +10,17 @@ import type { Weapon } from "./Projectiles";
 
 export type MonsterType = string;
 
+/** What a kind of monster sounds like, each by bare name (see `SoundBoard`) - left out, the game's `SoundTable` has it. */
+export type MonsterSounds = {
+    /** Hit by a shot, and still standing. */
+    hit?: string;
+    death?: string;
+    /** Made by a spawner. */
+    spawn?: string;
+    /** Woken, as a boss. */
+    wake?: string;
+};
+
 /** Everything the engine needs to run one kind of monster - the game's side of the deal. */
 export interface MonsterDef {
     /** Animation shown standing still - also its picture in the editor's spawner dialog. */
@@ -31,6 +42,8 @@ export interface MonsterDef {
     ranged?: Weapon;
     /** Makes this monster's steering - called once per monster spawned, so a behaviour can keep its own state. */
     behaviour: () => IMonsterBehaviour;
+    /** What it sounds like - see `MonsterSounds`. Its shot's sounds are `ranged`'s own. */
+    sounds?: MonsterSounds;
 }
 
 /** A game's monsters. `T` is the game's own monster names, so its `defaultPool` and `defs` are checked against them. */

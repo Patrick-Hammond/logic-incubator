@@ -22,6 +22,10 @@ export type ShotSetup = {
     range: number;
     /** A light it carries as it flies - a fireball, a glowing bolt. Leave out for a shot that gives no light. */
     light?: LightValue;
+    /** The sound it's fired with, by name (see `SoundBoard`) - left out, the game's `SoundTable.heroShot` or `monsterShot`. */
+    sound?: string;
+    /** The sound it makes stopping against a wall - left out, the game's `SoundTable.shotWall`. */
+    wallSound?: string;
 };
 
 /** A `ShotSetup` that fires repeatedly - the player's while fire is held, a monster's `MonsterDef.ranged` at will. */

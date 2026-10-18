@@ -98,11 +98,17 @@ export default class UiSelector extends UiControl {
         super.Trigger();
     }
 
+    /** A press is a step, which makes its own sound. */
+    protected get PressSound(): null {
+        return null;
+    }
+
     private Step(step: number): void {
         const next = StepChoice(this.selected, step, this.choices.length, this.wrap);
         if (next !== this.selected) {
             this.selected = next;
             this.Refresh();
+            this.Sound("slider");
             this.emit("change", next, this.choices[next], this);
         }
     }

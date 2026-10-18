@@ -3,11 +3,12 @@ import type Game from "@logic-incubator/lib/game/Game";
 import UiControl from "../widgets/UiControl";
 import UiScrollView from "../widgets/UiScrollView";
 import UiTabs from "../widgets/UiTabs";
+import type { UiSound } from "../skin/Skin";
 import UiTheme from "../UiTheme";
 import FocusManager, { Focusable, FocusScopeOptions } from "./FocusManager";
 import FocusRing from "./FocusRing";
 import { PadSample } from "./PadMap";
-import { Direction, InputSource, UiAction } from "./UiAction";
+import { Direction, InputSource, IsDirection, UiAction } from "./UiAction";
 import UiInputCore from "./UiInputCore";
 
 const FALLBACK_FOCUS_COLOUR = 0xffd866;
@@ -30,6 +31,9 @@ export interface UiUpdatable {
  *
  * Keys go through lib's `Keyboard` events (it owns `document.onkeydown`), so nothing here competes for them; a key the UI uses is kept from the page (so the arrows
  * don't scroll it) only while there is something on screen to focus, and a held key is let go when the window loses focus.
+ *
+ * It plays the skin's sounds (see `Skin.sounds`): `focus` as the player moves focus (a screen putting it on its first item is heard as the press that opened it), `back`
+ * as a scope's `onCancel` takes a cancel, and whatever its registered controls sound like as they're used (`UiControl`'s `sound` event).
  */
 export default class UiSystem {
     readonly focus = new FocusManager();
@@ -42,7 +46,7 @@ export default class UiSystem {
     private active = true;
     private ids = 0;
 
-    constructor(private readonly game: Game, theme: UiTheme, layer: Container) {
+    constructor(private readonly game: Game, private readonly theme: UiTheme, layer: Container) {
         this.core = new UiInputCore((action, source) => this.OnAction(action, source));
 
         const colour = theme.skin.colours.focus;
@@ -124,10 +128,17 @@ export default class UiSystem {
             OnDirection: direction => button.OnDirection(direction)
         };
         const unregister = this.focus.Register(item, options.scope);
-        const onOver = () => this.focus.Focus(id);
+        const onOver = () => {
+            const was = this.focus.Focused;
+            this.focus.Focus(id);
+            if (this.focus.Focused !== was) this.Sound("focus");
+        };
+        const onSound = (sound: UiSound) => this.Sound(sound);
         button.on("pointerover", onOver);
+        button.on("sound", onSound);
         const off = () => {
             button.off("pointerover", onOver);
+            button.off("sound", onSound);
             button.off("destroyed", off);
             unregister();
         };
@@ -158,7 +169,13 @@ export default class UiSystem {
 
     /** Makes the tab keys (Q and E, the pad's shoulder buttons) step through `tabs` while `scope` (the screen, by default) is in charge. */
     BindTabs(tabs: UiTabs, scope?: string): void {
-        this.focus.ConfigureScope({ onTab: step => tabs.Step(step) }, scope);
+        this.focus.ConfigureScope({
+            onTab: step => {
+                const was = tabs.Selected;
+                tabs.Step(step);
+                if (tabs.Selected !== was) this.Sound("focus");
+            }
+        }, scope);
     }
 
     /** A modal (or any screen that takes over) starts: only its items can be reached until `PopScope`. */
@@ -198,7 +215,15 @@ export default class UiSystem {
 
     private OnAction(action: UiAction, source: InputSource): void {
         if (source === "pointer") return;
-        this.focus.Handle(action);
+        const was = this.focus.Focused;
+        if (!this.focus.Handle(action)) return;
+        if (action === "cancel") this.Sound("back");
+        else if (IsDirection(action) && this.focus.Focused !== was) this.Sound("focus");
+    }
+
+    /** One of the skin's sounds, while this UI is listening. */
+    private Sound(sound: UiSound): void {
+        if (this.active && !this.destroyed) this.theme.Sound(sound);
     }
 
     private GlobalRect(button: UiControl) {

@@ -16,7 +16,7 @@ import type { EncounterView } from "../Encounter";
 import type { IPlayerInput } from "../input/PlayerControl";
 import type { LobbySeat } from "./NetMessages";
 import type { NetLevelContext, NetPlay } from "./NetPlay";
-import { DecodePlay, EncodePlay, PlayMessage } from "./PlayMessages";
+import { DecodePlay, EncodePlay, IsFleetingEvent, PlayMessage } from "./PlayMessages";
 
 /** How often each end pings the others, in milliseconds. */
 const PingEveryMs = 1000;
@@ -180,7 +180,8 @@ export default abstract class PlaySession implements NetPlay {
 /**
  * Whether `message` may go by a direct link's fast lane, which can lose it or let a later one overtake it: what's sent
  * again soon anyway. Inputs come with the few before them, a ping lost is one round trip unmeasured, and a snapshot is
- * the whole world as it stands - unless something happened in it, which must arrive, in order.
+ * the whole world as it stands - unless something happened in it, which must arrive, in order. Something only heard (a
+ * shot fired, a hit - see `IsFleetingEvent`) doesn't count: a sound lost is nothing to wait for.
  */
 export function MayBeLost(message: PlayMessage): boolean {
     switch (message.t) {
@@ -189,7 +190,7 @@ export function MayBeLost(message: PlayMessage): boolean {
         case "pong":
             return true;
         case "snapshot":
-            return message.events.length === 0;
+            return message.events.every(IsFleetingEvent);
         default:
             return false;
     }

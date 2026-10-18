@@ -19,7 +19,10 @@ import type { Vec2Like } from "@logic-incubator/lib/math/Geometry";
 import { RelayHost } from "@logic-incubator/lib/net/RelayRooms";
 import type RelaySession from "@logic-incubator/lib/net/RelaySession";
 import type { EncounterView } from "../Encounter";
-import { ALL_PLAYERS_DIED, KEYS_DROPPED, LEVEL_COMPLETED, MONSTER_KILLED, PICKUP_COLLECTED, PLAYER_DAMAGED, PLAYER_DIED, QUEST_UPDATED, SPAWNER_DESTROYED } from "../Events";
+import {
+    ALL_PLAYERS_DIED, BOSS_WOKE, KEYS_DROPPED, LEVEL_COMPLETED, MONSTER_HIT, MONSTER_KILLED, MONSTER_SPAWNED, PICKUP_COLLECTED, PLAYER_DAMAGED, PLAYER_DIED,
+    LIGHT_SPELL_CAST, QUEST_UPDATED, SHOT_FIRED, SHOT_STOPPED, SPAWNER_DESTROYED, SPAWNER_HIT
+} from "../Events";
 import type { IPlayerInput } from "../input/PlayerControl";
 import MonsterRoster from "../level/entities/MonsterRoster";
 import { NoInput } from "../sim/World";
@@ -126,10 +129,17 @@ export default class GuestSession extends PlaySession {
         if (!hero) {
             return;
         }
+        const wasLit = !!hero.Spell && !!hero.Spell.lit;
         const numbered = this.prediction.Step(hero, local[this.You] || NoInput, this.Others(), world.Collider);
+        // Its own hero's doings it hears as it does them, rather than when the host's word on them comes.
+        if (!wasLit && hero.Spell && hero.Spell.lit) {
+            context.emit(LIGHT_SPELL_CAST, this.You);
+        }
         const shot = hero.TakeShot();
         if (shot) {
-            replica.Fire(hero.Centre, shot, hero.EquippedWeapon.shot, numbered.seq || 0);
+            const setup = hero.EquippedWeapon.shot;
+            replica.Fire(hero.Centre, shot, setup, numbered.seq || 0);
+            context.emit(SHOT_FIRED, setup, this.You);
         }
         const level = context.level;
         replica.StepStandIns((x, y) => level.IsSolid(x, y) || !level.IsCellVisible(x, y));
@@ -314,12 +324,14 @@ export default class GuestSession extends PlaySession {
             this.lasting++;
         }
         switch (event.e) {
-            case "pickup":
+            case "pickup": {
+                const collected = level.CollectPickupsAt(event.x, event.y);
                 if (hero) {
-                    level.CollectPickupsAt(event.x, event.y).forEach(pickup => hero.ApplyPickup(pickup));
+                    collected.forEach(pickup => hero.ApplyPickup(pickup));
                 }
-                emit(PICKUP_COLLECTED, event.hero, event.x, event.y);
+                emit(PICKUP_COLLECTED, event.hero, event.x, event.y, collected);
                 break;
+            }
             case "keys":
                 if (hero) {
                     hero.DropKeys().forEach(key => level.DropPickup(event.x, event.y, { kind: "key", id: key.id }, key.sprite));
@@ -335,9 +347,45 @@ export default class GuestSession extends PlaySession {
                 }
                 break;
             }
-            case "killed":
-                emit(MONSTER_KILLED, MonsterRoster.inst.Types[event.type], event.x, event.y, event.hero);
+            case "spawner-hit": {
+                const state = world.encounter.spawners[event.index];
+                if (state && !state.destroyed) {
+                    emit(SPAWNER_HIT, state.spawner);
+                }
                 break;
+            }
+            case "killed":
+                emit(MONSTER_KILLED, MonsterRoster.inst.Types[event.type], event.x, event.y, event.hero, event.boss);
+                break;
+            case "hit":
+                emit(MONSTER_HIT, MonsterRoster.inst.Types[event.type]);
+                break;
+            case "spawned":
+                emit(MONSTER_SPAWNED, MonsterRoster.inst.Types[event.type]);
+                break;
+            case "woke":
+                emit(BOSS_WOKE, MonsterRoster.inst.Types[event.type]);
+                break;
+            case "fired": {
+                // This machine's own it heard as it fired them (see `Step`); one the host hasn't yet said the kind of - its snapshot overtaken - goes unheard.
+                const setup = this.replica!.Shot(event.shot);
+                if (setup && event.hero !== this.You) {
+                    emit(SHOT_FIRED, setup, event.hero);
+                }
+                break;
+            }
+            case "cast":
+                if (event.hero !== this.You) {
+                    emit(LIGHT_SPELL_CAST, event.hero);
+                }
+                break;
+            case "stopped": {
+                const setup = this.replica!.Shot(event.shot);
+                if (setup) {
+                    emit(SHOT_STOPPED, setup);
+                }
+                break;
+            }
             case "damaged":
                 emit(PLAYER_DAMAGED, event.damage, event.hitPoints, event.hero);
                 break;

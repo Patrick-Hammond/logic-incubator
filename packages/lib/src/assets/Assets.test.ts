@@ -129,7 +129,10 @@ class FakeSound implements ISoundAdapter {
         this.stopped.push(alias);
     }
     SetVolume(alias: string, volume: number) {
-        this.volumes.set(alias, volume);
+        // As pixi-sound's: only a registered sound has a volume to set.
+        if (this.aliases.has(alias)) {
+            this.volumes.set(alias, volume);
+        }
     }
 }
 
@@ -431,6 +434,45 @@ describe("sounds", () => {
     it("sets how loud a sound is", async () => {
         assets.SetSoundVolume("global.click", 0.4);
         expect(sound.volumes.get("global.click")).toBe(0.4);
+    });
+
+    it("gives a sound that loads later the volume it was set to beforehand, before it plays", async () => {
+        assets.SetSoundVolume("level1.music", 0.3);
+        expect(sound.volumes.has("level1.music")).toBe(false);
+        const heard: (number | undefined)[] = [];
+        sound.Play = (alias: string) => {
+            heard.push(sound.volumes.get(alias));
+        };
+        await assets.PlaySound("level1.music", { loop: true });
+        expect(heard).toEqual([0.3]);
+    });
+
+    it("gives a sound its volume again when its bundle loads again", async () => {
+        await assets.Load("level1.music");
+        assets.SetSoundVolume("level1.music", 0.6);
+        await assets.UseLevelBundle("level2");
+        await nextFrame();
+        expect(sound.aliases.has("level1.music")).toBe(false);
+        sound.volumes.clear();
+        await assets.UseLevelBundle("level1");
+        await assets.Load("level1.music");
+        expect(sound.volumes.get("level1.music")).toBe(0.6);
+    });
+
+    it("lists every sound in the manifest, loaded or not", () => {
+        expect(assets.SoundIds().sort()).toEqual(["global.click", "global.theme", "level1.music"]);
+    });
+
+    it("says which ids are sounds it can play: in the manifest, of a bundle it holds", async () => {
+        expect(assets.CanPlaySound("global.click")).toBe(true);
+        // Lazy, not loaded yet - but its bundle is, so playing it loads it.
+        expect(assets.CanPlaySound("level1.music")).toBe(true);
+        expect(assets.CanPlaySound("global.title")).toBe(false);
+        expect(assets.CanPlaySound("global.clack")).toBe(false);
+        expect(assets.CanPlaySound("click")).toBe(false);
+        await assets.UseLevelBundle("level2");
+        await nextFrame();
+        expect(assets.CanPlaySound("level1.music")).toBe(false);
     });
 
     it("loads a lazy sound the first time it's played", async () => {

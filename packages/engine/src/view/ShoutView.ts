@@ -4,6 +4,7 @@ import { Vec2Like } from "@logic-incubator/lib/math/Geometry";
 import UiLayer from "@logic-incubator/ui/UiLayer";
 import UiTooltip from "@logic-incubator/ui/widgets/UiTooltip";
 import { GameHeight, PlayWidth, TileSize } from "../Constants";
+import { NPC_SHOUTED } from "../Events";
 import Level, { Talker } from "../level/Level";
 import { DialogContext } from "../story/DialogScript";
 import Shouter, { HasShouts, InEarshot, ShoutLines } from "../story/Shouts";
@@ -13,7 +14,7 @@ import { TileRect } from "./helpers/TilePlacement";
 /** The skin's tooltip a shout is drawn in: a speech bubble, its tail pointing at the NPC. */
 const BubbleVariant = "speech";
 
-type Shout = { talker: Talker; shouter: Shouter; bubble: UiTooltip; lines: () => string[] };
+type Shout = { talker: Talker; shouter: Shouter; bubble: UiTooltip; lines: () => string[]; shown: string | null };
 
 /**
  * What the NPCs shout (see `Shouts`), in speech bubbles over them: while a hero played here is in earshot and the NPC is
@@ -43,7 +44,7 @@ export default class ShoutView extends GameComponent {
         this.shouts = talkers.filter(talker => HasShouts(talker.script)).map(talker => {
             const bubble = new UiTooltip(this.layer.Theme, BubbleVariant);
             this.layer.root.addChild(bubble);
-            return { talker, shouter: new Shouter(), bubble, lines: () => ShoutLines(talker.script, context) };
+            return { talker, shouter: new Shouter(), bubble, lines: () => ShoutLines(talker.script, context), shown: null };
         });
     }
 
@@ -52,6 +53,7 @@ export default class ShoutView extends GameComponent {
         this.shouts.forEach(shout => {
             shout.shouter.Hush();
             shout.bubble.Hide();
+            shout.shown = null;
         });
     }
 
@@ -66,7 +68,15 @@ export default class ShoutView extends GameComponent {
             const at = text !== null && seen ? this.Place(talker) : null;
             if (text === null || !at) {
                 shout.bubble.Hide();
+                // Over, rather than only out of sight for a moment: the next one is heard as it's shown.
+                if (text === null) {
+                    shout.shown = null;
+                }
                 continue;
+            }
+            if (text !== shout.shown) {
+                shout.shown = text;
+                this.game.dispatcher.emit(NPC_SHOUTED, talker.x, talker.y);
             }
             shout.bubble.ShowAt(at, { text }, this.Room());
             shout.bubble.alpha = shout.shouter.Fade;

@@ -1126,11 +1126,31 @@ game.assets.StopSound("global.theme");                           // also cancels
 `StopSound` before a sound has loaded cancels the pending play: a title screen that is hidden before its music arrived
 will not start the music behind the next scene.
 
-A volume setting is `SetSoundVolume`, which sets how loud a sound is for what is playing now and what plays later (0 to 1, on top of a play's own `volume`):
+A volume setting is `SetSoundVolume`, which sets how loud a sound is for what is playing now and what plays later (0 to 1, on top of a play's own `volume`).
+The volume is kept, so a sound that isn't loaded yet (a level's music, a `lazy` effect) is that loud when it loads. `SoundIds()` lists every sound
+in the manifest, so a game can set its sliders on all of them at once, the music tracks to one and everything else to the other:
 
 ```ts
 game.assets.SetSoundVolume("global.theme", settings.music / 100);   // the music slider
+const music = ["global.theme", "level1.music"];
+game.assets.SoundIds().forEach(id => game.assets.SetSoundVolume(id, (music.indexOf(id) >= 0 ? settings.music : settings.effects) / 100));
 ```
+
+**Sounds by name, before the files exist.** `NamedSounds` (`@logic-incubator/lib/assets/NamedSounds`) plays a sound by its name
+and quietly skips a name the build has no sound for - so a game can name every sound it means to have now, and each is heard as
+soon as its file is dropped in, with no code change. A bare name is looked up in the asset scope, nearest bundle first, so a level's
+bundle can have its own `door_open` in place of global's; a name with its bundle (`ui.confirm`) only there. A sound heard often can
+come as takes - `arrow_shot_1.ogg`, `arrow_shot_2.ogg`... - and each play picks one at random, never the one just played:
+
+```ts
+const sounds = new NamedSounds(game.assets);
+sounds.Play("arrow_shot");                    // global.arrow_shot, or one of its takes - or nothing yet
+sounds.Play([weaponSound, "arrow_shot"]);     // the first of these the build has
+```
+
+The same name played again within 40 ms isn't started again (`gapMs`), so a dozen hits in one step sound like one. The dungeon
+engine's sound effects ([9.8](#98-events-and-hooks)) and the UI kit's ([14.3](#143-skins-scale-and-the-art)) go through it.
+`assets.CanPlaySound(id)` is what it asks: a sound in the manifest, of a bundle that is loaded, with an adapter to play it.
 
 `pixi-sound` keeps one process-wide library, so aliases outlive a `Game`. The adapter removes the sounds a game
 registered when it is destroyed - and, if a sound is still being decoded at that moment, waits for the decode to finish
@@ -1544,6 +1564,7 @@ export function Dungeon(): () => void {
             player: PlayerSetup,
             level: () => game.assets.Data("level1.level"),   // the level to play; asked for on every start and restart
             levelBundle: () => "level1",                      // the bundle it needs; loaded before the level is built
+            music: () => "level1.secret_door",                // what it plays to, on a loop
         }));
         game.sceneManager.ShowScene(Scenes.GAME);
     })();
@@ -1564,6 +1585,8 @@ export function Dungeon(): () => void {
 | `heroes?` | `() => HeroSlot[] \| undefined`. Who plays: one slot per hero, called on every start/restart. Each slot gives that hero's `input` device, `sprite` and `lightSpell`. Leave it out (or return `undefined` or `[]`) for one hero on the keyboard or the first gamepad. See [9.3.1](#931-playing-together). |
 | `level` | `() => LevelFile \| undefined`. Called on every start/restart. In a dev build return the editor's latest save first (`editor.savedLevel() \|\| shipped`). |
 | `levelBundle?` | `() => string \| undefined`. The asset bundle the level plays in. Loaded (with its dependencies) *before* the level is built; the previous one is released after. |
+| `sounds?` | `SoundTable`. What play sounds like, where the thing it happens to doesn't name a sound of its own: each a sound by name, skipped while the build has no file for it ([9.8](#98-events-and-hooks)). |
+| `music?` | `() => SoundId \| undefined`. The track the level plays to, on a loop - usually one in the level's bundle, and `lazy`, so it loads as it starts. Called on every start/restart: the same track carries on through a restart and into a next level that asks for it, a different one takes over. It plays only while the dungeon is showing, so it stops behind the editor or the title. Leave it out (or return `undefined`) for silence. |
 | `overlay?` | `(main: DungeonMain) => GameComponent`. Called once; what it returns is attached above the HUD and kept with the scene. It gets the scene so it can `Pause()`, `Resume()` and `Restart()` it, and listens to `ALL_PLAYERS_DIED`, `LEVEL_COMPLETED` and the other events. This is how a game adds a pause menu and an end-of-level screen without the engine knowing what they look like. |
 | `manualRestart?` | `boolean`. The end of a level - everyone down, or a hero out - holds everything still until `main.Restart()` is called, instead of starting over by itself 1.5 s later - for a game whose `overlay` offers a choice (try again, quit). |
 | `playerSprite?` | `() => string \| undefined`. Only without `heroes`. Called on every start/restart; the animation it returns is what the lone hero is drawn with, in place of `player.sprite`. Return `undefined` for the default. This is how a character select screen's pick reaches the game: keep the chosen character in your boot code (listen for the event your screen emits) and return their run animation. With `heroes`, each slot's `sprite` does this. |
@@ -1763,11 +1786,11 @@ gives the host a `HostSession` and each guest a `GuestSession`, and `DungeonMain
   waiting, the host plays two a step to catch up.
 - **The host sends snapshots**, 20 a second (every third step), to everyone: every hero (position, hearts, gold, weapon, light spell,
   torch, the last input it played), every monster and shot, which doors are open, and what happened since the last one - pickups, kills,
-  hits, keys dropped, the level's end. A guest emits those as the engine's own events on its dispatcher, so
+  hits, shots fired, keys dropped, the level's end. A guest emits those as the engine's own events on its dispatcher, so
   sounds and an overlay work the same on every machine. About 150 bytes each for two players, about 3 KB a second.
 - **Straight to the host, where it can.** Given direct links ([15.5](#155-direct-links-between-players)), each guest links to the host as it
   joins, and once the link opens they talk over it, not the relay - a shorter way, and one where a lost message doesn't hold up the ones
-  behind it. What's sent again soon anyway (`MayBeLost`: inputs, pings, and a snapshot with nothing happening in it) goes by its fast lane,
+  behind it. What's sent again soon anyway (`MayBeLost`: inputs, pings, and a snapshot with nothing happening in it but sounds - `IsFleetingEvent`) goes by its fast lane,
   which may lose a message or let a later one overtake it; the rest - the lobby, a snapshot with events in it, a catch-up - goes reliably,
   whole and in order. A snapshot older than the newest a guest has is only what happened in it: the guest fires its events and skips its
   world. Two machines that can't reach each other directly (some mobile networks and offices) never link, and play on by the relay.
@@ -1846,8 +1869,8 @@ MonsterRoster.inst.Load(Monsters);
 
 `MonsterDef` fields: `idle`/`run` (animation names), `hitPoints`, `speed` (a multiple of the player's), `contactDamage`
 (half-hearts per touch; 0 = harmless), `contactCooldown` (seconds), optional `ranged` (a `Weapon` the monster shoots at the
-nearest hero within `range` tiles, from where the heroes can see it), and `behaviour` - a factory called once per monster spawned, so a behaviour can
-keep its own state.
+nearest hero within `range` tiles, from where the heroes can see it), `behaviour` - a factory called once per monster spawned, so a behaviour can
+keep its own state - and optional `sounds` (`hit`, `death`, `spawn`, `wake`: see [9.8](#98-events-and-hooks)).
 
 **Behaviours** decide where a monster steers each step (60 a second), always after the nearest living hero. Built in: `Chase`
 (the shortest walk to them), `Wander({ aggroRange, turnEvery, pace })` (amble until a hero is near, then chase for good) and
@@ -1927,7 +1950,7 @@ a deleted one is removed - with a warning if it had anything in it); you only fi
   "doors_leaf_closed": { "door": { "id": 1, "open": false } },
   "doors_leaf_open":   { "door": { "id": 1, "open": true } },
   "mob_spawner":     { "spawner": { "monsters": ["goblin"], "interval": 3, "maxAlive": 4, "total": 0, "activationRange": 10, "hitPoints": 10 } },
-  "sack_gold":       { "pickup": { "kind": "gold", "amount": 10 } },
+  "sack_gold":       { "pickup": { "kind": "gold", "amount": 10 }, "sound": "gold_sack" },
   "potion_blue":     { "pickup": { "kind": "item", "sprite": "potion_blue" } },
   "weapon_axe":      { "pickup": { "kind": "weapon", "weapon": { "icon": "weapon_axe",
                          "shot": { "sprite": "weapon_throwing_axe", "speed": 5, "damage": 2, "cooldown": 0.4, "range": 8 } } } }
@@ -1942,6 +1965,7 @@ a deleted one is removed - with a warning if it had anything in it); you only fi
 | `light` | A point light: `brightness` (its strength at its own cell, added on top of the ambient light; 1 is a normal torch, clamped to 0..2), `tint` (hex colour as a number; a warm colour reads as firelight against the cool ambient), `range` (radius in tiles), and optionally `flicker` (how far its strength wavers either way, as a share of itself: 0.15 is a torch; left out or 0, it's steady). Its sprite gets a soft glow over its flame (centred across the art, a third of the way down), in the light's colour. Baked once at level load at the corners of the tile grid, so it is blended smoothly across tiles, and fades out smoothly to nothing at its range. Overlapping lights add up, and light can go above 1 to brighten the art (capped). Where no light reaches, a dim, cool ambient light. Sprites, and tiles taller than a cell such as doors, are lit by the floor under their feet. Walls and other light-blocking tiles cast soft shadows, and the floor is a little darker along the foot of a wall and in a room's corners. A torch placed on a wall shines from the wall's open side (south first), so it lights the room it faces and not what's behind it. Height counts: a ledge two or more steps above the light hides its top, while stairs (one step a tile) stay lit. Spawners and doors don't cast shadows. A hand-edited light missing a field is dropped with a console warning naming the sprite rather than baking black. |
 | `door` | `id` pairs a door's two sprites (closed and open); `open` says which half this is. The door swaps when a hero's tile enters any of its footprint cells and swaps back when the last of them leaves, so it reads as "walked open" - unless that placement is locked, when the team needs its key ([9.6.1](#961-keys-and-locked-doors)). |
 | `spawner` | Produces `monsters` (a pool, picked at random) every `interval` s, at most `maxAlive` at once, `total` in all (0 = unlimited), only while a hero is within `activationRange` tiles' walk (0 = always). `hitPoints` is the damage to destroy it (0 = indestructible). Its sprite's footprint is solid until destroyed, when the tile goes too. The `spawner` data brush ([9.5](#95-the-level-file)) makes any other sprite one. |
+| `sound` | What the sprite sounds like, by name ([5.9](#59-sound)): a pickup's as it's picked up, a door's as the door turns into it. Left out, the game's `sounds` has it ([9.8](#98-events-and-hooks)). One that isn't a string is dropped with a console warning. |
 | `pickup` | What a hero who touches it gets ([9.3](#93-the-player)): `gold` or `health` (an `amount`; health is in half-hearts and never goes past the maximum), a `key` (an `id`), a `weapon`, an inventory `item` (its `sprite`, or - left out - the tile's own), or a `light` to carry (a `light` value, and the `seconds` it burns for - 0 or left out for the rest of the level; see [9.6.2](#962-lights-in-play)). Any kind can have a `quest`: the id of the quest it counts for when it's picked up ([9.10](#910-npcs-dialogs-and-quests)). The tile then disappears, and if it gave off light its light goes with it. A malformed one is dropped with a console warning naming the sprite. |
 
 A **specific placement** can override its light, spawner, pickup or door lock (the editor's data-select tool edits them per placement);
@@ -2005,13 +2029,23 @@ All on `game.dispatcher`; the constants are in `@logic-incubator/engine/Events`:
 | `PLAYER_DIED` | `(hero)` | A hero's hit points reached 0. They drop their keys; the rest play on. |
 | `ALL_PLAYERS_DIED` | - | Every hero is down: the level is over, and starts over shortly after (or on `Restart()`, with `manualRestart`). |
 | `LEVEL_COMPLETED` | `(hero)` | A hero stepped onto an `exit`: the level is over, and the next start (whatever `level` returns then) brings every hero back. |
-| `MONSTER_KILLED` | `(type, x, y, hero)` | A monster died (pixel position), killed by that hero's shot (-1 if by none). |
+| `MONSTER_KILLED` | `(type, x, y, hero, boss)` | A monster died (pixel position), killed by that hero's shot (-1 if by none); `boss` if a `BOSS` brush placed it. |
+| `MONSTER_HIT` | `(type)` | A shot hit a monster, and it lived. |
+| `MONSTER_SPAWNED` | `(type)` | A spawner made a monster. |
+| `BOSS_WOKE` | `(type)` | A boss woke: a hero came near it, or shot it. |
+| `SPAWNER_HIT` | `(spawner)` | A shot hit a spawner, and it stands. |
 | `SPAWNER_DESTROYED` | `(spawner)` | A spawner was shot to pieces. |
-| `PICKUP_COLLECTED` | `(hero, tileX, tileY)` | A hero picked up what was on that cell (gold, a key, a weapon...) - once for each cell their sprite reached. |
+| `SHOT_FIRED` | `(shot, hero)` | A shot (its `ShotSetup`) was fired, by that hero or by a monster (-1). |
+| `SHOT_STOPPED` | `(shot)` | A shot stopped against a wall, a closed door or the dark. |
+| `LIGHT_SPELL_CAST` | `(hero)` | A hero called up their mage-light. |
+| `DOOR_OPENED` / `DOOR_CLOSED` | `(sprite, index)` | A door opened or shut, and is drawn as `sprite` now. |
+| `PICKUP_COLLECTED` | `(hero, tileX, tileY, collected)` | A hero picked up what was on that cell (gold, a key, a weapon...) - once for each cell their sprite reached; `collected` is each thing's `value` and the `sprite` it was drawn as. |
 | `KEYS_DROPPED` | `(hero, tileX, tileY)` | A fallen hero's keys landed on that cell, for the others to pick up. |
 | `NPC_BUMPED` | `(hero, tileX, tileY)` | A hero walked into the NPC on that cell, where they can talk (a Quest); `DungeonMain` starts the talk. |
 | `TALK_STARTED` | `(hero, tileX, tileY)` | A talk began: play holds still until `TALK_ENDED`. A game's own UI should stop taking the keys meanwhile. |
 | `TALK_ENDED` | - | The talk is over, and play goes on. |
+| `TALK_LINE` | - | The talk went on to its next line. |
+| `NPC_SHOUTED` | `(tileX, tileY)` | The NPC on that cell called out something new, in a speech bubble. |
 | `QUEST_UPDATED` | `(id, state, progress, was)` | One of the level's quests was given, moved on, met or handed in: its state now, how far it has got, and its state before. |
 
 `hero` is the hero's slot, from 0 - their place in what `heroes` returned; a lone hero is 0. On an online guest these come from the
@@ -2021,6 +2055,28 @@ host's snapshots ([9.3.2](#932-playing-online)), a moment after they happened th
 this.Listen(this.game.dispatcher, MONSTER_KILLED, (type: string, x: number, y: number) => this.SpawnLoot(x, y));
 this.Listen(this.game.dispatcher, LEVEL_COMPLETED, () => (CurrentLevel = NextLevel(CurrentLevel)));   // level() hands it back on the next start
 ```
+
+**Sound effects.** `DungeonMain` plays a sound for each of these that has one (a `SoundBoard`), while the dungeon is showing. The thing
+it happens to names its own where it has one, and the game's `sounds` table has the rest; every sound is a name ([5.9](#59-sound)), so
+the whole table can be filled in before the files exist, and a name without a file gives way to the next one, then to silence:
+
+| Where | Names |
+| --- | --- |
+| A shot's `ShotSetup` (a hero's weapon, a monster's `ranged`, a weapon pickup's `shot`) | `sound` as it's fired, `wallSound` as it stops against a wall |
+| A kind of monster's `MonsterDef.sounds` | `hit`, `death`, `spawn`, `wake` (as a boss) |
+| A sprite's `assets-meta.json` entry | `sound`: a pickup's as it's picked up, a door's as it turns into that sprite (its open sprite's as it opens, its closed one's as it shuts) |
+| The game's `sounds` (`SoundTable`) | `heroShot`, `monsterShot`, `shotWall`, `heroHurt`, `heroDeath`, `lightSpell`, `keysDropped`, `gameOver`, `levelComplete`, `monsterHit`, `monsterDeath`, `monsterSpawn`, `bossWake`, `bossDeath` (in place of the kind's own death), `spawnerHit`, `spawnerBreak`, `doorOpen`, `doorClose`, `pickup` (by kind: `gold`, `key`...), `questGiven`, `questProgress`, `questDone`, `talkStart`, `talkLine`, `shout`, `pause` |
+
+```ts
+new DungeonMain({
+    // ...
+    sounds: { heroShot: "arrow_shot", monsterHit: "monster_hit", pickup: { gold: "coin" }, doorOpen: "door_opening" },
+});
+const Orc: MonsterDef = { ...Bruiser, sounds: { death: "big_death" } };
+```
+
+Online, a guest hears the host's events as its own, and its own hero's shots and mage-light as it fires or casts them. Sounds that
+change nothing else (a shot, a hit) don't hold a snapshot to the reliable lane: one lost is a sound missed.
 
 **Particle effects.** `DungeonMain` has an `Effects` layer over the figures - under any tile layers drawn over them (after the
 level's player layer, [10.3](#103-layers-data-brushes-and-palette-categories)) and the HUD; `main.Effects.Play(art, config, x, y)` starts an
@@ -2049,12 +2105,13 @@ new DungeonMain({
     player: PlayerSetup,
     level: () => game.assets.Data(`${CurrentLevel}.level` as DataId),
     levelBundle: () => CurrentLevel,                // "level1", then "level2" ...
+    music: () => `${CurrentLevel}.music` as SoundId,  // each level's own track, in its bundle
 });
 ```
 
 When the game switches `CurrentLevel` and restarts the scene, the engine loads the new bundle (showing nothing new until
 it is ready), builds the level, then releases the old one. Switching it when `LEVEL_COMPLETED` arrives is how a hero
-reaching an exit moves the party on: the start that follows the end of the level asks `level` and `levelBundle` again. Sprites a level redefines shadow `global`'s; see
+reaching an exit moves the party on: the start that follows the end of the level asks `level`, `levelBundle` and `music` again. Sprites a level redefines shadow `global`'s; see
 [5.8](#58-sprites-by-bare-name-scope-and-assetfactory).
 
 ### 9.10 NPCs, dialogs and quests
@@ -2999,6 +3056,12 @@ or a compact one for tools - re-dresses the same widgets. Optional parts let a s
 beyond its box (`outset` - the selected tab standing proud), a fill that repeats its pattern (`fillMode: "tile"`), separate art for a vertical slider or a horizontal scrollbar, a fixed-size
 scrollbar grip (`thumbLength`), a dialogue's portrait beside the box and a name plate across its top (a line's `portraitScale` enlarges a
 small portrait by whole pixels to fill its frame, as the dungeon's talks do with an NPC's 16-pixel tile).
+
+The skin's `sounds` say what the UI sounds like, each a sound's name in the skin's bundle: `focus` as the player moves focus to another control (or
+the tab keys step; a new screen focusing its first control is silent), `confirm` as a button is pressed, `back` as a screen is backed out of, `slider` as a slider or selector steps, and
+`toggle` as a checkbox or radio is pressed. The game skin names each after itself, so `packages/ui/assets/ui/sounds/confirm.ogg` is
+heard as soon as it's there; a name with no file is silent ([5.9](#59-sound)). A registered control makes its sound by emitting `sound`
+(`UiControl.Sound`), and the screen's `UiSystem` plays it while it's listening.
 
 The art is the **Tiny Dungeons UI pack** (`packages/ui/design/Tiny Dungeons - UI Pack`). It is drawn for a 480x270 screen, so `node packages/ui/tools/import-pack.mjs` enlarges every piece
 2x with nearest-neighbour scaling (each pixel a 2x2 block, never smoothed; `--scale=N` for another size) as it builds the bundle's sprites and `data/frames.json`: it copies the pieces, finds each stretchable frame's nine-slice insets from the art (the longest run of identical columns and rows is what stretches), and

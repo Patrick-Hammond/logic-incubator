@@ -16,7 +16,10 @@
 
 import { RelayHost } from "@logic-incubator/lib/net/RelayRooms";
 import type { EncounterView } from "../Encounter";
-import { ALL_PLAYERS_DIED, KEYS_DROPPED, LEVEL_COMPLETED, MONSTER_KILLED, PICKUP_COLLECTED, PLAYER_DAMAGED, PLAYER_DIED, QUEST_UPDATED, SPAWNER_DESTROYED } from "../Events";
+import {
+    ALL_PLAYERS_DIED, BOSS_WOKE, KEYS_DROPPED, LEVEL_COMPLETED, MONSTER_HIT, MONSTER_KILLED, MONSTER_SPAWNED, PICKUP_COLLECTED, PLAYER_DAMAGED, PLAYER_DIED,
+    LIGHT_SPELL_CAST, QUEST_UPDATED, SHOT_FIRED, SHOT_STOPPED, SPAWNER_DESTROYED, SPAWNER_HIT
+} from "../Events";
 import { StepSeconds } from "../FixedStep";
 import type { IPlayerInput } from "../input/PlayerControl";
 import MonsterRoster from "../level/entities/MonsterRoster";
@@ -160,20 +163,41 @@ export default class HostSession extends PlaySession {
         const n = (i: number) => args[i] as number;
         switch (event) {
             case PICKUP_COLLECTED:
+                // What was collected the guest finds for itself, on its own copy of the level.
                 this.events.push({ e: "pickup", hero: n(0), x: n(1), y: n(2) });
                 break;
             case KEYS_DROPPED:
                 this.events.push({ e: "keys", hero: n(0), x: n(1), y: n(2) });
                 break;
-            case SPAWNER_DESTROYED: {
+            case SPAWNER_DESTROYED:
+            case SPAWNER_HIT: {
                 const index = context.world.encounter.spawners.findIndex(state => state.spawner === args[0]);
                 if (index >= 0) {
-                    this.events.push({ e: "spawner", index });
+                    this.events.push(event === SPAWNER_HIT ? { e: "spawner-hit", index } : { e: "spawner", index });
                 }
                 break;
             }
             case MONSTER_KILLED:
-                this.events.push({ e: "killed", type: Math.max(0, MonsterRoster.inst.Types.indexOf(args[0] as string)), x: n(1), y: n(2), hero: n(3) });
+                this.events.push({ e: "killed", type: TypeNumber(args[0]), x: n(1), y: n(2), hero: n(3), boss: !!args[4] });
+                break;
+            case MONSTER_HIT:
+                this.events.push({ e: "hit", type: TypeNumber(args[0]) });
+                break;
+            case MONSTER_SPAWNED:
+                this.events.push({ e: "spawned", type: TypeNumber(args[0]) });
+                break;
+            case BOSS_WOKE:
+                this.events.push({ e: "woke", type: TypeNumber(args[0]) });
+                break;
+            case SHOT_FIRED:
+                // Numbered first, so a new kind's `shot` goes ahead of it.
+                this.events.push({ e: "fired", shot: this.ShotNumber(args[0] as ShotSetup), hero: n(1) });
+                break;
+            case SHOT_STOPPED:
+                this.events.push({ e: "stopped", shot: this.ShotNumber(args[0] as ShotSetup) });
+                break;
+            case LIGHT_SPELL_CAST:
+                this.events.push({ e: "cast", hero: n(0) });
                 break;
             case PLAYER_DAMAGED:
                 this.events.push({ e: "damaged", damage: n(0), hitPoints: n(1), hero: n(2) });
@@ -323,7 +347,6 @@ export default class HostSession extends PlaySession {
         }
         const world = context.world;
         const encounter = world.encounter;
-        const types = MonsterRoster.inst.Types;
         const snapshot: Snapshot = {
             t: "snapshot",
             round: this.round,
@@ -331,7 +354,7 @@ export default class HostSession extends PlaySession {
             heroes: world.Heroes.map((hero, i) => HeroSnapshotOf(hero, this.inputs[i].Acked)),
             monsters: encounter.monsters.filter(m => !m.dead).map(m => ({
                 id: m.id,
-                type: Math.max(0, types.indexOf(m.type)),
+                type: TypeNumber(m.type),
                 x: m.position.x,
                 y: m.position.y,
                 facingX: m.facingX,
@@ -395,4 +418,9 @@ export default class HostSession extends PlaySession {
     private HeroOf(peer: number): number {
         return this.seats.findIndex(seat => seat.peer === peer);
     }
+}
+
+/** A monster type by its place in the roster - how guests are told it. */
+function TypeNumber(type: unknown): number {
+    return Math.max(0, MonsterRoster.inst.Types.indexOf(type as string));
 }

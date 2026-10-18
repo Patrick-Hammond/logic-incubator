@@ -1,6 +1,6 @@
 import { Container, Rectangle } from "pixi.js";
 import { Direction } from "../input/UiAction";
-import { ButtonState } from "../skin/Skin";
+import { ButtonState, UiSound } from "../skin/Skin";
 import { ButtonStateOf } from "./ButtonLook";
 
 /**
@@ -9,7 +9,8 @@ import { ButtonStateOf } from "./ButtonLook";
  * does by overriding `Trigger` (a button emits `activate`, a checkbox toggles, a tab selects). Releasing the pointer outside the widget, or pressing a disabled one, does nothing.
  *
  * Events are `activate` (a press completed, by pointer or accept - not `click`, which Pixi emits itself on every interactive object, disabled ones included) and `focuschange`
- * (with whether it now has the keyboard or pad focus; a pointer hovering does not count) and `destroyed` (as it goes).
+ * (with whether it now has the keyboard or pad focus; a pointer hovering does not count) and `destroyed` (as it goes), and `sound` (with the `UiSound` it makes, which the
+ * `UiSystem` it's registered with plays).
  */
 export default abstract class UiControl extends Container {
     private hover = false;
@@ -40,9 +41,22 @@ export default abstract class UiControl extends Container {
     /** Draws the widget for `State`. Called whenever it changes (and by the subclass once it has built itself). */
     protected abstract Redraw(): void;
 
-    /** What a completed press does. By default: emit `activate`. */
+    /** What a completed press does. By default: sound like it (`PressSound`), and emit `activate`. */
     protected Trigger(): void {
+        if (this.PressSound) {
+            this.Sound(this.PressSound);
+        }
         this.emit("activate", this);
+    }
+
+    /** What a press sounds like - `confirm`, a checkbox's `toggle` - or null for a widget whose press is silent, or sounds by itself. */
+    protected get PressSound(): UiSound | null {
+        return "confirm";
+    }
+
+    /** Makes one of the skin's sounds (see `Skin.sounds`). */
+    protected Sound(sound: UiSound): void {
+        this.emit("sound", sound);
     }
 
     /** Offered a direction by the focus manager before focus moves; return true to take it (a slider's steps). Most widgets don't. */

@@ -27,6 +27,7 @@ configuration files and plugin interface. For explanations, examples and workflo
 [Asset errors](#asset-errors) ·
 [Loader and sound interfaces](#loader-and-sound-interfaces) ·
 [PixiSoundAdapter](#pixisoundadapter) ·
+[NamedSounds](#namedsounds) ·
 [LoadingScreen](#loadingscreen) ·
 [AssetFactory](#assetfactory) ·
 [Asset build tool](#asset-build-tool) ·
@@ -383,6 +384,7 @@ interface BundleHandle {
 | `IsDev` | `boolean` | The manifest was built without `--production`. |
 | `ManifestUrl` | `string` | Where `Init` read the manifest from (`""` if it was given one directly). |
 | `Catalogue()` | `{ name, atlases, ids }[]` | What the manifest holds, for tools: per bundle, its atlas names (`~atlas.<bundle>.<sheet>.<page>`) and every asset id. Empty before `Init`. |
+| `SoundIds()` | `SoundId[]` | Every sound in the manifest, in every bundle, loaded or not - what a volume setting goes over. Empty before `Init`. |
 | `Scope` | `string[]` | Bundles a bare sprite name resolves in, nearest first, `global` last. A copy. |
 
 ### Initialisation
@@ -421,7 +423,8 @@ in that window cancels the unload. Its dependencies are released then and unload
 | `FontName(id: FontId): string` | The font's `face` - what `BitmapText` is given as `font.name`. |
 | `PlaySound(id: SoundId, options?: SoundPlayOptions): Promise<void>` | Plays at once if loaded; otherwise loads, then plays unless `StopSound(id)` was called meanwhile. Rejects if loading fails; throws if no sound adapter was given. |
 | `StopSound(id: SoundId): void` | Stops playing instances and cancels a pending play. |
-| `SetSoundVolume(id: SoundId, volume: number): void` | How loud a sound is, 0 to 1, for what is playing now and what plays later (on top of a play's own `volume`). Does nothing for a sound that isn't loaded. |
+| `CanPlaySound(id: string): id is SoundId` | Whether `id` is a sound `PlaySound` can play now: in the manifest, of a bundle that is loaded or loading, with a sound adapter. Takes any string, for an id put together at run time (`NamedSounds`). |
+| `SetSoundVolume(id: SoundId, volume: number): void` | How loud a sound is, 0 to 1, for what is playing now and what plays later (on top of a play's own `volume`). Kept: a sound that isn't loaded yet gets it when it loads, and again each time its bundle loads again. |
 | `Reload(id: DataId \| BinaryId): Promise<void>` | Re-fetches (bypassing cache), replaces the value, emits `asset:reloaded`. Other kinds throw. |
 | `Stats()` | `{ loadJobs: number; bundles: { [name]: { refs, loaded, pinned, bytes } } }`. For the dev console and tests. |
 | `Destroy(): void` | See below. |
@@ -594,6 +597,29 @@ imports `pixi-sound` (an optional peer dependency of lib).
 | `Remove(alias)` | Removes a loaded sound at once. If it is **still being decoded**, the removal waits for the decode to finish (pixi-sound throws from its audio callback if the sound is destroyed under it). |
 
 Requires Web Audio (the file's bytes are passed to pixi-sound as an `ArrayBuffer`).
+
+---
+
+## NamedSounds
+
+`@logic-incubator/lib/assets/NamedSounds` (pure) - plays sounds by name, and skips quietly any name the build has no sound for, so a game can
+name its sounds before the files exist.
+
+```ts
+type NamedSoundPlayer = Pick<Assets, "Scope" | "CanPlaySound" | "PlaySound">;
+type NamedSoundsOptions = { random?: () => number; now?: () => number; gapMs?: number };   // Math.random, performance.now, 40
+
+const sounds = new NamedSounds(game.assets, options?);
+sounds.Play("arrow_shot");                       // true if the build had it; a bare name, looked up in the asset scope, nearest first
+sounds.Play("ui.confirm");                       // a name with its bundle: only there
+sounds.Play([shot.sound, table.heroShot]);       // the first the build has; undefined ones are passed over
+sounds.Find("arrow_shot"): SoundId[]             // what a name plays as, from the nearest bundle with any: itself and its takes
+sounds.Has(name): boolean
+```
+
+A sound can come as takes, `<name>_1`, `<name>_2`... (counted from 1 to the first missing): each play picks one at random, never the one
+just played. A name played again within `gapMs` is not started again (a dozen hits at once sound once). A sound that fails to load is one
+`console.warn` per id, not an error.
 
 ---
 
@@ -1242,13 +1268,23 @@ await relay.close();         // ends every connection and stops
 | `LEVEL_COMPLETED` | `"levelCompleted"` | `(hero)` - a hero reached an `EXIT` cell: the level is over, every hero comes back for the next start |
 | `GAME_PAUSED` | `"gamePaused"` | - (`DungeonMain.Pause()` stopped play) |
 | `GAME_RESUMED` | `"gameResumed"` | - (`DungeonMain.Resume()` set it going again) |
-| `MONSTER_KILLED` | `"monsterKilled"` | `(type, x, y, hero)` - `hero` is whose shot killed it (-1 for none) |
+| `MONSTER_KILLED` | `"monsterKilled"` | `(type, x, y, hero, boss)` - `hero` is whose shot killed it (-1 for none); `boss`: it was placed by a `BOSS` brush |
+| `MONSTER_HIT` | `"monsterHit"` | `(type)` - a shot hit a monster and it lived |
+| `MONSTER_SPAWNED` | `"monsterSpawned"` | `(type)` - a spawner made a monster |
+| `BOSS_WOKE` | `"bossWoke"` | `(type)` - a boss woke: a hero came near, or shot it |
+| `SPAWNER_HIT` | `"spawnerHit"` | `(spawner)` - a shot hit a spawner and it stands |
 | `SPAWNER_DESTROYED` | `"spawnerDestroyed"` | `(spawner)` |
-| `PICKUP_COLLECTED` | `"pickupCollected"` | `(hero, tileX, tileY)` - a hero picked up what was on that cell; once for each cell, when their sprite reaches more than one in a step (`PickupCellsReached`) |
+| `SHOT_FIRED` | `"shotFired"` | `(shot: ShotSetup, hero)` - by that hero, or a monster (-1) |
+| `SHOT_STOPPED` | `"shotStopped"` | `(shot: ShotSetup)` - against a wall, a closed door or the dark (not a spawner it damages, a monster or a hero) |
+| `LIGHT_SPELL_CAST` | `"lightSpellCast"` | `(hero)` - their mage-light is lit |
+| `DOOR_OPENED` / `DOOR_CLOSED` | `"doorOpened"` / `"doorClosed"` | `(sprite, index)` - door `index` of `Level.doors` opened or shut, and is drawn as `sprite` now (`Level.SetDoorOpen`, on every machine) |
+| `PICKUP_COLLECTED` | `"pickupCollected"` | `(hero, tileX, tileY, collected: CollectedPickup[])` - a hero picked up what was on that cell, each thing with the sprite it was drawn as; once for each cell, when their sprite reaches more than one in a step (`PickupCellsReached`) |
 | `KEYS_DROPPED` | `"keysDropped"` | `(hero, tileX, tileY)` - a fallen hero's keys landed on that cell |
 | `NPC_BUMPED` | `"npcBumped"` | `(hero, tileX, tileY)` - a hero walked into the NPC on that cell (a `DIALOG` brush), where talking is on (`World.SetTalk`); `DungeonMain` starts the talk |
 | `TALK_STARTED` | `"talkStarted"` | `(hero, tileX, tileY)` - a talk with that cell's NPC began: play holds still until `TALK_ENDED` |
 | `TALK_ENDED` | `"talkEnded"` | - (the talk is over, play goes on) |
+| `TALK_LINE` | `"talkLine"` | - (the talk went on to its next line; `TALK_STARTED` is its first) |
+| `NPC_SHOUTED` | `"npcShouted"` | `(tileX, tileY)` - the NPC on that cell called out something new (`ShoutView`) |
 | `QUEST_UPDATED` | `"questUpdated"` | `(id, state: QuestState, progress, was: QuestState)` - one of the level's quests was given, moved on, met or handed in |
 
 `hero` is always a hero's slot, from 0 - their place in `DungeonMainOptions.heroes`. On an online guest every one of these about play comes from
@@ -1281,6 +1317,8 @@ type DungeonMainOptions = {
     heroes?: () => ReadonlyArray<HeroSlot> | undefined;   // who plays, one slot per hero (hero 0 first), asked on every start and restart; none or empty: one hero
     level: () => LevelFile | undefined;                   // asked on every start and restart
     levelBundle?: () => string | undefined;               // the asset bundle the level plays in
+    music?: () => SoundId | undefined;                    // the track the level plays to, on a loop while the scene is showing, asked on every start and restart; the same track carries on
+    sounds?: SoundTable;                                  // what play sounds like where the thing it happens to names no sound of its own (see SoundBoard)
     seed?: () => number | undefined;                      // what the level's random numbers start from, asked on every start and restart; undefined: a new one
     net?: () => NetPlay | undefined;                      // online: the run this machine plays in (CreateNetPlay), asked on every start and restart; undefined: offline
     playerSprite?: () => string | undefined;              // a lone hero's animation, in place of player.sprite (only without heroes)
@@ -1353,8 +1391,8 @@ given the host's seed, spawn the same monsters.
 Lifecycle: `OnInitialise` builds the `Level`, attaches `Camera`, `TileMapView`, `Effects` (into the camera) and `Hud`, creates the `EntityRenderer` and
 the `World`, binds asset metadata (`BindAssetMetadata`) and listens for `LEVEL_CREATED`, `ALL_PLAYERS_DIED` and `LEVEL_COMPLETED`. `OnShow` and each
 restart (1.5 s after the level ends, or when told to with `manualRestart`) call `Reload`: prepare the assets (`LevelAssets.Prepare` - refresh dev metadata,
-then `UseLevelBundle(levelBundle())`), then `Level.LoadLevel(level())` unless the scene was destroyed meanwhile - so after `LEVEL_COMPLETED` a game moves
-on by having `level` (and `levelBundle`) return the next one. On `LEVEL_CREATED` it resets the world for the slots `heroes` gives and keeps one
+then `UseLevelBundle(levelBundle())`), then `Level.LoadLevel(level())` and `LevelMusic.Play(music())` unless the scene was destroyed meanwhile - so after `LEVEL_COMPLETED` a game moves
+on by having `level` (and `levelBundle`, and `music`) return the next one. The music plays only while the scene is shown (a `WhileShown`), so it stops behind the editor or the title. On `LEVEL_CREATED` it resets the world for the slots `heroes` gives and keeps one
 `HeroView` per slot from level to level. `OnDestroy` destroys the hero views, disposes the level and releases the level bundle (when `levelBundle` was given).
 
 ---
@@ -1487,6 +1525,7 @@ type AssetMetadata = {
     light?: LightValue;
     spawner?: SpawnerValue;
     pickup?: PickupValue;
+    sound?: string;             // by name (NamedSounds): a pickup's as it's picked up, a door sprite's as the door turns into it (see SoundBoard)
 };
 type AssetMetadataMap = { [assetName: string]: AssetMetadata };
 ```
@@ -1495,7 +1534,7 @@ type AssetMetadataMap = { [assetName: string]: AssetMetadata };
 
 | Method | Description |
 | --- | --- |
-| `Add(bundle, map)` | Adds or replaces a bundle's metadata. A `light` that isn't complete (`brightness`, `tint`, `range`, all finite numbers), a `blocksLight` that isn't a boolean or a `category` that isn't one of `AssetCategories` is dropped with a console warning naming the asset; the entry's other fields are kept. |
+| `Add(bundle, map)` | Adds or replaces a bundle's metadata. A `light` that isn't complete (`brightness`, `tint`, `range`, all finite numbers), a `blocksLight` that isn't a boolean, a `sound` that isn't a string or a `category` that isn't one of `AssetCategories` is dropped with a console warning naming the asset; the entry's other fields are kept. |
 | `Remove(bundle)` | |
 | `SetScope(chain: string[])` | The bundles searched, nearest first (then the unscoped bucket). |
 | `Load(map)` | Replaces everything with one unscoped map - for a game or test with metadata but no bundles. |
@@ -1518,6 +1557,36 @@ already loaded when bound), removed on `bundle:unloaded`, re-added on `asset:rel
 metadata: { Refresh() })`; `Prepare(bundle: string | undefined): Promise<boolean>` - in a dev build refreshes metadata first (failures ignored),
 then `UseLevelBundle`; resolves `false` (quietly if the game was destroyed, with a `console.error` otherwise) when the level can't be built;
 `true` if the game has no asset bundles at all.
+
+`@logic-incubator/engine/level/LevelMusic` (pure) - `default class LevelMusic`: `new LevelMusic(player: MusicPlayer)`, where
+`type MusicPlayer = Pick<Assets, "PlaySound" | "StopSound">`. `Play(track: SoundId | null)` - the track the level plays to, on a loop (null: none);
+`Show()` / `Hide()` - whether it can be heard. A track asked for again while it plays carries on; a different one stops the old first; a track
+that can't be played is a `console.warn`, not an error.
+
+`@logic-incubator/engine/SoundBoard` (pure) - what play sounds like. `DungeonMain` makes one over `NamedSounds(game.assets)` and plays it from
+the dispatcher while the scene is shown (`ListenWhileShown` on each of `SoundEvents`); an online guest hears the host's events as its own.
+
+```ts
+type SoundTable = {   // each a sound by name (NamedSounds); one left out, or with no file, is silent
+    heroShot?, monsterShot?, shotWall?, heroHurt?, heroDeath?, lightSpell?, keysDropped?, gameOver?, levelComplete?,
+    monsterHit?, monsterDeath?, monsterSpawn?, bossWake?, bossDeath?, spawnerHit?, spawnerBreak?, doorOpen?, doorClose?,
+    pickup?: Partial<Record<PickupKind, string>>, questGiven?, questProgress?, questDone?, talkStart?, talkLine?, shout?, pause?: string;
+};
+const SoundEvents: ReadonlyArray<string>;   // the events it plays for
+new SoundBoard({ sounds: Pick<NamedSounds, "Play">, table?: SoundTable, monster: type => MonsterDef | undefined, metadata: sprite => AssetMetadata | undefined })
+board.Heard(event: string, args: ReadonlyArray<unknown>): void
+```
+
+| Event | Plays the first the build has of |
+| --- | --- |
+| `SHOT_FIRED` | `shot.sound`, then `heroShot` (a hero's) or `monsterShot` |
+| `SHOT_STOPPED` | `shot.wallSound`, `shotWall` |
+| `MONSTER_HIT`, `MONSTER_SPAWNED`, `BOSS_WOKE` | its kind's `MonsterDef.sounds.hit` / `spawn` / `wake`, then `monsterHit` / `monsterSpawn` / `bossWake` |
+| `MONSTER_KILLED` | a boss: `bossDeath`, then as any other - its kind's `sounds.death`, `monsterDeath` |
+| `DOOR_OPENED`, `DOOR_CLOSED` | the `sound` of the sprite the door turns into (`AssetMetadata`), `doorOpen` / `doorClose` |
+| `PICKUP_COLLECTED` | for each thing collected: its sprite's `sound`, then `pickup[kind]` |
+| `QUEST_UPDATED` | `questGiven` (now active, it wasn't), `questProgress` (active, it was), `questDone` (complete or finished, it wasn't) |
+| the rest | `PLAYER_DAMAGED` `heroHurt`, `PLAYER_DIED` `heroDeath`, `LIGHT_SPELL_CAST` `lightSpell`, `KEYS_DROPPED` `keysDropped`, `ALL_PLAYERS_DIED` `gameOver`, `LEVEL_COMPLETED` `levelComplete`, `SPAWNER_HIT` `spawnerHit`, `SPAWNER_DESTROYED` `spawnerBreak`, `TALK_STARTED` `talkStart`, `TALK_LINE` `talkLine`, `NPC_SHOUTED` `shout`, `GAME_PAUSED` `pause` |
 
 ---
 
@@ -1648,7 +1717,10 @@ interface MonsterDef {
     contactCooldown: number;    // seconds between touches from one monster
     ranged?: Weapon;            // shoots at the nearest hero within `range` tiles, from where the heroes can see
     behaviour: () => IMonsterBehaviour;   // called once per monster spawned
+    sounds?: MonsterSounds;     // what it sounds like; its shot's are ranged's own
 }
+
+type MonsterSounds = { hit?: string; death?: string; spawn?: string; wake?: string };   // by name (NamedSounds); left out, the game's SoundTable has it
 
 interface IMonsterRoster<T extends MonsterType = MonsterType> {
     types: ReadonlyArray<T>;                  // listing order in the editor
@@ -1721,7 +1793,7 @@ plus `CreateSpawnerState` and `StepSpawner` (used by `Encounter`).
 
 ```ts
 type ProjectileOwner = "player" | "monster";
-type ShotSetup = { sprite: string; spriteAngle?: number; speed: number; damage: number; range: number; light?: LightValue };   // speed px per step (a 60th of a second); range in tiles; light: it glows as it flies
+type ShotSetup = { sprite: string; spriteAngle?: number; speed: number; damage: number; range: number; light?: LightValue; sound?: string; wallSound?: string };   // speed px per step (a 60th of a second); range in tiles; light: it glows as it flies; sound as it's fired, wallSound as it stops against a wall (see SoundBoard)
 type Weapon = ShotSetup & { cooldown: number };            // seconds between shots
 type WeaponDef = { icon: string; shot: Weapon };           // icon = the HUD weapon slot
 type Projectile = { id, x, y, px, py, vx, vy, owner, hero, damage, sprite, spriteAngle?, range, dead, light? };   // x, y its centre; px, py where it was before the last step; hero: the slot of the hero who fired it, -1 for a monster's
@@ -1775,7 +1847,7 @@ type EncounterOptions = {
 | `Flow: FlowField` | Walking distances as of the last `Update`. |
 | `Reset(seed?, heroes = 1)` | Starts over from the level's spawners (call on every `LEVEL_CREATED` - `World.Reset` does), with ids from 1 and its random numbers started again from `seed` (a new one if left out), unless the options brought their own `random`. The same seed, level and heroes' moves play out the same. Monsters' and spawners' hit points are multiplied by `PartyToughness(heroes)`, rounded up. |
 | `Seed` | What the random numbers started from at the last `Reset`. |
-| `Fire(from, direction, shot, owner, hero = -1, seq = -1)` | Adds a projectile; a hero's shot names them by slot (`hero`), which `MONSTER_KILLED` passes on, and by the `seq` of the input it was fired with (an online guest's own shot, which its stand-in waits for). Heroes' shots pass through each other - there's no friendly fire. Each `Projectile` keeps its `setup` (`ShotSetup`) and `seq`. |
+| `Fire(from, direction, shot, owner, hero = -1, seq = -1)` | Adds a projectile (`SHOT_FIRED`); a hero's shot names them by slot (`hero`), which `MONSTER_KILLED` passes on, and by the `seq` of the input it was fired with (an online guest's own shot, which its stand-in waits for). Heroes' shots pass through each other - there's no friendly fire. Each `Projectile` keeps its `setup` (`ShotSetup`) and `seq`. |
 | `Update(dt, seconds, players: EncounterPlayer[])` | One step: `dt` in frames (movement; 1 at 60 a second), `seconds` for timers. Only the living among `players` count: the flow field leads to the nearest of them, each monster steers for (and faces, and shoots at) the nearest in a straight line, a touch or a shot hurts the first it reaches, and the dead take no more hits. With none alive, nothing moves. |
 
 **Bosses.** `Reset` also places the level's `bosses` (`EncounterLevel.bosses`): each a `Monster` with `boss` set, its `quest`, and its own
@@ -1850,8 +1922,8 @@ size (`Encounter.Reset(seed, heroes)`).
 2. Doors open and shut by where the heroes in play stand (`UpdateDoors`, with `TeamCanOpen`), and the regions they can see are recomputed together.
 3. Each picks up what their sprite touches, in slot order, so the first there gets it: every cell `PickupCellsReached` gives for their `Figure`
    and `Tile` - a pickup whose art any part of theirs overlaps, as both are drawn, unless it's up or down a step too high to climb
-   (`IsHeightBlocked`), and anything on the cell they stand on. Each cell is collected whole (`CollectPickupsAt`, then `PICKUP_COLLECTED(hero, x, y)` with that
-   cell), as an online guest does it from the event. Each thing picked up is counted toward the quests (a `collect` happening, with the pickup's `quest`). With talking on, a hero who has just walked into
+   (`IsHeightBlocked`), and anything on the cell they stand on. Each cell is collected whole (`CollectPickupsAt`, then `PICKUP_COLLECTED(hero, x, y, collected)` with that
+   cell and what was on it), as an online guest does it from the event. A hero whose mage-light is lit by their step emits `LIGHT_SPELL_CAST(hero)`. Each thing picked up is counted toward the quests (a `collect` happening, with the pickup's `quest`). With talking on, a hero who has just walked into
    an NPC (`BumpedNpc`) emits `NPC_BUMPED` - once as they reach it, not again while they keep pushing.
 4. A hero on an exit ends the level: `Completed` is set, `LEVEL_COMPLETED(hero)` emitted, and nothing else happens this step.
 5. Each fires the shots they took, if any (`Encounter.Fire` with their slot and the input's `seq`), and the encounter steps with the heroes in
@@ -1977,7 +2049,7 @@ same level onto every machine, and the host's and guests' lobbies. All pure.
 `@logic-incubator/engine/net/NetMessages` - a kind byte, then JSON (a `level`'s body is its bytes).
 
 ```ts
-NetVersion = 6;     // a guest on another is refused ("version"); raise it whenever a message changes - this file's or PlayMessages' - or how a level sent in one is read
+NetVersion = 7;     // a guest on another is refused ("version"); raise it whenever a message changes - this file's or PlayMessages' - or how a level sent in one is read
 NameLength = 12;
 
 type LobbySeat = { peer: number; name: string; character: string | null };   // host's seat first; character: a game's id, null while choosing
@@ -2151,7 +2223,7 @@ type NetLevelContext = {
 
 `@logic-incubator/engine/net/HostSession`, `GuestSession` - both `extends PlaySession` (`net/PlaySession`: listens to the session's messages and
 departures, answers pings and pings its peers once a second, keeping each one's round trip; sends each message by a direct link's fast
-lane when `MayBeLost(message)` - inputs, pings, pongs, and a snapshot with no events - and reliably otherwise; `BytesText(bytes)` and
+lane when `MayBeLost(message)` - inputs, pings, pongs, and a snapshot with no events but fleeting ones (`IsFleetingEvent`) - and reliably otherwise; `BytesText(bytes)` and
 `ByteRate` for `Stats`).
 
 | | Host | Guest |
@@ -2161,6 +2233,7 @@ lane when `MayBeLost(message)` - inputs, pings, pongs, and a snapshot with no ev
 | A snapshot | - | Its events, then the doors and the world - but a snapshot no newer than the newest it has (overtaken on a link's fast lane) is only its events. |
 | `Frame` | Pings. | Pings; moves the `PlayClock` on; samples the `Replica`; puts the other heroes where they were at that moment; settles the correction; updates what's seen. |
 | `Record` | Turns the engine's events into `NetEvent`s for the next snapshot (`QUEST_UPDATED` into a `quest` event, by its index in `World.quests`). | - |
+| Shots and the light spell | - | Its own hero's `SHOT_FIRED` and `LIGHT_SPELL_CAST` it emits as it fires or casts, and skips the host's word on them; another's `fired` of a shot kind it hasn't been told of yet (its snapshot overtaken) goes unheard. |
 | A `quest` event | - | `QuestLog.Follow(index, state, progress)` - its quests are the host's - and `QUEST_UPDATED`, unless it's catching up. |
 | `Restart` | The next round: tells every guest, forgets their inputs. | - (a `restart` message calls `restart`) |
 | A guest leaves (`leave`, from its `End`) | `World.RemoveHero` and a snapshot at once. | (the host leaving closes the lobby) |
@@ -2185,8 +2258,11 @@ type PingMessage = { t: "ping" | "pong"; id: number };
 type CatchUpMessage = { t: "catch-up"; round: number; events: NetEvent[] };   // host -> a guest back in: the round, every lasting event in it, then its end if it's over
 type LeaveMessage = { t: "leave" };                                          // guest -> host: leaving for good
 type NetEvent = pickup | keys | spawner | killed | damaged | died | all-died | completed | shot | quest   // the engine's events, and a new kind of shot's setup
+             | fired | stopped | hit | spawned | woke | spawner-hit | cast   // only heard: SHOT_FIRED (shot by its number, hero), SHOT_STOPPED, MONSTER_HIT, MONSTER_SPAWNED, BOSS_WOKE, SPAWNER_HIT, LIGHT_SPELL_CAST
                                          // quest: { e: "quest"; index; state: QuestState; progress } - quest index of the level's moved on (QUEST_UPDATED)
+                                         // killed carries boss; pickup carries no more than the cell - a guest finds what was there on its own copy
 IsLastingEvent(event): boolean           // pickup, keys, spawner, shot, quest - what changes the level or a hero for good, and goes in a catch-up
+IsFleetingEvent(event): boolean          // fired, stopped, hit, spawned, woke, spawner-hit, cast - a sound lost is nothing to wait for
 
 QuantiseInput(input, seq): IPlayerInput   // what the host will have of it: each axis to 1/127 - a guest steps its own hero with this, so both agree
 ```
@@ -2341,6 +2417,7 @@ are PascalCase like the rest.
 | `Track(widget: { Update(ms) }): () => void` | Calls `widget.Update(ms)` every frame while the system is active (dialogue typing, toasts, a text field's caret, a tile marker). |
 | `RegisterScroll(view): () => void` | The mouse wheel scrolls `view` while the pointer is over it. |
 | `BindTabs(tabs, scope?)` | The tab keys (Q and E, the pad's shoulder buttons) step through a `UiTabs`. |
+| Sounds | It plays the skin's `sounds` (`UiTheme.Sound`) while active: `focus` as the player moves focus to another control (keys, pad or pointer; a screen putting it on its first item makes none) or the tab keys step; `back` as a scope's `onCancel` takes a cancel; and each registered control's own (its `sound` event). |
 | `SetActive(active)` / `Destroy()` | Whether it listens (a scene's UI shouldn't answer keys while another scene is up); tear-down. |
 
 Keys: arrows and WASD move, Enter and Space accept, Escape and Backspace cancel, Q/E and Page Up/Down step tabs. Pad: d-pad and left stick move (past a dead zone of 0.5), A accepts, B and Start cancel, the
@@ -2352,14 +2429,15 @@ shoulder buttons step tabs. Held directions repeat (350 ms, then every 120 ms).
 
 | Member | Meaning |
 | --- | --- |
-| `Skin` | `{ name, bundle, scale, metrics?, fonts, colours, buttons, panels, borderStyles, bars, checkboxes?, radios?, sliders?, scrollbars?, tabs?, fields?, slots?, tooltips?, dialogues?, toasts?, windows?, iconRows?, menus?, selectors?, cursors?, playerFrames?, abilities?, skillTrees?, tileMarkers? }` - each a record of named variants. `assets/ui/data/skin.json` is the game skin; `ParseSkin` turns its `"#rrggbb"` colours into numbers. |
+| `Skin` | `{ name, bundle, scale, metrics?, fonts, colours, buttons, panels, borderStyles, bars, checkboxes?, radios?, sliders?, scrollbars?, tabs?, fields?, slots?, tooltips?, dialogues?, toasts?, windows?, iconRows?, menus?, selectors?, cursors?, playerFrames?, abilities?, skillTrees?, tileMarkers?, sounds? }` - each a record of named variants. `assets/ui/data/skin.json` is the game skin; `ParseSkin` turns its `"#rrggbb"` colours into numbers. |
 | `NineSliceSkin` | `{ frame, insets, edges?, centre?, outset? }`: `edges` and `centre` are `"stretch"` or `"tile"`; `outset` draws the frame beyond the widget's box (a selected tab standing proud) without changing its size. |
 | Optional parts | `BarSkin.fillMode: "tile"` repeats a patterned fill; `SliderSkin.vertical` and `ScrollbarSkin.horizontal` are art for the other axis (without them the widget is turned on its side); `ScrollbarSkin.trackThickness` (a rail thinner than the grip) and `thumbLength` (a fixed grip); `TabSkin.width` (tabs of one size) and `vertical` (a column of side tabs); `TooltipSkin.tailDown`/`tailUp` are optional; `DialogueSkin.portraitBeside`, `portraitPadding`, `portraitOverlap` and `nameFrame`, `nameHeight`, `namePadding`, `nameInset`, `nameOffset`, `nameRaise` (a name plate across the box's top); `WindowSkin.titleRaise`, and `close.icon` is optional (a button whose art is the glyph). |
 | `Skin.metrics` | Spacings no frame or font sets, by name, in UI pixels: `iconGap`, `lineGap`, `slotGap`, `scrollGap`, `scrollMargin`, `scrollStep`, `caretWidth`, `caretMargin`, `tailMargin`, `tailOverlap`, `slide`, `bob`, `ringGap`, `ringThickness`, `statusGap`. A skin may leave any out. |
+| `Skin.sounds` | `Partial<Record<UiSound, string>>`, `type UiSound = "focus" \| "confirm" \| "back" \| "slider" \| "toggle"`: each a sound's name in the skin's bundle (`confirm` is `ui.confirm`). One left out, or with no file in the bundle, is silent. The game skin names each after itself. |
 | `LoadSkin(assets, bundle = "ui"): Skin` | The data asset `<bundle>.skin`, parsed, with each nine-slice's insets taken from `<bundle>.frames` (the frame index the art tools write) unless the skin gives them. |
-| `GameUiAssets(assets, bundle): UiAssets` | The skin's frames and fonts as the game's loaded bundle has them. |
+| `GameUiAssets(assets, bundle): UiAssets` | The skin's frames, fonts and sounds as the game's loaded bundle has them (`UiAssets.PlaySound?(name)`, through `NamedSounds`; a `UiAssets` without it is a silent UI). |
 | `ValidateLoadedSkin(skin, assets): string[]` / `ValidateSkin` | What is wrong with a skin: a missing frame or font, an inset that leaves nothing of its frame, a pointer's hot spot outside its picture, a tooltip with one tail. Empty when fine. |
-| `new UiTheme(skin, assets, host?)` | `Scale`, `Texture(frame)`, `HasTexture(frame)`, `FontName(key)`, `FontSize(key)`, `Colour(name)`, `Metric(name, fallback)`; `host` is `{ view: HTMLCanvasElement }` (only `UiTextInput` needs it). |
+| `new UiTheme(skin, assets, host?)` | `Scale`, `Texture(frame)`, `HasTexture(frame)`, `FontName(key)`, `FontSize(key)`, `Colour(name)`, `Metric(name, fallback)`, `Sound(sound: UiSound)` (the skin's, if it names one); `host` is `{ view: HTMLCanvasElement }` (only `UiTextInput` needs it). |
 
 ## UiCursor
 
@@ -2376,7 +2454,8 @@ shoulder buttons step tabs. Held directions repeat (350 ms, then every 120 ms).
 
 `@logic-incubator/ui/widgets/<Name>`. Every widget is built from a theme and a skin variant (`new UiSlider(theme, "default", 140, options)`) and sizes itself from the skin. A `UiControl` is a `Container` with
 hover / pressed / disabled / focused states (`Enabled`, `Focused`, `State`, `Activate()`); its events are Pixi events: `activate` (a press completed by pointer or accept - not `click`, which Pixi emits itself),
-`focuschange`, `destroyed`. Pixi 5.2.1 doesn't announce a destroyed object, so `UiControl` and `UiScrollView` emit `destroyed` themselves; destroying a panel, window, menu or grid destroys what is in it.
+`focuschange`, `destroyed`, and `sound` (the `UiSound` it makes, for its `UiSystem` to play): a press makes its `PressSound` (`confirm`; a checkbox's or radio's
+`toggle`; none for a slider, selector, scrollbar or dialogue), and a slider or selector stepping makes `slider`. A subclass calls `Sound(sound)` for one of its own. Pixi 5.2.1 doesn't announce a destroyed object, so `UiControl` and `UiScrollView` emit `destroyed` themselves; destroying a panel, window, menu or grid destroys what is in it.
 
 | Widget | Constructor and members | Events |
 | --- | --- | --- |

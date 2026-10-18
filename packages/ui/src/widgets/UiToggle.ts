@@ -28,6 +28,10 @@ export default abstract class UiToggle extends UiControl {
         return this.checked;
     }
 
+    protected get PressSound(): "toggle" {
+        return "toggle";
+    }
+
     set Checked(checked: boolean) {
         if (this.checked !== checked) {
             this.checked = checked;

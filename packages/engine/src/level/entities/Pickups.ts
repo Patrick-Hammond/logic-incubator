@@ -44,7 +44,9 @@ function IsWeaponDef(value: unknown): value is WeaponDef {
         typeof shot === "object" && shot !== null && typeof shot.sprite === "string" &&
         IsNumber(shot.speed) && IsNumber(shot.damage) && IsNumber(shot.range) && IsNumber(shot.cooldown) &&
         (shot.spriteAngle === undefined || IsNumber(shot.spriteAngle)) &&
-        (shot.light === undefined || IsCompleteLightValue(shot.light))
+        (shot.light === undefined || IsCompleteLightValue(shot.light)) &&
+        (shot.sound === undefined || typeof shot.sound === "string") &&
+        (shot.wallSound === undefined || typeof shot.wallSound === "string")
     );
 }
 

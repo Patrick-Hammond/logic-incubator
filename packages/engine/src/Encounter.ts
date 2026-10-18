@@ -9,7 +9,7 @@
 
 import { RectangleLike, Vec2, Vec2Like } from "@logic-incubator/lib/math/Geometry";
 import { PlayerSpeed, TileSize } from "./Constants";
-import { MONSTER_KILLED, PLAYER_DAMAGED, PLAYER_DIED, SPAWNER_DESTROYED } from "./Events";
+import { BOSS_WOKE, MONSTER_HIT, MONSTER_KILLED, MONSTER_SPAWNED, PLAYER_DAMAGED, PLAYER_DIED, SHOT_FIRED, SHOT_STOPPED, SPAWNER_DESTROYED, SPAWNER_HIT } from "./Events";
 import { IsHeightGap } from "./level/Depth";
 import type { Boss } from "./level/entities/Bosses";
 import { IMonsterBehaviour, Separation, Toward } from "./level/entities/Behaviours";
@@ -262,9 +262,10 @@ export default class Encounter implements EncounterView {
         return this.flow;
     }
 
-    /** Fires a shot from `from` (a centre, in pixels) along `direction` - a hero's names them by `hero`, their index, and online by `seq`, the input that fired it. */
+    /** Fires a shot from `from` (a centre, in pixels) along `direction` (`SHOT_FIRED`) - a hero's names them by `hero`, their index, and online by `seq`, the input that fired it. */
     Fire(from: Vec2Like, direction: Vec2Like, shot: ShotSetup, owner: ProjectileOwner, hero = -1, seq = -1): void {
         this.projectiles.push(CreateProjectile(from, direction, shot, owner, TileSize, this.nextId++, hero, seq));
+        this.options.emit(SHOT_FIRED, shot, hero);
     }
 
     /**
@@ -316,6 +317,7 @@ export default class Encounter implements EncounterView {
             if (cell && def && this.monsters.length < MaxMonsters) {
                 this.monsters.push(this.CreateMonster(type, def, cell, state));
                 RecordSpawn(state);
+                this.options.emit(MONSTER_SPAWNED, type);
             }
         });
     }
@@ -365,6 +367,7 @@ export default class Encounter implements EncounterView {
                     return;
                 }
                 m.asleep = false;
+                this.options.emit(BOSS_WOKE, m.type);
             }
             // A door that has shut on it overrides whatever it was after: out of the door first.
             const caught = this.ClosedDoorsUnder(m.position);
@@ -432,8 +435,9 @@ export default class Encounter implements EncounterView {
         this.projectiles.forEach(p => {
             const hitCell = StepProjectile(p, dt, blocked, TileSize);
             if (p.dead) {
-                if (hitCell && p.owner === "player") {
-                    this.HitSpawnerAt(hitCell, p.damage);
+                // A spawner it hits has a sound of its own; anything else it stops against, the shot's.
+                if (hitCell && !(p.owner === "player" && this.HitSpawnerAt(hitCell, p.damage))) {
+                    this.options.emit(SHOT_STOPPED, p.setup);
                 }
                 return;
             }
@@ -473,25 +477,34 @@ export default class Encounter implements EncounterView {
     private HurtMonster(m: Monster, damage: number, hero: number): void {
         m.hitPoints -= damage;
         m.hitFlash = HitFlashTime;
-        // A boss shot from afar is awake now.
-        m.asleep = false;
-        if (m.hitPoints <= 0) {
-            m.dead = true;
-            if (m.spawner) {
-                RecordDeath(m.spawner);
-            }
-            if (this.options.killed) {
-                this.options.killed(m, hero);
-            }
-            this.options.emit(MONSTER_KILLED, m.type, m.position.x, m.position.y, hero);
+        if (m.asleep) {
+            // A boss shot from afar is awake now.
+            m.asleep = false;
+            this.options.emit(BOSS_WOKE, m.type);
         }
+        if (m.hitPoints > 0) {
+            this.options.emit(MONSTER_HIT, m.type);
+            return;
+        }
+        m.dead = true;
+        if (m.spawner) {
+            RecordDeath(m.spawner);
+        }
+        if (this.options.killed) {
+            this.options.killed(m, hero);
+        }
+        this.options.emit(MONSTER_KILLED, m.type, m.position.x, m.position.y, hero, m.boss);
     }
 
-    private HitSpawnerAt(cell: Vec2Like, damage: number): void {
+    /** A hero's shot hit `cell`: the spawner on it, if any, takes the damage (`SPAWNER_HIT`, or `SPAWNER_DESTROYED`). Returns whether there was one, flinching or not. */
+    private HitSpawnerAt(cell: Vec2Like, damage: number): boolean {
         const state = this.spawners.find(s => !s.destroyed && s.spawner.cells.some(c => c.x === cell.x && c.y === cell.y));
-        // An indestructible one doesn't flinch - so it reads as such.
-        if (!state || state.spawner.value.hitPoints === 0) {
-            return;
+        if (!state) {
+            return false;
+        }
+        // An indestructible one doesn't flinch - so it reads as such - and sounds like the wall it might as well be.
+        if (state.spawner.value.hitPoints === 0) {
+            return false;
         }
         this.spawnerFlash.set(state, HitFlashTime);
         if (DamageSpawner(state, damage)) {
@@ -499,7 +512,10 @@ export default class Encounter implements EncounterView {
             this.level.RemoveSpawner(state.spawner);
             this.flow.MarkDirty();
             this.options.emit(SPAWNER_DESTROYED, state.spawner);
+        } else {
+            this.options.emit(SPAWNER_HIT, state.spawner);
         }
+        return true;
     }
 
     private HurtPlayer(player: EncounterPlayer, damage: number): void {

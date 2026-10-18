@@ -1,13 +1,17 @@
+import type {SoundId} from "@logic-incubator/lib/assets/AssetIds";
+import NamedSounds from "@logic-incubator/lib/assets/NamedSounds";
 import GameComponent from "@logic-incubator/lib/game/GameComponent";
 import AssetFactory from "@logic-incubator/lib/loading/AssetFactory";
 import {Vec2Like} from "@logic-incubator/lib/math/Geometry";
 import { TileSize } from "./Constants";
-import {ALL_PLAYERS_DIED, GAME_PAUSED, GAME_RESUMED, LEVEL_COMPLETED, LEVEL_CREATED, NPC_BUMPED, TALK_ENDED, TALK_STARTED} from "./Events";
+import {ALL_PLAYERS_DIED, GAME_PAUSED, GAME_RESUMED, LEVEL_COMPLETED, LEVEL_CREATED, NPC_BUMPED, TALK_ENDED, TALK_LINE, TALK_STARTED} from "./Events";
 import FixedStep, {StepSeconds} from "./FixedStep";
 import PlayerControl, {DefaultInput, InputDevice} from "./input/PlayerControl";
 import AssetMetadataStore from "./level/AssetMetadata";
 import { AssetMetadataBinding, BindAssetMetadata } from "./level/AssetMetadataBinding";
 import LevelAssets from "./level/LevelAssets";
+import LevelMusic from "./level/LevelMusic";
+import MonsterRoster from "./level/entities/MonsterRoster";
 import {LightSpell} from "./level/entities/LightSpell";
 import {ArtBounds, SpriteSize, WeaponDef} from "./level/entities/Projectiles";
 import Level from "./level/Level";
@@ -15,6 +19,7 @@ import {LevelFile} from "./level/LevelFormat";
 import { MovingLight } from "./level/SceneLights";
 import type {NetPlay} from "./net/NetPlay";
 import World from "./sim/World";
+import SoundBoard, {SoundEvents, SoundTable} from "./SoundBoard";
 import DialogRunner, {DialogLine} from "./story/DialogRunner";
 import type {EncounterView} from "./Encounter";
 import {Camera} from "./view/Camera";
@@ -92,6 +97,18 @@ export type DungeonMainOptions = {
      */
     levelBundle?: () => string | undefined;
     /**
+     * The track the level plays to, on a loop - usually one in `levelBundle`'s bundle - asked for with each start like
+     * `level`. It plays while the scene is showing and stops when it's hidden; a restart, or a next level, that asks for
+     * the same track lets it carry on rather than start it over. Undefined, or without it, the level has no music.
+     */
+    music?: () => SoundId | undefined;
+    /**
+     * What play sounds like, where the thing it happens to doesn't name its own sound (see `SoundBoard`): each by name, a
+     * name the build has no sound for being skipped, so every one can be named before its file exists. Without it, only
+     * what names its own (shots, monsters, sprites' metadata) is heard.
+     */
+    sounds?: SoundTable;
+    /**
      * The animation to draw a lone hero with (see `heroes`), asked for each time a level starts, like `level`:
      * when it returns one it is used in place of `player.sprite` - how a game lets the player pick a character.
      */
@@ -140,6 +157,7 @@ export class DungeonMain extends GameComponent {
     /** The centres of the heroes who hear the NPCs shout - gathered into the same array each frame (see `Hearers`). */
     private readonly hearers: Vec2Like[] = [];
     private levelAssets: LevelAssets | undefined;
+    private music: LevelMusic | undefined;
     /** Seconds until the next start after the level ended - 0 while it's being played. */
     private restartIn = 0;
     private restarting = false;
@@ -269,6 +287,16 @@ export class DungeonMain extends GameComponent {
         const metadata: AssetMetadataBinding = BindAssetMetadata(this.game.assets, AssetMetadataStore.inst);
         this.Own(() => metadata.Dispose());
         this.levelAssets = new LevelAssets(this.game.assets, metadata);
+        const music = this.music = new LevelMusic(this.game.assets);
+        this.WhileShown(() => music.Show(), () => music.Hide());
+        const board = new SoundBoard({
+            sounds: new NamedSounds(this.game.assets),
+            table: this.options.sounds,
+            monster: type => MonsterRoster.inst.Def(type),
+            metadata: sprite => AssetMetadataStore.inst.Get(sprite)
+        });
+        // What happens while the dungeon isn't showing (the editor's own goings-on) isn't heard.
+        SoundEvents.forEach(event => this.ListenWhileShown(this.game.dispatcher, event, (...args: unknown[]) => board.Heard(event, args)));
 
         this.Listen(this.game.dispatcher, LEVEL_CREATED, this.OnLevelCreated);
         // The level is over either way: everyone down, or a hero out.
@@ -297,7 +325,7 @@ export class DungeonMain extends GameComponent {
             this.game.assets.UseLevelBundle().catch(() => undefined);
         }
         // Drops anything a `Reload` still waiting on its assets would otherwise carry on with.
-        this.level = this.camera = this.world = this.renderer = this.hud = this.tracker = this.dialog = this.effects = this.shouts = this.levelAssets = undefined;
+        this.level = this.camera = this.world = this.renderer = this.hud = this.tracker = this.dialog = this.effects = this.shouts = this.levelAssets = this.music = undefined;
         this.talk = null;
     }
 
@@ -496,6 +524,7 @@ export class DungeonMain extends GameComponent {
     private TalkOn(line: DialogLine | null): void {
         if (line) {
             this.dialog.Say(line);
+            this.game.dispatcher.emit(TALK_LINE);
         } else {
             this.EndTalk();
         }
@@ -590,8 +619,8 @@ export class DungeonMain extends GameComponent {
     }
 
     /**
-     * Gets the level's assets ready (see `LevelAssets`), then builds the level - at the start of
-     * every visit and after every restart.
+     * Gets the level's assets ready (see `LevelAssets`), then builds the level and puts its music on - at
+     * the start of every visit and after every restart.
      */
     private async Reload(): Promise<void> {
         const ready = await this.levelAssets.Prepare(this.options.levelBundle && this.options.levelBundle());
@@ -599,6 +628,7 @@ export class DungeonMain extends GameComponent {
         // The scene may have been destroyed while the assets loaded.
         if (ready && file && this.level) {
             this.level.LoadLevel(file);
+            this.music.Play((this.options.music && this.options.music()) || null);
         }
     }
 }

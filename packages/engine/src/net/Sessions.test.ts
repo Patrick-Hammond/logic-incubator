@@ -6,7 +6,7 @@ import { LinkMaker, PeerLink, PeerLinkBase } from "@logic-incubator/lib/net/Peer
 import { RelayHost } from "@logic-incubator/lib/net/RelayRooms";
 import RelaySession from "@logic-incubator/lib/net/RelaySession";
 import { TileSize } from "../Constants";
-import { ALL_PLAYERS_DIED, PICKUP_COLLECTED, QUEST_UPDATED } from "../Events";
+import { ALL_PLAYERS_DIED, PICKUP_COLLECTED, QUEST_UPDATED, SHOT_FIRED, SHOT_STOPPED } from "../Events";
 import type { IPlayerInput } from "../input/PlayerControl";
 import { Chase } from "../level/entities/Behaviours";
 import MonsterRoster, { MonsterDef } from "../level/entities/MonsterRoster";
@@ -19,6 +19,9 @@ import GuestSession from "./GuestSession";
 import HostSession, { AwayAfterMs, HoldAwayMs, WaitForGuestsMs } from "./HostSession";
 import type { LobbySeat } from "./NetMessages";
 import type { NetPlay } from "./NetPlay";
+
+/** What a guest hears was collected from the test level's gold - found on its own copy of the level. */
+const Gold5 = [expect.objectContaining({ value: expect.objectContaining({ kind: "gold", amount: 5 }) })];
 
 /**
  * Whole online runs, headless: a host and its guests, each with its own world on its own copy of the level,
@@ -242,7 +245,7 @@ describe("an online run", () => {
         expect(guest.level.pickups).toEqual([]);
         expect(run.host.world.Heroes[1].Gold.amount).toBe(5);
         expect(guest.world.Heroes[1].Gold.amount).toBe(5);
-        expect(guest.events).toContainEqual([PICKUP_COLLECTED, 1, 4, 3]);
+        expect(guest.events).toContainEqual([PICKUP_COLLECTED, 1, 4, 3, Gold5]);
         // Opened as the heroes went through, and shut behind them.
         expect(guest.level.doorVersion).toBeGreaterThanOrEqual(2);
         expect(guest.level.door.isOpen).toBe(run.host.level.door.isOpen);
@@ -261,7 +264,7 @@ describe("an online run", () => {
         expect(run.host.level.pickups).toEqual([]);
         expect(guest.level.pickups).toEqual([]);
         expect(guest.world.Heroes[0].Gold.amount).toBe(5);
-        expect(guest.events).toContainEqual([PICKUP_COLLECTED, 0, 4, 3]);
+        expect(guest.events).toContainEqual([PICKUP_COLLECTED, 0, 4, 3, Gold5]);
     });
 
     it("draws the host's monsters on each guest", async () => {
@@ -272,6 +275,23 @@ describe("an online run", () => {
         const replica = run.guests[0].session.Entities!;
         expect(replica.monsters).toHaveLength(1);
         expect(replica.monsters[0].def).toBe(Walker);
+    });
+
+    it("lets each guest hear the shots fired: its own as it fires them, the others' as the host says - each once", async () => {
+        await run.Open(2);
+        await run.BeginAll();
+        await run.Frames(30, () => undefined);
+        await run.Frames(1, () => Input(0, 0, { firing: true }));
+        await run.Frames(90, () => undefined);
+        const guest = run.guests[0];
+        const fired = guest.events.filter(event => event[0] === SHOT_FIRED);
+        // Its own first, at once - the host's word on it isn't heard again.
+        expect(fired[0]).toEqual([SHOT_FIRED, BOW.shot, 1]);
+        expect(fired.map(event => event[2]).sort()).toEqual([0, 1, 2]);
+        fired.forEach(event => expect(event[1]).toEqual(BOW.shot));
+        // Every one of them is heard stopping, as the host's do.
+        expect(run.host.events.filter(event => event[0] === SHOT_STOPPED)).toHaveLength(3);
+        expect(guest.events.filter(event => event[0] === SHOT_STOPPED)).toEqual([[SHOT_STOPPED, BOW.shot], [SHOT_STOPPED, BOW.shot], [SHOT_STOPPED, BOW.shot]]);
     });
 
     it("takes a guest's hero out when they leave, on the host and every other guest", async () => {
@@ -537,7 +557,7 @@ describe("an online run", () => {
             const guest = run.guests[0];
             expect(run.host.level.pickups).toEqual([]);
             expect(guest.level.pickups).toEqual([]);
-            expect(guest.events).toContainEqual([PICKUP_COLLECTED, 0, 4, 3]);
+            expect(guest.events).toContainEqual([PICKUP_COLLECTED, 0, 4, 3, Gold5]);
         });
 
         it("draws from the newest snapshot, though an older one comes after it - and does what happened in that", async () => {

@@ -3,7 +3,7 @@ import Game from "@logic-incubator/lib/game/Game";
 import AssetFactory from "@logic-incubator/lib/loading/AssetFactory";
 import {Rectangle, RectangleLike, Vec2Like} from "@logic-incubator/lib/math/Geometry";
 import { AnimationSpeed, TileSize } from "../Constants";
-import {LEVEL_LOADED} from "../Events";
+import {DOOR_CLOSED, DOOR_OPENED, LEVEL_LOADED} from "../Events";
 import AssetMetadataStore from "./AssetMetadata";
 import {HeightAt} from "./Depth";
 import {DescribeDialogErrors, DialogScript, ParseDialog} from "../story/DialogScript";
@@ -274,14 +274,16 @@ export default class Level {
 
     /**
      * Opens or shuts door `index` (of `doors`) as it's told, whoever stands where - for an online guest, whose doors
-     * do what the host's snapshots say (see `GuestSession`). Does nothing if it already is.
+     * do what the host's snapshots say (see `GuestSession`) - and says so (`DOOR_OPENED`, `DOOR_CLOSED`). Does nothing if it already is.
      */
     SetDoorOpen(index: number, open: boolean): void {
         const door = this.doors[index];
         if (door && open !== door.isOpen) {
             door.isOpen = open;
-            door.tile.texture = AssetFactory.inst.CreateTexture(open ? door.openSprite : door.closedSprite);
+            const sprite = open ? door.openSprite : door.closedSprite;
+            door.tile.texture = AssetFactory.inst.CreateTexture(sprite);
             this.doorVersion++;
+            Game.inst.dispatcher.emit(open ? DOOR_OPENED : DOOR_CLOSED, sprite, index);
         }
     }
 

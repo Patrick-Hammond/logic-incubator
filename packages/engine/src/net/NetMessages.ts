@@ -9,7 +9,7 @@
 import { ChatLength, ChatLine } from "./Chat";
 
 /** The version of these messages: a guest on another is turned away (`refused`, "version"). Raise it whenever a message changes, or how a level sent in one is read - a guest has to build the same spawners and the rest as the host. */
-export const NetVersion = 6;
+export const NetVersion = 7;
 
 /** The most characters a player's name keeps. */
 export const NameLength = 12;

@@ -83,6 +83,11 @@ export default class Replica implements EncounterView {
         this.shots[index] = setup;
     }
 
+    /** The kind of shot the host numbered `index` - undefined if it hasn't been told of it yet. */
+    Shot(index: number): ShotSetup | undefined {
+        return this.shots[index];
+    }
+
     /**
      * Keeps a snapshot to draw from, and settles the stand-ins against it: one the host's own shot has shown up
      * for flies on until that's gone; one the host has played the input of, yet shows no shot for, goes (it never

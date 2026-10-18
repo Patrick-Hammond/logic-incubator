@@ -100,8 +100,8 @@ export type NetEvent =
     | { e: "keys"; hero: number; x: number; y: number }
     /** The spawner at `index` (of the level's spawners, as it started) was shot to pieces (`SPAWNER_DESTROYED`). */
     | { e: "spawner"; index: number }
-    /** `MONSTER_KILLED` - `type` by its place in the roster. */
-    | { e: "killed"; type: number; x: number; y: number; hero: number }
+    /** `MONSTER_KILLED` - `type` by its place in the roster, and whether it was a boss. */
+    | { e: "killed"; type: number; x: number; y: number; hero: number; boss: boolean }
     | { e: "damaged"; damage: number; hitPoints: number; hero: number }
     | { e: "died"; hero: number }
     | { e: "all-died" }
@@ -109,7 +109,21 @@ export type NetEvent =
     /** A kind of shot not seen before in this run: `ProjectileSnapshot.shot` numbers it from now on. */
     | { e: "shot"; index: number; setup: ShotSetup }
     /** The level's quest at `index` (of its quests, in order) is now in `state`, `progress` along (`QUEST_UPDATED`). */
-    | { e: "quest"; index: number; state: QuestState; progress: number };
+    | { e: "quest"; index: number; state: QuestState; progress: number }
+    /** A shot was fired (`SHOT_FIRED`) - what as, by its number (see `shot`), and by which hero, -1 for a monster. */
+    | { e: "fired"; shot: number; hero: number }
+    /** A shot stopped against a wall (`SHOT_STOPPED`). */
+    | { e: "stopped"; shot: number }
+    /** A monster was hit and lived (`MONSTER_HIT`) - `type` by its place in the roster. */
+    | { e: "hit"; type: number }
+    /** A spawner made a monster (`MONSTER_SPAWNED`). */
+    | { e: "spawned"; type: number }
+    /** A boss woke (`BOSS_WOKE`). */
+    | { e: "woke"; type: number }
+    /** The spawner at `index` was hit and stands (`SPAWNER_HIT`). */
+    | { e: "spawner-hit"; index: number }
+    /** Hero `hero` cast their light spell (`LIGHT_SPELL_CAST`). */
+    | { e: "cast"; hero: number };
 
 /** Host to every guest, 20 times a second and as a level ends: the world after step `tick` of level `round`, and what happened since the last one. */
 export type Snapshot = {
@@ -149,7 +163,15 @@ export function IsLastingEvent(event: NetEvent): boolean {
     return event.e === "pickup" || event.e === "keys" || event.e === "spawner" || event.e === "shot" || event.e === "quest";
 }
 
-const EventKinds = ["pickup", "keys", "spawner", "killed", "damaged", "died", "all-died", "completed", "shot", "quest"];
+/**
+ * Whether `event` is only heard - a shot fired, a hit - and changes nothing a guest shows for longer than a sound: a
+ * snapshot with only these in it may still go by a direct link's fast lane (see `MayBeLost`), as losing one loses a sound.
+ */
+export function IsFleetingEvent(event: NetEvent): boolean {
+    return event.e === "fired" || event.e === "stopped" || event.e === "hit" || event.e === "spawned" || event.e === "woke" || event.e === "spawner-hit" || event.e === "cast";
+}
+
+const EventKinds = ["pickup", "keys", "spawner", "killed", "damaged", "died", "all-died", "completed", "shot", "quest", "fired", "stopped", "hit", "spawned", "woke", "spawner-hit", "cast"];
 
 const HeroGone = 1;
 const HeroFacingLeft = 2;
@@ -326,10 +348,11 @@ function WriteEvents(writer: ByteWriter, events: ReadonlyArray<NetEvent>): void 
                 writer.U8(event.hero).U16(event.x).U16(event.y);
                 break;
             case "spawner":
+            case "spawner-hit":
                 writer.U16(event.index);
                 break;
             case "killed":
-                writer.U8(event.type).F32(event.x).F32(event.y).I8(event.hero);
+                writer.U8(event.type).F32(event.x).F32(event.y).I8(event.hero).U8(event.boss ? 1 : 0);
                 break;
             case "damaged":
                 writer.U16(event.damage).U16(Math.max(0, event.hitPoints)).U8(event.hero);
@@ -345,6 +368,20 @@ function WriteEvents(writer: ByteWriter, events: ReadonlyArray<NetEvent>): void 
                 break;
             case "quest":
                 writer.U8(event.index).U8(QuestStates.indexOf(event.state)).U16(Math.max(0, Math.min(0xffff, event.progress)));
+                break;
+            case "fired":
+                writer.U16(event.shot).I8(event.hero);
+                break;
+            case "stopped":
+                writer.U16(event.shot);
+                break;
+            case "hit":
+            case "spawned":
+            case "woke":
+                writer.U8(event.type);
+                break;
+            case "cast":
+                writer.U8(event.hero);
                 break;
         }
     });
@@ -444,9 +481,10 @@ function ReadEvent(reader: ByteReader): NetEvent {
         case "keys":
             return { e: kind, hero: reader.U8(), x: reader.U16(), y: reader.U16() };
         case "spawner":
+        case "spawner-hit":
             return { e: kind, index: reader.U16() };
         case "killed":
-            return { e: kind, type: reader.U8(), x: reader.F32(), y: reader.F32(), hero: reader.I8() };
+            return { e: kind, type: reader.U8(), x: reader.F32(), y: reader.F32(), hero: reader.I8(), boss: reader.U8() === 1 };
         case "damaged":
             return { e: kind, damage: reader.U16(), hitPoints: reader.U16(), hero: reader.U8() };
         case "died":
@@ -466,6 +504,16 @@ function ReadEvent(reader: ByteReader): NetEvent {
             }
             return { e: kind, index, state, progress: reader.U16() };
         }
+        case "fired":
+            return { e: kind, shot: reader.U16(), hero: reader.I8() };
+        case "stopped":
+            return { e: kind, shot: reader.U16() };
+        case "hit":
+        case "spawned":
+        case "woke":
+            return { e: kind, type: reader.U8() };
+        case "cast":
+            return { e: kind, hero: reader.U8() };
         default:
             throw new RangeError("Unknown event.");
     }

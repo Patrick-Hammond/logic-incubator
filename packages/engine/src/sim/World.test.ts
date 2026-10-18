@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Vec2, Vec2Like } from "@logic-incubator/lib/math/Geometry";
 import { TileSize } from "../Constants";
-import { ALL_PLAYERS_DIED, LEVEL_COMPLETED, NPC_BUMPED, PICKUP_COLLECTED, QUEST_UPDATED } from "../Events";
+import { ALL_PLAYERS_DIED, LEVEL_COMPLETED, LIGHT_SPELL_CAST, NPC_BUMPED, PICKUP_COLLECTED, QUEST_UPDATED } from "../Events";
 import type { IPlayerInput } from "../input/PlayerControl";
 import { DoorOpens } from "../level/Doors";
 import type { CollectedPickup } from "../level/Level";
@@ -193,6 +193,16 @@ describe("World", () => {
         expect(level.visibleFrom.length).toBe(3);
     });
 
+    it("says a hero cast their light spell as they cast it - not while it stays lit", () => {
+        const level = Level(ROOM);
+        const events: { event: string; args: unknown[] }[] = [];
+        const world = new World(level, { emit: (event, ...args) => events.push({ event, args }), sizeFor: () => undefined });
+        world.Reset(SETUP, [undefined, SPELL]);
+        world.Step([Input(0, 0, { casting: true }), Input(0, 0, { casting: true })], 1, FRAME);
+        world.Step([undefined, Input(0, 0, { casting: true })], 1, FRAME);
+        expect(events.filter(e => e.event === LIGHT_SPELL_CAST).map(e => e.args)).toEqual([[1]]);
+    });
+
     it("moves each hero with their own input, and leaves one with none standing", () => {
         const { world } = Setup(ROOM, 2);
         const before = world.Heroes.map(h => ({ x: h.Position.x, y: h.Position.y }));
@@ -222,7 +232,7 @@ describe("World", () => {
         world.Step([], 1, FRAME);
         expect(world.Heroes[0].Gold.amount).toBe(5);
         expect(level.pickups).toEqual([]);
-        expect(events.filter(e => e.event === PICKUP_COLLECTED).map(e => e.args)).toEqual([[0, 6, 1]]);
+        expect(events.filter(e => e.event === PICKUP_COLLECTED).map(e => e.args)).toEqual([[0, 6, 1, [{ value: { kind: "gold", amount: 5 }, sprite: null }]]]);
     });
 
     it("picks up from every cell a hero's sprite overlaps at once, telling of each", () => {
@@ -234,7 +244,10 @@ describe("World", () => {
         world.Step([], 1, FRAME);
         expect(world.Heroes[0].Gold.amount).toBe(3);
         expect(level.pickups.map(p => p.x)).toEqual([7]);
-        expect(events.filter(e => e.event === PICKUP_COLLECTED).map(e => e.args)).toEqual([[0, 5, 2], [0, 6, 2]]);
+        expect(events.filter(e => e.event === PICKUP_COLLECTED).map(e => e.args)).toEqual([
+            [0, 5, 2, [{ value: { kind: "gold", amount: 1 }, sprite: null }]],
+            [0, 6, 2, [{ value: { kind: "gold", amount: 2 }, sprite: null }]]
+        ]);
     });
 
     it("touches a pickup where it's drawn, not anywhere on its cell", () => {

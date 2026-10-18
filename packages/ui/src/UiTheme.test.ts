@@ -45,6 +45,17 @@ describe("UiTheme", () => {
         expect(theme.Metric("lineGap", 4)).toBe(4);
     });
 
+    it("plays the sounds the skin names, and is silent for one it doesn't or with nothing to play them", () => {
+        const played: string[] = [];
+        const loud = new UiTheme({ ...skin, sounds: { confirm: "click", back: "back" } }, { ...assets({}, []), PlaySound: name => played.push(name) });
+        loud.Sound("confirm");
+        loud.Sound("focus");
+        loud.Sound("back");
+        expect(played).toEqual(["click", "back"]);
+        expect(() => theme.Sound("confirm")).not.toThrow();
+        expect(() => new UiTheme({ ...skin, sounds: { confirm: "click" } }, assets({}, [])).Sound("confirm")).not.toThrow();
+    });
+
     it("says which skin lacks a colour or font it was asked for", () => {
         expect(() => theme.Colour("nope")).toThrow('The "test" skin has no colour "nope".');
         expect(() => theme.FontName("fancy")).toThrow('The "test" skin has no font "fancy".');

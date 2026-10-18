@@ -94,6 +94,8 @@ export default class Assets extends EventEmitter {
     private scope: string[] = [];
     /** Sounds asked to play before they'd loaded: a `StopSound` in the meantime cancels the play. */
     private playing = new Map<string, object>();
+    /** How loud each sound was last set to be (`SetSoundVolume`), kept for when it loads - or loads again, with its bundle. */
+    private volumes = new Map<string, number>();
     private inFlight = new Set<() => void>();
     private scheduledUnloads = new Set<() => void>();
     private loadJobs = 0;
@@ -132,6 +134,21 @@ export default class Assets extends EventEmitter {
     Catalogue(): { name: string; atlases: string[]; ids: string[] }[] {
         const bundles = this.manifest ? this.manifest.bundles : {};
         return Object.keys(bundles).map(name => ({ name, atlases: bundles[name].atlases.map(atlas => atlas.name), ids: Object.keys(bundles[name].assets) }));
+    }
+
+    /** Every sound in the manifest, in every bundle, loaded or not - what a volume setting goes over. Empty before `Init`. */
+    SoundIds(): SoundId[] {
+        const bundles = this.manifest ? this.manifest.bundles : {};
+        const ids: SoundId[] = [];
+        Object.keys(bundles).forEach(name => {
+            const assets = bundles[name].assets;
+            Object.keys(assets).forEach(id => {
+                if (assets[id].kind === "sound") {
+                    ids.push(id as SoundId);
+                }
+            });
+        });
+        return ids;
     }
 
     /** Bundles a bare name is looked up in, nearest first. */
@@ -248,6 +265,19 @@ export default class Assets extends EventEmitter {
         return !!entry && !!entry.assets[id];
     }
 
+    /**
+     * Whether `id` is a sound `PlaySound` can play now: one in the manifest, of a bundle that is loaded or loading, with
+     * a sound adapter to play it. Takes any string, for an id put together at run time (see `NamedSounds`).
+     */
+    CanPlaySound(id: string): id is SoundId {
+        const dot = id.indexOf(".");
+        const bundle = dot > 0 ? id.slice(0, dot) : "";
+        const entry = this.manifest && this.manifest.bundles[bundle];
+        const asset = entry && entry.assets[id];
+        const state = this.bundles.get(bundle);
+        return !!asset && asset.kind === "sound" && !!state && !state.disposed && !!this.sound && !this.destroyed;
+    }
+
     IsLoaded(id: AssetId): boolean {
         const found = this.Locate(id);
         if (!found.state || !found.state.done || found.state.disposed) {
@@ -345,8 +375,12 @@ export default class Assets extends EventEmitter {
         adapter.Play(id, options);
     }
 
-    /** How loud a sound is, 0 to 1 - what a volume setting does to the sounds it covers. Nothing happens for one that isn't loaded. */
+    /**
+     * How loud a sound is, 0 to 1 - what a volume setting does to the sounds it covers. A sound that isn't loaded yet (a
+     * level's, a `lazy` one) is that loud when it loads, and so is one that loads again with its bundle.
+     */
     SetSoundVolume(id: SoundId, volume: number): void {
+        this.volumes.set(id, volume);
         if (this.sound && !this.destroyed) {
             this.sound.SetVolume(id, volume);
         }
@@ -603,6 +637,10 @@ export default class Assets extends EventEmitter {
         if (this.destroyed || state.disposed) {
             this.sound.Remove(id);
             throw new AssetsDestroyedError();
+        }
+        const volume = this.volumes.get(id);
+        if (volume !== undefined) {
+            this.sound.SetVolume(id, volume);
         }
     }
 
