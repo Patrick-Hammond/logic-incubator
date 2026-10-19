@@ -21,7 +21,6 @@
     "@eslint/js": "^10.0.1",
     "@types/node": "^22.20.1",
     "eslint": "^10.10.0",
-    "patch-package": "^8.0.1",
     "pixi-sound": "^3.0.4",
     "pixi.js": "5.2.1",
     "typescript": "~5.9.3",
