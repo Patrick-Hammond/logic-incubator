@@ -5,7 +5,7 @@ import { FindImplicitPlacements, FindLights, FindSpawners } from "@logic-incubat
 import MonsterRoster from "@logic-incubator/engine/level/entities/MonsterRoster";
 import { Brush, DataBrushName, HEIGHT_LAYER_ID, IsTileLayer } from "@logic-incubator/engine/level/LevelFormat";
 import AssetFactory from "@logic-incubator/lib/loading/AssetFactory";
-import { MapLabel } from "../DataLabels";
+import { MapLabel, UnpairedPortalCells } from "../DataLabels";
 import { DataBrushEditorFor } from "../DataBrushEditors";
 import { BlockedEdges, HeightColour, HeightMap } from "../Heights";
 import { PipRect } from "../tools/ToolGeometry";
@@ -144,6 +144,7 @@ export default class Canvas extends EditorComponent {
         this.textPool.RestoreAll();
         this.DrawImplicitLayer(levelData);
         this.DrawHeights(levelData, heightContainer);
+        const unpairedPortals = UnpairedPortalCells(levelData);
         levelData.forEach(brush => {
             if (layerDict[brush.layerId] && layerDict[brush.layerId].visible && brush.layerId !== HEIGHT_LAYER_ID) {
                 let posX = (brush.position.x - viewOffset.x) * scaledTileSize + GridBounds.x;
@@ -188,6 +189,9 @@ export default class Canvas extends EditorComponent {
                         // monster types it draws from, a pickup its kind and number (see `MapLabel`). The rest
                         // only matters once you're editing it (see SelectedBrush), not at a map-overview glance.
                         text.text = MapLabel(brush.data);
+                        if (brush.name === DataBrushName.TELEPORT && unpairedPortals.has(brush.position.x + "," + brush.position.y)) {
+                            text.text += "?";
+                        }
                         sprite.addChild(text);
                     }
                     layerDict[brush.layerId].addChild(sprite);

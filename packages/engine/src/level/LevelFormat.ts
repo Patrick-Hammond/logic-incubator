@@ -14,6 +14,7 @@ import type { PickupValue } from "./entities/Pickups";
 import type { SpawnerValue } from "./entities/Spawners";
 import type { DoorLockValue } from "./Doors";
 import type { LightValue } from "./Lighting";
+import type { TeleportValue } from "./Portals";
 
 /**
  * The data brushes: painted on data layers, and read by the engine rather than drawn.
@@ -45,6 +46,9 @@ import type { LightValue } from "./Lighting";
  *
  * `BOSS` puts one of the roster's monsters there, sleeping until a hero comes near - tougher, if it's given
  * more hit points, and marked for a quest that asks for it to be killed (see `Bosses`).
+ *
+ * `TELEPORT` makes its cell a portal, with a portal id: a hero who walks onto it comes out of another portal with the same id
+ * (see `Portals`). Like `EXIT`, it isn't drawn - paint something there for the players to see.
  */
 export const enum DataBrushName {
     PLAYER_START = "player-start",
@@ -55,7 +59,8 @@ export const enum DataBrushName {
     DIALOG = "dialog",
     BOSS = "boss",
     SPAWNER = "spawner",
-    LIGHT = "light"
+    LIGHT = "light",
+    TELEPORT = "teleport"
 }
 
 /**
@@ -73,8 +78,8 @@ export const LevelVersion = 2;
  */
 export const HEIGHT_LAYER_ID = -99997;
 
-/** A data brush's value - a number (`Z_INDEX`'s height), or a light's, spawner's, pickup's, door lock's, dialog's or boss's settings. */
-export type DataBrushValue = number | LightValue | SpawnerValue | PickupValue | DoorLockValue | DialogValue | BossValue;
+/** A data brush's value - a number (`Z_INDEX`'s height), or a light's, spawner's, pickup's, door lock's, dialog's, boss's or portal's settings. */
+export type DataBrushValue = number | LightValue | SpawnerValue | PickupValue | DoorLockValue | DialogValue | BossValue | TeleportValue;
 
 /**
  * One placed tile or data brush. `position` is in map cells; `layerId` is its layer's `id`; `data` is null on a tile. A tile layer has

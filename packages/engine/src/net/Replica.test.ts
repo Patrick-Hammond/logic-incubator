@@ -106,6 +106,13 @@ describe("Replica", () => {
         expect(moment.snapshot.hitPoints).toBe(6);
     });
 
+    it("draws a hero who got somewhere at once - a portal, a warp - at one end or the other, never on the way", () => {
+        replica.Push(Snap(3, { heroes: [HeroAt(0, 0), HeroAt(100, 100)] }));
+        replica.Push(Snap(6, { heroes: [HeroAt(0, 0), HeroAt(400, 20)] }));
+        expect(replica.HeroAt(1, 5)).toMatchObject({ x: 100, y: 100 });
+        expect(replica.HeroAt(1, 6)).toMatchObject({ x: 400, y: 20 });
+    });
+
     describe("this machine's own shots", () => {
         it("fly from the moment they're fired, as stand-ins", () => {
             replica.Push(Snap(3));

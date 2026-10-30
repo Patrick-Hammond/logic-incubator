@@ -2,7 +2,7 @@ import type {SoundId} from "@logic-incubator/lib/assets/AssetIds";
 import NamedSounds from "@logic-incubator/lib/assets/NamedSounds";
 import GameComponent from "@logic-incubator/lib/game/GameComponent";
 import AssetFactory from "@logic-incubator/lib/loading/AssetFactory";
-import {Vec2Like} from "@logic-incubator/lib/math/Geometry";
+import {Vec2, Vec2Like} from "@logic-incubator/lib/math/Geometry";
 import AmbientSounds from "./AmbientSounds";
 import { TileSize } from "./Constants";
 import {ALL_PLAYERS_DIED, BOSS_WOKE, GAME_PAUSED, GAME_RESUMED, LEVEL_COMPLETED, LEVEL_CREATED, MONSTER_KILLED, NPC_BUMPED, TALK_ENDED, TALK_LINE, TALK_STARTED} from "./Events";
@@ -193,6 +193,8 @@ export class DungeonMain extends GameComponent {
     /** Where the heroes the camera follows are drawn this frame, and the box round them - gathered into the same objects each frame. */
     private followed: Vec2Like[] = [];
     private partyBox = PartyBounds([]);
+    /** The middle of `partyBox` last frame, in pixels - null as a level starts. See `MoveCamera`. */
+    private lastFollowed: Vec2 | null = null;
     /** The online run this level is played in, as `net` gave it when the level started - null offline. */
     private net: NetPlay | null = null;
     /** Whether this visit shows the online run's numbers (`NetPlay.Stats`) - see `OnLevelCreated`. */
@@ -406,6 +408,7 @@ export class DungeonMain extends GameComponent {
         });
         this.hud.SetNames(slots.map((slot, i) => ({ name: slot.name || "PLAYER " + (i + 1), own: !allHere && this.local[i] })));
         this.renderer.Reset();
+        this.lastFollowed = null;
         this.fixedStep.Reset();
         this.footsteps.Reset();
         this.restartIn = 0;
@@ -616,8 +619,9 @@ export class DungeonMain extends GameComponent {
      * Keeps the camera on the heroes played here (every hero, if none is) who are still standing - centred on the
      * box round where they're drawn, zoomed out as far as it takes to show them all (see `PartyFrame`) and for the
      * height the first of them stands at. With all of those down it follows a teammate still standing (online, where
-     * the rest play on elsewhere), and with no one standing, where they fell. `frames` and `seconds` since the last
-     * display frame.
+     * the rest play on elsewhere), and with no one standing, where they fell. Where they've gone further than half a
+     * view in one frame - through a portal - it cuts to them rather than sweeping across the map. `frames` and `seconds`
+     * since the last display frame.
      */
     private MoveCamera(frames: number, seconds: number): void {
         const anyHere = this.local.some(here => here);
@@ -644,9 +648,15 @@ export class DungeonMain extends GameComponent {
         this.camera.SetZ(this.level.HeightAt(tile.x, tile.y));
         this.camera.UpdateZoom(seconds);
         const box = PartyBounds(followed, this.partyBox);
-        this.camera.ZoomForParty(PartyZoom(box, this.BaseView()), frames);
+        const view = this.BaseView();
+        this.camera.ZoomForParty(PartyZoom(box, view), frames);
+        const x = (box.minX + box.maxX) / 2;
+        const y = (box.minY + box.maxY) / 2;
+        const last = this.lastFollowed;
+        const jumped = !!last && (Math.abs(x - last.x) > (view.width * TileSize) / 2 || Math.abs(y - last.y) > (view.height * TileSize) / 2);
+        this.lastFollowed = (last || new Vec2()).Set(x, y);
         // The same pull per second whatever the frame rate.
-        this.camera.Follow((box.minX + box.maxX) / 2, (box.minY + box.maxY) / 2, 1 - Math.pow(1 - CameraFollow, frames));
+        this.camera.Follow(x, y, jumped ? 1 : 1 - Math.pow(1 - CameraFollow, frames));
     }
 
     /** How many tiles the camera shows across and down at its usual zoom. */

@@ -20,8 +20,8 @@ import { RelayHost } from "@logic-incubator/lib/net/RelayRooms";
 import type RelaySession from "@logic-incubator/lib/net/RelaySession";
 import type { EncounterView } from "../Encounter";
 import {
-    ALL_PLAYERS_DIED, BOSS_WOKE, DOOR_LOCKED, KEYS_DROPPED, LEVEL_COMPLETED, MONSTER_HIT, MONSTER_KILLED, MONSTER_SPAWNED, PICKUP_COLLECTED, PLAYER_DAMAGED, PLAYER_DIED,
-    LIGHT_SPELL_CAST, QUEST_UPDATED, SHOT_FIRED, SHOT_STOPPED, SPAWNER_DESTROYED, SPAWNER_HIT
+    ALL_PLAYERS_DIED, BOSS_WOKE, DOOR_LOCKED, HERO_TELEPORTED, KEYS_DROPPED, LEVEL_COMPLETED, MONSTER_HIT, MONSTER_KILLED, MONSTER_SPAWNED, PICKUP_COLLECTED, PLAYER_DAMAGED,
+    PLAYER_DIED, LIGHT_SPELL_CAST, QUEST_UPDATED, SHOT_FIRED, SHOT_STOPPED, SPAWNER_DESTROYED, SPAWNER_HIT
 } from "../Events";
 import type { IPlayerInput } from "../input/PlayerControl";
 import MonsterRoster from "../level/entities/MonsterRoster";
@@ -130,10 +130,14 @@ export default class GuestSession extends PlaySession {
             return;
         }
         const wasLit = !!hero.Spell && !!hero.Spell.lit;
-        const numbered = this.prediction.Step(hero, local[this.You] || NoInput, this.Others(), world.Collider);
+        const numbered = this.prediction.Step(hero, local[this.You] || NoInput, this.Others(), world.Collider, context.level);
         // Its own hero's doings it hears as it does them, rather than when the host's word on them comes.
         if (!wasLit && hero.Spell && hero.Spell.lit) {
             context.emit(LIGHT_SPELL_CAST, this.You);
+        }
+        const trip = this.prediction.Trip;
+        if (trip) {
+            context.emit(HERO_TELEPORTED, this.You, trip.from.x, trip.from.y, trip.to.x, trip.to.y);
         }
         const shot = hero.TakeShot();
         if (shot) {
@@ -310,7 +314,7 @@ export default class GuestSession extends PlaySession {
         const hero = context.world.Heroes[this.You];
         const mine = snapshot.heroes[this.You];
         if (hero && mine) {
-            this.prediction.Reconcile(hero, mine, this.Others(), context.world.Collider);
+            this.prediction.Reconcile(hero, mine, this.Others(), context.world.Collider, level);
         }
     }
 
@@ -381,6 +385,11 @@ export default class GuestSession extends PlaySession {
                 break;
             case "locked":
                 emit(DOOR_LOCKED, event.hero, event.x, event.y);
+                break;
+            case "teleported":
+                if (event.hero !== this.You) {
+                    emit(HERO_TELEPORTED, event.hero, event.fromX, event.fromY, event.x, event.y);
+                }
                 break;
             case "stopped": {
                 const setup = this.replica!.Shot(event.shot);

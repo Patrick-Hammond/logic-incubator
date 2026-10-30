@@ -3,6 +3,7 @@ import AssetFactory from "@logic-incubator/lib/loading/AssetFactory";
 import AssetMetadataStore from "@logic-incubator/engine/level/AssetMetadata";
 import { AnimationSpeed } from "@logic-incubator/engine/Constants";
 import { DataBrushName, DataBrushValue } from "@logic-incubator/engine/level/LevelFormat";
+import { IsTeleportValue } from "@logic-incubator/engine/level/Portals";
 import { DescribeDataValue } from "../DataLabels";
 import { OpenDataBrushDialog } from "../DataBrushDialog";
 import { DataBrushEditorFor } from "../DataBrushEditors";
@@ -179,7 +180,11 @@ export default class SelectedBrush extends EditorComponent {
     }
 
     private DescribeValue(value: DataBrushValue): { text: string; colour?: number } {
-        return typeof value === "number" ? { text: `${value} · +/- to adjust` } : DescribeDataValue(value);
+        if (typeof value === "number") {
+            return { text: `${value} · +/- to adjust` };
+        }
+        const about = DescribeDataValue(value);
+        return IsTeleportValue(value) ? { text: `${about.text} · +/- to change` } : about;
     }
 
     private Animate(delta: number): void {

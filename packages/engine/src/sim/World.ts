@@ -10,8 +10,10 @@
  * hero whose player's connection has gone is away (`SetAway`): out of play,
  * standing where they were, until their player is back. The level's quests
  * (`Quests`) are kept here, moved on by what's picked up and killed; one that
- * `ends` the level ends it as a way out does. A lone hero on one machine can
- * talk (`SetTalk`): walking into an NPC asks for the talk (`NPC_BUMPED`). No camera
+ * `ends` the level ends it as a way out does. A hero who walks onto a portal comes
+ * out of its partner (see `Portals`) - on a shared screen with the whole party. A
+ * lone hero on one machine can talk (`SetTalk`): walking into an NPC asks for the
+ * talk (`NPC_BUMPED`). No camera
  * and no sprites - `DungeonMain` draws it. Pure - no pixi - so it runs under the
  * plain node test runner.
  */
@@ -20,7 +22,7 @@ import { Vec2, Vec2Like } from "@logic-incubator/lib/math/Geometry";
 import { TileSize } from "../Constants";
 import type { PlayerSetup } from "../DungeonMain";
 import Encounter, { EncounterLevel, EncounterOptions, Monster } from "../Encounter";
-import { ALL_PLAYERS_DIED, DOOR_LOCKED, KEYS_DROPPED, LEVEL_COMPLETED, LIGHT_SPELL_CAST, NPC_BUMPED, PICKUP_COLLECTED, QUEST_UPDATED } from "../Events";
+import { ALL_PLAYERS_DIED, DOOR_LOCKED, HERO_TELEPORTED, KEYS_DROPPED, LEVEL_COMPLETED, LIGHT_SPELL_CAST, NPC_BUMPED, PICKUP_COLLECTED, QUEST_UPDATED } from "../Events";
 import type { IPlayerInput } from "../input/PlayerControl";
 import type { CollectedPickup } from "../level/Level";
 import { LightSpell } from "../level/entities/LightSpell";
@@ -41,6 +43,8 @@ export interface WorldLevel extends EncounterLevel, QuestLevel {
     readonly playerStartPosition: Vec2Like | undefined;
     IsFloor(tileX: number, tileY: number): boolean;
     IsExit(tileX: number, tileY: number): boolean;
+    /** Where a hero who stepped from cell `from` onto cell `to` comes out of a portal, if they walked onto one - see `Level.PortalJump`. */
+    PortalJump(from: Vec2Like, to: Vec2Like): Vec2Like | null;
     IsDoorLocked(tileX: number, tileY: number, canOpen: (lockId: number) => boolean): boolean;
     UpdateDoors(tiles: ReadonlyArray<Vec2Like>, canOpen: (lockId: number) => boolean): void;
     UpdateVisibleRegions(tiles: ReadonlyArray<Vec2Like>): void;
@@ -65,6 +69,24 @@ export const NoInput: IPlayerInput = { direction: new Vec2(), firing: false, aim
  * guest's next input is still on its way, and two to catch up once it's come (see `RemoteInput`).
  */
 export type HeroInput = IPlayerInput | ReadonlyArray<IPlayerInput> | undefined;
+
+/** A trip through a portal: the cell of the one walked onto, and of the one come out of. */
+export type PortalTrip = { from: Vec2Like; to: Vec2Like };
+
+/**
+ * Sends `hero`, who was on cell `from` before the step they've just taken, through the portal they've walked onto, if they
+ * have (see `WorldLevel.PortalJump`): they come out standing on the other one, at once. Returns the trip, or null. The same
+ * on the host and on a guest moving its own hero ahead of it (see `Prediction`), as it's decided by where they are alone.
+ */
+export function TakePortal(hero: Hero, from: Vec2Like, level: Pick<WorldLevel, "PortalJump">): PortalTrip | null {
+    const entered = hero.Tile;
+    const to = level.PortalJump(from, entered);
+    if (!to) {
+        return null;
+    }
+    hero.WarpTo({ x: to.x * TileSize, y: to.y * TileSize });
+    return { from: entered, to: { x: to.x, y: to.y } };
+}
 
 /** The hero standing nearest `hero`, if every one of `others` is at least `WarpDistance` tiles away - null otherwise, or with none. */
 export function WarpTarget(hero: Hero, others: ReadonlyArray<Hero>): Hero | null {
@@ -244,7 +266,8 @@ export default class World {
      * asked to and may (see `WarpDistance`); the doors and what the team can see follow where they stand, each
      * picks up every pickup their sprite touches (`PickupCellsReached`; in slot order, so the first there gets it -
      * `PICKUP_COLLECTED`, once a cell) and fires;
-     * then the encounter. A hero on a way out ends the level there and then. `dt` in frames (1 at 60 a second),
+     * then the encounter. A hero who walks onto a portal comes out of its partner (`TakePortal`, `HERO_TELEPORTED`) - and on a
+     * shared screen (`SetLeash`) the rest of the party with them, around them, so no one is left off it. A hero on a way out ends the level there and then. `dt` in frames (1 at 60 a second),
      * `seconds` for timers.
      */
     Step(inputs: ReadonlyArray<HeroInput>, dt: number, seconds: number): void {
@@ -265,9 +288,18 @@ export default class World {
                 }
                 const box = this.leash && LeashBoxFor(others.map(other => other.Position), this.leash);
                 const wasLit = !!hero.Spell && !!hero.Spell.lit;
+                // After any warp: coming out on a portal isn't walking onto it.
+                const from = hero.Tile;
                 hero.Step(input, dt, seconds, box ? Leashed(this.collision, box) : this.collision);
                 if (!wasLit && hero.Spell && hero.Spell.lit) {
                     this.options.emit(LIGHT_SPELL_CAST, hero.Index);
+                }
+                const trip = TakePortal(hero, from, this.level);
+                if (trip) {
+                    if (this.leash) {
+                        this.BringParty(trip.to, others);
+                    }
+                    this.options.emit(HERO_TELEPORTED, hero.Index, trip.from.x, trip.from.y, trip.to.x, trip.to.y);
                 }
                 this.Bump(hero, input);
                 // Taken as it's fired: a hero given two steps at once can fire in each.
@@ -335,6 +367,12 @@ export default class World {
         if (away && !this.allDown && !this.completed) {
             this.CheckFallen();
         }
+    }
+
+    /** Puts `party` on the open floor nearest `cell` (see `StartCells`), where a hero has just come out of a portal. */
+    private BringParty(cell: Vec2Like, party: ReadonlyArray<Hero>): void {
+        const cells = StartCells(cell, party.length + 1, (x, y) => this.level.IsFloor(x, y));
+        party.forEach((hero, i) => hero.WarpTo({ x: cells[i + 1].x * TileSize, y: cells[i + 1].y * TileSize }));
     }
 
     /** A monster died - `hero`'s shot killed it: the quests count it. */

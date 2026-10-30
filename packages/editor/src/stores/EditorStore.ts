@@ -6,6 +6,7 @@ import { InitalScale } from "../Layout";
 import { DefaultBossValue } from "@logic-incubator/engine/level/entities/Bosses";
 import { DefaultPickupValue } from "@logic-incubator/engine/level/entities/Pickups";
 import { DefaultSpawnerValue } from "@logic-incubator/engine/level/entities/Spawners";
+import { DefaultTeleportValue, IsTeleportValue, MaxPortalId } from "@logic-incubator/engine/level/Portals";
 import { Brush, DataBrushName, DataBrushValue, HEIGHT_LAYER_ID, IsTileLayer, TileLayerKind } from "@logic-incubator/engine/level/LevelFormat";
 import { DefaultLightValue } from "@logic-incubator/engine/level/Lighting";
 import { DefaultDialogValue } from "@logic-incubator/engine/story/Talk";
@@ -396,8 +397,10 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
                 { name: DataBrushName.BOSS, colour: 0xd00000, value: DefaultBossValue() },
                 // The colour the editor has always outlined a spawner tile's footprint in.
                 { name: DataBrushName.SPAWNER, colour: 0x9b5de5, value: DefaultSpawnerValue() },
-                // The colour the editor has always outlined a lit tile in. Last of the attributes, so the others' pips keep their places.
+                // The colour the editor has always outlined a lit tile in. The light and the teleport come last of the attributes,
+                // so the older ones' pips keep their places.
                 { name: DataBrushName.LIGHT, colour: 0xff8100, value: DefaultLightValue() },
+                { name: DataBrushName.TELEPORT, colour: 0xbdb2ff, value: DefaultTeleportValue() },
                 // The height layer's: the height painted, then raise and lower, which have no value of their own.
                 { name: DataBrushName.Z_INDEX, colour: 0x06d6a0, value: 1, height: true },
                 { name: RAISE_BRUSH, colour: 0xf4a259, value: null, height: true },
@@ -862,12 +865,18 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
         return ToolFitsLayer(tool, layers.find(layer => layer.selected)) ? tool : EditorTool.BRUSH;
     }
 
-    /** Plain +/- stepping only applies to a numeric data brush value (a height) - a pickup's, spawner's, light's, dialog's or boss's is set in its popup instead. */
+    /**
+     * Plain +/- stepping applies to a height and to a portal's id, so the next pair can be painted without the popup - a
+     * pickup's, spawner's, light's, dialog's or boss's value is set in its popup instead.
+     */
     private CalcDataBrushValue(value: DataBrushValue, actionType: EditorActions): DataBrushValue {
+        const inc = actionType === EditorActions.DATA_BRUSH_INC ? 1 : -1;
+        if (IsTeleportValue(value)) {
+            return { ...value, portal: Math.min(MaxPortalId, Math.max(0, value.portal + inc)) };
+        }
         if (typeof value !== "number") {
             return value;
         }
-        const inc = actionType === EditorActions.DATA_BRUSH_INC ? 1 : -1;
         return ClampHeight(value + inc);
     }
 

@@ -5,7 +5,8 @@
  *
  * The map's labels are drawn in a small bitmap font that has letters, digits and a few marks but no "+" or
  * "$" - so a pickup is its kind's letter and its number ("G10" for ten gold, "K3" for key 3), with a Q after
- * it if it counts for a quest.
+ * it if it counts for a quest, and a portal is P and its id (A for an arrival-only one), with a ? after it if
+ * it goes nowhere.
  */
 
 import { IsDoorLockValue } from "@logic-incubator/engine/level/Doors";
@@ -14,7 +15,8 @@ import { IsLocked } from "@logic-incubator/engine/level/entities/Keys";
 import { IsPickupValue, PickupValue } from "@logic-incubator/engine/level/entities/Pickups";
 import { IsSpawnerValue, SpawnerValue } from "@logic-incubator/engine/level/entities/Spawners";
 import { IsLightValue } from "@logic-incubator/engine/level/Lighting";
-import { DataBrushValue } from "@logic-incubator/engine/level/LevelFormat";
+import { Brush, DataBrushName, DataBrushValue } from "@logic-incubator/engine/level/LevelFormat";
+import Portals, { IsTeleportValue, TeleportValue } from "@logic-incubator/engine/level/Portals";
 import { ShoutPart } from "@logic-incubator/engine/story/DialogScript";
 import { IsDialogValue } from "@logic-incubator/engine/story/Talk";
 
@@ -39,8 +41,9 @@ export function PickupLabel(pickup: PickupValue): string {
 /**
  * The tag drawn over a data value on the map - a bare number for a height, the range of a light, how many
  * monster types a spawner draws from, a pickup's PickupLabel, a locked door's lock as L3 (an unlocked door,
- * which is every door by default, has none - it'd be noise on each), D for an NPC's dialog and B for a boss.
- * A pickup or boss that counts for a quest has a Q after its tag. Empty for anything else.
+ * which is every door by default, has none - it'd be noise on each), D for an NPC's dialog, B for a boss and
+ * a portal's id as P3 (A3 if it's arrival only). A pickup or boss that counts for a quest has a Q after its tag.
+ * Empty for anything else.
  * Whatever each is is told apart by its shape, like everywhere else a Brush.data is read.
  */
 export function MapLabel(value: DataBrushValue | null | undefined): string {
@@ -65,7 +68,28 @@ export function MapLabel(value: DataBrushValue | null | undefined): string {
     if (IsSpawnerValue(value)) {
         return String(value.monsters.length);
     }
+    if (IsTeleportValue(value)) {
+        return (value.arrivalOnly ? "A" : "P") + value.portal;
+    }
     return "";
+}
+
+/**
+ * The cells (as "x,y") of the `TELEPORT` brushes in `levelData` that can never send anyone anywhere: no other portal has
+ * their id (see `Portals.Unpaired`). The map puts a ? after their tag.
+ */
+export function UnpairedPortalCells(levelData: ReadonlyArray<Brush>): Set<string> {
+    const portals = new Portals(
+        levelData
+            .filter(brush => brush.name === DataBrushName.TELEPORT && IsTeleportValue(brush.data))
+            .map(brush => ({ x: brush.position.x, y: brush.position.y, value: brush.data as TeleportValue }))
+    );
+    return new Set(portals.Unpaired().map(portal => portal.x + "," + portal.y));
+}
+
+/** A portal in a few words, for the selected-brush card and the cell inspector: "portal 3", "portal 3 · arrival only". */
+export function DescribeTeleport(value: TeleportValue): string {
+    return `portal ${value.portal}` + (value.arrivalOnly ? " · arrival only" : "");
 }
 
 /** A pickup in a few words, for the selected-brush card: "10 gold", "key 3", "weapon: weapon_axe" - and "· quest rats" if it counts for one. */
@@ -151,6 +175,9 @@ export function DescribeDataValue(value: DataBrushValue | null | undefined): { t
     }
     if (IsDoorLockValue(value)) {
         return { text: DescribeLock(value.lock) };
+    }
+    if (IsTeleportValue(value)) {
+        return { text: DescribeTeleport(value) };
     }
     return { text: "" };
 }

@@ -6,7 +6,7 @@ import { LinkMaker, PeerLink, PeerLinkBase } from "@logic-incubator/lib/net/Peer
 import { RelayHost } from "@logic-incubator/lib/net/RelayRooms";
 import RelaySession from "@logic-incubator/lib/net/RelaySession";
 import { TileSize } from "../Constants";
-import { ALL_PLAYERS_DIED, PICKUP_COLLECTED, QUEST_UPDATED, SHOT_FIRED, SHOT_STOPPED } from "../Events";
+import { ALL_PLAYERS_DIED, HERO_TELEPORTED, PICKUP_COLLECTED, QUEST_UPDATED, SHOT_FIRED, SHOT_STOPPED } from "../Events";
 import type { IPlayerInput } from "../input/PlayerControl";
 import { Chase } from "../level/entities/Behaviours";
 import MonsterRoster, { MonsterDef } from "../level/entities/MonsterRoster";
@@ -66,6 +66,8 @@ class Run {
     stalled = new Set<Machine>();
     /** The level's quests, on every machine. */
     quests: QuestDef[] = [];
+    /** The level's map, on every machine. */
+    map = MAP;
     private relay!: LoopbackRelay;
     private seats: LobbySeat[] = [];
 
@@ -120,7 +122,7 @@ class Run {
 
     /** Starts the level on `machine`, as its `LEVEL_CREATED` would. */
     Begin(machine: Machine): void {
-        const level = machine.level = NetTestLevel(MAP, undefined, undefined, this.quests);
+        const level = machine.level = NetTestLevel(this.map, undefined, undefined, this.quests);
         machine.world = new World(level, {
             emit: (event, ...args) => {
                 machine.session.Record(event, args);
@@ -502,6 +504,32 @@ describe("an online run", () => {
             expect(guest.world.Heroes[i + 1].Position.y).toBe(run.host.world.Heroes[i + 1].Position.y);
             expect(session.Prediction.Corrections).toBe(0);
         });
+    });
+
+    it("over a slow line, sends a guest's hero through portals as the host does - uncorrected - and lets everyone hear each trip once", async () => {
+        const random = SeededRandom(5);
+        run.map = [
+            "####################",
+            "#S...1....#........#",
+            "#.........#....1...#",
+            "#.........#........#",
+            "####################"
+        ];
+        await run.Open(2, () => ({ delayMs: 120, jitterMs: 20, lossChance: 0, random }));
+        await run.BeginAll();
+        // Guest 1's hero right onto the portal, on to the far wall, back left over the portal it came out of, and so on.
+        const walk = (hero: number, frame: number) => (hero !== 1 ? undefined : Input(Math.floor(frame / 150) % 2 ? -1 : 1));
+        await run.Frames(600, walk);
+        await run.Frames(90, () => undefined);
+        const trips = (machine: Machine) => machine.events.filter(event => event[0] === HERO_TELEPORTED && event[1] === 1);
+        const hosts = trips(run.host);
+        expect(hosts.map(event => event.slice(2))).toEqual([[5, 1, 15, 2], [15, 2, 5, 1], [5, 1, 15, 2], [15, 2, 5, 1]]);
+        run.guests.forEach(guest => expect(trips(guest)).toEqual(hosts));
+        const guest = run.guests[0];
+        expect(guest.world.Heroes[1].Position).toEqual(run.host.world.Heroes[1].Position);
+        expect((guest.session as GuestSession).Prediction.Corrections).toBe(0);
+        // The other guest drew them where the host has them too.
+        expect(run.guests[1].world.Heroes[1].Position.x).toBeCloseTo(run.host.world.Heroes[1].Position.x, 6);
     });
 
     describe("over direct links", () => {

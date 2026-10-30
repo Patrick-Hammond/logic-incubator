@@ -49,6 +49,7 @@ configuration files and plugin interface. For explanations, examples and workflo
 [DungeonMain](#dungeonmain) ·
 [Level](#level) ·
 [Level file format](#level-file-format) ·
+[Portals](#portals) ·
 [Asset metadata](#asset-metadata) ·
 [Lighting](#lighting) ·
 [Depth](#depth) ·
@@ -1284,6 +1285,7 @@ await relay.close();         // ends every connection and stops
 | `LIGHT_SPELL_CAST` | `"lightSpellCast"` | `(hero)` - their mage-light is lit |
 | `DOOR_OPENED` / `DOOR_CLOSED` | `"doorOpened"` / `"doorClosed"` | `(sprite, index)` - door `index` of `Level.doors` opened or shut, and is drawn as `sprite` now (`Level.SetDoorOpen`, on every machine) |
 | `DOOR_LOCKED` | `"doorLocked"` | `(hero, tileX, tileY)` - a hero walked into the door on that cell, and no one in the team has its key (`World.Step`); once, until they walk away from it |
+| `HERO_TELEPORTED` | `"heroTeleported"` | `(hero, fromX, fromY, toX, toY)` - a hero walked onto the portal on the first cell and came out of the one on the second (`World.Step`, `TakePortal`); on a shared screen the rest of the party came too, and this is said once, for the one who walked on. An online guest says it for its own hero as it predicts the trip, and for the others as the host's `teleported` event comes |
 | `PICKUP_COLLECTED` | `"pickupCollected"` | `(hero, tileX, tileY, collected: CollectedPickup[])` - a hero picked up what was on that cell, each thing with the sprite it was drawn as; once for each cell, when their sprite reaches more than one in a step (`PickupCellsReached`) |
 | `KEYS_DROPPED` | `"keysDropped"` | `(hero, tileX, tileY)` - a fallen hero's keys landed on that cell |
 | `NPC_BUMPED` | `"npcBumped"` | `(hero, tileX, tileY)` - a hero walked into the NPC on that cell (a `DIALOG` brush), where talking is on (`World.SetTalk`); `DungeonMain` starts the talk |
@@ -1391,7 +1393,8 @@ once a frame, it places each hero for drawing between their last two steps (`Her
 played so far and the lights that move - each hero's carried torch (`HeroView.Light`) and mage-light while it's lit (`HeroView.SpellLight`), and every
 live shot with a `light`, keyed by the shot, all where they're drawn - and moves the camera: `SetZ` for the height under the first living hero,
 `UpdateZoom`, `ZoomForParty` and `Follow` the centre of the box round the living heroes played here, where they're drawn (all of those, once they're down; after the
-lights, since moving the camera draws the tiles; the pull is the same per second at any frame rate). Last it draws the figures
+lights, since moving the camera draws the tiles; the pull is the same per second at any frame rate - and where that centre has moved more than half a
+view since the last frame, through a portal, it cuts straight there). Last it draws the figures
 (`EntityRenderer.Render(views, encounter, alpha)`) and the HUD (`Hud.RenderHeroes`). Each level start re-seeds the encounter's random numbers
 (`World.Reset`, which calls `Encounter.Reset`) from `seed()` - a new seed when it's left out or returns `undefined`, so an online run's machines,
 given the host's seed, spawn the same monsters.
@@ -1435,6 +1438,7 @@ type Talker = Vec2Like & { value: DialogValue; script: DialogScript; tile: Tile 
 | `boundRect` | `Rectangle` | The map's bounds in cells. |
 | `playerStartPosition` | `Vec2Like \| undefined` | |
 | `exits` | `Vec2Like[]` | Every cell painted with the `exit` data brush - see `IsExit`. |
+| `portals` | `Portals` | Every cell painted with the `teleport` data brush, with its `TeleportValue` - see `PortalJump` and [Portals](#portals). Each one whose id no other portal has is warned of as the level loads. |
 | `spawners` | `Spawner[]` | Every spawner tile and `SPAWNER` brush, one to a cell (`FindSpawners`) - a brush on a spawner tile's cell decides what it does. Each is drawn as a tile on its cell (`SpawnerTile`) - a spawner tile, else the top one that isn't floor - or, with none, as the roster's `spawnerSprite`; that picture's footprint (`cells`) is solid until `RemoveSpawner`. |
 | `pickups` | `Pickup[]` | Every pickup not yet collected: each tile with a `pickup` in its metadata, each `PICKUP` brush (one to a cell, the brush winning), each key dropped (`DropPickup`). |
 | `depths` | | |
@@ -1451,6 +1455,7 @@ type Talker = Vec2Like & { value: DialogValue; script: DialogScript; tile: Tile 
 | `IsSolid(x, y): boolean` | A wall, a spawner, or anywhere off the map. Not a closed door - a hero walks onto one to open it. |
 | `IsFloor(x, y): boolean` | Open floor: in a region and not solid - not a wall, a door, a spawner or off the map. Where the party starts (`StartCells`) and what's dropped lands. |
 | `IsExit(x, y): boolean` | Whether the cell is a way out (an `exit` brush): a hero standing on one ends the level (`World`). |
+| `PortalJump(from, to): Vec2Like \| null` | Where a hero whose step took them from cell `from` to cell `to` comes out, if they've just walked onto a portal: `portals.Jump` with the cells that aren't `IsSolid` to stand on. Null if they haven't (`to` is `from`, or no portal, or an arrival-only one), or it leads nowhere. |
 | `IsDoorClosed(x, y): boolean` | Whether the cell belongs to a door that is closed right now. Monsters can't enter one (their path and their movement both stop at it); the heroes can. A door with no sprite pair to swap never opens, so isn't in `doors` and doesn't count. |
 | `RemoveSpawner(spawner)` | Opens a destroyed spawner's cells, and takes away the tile it's drawn as (`SpawnerTile`), putting out its light if it gives one. |
 | `SpawnerTile(spawner): Tile \| null` | The tile a spawner is drawn as - the one `FindSpawners` picked on its cell - or null for one the roster's `spawnerSprite` stands in for. |
@@ -1473,8 +1478,8 @@ type Talker = Vec2Like & { value: DialogValue; script: DialogScript; tile: Tile 
 
 ```ts
 const enum DataBrushName { PLAYER_START = "player-start", COLLISION = "collision", Z_INDEX = "z-index", PICKUP = "pickup", EXIT = "exit",
-                           DIALOG = "dialog", BOSS = "boss", SPAWNER = "spawner", LIGHT = "light" }
-type DataBrushValue = number | LightValue | SpawnerValue | PickupValue | DoorLockValue | DialogValue | BossValue;
+                           DIALOG = "dialog", BOSS = "boss", SPAWNER = "spawner", LIGHT = "light", TELEPORT = "teleport" }
+type DataBrushValue = number | LightValue | SpawnerValue | PickupValue | DoorLockValue | DialogValue | BossValue | TeleportValue;
 
 type Brush = {
     name: string;            // a bare sprite/animation name, or a DataBrushName
@@ -1530,7 +1535,36 @@ there too. A level with none has no way out but to fall. `DIALOG` is an NPC (`{ 
 (`BossValue`, see `level/entities/Bosses`) - both in [Quests and dialogs](#quests-and-dialogs). A `PickupValue` may carry a `quest`, the id of the quest it counts for.
 `SPAWNER` is a monster spawner (`SpawnerValue`, see [Spawners](#spawners)): it makes the top tile on its cell that isn't floor a spawner, drawn as
 that tile, as big as it and gone with it when it's destroyed. On bare floor it's drawn as the roster's `spawnerSprite`. Painted on a spawner
-tile's cell, it decides what that spawner does.
+tile's cell, it decides what that spawner does. `TELEPORT` makes its cell a portal (`TeleportValue`, see [Portals](#portals)); like `EXIT`, it
+isn't drawn.
+
+---
+
+## Portals
+
+`@logic-incubator/engine/level/Portals` (pure) - the cells painted with the `TELEPORT` data brush.
+
+```ts
+type TeleportValue = { portal: number; arrivalOnly?: boolean };   // the portal id; arrivalOnly: somewhere to come out, not to go in
+type Portal = Vec2Like & { value: TeleportValue };                // its cell, in normalised map coordinates
+const MaxPortalId = 9999;
+IsTeleportValue(value): value is TeleportValue                    // told apart by its shape: a numeric `portal`
+DefaultTeleportValue(): TeleportValue                             // { portal: 1 } - a new brush's
+SanitiseTeleportValue(value): TeleportValue                       // a whole id from 0 to MaxPortalId; arrivalOnly only where it's set
+
+new Portals(portals: Portal[] = [])     // in any order; one a cell, the last given winning
+portals.All: ReadonlyArray<Portal>      // in reading order: along each row, the top row first
+portals.At(x, y): Portal | null
+portals.Jump(from, to, canStand: (x, y) => boolean): Portal | null   // where a step from cell `from` to cell `to` sends someone - see below
+portals.Destination(portal, canStand): Portal | null                 // the next of `All` with its id, round again, that canStand
+portals.Unpaired(): Portal[]             // the ones that can't send anyone anywhere: not arrival only, and no other portal has their id
+```
+
+`Jump` sends someone only as they walk onto a portal - `to` is a portal and isn't `from` - so one who comes out on a portal stays put until they
+step off it and on again: no bouncing back and forth. An arrival-only portal sends no one, but can be come out of. Two portals with an id lead to
+each other; three or more make a ring, each leading to the next in reading order, the last to the first. One where `canStand` says no (the
+level's: not solid) is passed over. `World.Step` and an online guest's `Prediction` both go through `TakePortal`, so a guest's hero takes a portal
+the moment it does on the host.
 
 `LIGHT` is a point light on its cell (`LightValue`, see [Lighting](#lighting)), with or without a lit tile there. Painted on a lit tile's cell (a
 torch), it takes the place of that tile's light, so it retunes the torch rather than doubling it. It belongs to the tile it's on - the top lit one,
@@ -1633,7 +1667,7 @@ the dispatcher while the scene is shown (`ListenWhileShown` on each of `SoundEve
 type SoundTable = {   // each a sound by name (NamedSounds); one left out, or with no file, is silent
     heroShot?, monsterShot?, shotWall?, heroHurt?, heroDeath?, lightSpell?, keysDropped?, gameOver?, levelComplete?,
     monsterHit?, monsterDeath?, monsterSpawn?, bossWake?, bossDeath?, spawnerHit?, spawnerBreak?, doorOpen?, doorClose?,
-    doorLocked?, pickup?: Partial<Record<PickupKind, string>>, questGiven?, questProgress?, questDone?, talkStart?, talkLine?, shout?, pause?,
+    doorLocked?, teleport?, pickup?: Partial<Record<PickupKind, string>>, questGiven?, questProgress?, questDone?, talkStart?, talkLine?, shout?, pause?,
     footstep?, ambience?, bossMusic?: string;   // these three DungeonMain plays itself, not for an event; give bossMusic the music volume
 };
 const SoundEvents: ReadonlyArray<string>;   // the events it plays for
@@ -1652,6 +1686,7 @@ board.Heard(event: string, args: ReadonlyArray<unknown>): void
 | `MONSTER_KILLED` | a boss: `bossDeath`, then as any other - its kind's `sounds.death`, `monsterDeath` |
 | `DOOR_OPENED`, `DOOR_CLOSED` | the `sound` of the sprite the door turns into (`AssetMetadata`), `doorOpen` / `doorClose` |
 | `DOOR_LOCKED` | `doorLocked` |
+| `HERO_TELEPORTED` | `teleport` |
 | `PICKUP_COLLECTED` | for each thing collected: its sprite's `sound`, then `pickup[kind]` |
 | `QUEST_UPDATED` | `questGiven` (now active, it wasn't), `questProgress` (active, it was), `questDone` (complete or finished, it wasn't) |
 | the rest | `LIGHT_SPELL_CAST` `lightSpell`, `KEYS_DROPPED` `keysDropped`, `ALL_PLAYERS_DIED` `gameOver`, `LEVEL_COMPLETED` `levelComplete`, `SPAWNER_HIT` `spawnerHit`, `SPAWNER_DESTROYED` `spawnerBreak`, `TALK_STARTED` `talkStart`, `TALK_LINE` `talkLine`, `NPC_SHOUTED` `shout`, `GAME_PAUSED` `pause` |
@@ -1943,7 +1978,7 @@ each hero's input every step and draws it; a game rarely touches it directly.
 
 ```ts
 interface WorldLevel extends EncounterLevel, QuestLevel {   // the parts of Level a world uses
-    playerStartPosition; quests; IsFloor(x, y); IsExit(x, y); IsTalker(x, y); IsDoorLocked(x, y, canOpen); UpdateDoors(tiles, canOpen);
+    playerStartPosition; quests; IsFloor(x, y); IsExit(x, y); PortalJump(from, to); IsTalker(x, y); IsDoorLocked(x, y, canOpen); UpdateDoors(tiles, canOpen);
     UpdateVisibleRegions(tiles); pickups: PickupSpot[]; CollectPickupsAt(x, y); DropPickup(x, y, value, sprite);
 }
 
@@ -1976,6 +2011,10 @@ NoInput: IPlayerInput                   // standing still
 WarpDistance = 8                                              // tiles
 WarpTarget(hero, others: Hero[]): Hero | null                 // the nearest of others, if all are at least WarpDistance away
 StartCells(start, count, isFloor): Vec2Like[]                 // start, then the open floor nearest it by steps (up to 6), the rest sharing start
+type PortalTrip = { from: Vec2Like; to: Vec2Like }            // the cell of the portal walked onto, and of the one come out of
+TakePortal(hero, from: Vec2Like, level: Pick<WorldLevel, "PortalJump">): PortalTrip | null
+                                                              // after a step that started on cell `from`: through the portal they've walked
+                                                              // onto, if any - WarpTo the cell come out of - and the trip, or null
 ```
 
 `Reset` (call on every `LEVEL_CREATED`) makes one hero per entry of `lightSpells`, each with that spell, if any, and `setup`'s hit points and
@@ -1987,7 +2026,9 @@ size (`Encounter.Reset(seed, heroes)`).
 1. Each hero in play (`Active`: living and not away), by slot, moves with `inputs[slot]` (standing still without one; a list of inputs moves them once for each, in order - an
    online host catching up on a guest's inputs). One holding the warp control first jumps to the nearest other hero in play, if every one of
    them is at least `WarpDistance` tiles away. With a leash, the others' positions bound where they can go (`LeashBoxFor`) and the edge stops
-   them like a wall (`Leashed`).
+   them like a wall (`Leashed`). After each move, a hero who has walked onto a portal comes out of its partner (`TakePortal` - from the cell they
+   were on after any warp, so a warp onto a portal doesn't count) and `HERO_TELEPORTED(hero, fromX, fromY, toX, toY)` is emitted; with a leash,
+   the rest of the heroes in play are put round them (`StartCells` from the cell come out of), so the party stays on one screen.
 2. Doors open and shut by where the heroes in play stand (`UpdateDoors`, with `TeamCanOpen`), and the regions they can see are recomputed together.
 3. Each picks up what their sprite touches, in slot order, so the first there gets it: every cell `PickupCellsReached` gives for their `Figure`
    and `Tile` - a pickup whose art any part of theirs overlaps, as both are drawn, unless it's up or down a step too high to climb
@@ -2118,7 +2159,7 @@ same level onto every machine, and the host's and guests' lobbies. All pure.
 `@logic-incubator/engine/net/NetMessages` - a kind byte, then JSON (a `level`'s body is its bytes).
 
 ```ts
-NetVersion = 9;     // a guest on another is refused ("version"); raise it whenever a message changes - this file's or PlayMessages' - or how a level sent in one is read
+NetVersion = 10;    // a guest on another is refused ("version"); raise it whenever a message changes - this file's or PlayMessages' - or how a level sent in one is read
 NameLength = 12;
 
 type LobbySeat = { peer: number; name: string; character: string | null };   // host's seat first; character: a game's id, null while choosing
@@ -2327,11 +2368,11 @@ type PingMessage = { t: "ping" | "pong"; id: number };
 type CatchUpMessage = { t: "catch-up"; round: number; events: NetEvent[] };   // host -> a guest back in: the round, every lasting event in it, then its end if it's over
 type LeaveMessage = { t: "leave" };                                          // guest -> host: leaving for good
 type NetEvent = pickup | keys | spawner | killed | damaged | died | all-died | completed | shot | quest   // the engine's events, and a new kind of shot's setup
-             | fired | stopped | hit | spawned | woke | spawner-hit | cast | locked   // heard: SHOT_FIRED (shot by its number, hero), SHOT_STOPPED, MONSTER_HIT, MONSTER_SPAWNED, BOSS_WOKE, SPAWNER_HIT, LIGHT_SPELL_CAST, DOOR_LOCKED (hero, x, y)
+             | fired | stopped | hit | spawned | woke | spawner-hit | cast | locked | teleported   // heard: SHOT_FIRED (shot by its number, hero), SHOT_STOPPED, MONSTER_HIT, MONSTER_SPAWNED, BOSS_WOKE, SPAWNER_HIT, LIGHT_SPELL_CAST, DOOR_LOCKED (hero, x, y), HERO_TELEPORTED (hero, fromX, fromY, x, y)
                                          // quest: { e: "quest"; index; state: QuestState; progress } - quest index of the level's moved on (QUEST_UPDATED)
                                          // killed carries boss; pickup carries no more than the cell - a guest finds what was there on its own copy
 IsLastingEvent(event): boolean           // pickup, keys, spawner, shot, quest - what changes the level or a hero for good, and goes in a catch-up
-IsFleetingEvent(event): boolean          // fired, stopped, hit, spawned, spawner-hit, cast, locked - a sound lost is nothing to wait for (not woke: it puts the boss music on)
+IsFleetingEvent(event): boolean          // fired, stopped, hit, spawned, spawner-hit, cast, locked, teleported - a sound lost is nothing to wait for (not woke: it puts the boss music on)
 
 QuantiseInput(input, seq): IPlayerInput   // what the host will have of it: each axis to 1/127 - a guest steps its own hero with this, so both agree
 ```
@@ -2346,8 +2387,8 @@ ignored.
 | --- | --- |
 | `RemoteInput` | The host's queue of one guest's inputs, by `seq`: `Receive(inputs)`, `Take(): IPlayerInput[]` (the next one, none while it hasn't come, two once more than `MaxWaiting` (4) are waiting; past 30 waiting it skips a lost one), `Acked` (the last played), `Waiting`, `Started`, `Reset()`. |
 | `PlayClock` | Which of the host's steps a guest draws: `DrawDelayMs` (100) behind the newest, trusting the quickest arrivals and moving smoothly when that changes. `Observe(tick, nowMs)` for each snapshot, `Advance(nowMs, frames)` each frame, `Tick` (fractional), `Started`, `Reset()`. |
-| `Replica` | The guest's copy of the host's monsters, shots and spawners - an `EncounterView`. `new Replica({ you, sizeFor })`; `Reset(spawners)`, `AddShot(index, setup)`, `Push(snapshot)` (keeps the last 20), `Sample(tick, frames)` (each monster and shot between the snapshots either side of `tick`, carried on up to 6 steps past the newest), `HeroAt(index, tick): HeroMoment \| null`, `Newest`. This machine's own shots are stand-ins from the moment they're fired (`Fire(from, direction, setup, seq)`, `StepStandIns(isBlocked)`), stopped by walls and by monsters as drawn, until the host's copy has gone or the host played that input without one. |
-| `Prediction` | The guest's own hero, ahead of the host: `Step(hero, input, others, collider)` numbers and plays an input, kept until the host has played it; `Reconcile(hero, snapshot, others, collider)` starts from the host's word and plays the rest again, leaving the difference in `Offset`, which `Settle(frames)` draws away (or jumps, past two tiles); `Corrections` (differences over half a pixel), `LastError`, `Pending`, `Recent(n)`, `Reset()`, `Forget()` (drops the inputs the host never had - after the connection went - numbering on). |
+| `Replica` | The guest's copy of the host's monsters, shots and spawners - an `EncounterView`. `new Replica({ you, sizeFor })`; `Reset(spawners)`, `AddShot(index, setup)`, `Push(snapshot)` (keeps the last 20), `Sample(tick, frames)` (each monster and shot between the snapshots either side of `tick`, carried on up to 6 steps past the newest), `HeroAt(index, tick): HeroMoment \| null` (between the snapshots either side, except where a hero moved more than two tiles between them - a portal, a warp - who is drawn at one end or the other), `Newest`. This machine's own shots are stand-ins from the moment they're fired (`Fire(from, direction, setup, seq)`, `StepStandIns(isBlocked)`), stopped by walls and by monsters as drawn, until the host's copy has gone or the host played that input without one. |
+| `Prediction` | The guest's own hero, ahead of the host: `Step(hero, input, others, collider, level)` numbers and plays an input, kept until the host has played it - taking a portal it walks onto as the host will (`TakePortal`; `level: PredictionLevel`, `Pick<WorldLevel, "PortalJump">`), the trip in `Trip` until the next `Step`; `Reconcile(hero, snapshot, others, collider, level)` starts from the host's word and plays the rest again, leaving the difference in `Offset`, which `Settle(frames)` draws away (or jumps, past two tiles); `Corrections` (differences over half a pixel), `LastError`, `Pending`, `Recent(n)`, `Reset()`, `Forget()` (drops the inputs the host never had - after the connection went - numbering on). |
 | `HeroSync` | `HeroSnapshotOf(hero, ack)` and `ApplyHeroSnapshot(hero, snapshot)` (everything but where they stand, which the caller places). |
 
 ## Quests and dialogs
@@ -2627,7 +2668,7 @@ Both extend lib's `Store`.
 
 `@logic-incubator/editor/stores/EditorStore` - `default class EditorStore` (UI state: tool, brush, layers, zoom, scene):
 `const enum EditorActions` (`BRUSH_MOVED`, `ROTATE_BRUSH`, `FLIP_BRUSH_H`, `FLIP_BRUSH_V`, `BRUSH_CHANGED`, `BRUSH_HOVERED`, `BRUSH_VISIBLE`, `BRUSH_NUDGE`,
-`DATA_BRUSH_INC`, `DATA_BRUSH_DEC`, `SET_DATA_BRUSH_VALUE`, `ZOOM_IN`, `ZOOM_OUT`, `MOUSE_BUTTON`, `CHANGE_SCENE`, `RESET`, `DUPLICATE_LAYER`,
+`DATA_BRUSH_INC`, `DATA_BRUSH_DEC` (+/-: step the height brush, or the teleport brush's portal id - no other value), `SET_DATA_BRUSH_VALUE`, `ZOOM_IN`, `ZOOM_OUT`, `MOUSE_BUTTON`, `CHANGE_SCENE`, `RESET`, `DUPLICATE_LAYER`,
 `MOVE_PLAYER_LAYER_UP`, `MOVE_PLAYER_LAYER_DOWN` (see `PlayerLayerMoved`), `INSPECT_CELL` (`data.position`: opens the cell inspector there, or closes it given none), `REFRESH`, ...),
 `const enum EditorTool { BRUSH = "brush", ERASE = "erase", DATA_SELECT = "data-select", STAMP = "stamp", DROPPER = "dropper", FILL = "fill", MOVE = "move" }`,
 `const enum MouseButtonState { LEFT_DOWN, RIGHT_DOWN, UP, MIDDLE_DOWN }`, `IMPLICIT_LAYER_ID = -99999` (the always-present `attributes` data layer, holding every data brush but the heights, one of each name a cell),
@@ -2663,17 +2704,17 @@ Used by the editor's own views; available for editor extensions.
 | `ui/dom/EditorOverlay` | `default class EditorOverlay` - singleton DOM overlay (`inst`, `Destroy()`), `Slot(name: OverlaySlot): HTMLElement` with `OverlaySlot = "brushes" \| "selected" \| "layers" \| "tools" \| "help" \| "float"` (`"float"` covers the whole stage for a popup over the map - the cell inspector; only what's put in it takes the pointer), `SetVisible(visible)` |
 | `ui/dom/SpriteCanvas` | `default class SpriteCanvas` (draws textures to a 2D canvas); `FitIcon`, `VisibleBounds`, `DrawTexture`, `DrawDataBrushSwatch` |
 | `ui/dialog/FormDialog` | `OpenFormDialog(options: FormDialogOptions): Promise<FormValues \| null>`, `IsFormDialogOpen()`, `InjectFormStyles()` (its look - `fd-overlay`, `fd-panel`, `fd-header`... - for another modal to share); field specs `NumberField`, `TextField`, `TextAreaField` (lines of text: a script - Enter in it is a new line, not Save), `ColourField`, `ToggleField`, `ChoiceField` (exactly one option; an option's `image` draws a picture on its chip, as a multi-choice's does), `MultiChoiceField` (`FieldSpec`), `ChoiceOption`; any field can have `visibleWhen(values)` to show only while it applies to the other values (a pickup's key id only for a key); `IsFieldVisible(field, values)`; options may set `saveLabel` and `cancelLabel` (`null` leaves Cancel out - a message with just an OK, which the sprite editor uses for alerts and confirms) |
-| `DataBrushEditors` | `DataBrushEditorFor(name): DataBrushEditor \| undefined` - the dialog definitions for editing a value: `"light"` (the `LIGHT` brush's name - the same popup for the brush and for a lit tile: brightness, tint, range and flicker; a value that isn't a light starts as `DefaultLightValue()`), `"spawner"` (the `SPAWNER` brush's name - the same popup for the brush and for a spawner tile), `"pickup"` (the `PICKUP` brush's name - the same popup for the brush and for a tile that gives one; a weapon's shot can be set to give off light, and a light to carry has a light and how long it burns), `"door"` (a door tile's lock: a Locked checkbox that reveals its key id), the height, `"dialog"` (a script box, read as it's typed against the level's quests: the first mistake and how many more) and `"boss"` (its monster, hit points and quest). A pickup and a boss choose the quest they count for from None and the level's. `EditorImages` carries the lookups they need from the game's art and the level (`monster`, `hasSprite`, `quests?`) |
+| `DataBrushEditors` | `DataBrushEditorFor(name): DataBrushEditor \| undefined` - the dialog definitions for editing a value: `"light"` (the `LIGHT` brush's name - the same popup for the brush and for a lit tile: brightness, tint, range and flicker; a value that isn't a light starts as `DefaultLightValue()`), `"spawner"` (the `SPAWNER` brush's name - the same popup for the brush and for a spawner tile), `"pickup"` (the `PICKUP` brush's name - the same popup for the brush and for a tile that gives one; a weapon's shot can be set to give off light, and a light to carry has a light and how long it burns), `"door"` (a door tile's lock: a Locked checkbox that reveals its key id), the height, `"dialog"` (a script box, read as it's typed against the level's quests: the first mistake and how many more), `"boss"` (its monster, hit points and quest) and `"teleport"` (its portal id and an Arrival only checkbox). A pickup and a boss choose the quest they count for from None and the level's. `EditorImages` carries the lookups they need from the game's art and the level (`monster`, `hasSprite`, `quests?`) |
 | `DataBrushDialog` | `OpenDataBrushDialog(name, value, context?, quests?)` - the popup for a value, with the level's quests to offer; `MonsterImage(type)` (a monster's chip picture, cached) |
 | `QuestEditor` | The quest popup's pure parts: `QuestFields(images)`, `QuestToForm(quest)`, `QuestFromForm(form, was)` (a goal of a kind it doesn't know keeps its fields), `QuestProblem(form, others)`, `NewQuestId(quests)`, `DescribeQuest(quest)` |
 | `QuestsDialog` | `OpenQuestsDialog(quests): Promise<QuestDef[] \| null>` - the quest list (Q): Edit, Remove, Add quest; resolves with the new list on Save, null if cancelled or unchanged; `IsQuestsDialogOpen()` |
-| `DataLabels` | `PickupLabel(pickup)`, `MapLabel(value)` (the short tag drawn over a value on the attributes overlay: `G10`, `H2`, `K3`, `W`, `I`, `T` for a light to carry (a torch), `L3` for a locked door - an unlocked one has no tag -, `D` for a dialog, `B` for a boss, a spawner's number of monster types, and a `Q` after a pickup's or boss's that counts for a quest; only characters the bitmap font has), `DescribePickup(pickup)`, `DescribeBoss(boss)`, `DescribeDialog(script)` (its first line, not a part's name, how many lines, and `shouts` when it has a shout part), `DescribeLock(lock)`, `DescribeSpawner(spawner)`, `DescribeDataValue(value): { text }` (any data value in a line - a number, pickup, dialog, boss, light, spawner or door lock - for the selected-brush card and the inspector) (pure) |
+| `DataLabels` | `PickupLabel(pickup)`, `MapLabel(value)` (the short tag drawn over a value on the attributes overlay: `G10`, `H2`, `K3`, `W`, `I`, `T` for a light to carry (a torch), `L3` for a locked door - an unlocked one has no tag -, `D` for a dialog, `B` for a boss, a spawner's number of monster types, `P3` for portal 3 - `A3` for an arrival-only one -, and a `Q` after a pickup's or boss's that counts for a quest; only characters the bitmap font has), `UnpairedPortalCells(levelData): Set<string>` (the cells, as `"x,y"`, of the `teleport` brushes whose id no other portal has - the map puts a `?` after their tag), `DescribeTeleport(value)` (`portal 3`, `portal 3 · arrival only`), `DescribePickup(pickup)`, `DescribeBoss(boss)`, `DescribeDialog(script)` (its first line, not a part's name, how many lines, and `shouts` when it has a shout part), `DescribeLock(lock)`, `DescribeSpawner(spawner)`, `DescribeDataValue(value): { text }` (any data value in a line - a number, pickup, dialog, boss, light, spawner, door lock or portal - for the selected-brush card and the inspector) (pure) |
 | `Heights` | The height layer's pure rules: `MaxHeight` (999), `ClampHeight(h)`, `CellKey(cell)`, `HeightMap(levelData)` (cell key -> height), `HeightAtCell(levelData, cell)`, `IsHeightBrush(brush)`, `MakeHeightBrush(cell, height)`, `type HeightChange = { height?; delta? }`, `WithHeights(levelData, cells, change)` (each cell once, clamped; a cell at 0 has no brush; the same array if nothing changed), `HeightColour(h)` (the heatmap's colour: greens through reds up, blues down), `BlockedEdges(heights)` (the cell edges a hero can't step over - `IsHeightGap` - which the map marks in red) |
 | `CellEntries` | `type CellEntry` (a data brush, a tile's own light/spawner/pickup/door lock - `replaced` for a light a `LIGHT` brush on the tile's own cell takes the place of - or the cell's height), `type CellLookups`, `TileValueOf(brush, meta)`, `CellEntriesAt(levelData, layers, cell, lookups)` (everything on a cell, on any layer, shown or not: data brushes, then tiles' values from the top, then always the height), `EntryName(entry)`, `SummariseCell(entries)` (the cursor's one-line summary, leaving out a height of 0 and a replaced light) (pure) |
 | `views/CellLookups` | `EditorCellLookups(levelData, layers)` (footprints and metadata from the loaded art), `EditorCellEntries(levelData, layers, cell)` |
 | `views/CellInspector` | `default class CellInspector` - the inspector panel in the `"float"` slot, following `IEditorState.inspectedCell`: one row per `CellEntry`, with Edit (its value's popup) and Delete (`REMOVE`, or `SET_HEIGHT` to 0) as one undo step each; a tile's own value has no Delete. Esc or its × closes it |
 | `views/PaletteCategories` | `type TileSet = { id: AssetCategory; name; brushes: string[] }`; `GroupByCategory(names, categoryOf): TileSet[]` (one set per category, in `AssetCategories` order, empty ones included, each sorted by name); `EmptyTabHint(id, canCreate?): string` (pure); `ShowsCategory(kind, category)` (a floor/walls layer shows only its own tab, any other tile layer all but those two); `TakesCategory(kind, category)` (a floor/walls layer paints only its own category, a generic one anything); `EmptyTabHint(id, canCreate?)` mentions the tab's + when the sprite editor is available |
-| `tools/ToolGeometry` | `SpanRect(a, b)`, `RectCells(rect, border?)`, `InRect(rect, x, y)`, `FloodFill(start, bounds, keyAt)`, `TopmostBrushAt(...)` (a brush is only at its anchor cell), `TopmostBrushCovering(brushes, layers, cell, footprintOf, accept?)` (a brush is on top at every cell of its footprint, so a 2x2 spawner or door is the target wherever it's clicked), `BoundsOfCells(cells)`, `PipRect(slot, size)` (where an attribute type's pip sits on a cell, by its palette slot: four along the top, the rest along the bottom), `type CellRect` |
+| `tools/ToolGeometry` | `SpanRect(a, b)`, `RectCells(rect, border?)`, `InRect(rect, x, y)`, `FloodFill(start, bounds, keyAt)`, `TopmostBrushAt(...)` (a brush is only at its anchor cell), `TopmostBrushCovering(brushes, layers, cell, footprintOf, accept?)` (a brush is on top at every cell of its footprint, so a 2x2 spawner or door is the target wherever it's clicked), `BoundsOfCells(cells)`, `PipRect(slot, size)` (where an attribute type's pip sits on a cell, by its palette slot: four along the top, four along the bottom, the rest down the left and right edges), `type CellRect` |
 
 ## Sprite editor
 

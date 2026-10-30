@@ -11,6 +11,7 @@
  * only ever a tile's own value (`EffectiveDoorLock`): there's no door data brush. A dialog's script
  * and a boss are painted data brushes, each with its popup; so are the level's quests, which a pickup,
  * a boss and a script name by id - their list is `QuestsDialog`'s, and the popups offer them from it.
+ * A portal's id and whether it's arrival only are a `TELEPORT` brush's (see `Portals`).
  *
  * No pixi in here - monster pictures come in via `EditorImages` - so the
  * conversions run under the plain node test runner (see DataBrushEditors.test.ts).
@@ -24,6 +25,7 @@ import { DefaultPickupValue, IsPickupValue, PickupKind, PickupKinds, PickupValue
 import { DefaultSpawnerValue, IsSpawnerValue, SanitiseSpawnerValue } from "@logic-incubator/engine/level/entities/Spawners";
 import { DefaultLightValue, IsLightValue, LightValue, MAX_BRIGHTNESS } from "@logic-incubator/engine/level/Lighting";
 import { DataBrushName, DataBrushValue } from "@logic-incubator/engine/level/LevelFormat";
+import { DefaultTeleportValue, IsTeleportValue, MaxPortalId, SanitiseTeleportValue } from "@logic-incubator/engine/level/Portals";
 import { DescribeDialogErrors, ParseDialog } from "@logic-incubator/engine/story/DialogScript";
 import type { QuestDef } from "@logic-incubator/engine/story/Quests";
 import { DefaultDialogValue, IsDialogValue } from "@logic-incubator/engine/story/Talk";
@@ -470,6 +472,33 @@ const EDITORS: { [name: string]: DataBrushEditor } = {
                 hitPoints: Number(form.hitPoints)
             }),
         validate: form => ((form.monsters as string[]).length ? null : "Pick at least one monster.")
+    },
+
+    [DataBrushName.TELEPORT]: {
+        title: "Portal",
+        subtitle: "A hero who walks onto it comes out of another portal with the same id. Paint something there too - the portal itself isn't drawn.",
+        fields: () => [
+            {
+                type: "number",
+                key: "portal",
+                label: "Portal id",
+                min: 0,
+                max: MaxPortalId,
+                sliderMax: 20,
+                hint: "Two portals with an id are a pair, each leading to the other. Three or more make a ring, each leading to the next along the rows, top row first. +/- changes it while painting."
+            },
+            {
+                type: "toggle",
+                key: "arrivalOnly",
+                label: "Arrival only",
+                hint: "Somewhere to come out, not to go in: walking onto it does nothing. Give a portal and an arrival-only one the same id for a one-way trip."
+            }
+        ],
+        toForm: value => {
+            const portal = IsTeleportValue(value) ? value : DefaultTeleportValue();
+            return { portal: portal.portal, arrivalOnly: !!portal.arrivalOnly };
+        },
+        fromForm: form => SanitiseTeleportValue({ portal: Number(form.portal), arrivalOnly: form.arrivalOnly === true })
     }
 };
 

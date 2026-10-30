@@ -52,6 +52,11 @@ export const PICKUP_COLLECTED = "pickupCollected";
 /** `(hero: number, tileX: number, tileY: number)` - a hero who fell (or left) dropped the keys they carried, all on that cell, for the others to pick up. */
 export const KEYS_DROPPED = "keysDropped";
 /**
+ * `(hero: number, fromX: number, fromY: number, toX: number, toY: number)` - a hero walked onto the portal on the first cell and came out of
+ * the one on the second (see `Portals`). On a shared screen the rest of the party came too, around them, and this is the only one said.
+ */
+export const HERO_TELEPORTED = "heroTeleported";
+/**
  * `(hero: number, tileX: number, tileY: number)` - a hero walked into an NPC (a `DIALOG` brush's cell) in a game where they can
  * talk (`World.SetTalk`: one hero, on one machine). `DungeonMain` starts the talk.
  */

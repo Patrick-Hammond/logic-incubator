@@ -158,12 +158,15 @@ export function BoundsOfCells(cells: ReadonlyArray<Vec2Like>): CellRect {
 
 /**
  * Where an attribute type's pip sits on a cell `size` pixels across, by its place in the palette (`slot`): a quarter of the
- * cell each, four along the top and the rest along the bottom, leaving the middle for the active type's own label. The
- * map (`Canvas`) and the palette's All chip draw them in the same places, so a pip's place says its type as well as its colour.
+ * cell each, four along the top, four along the bottom, then down the left and right edges between them, leaving the middle
+ * for the active type's own label. The map (`Canvas`) and the palette's All chip draw them in the same places, so a pip's
+ * place says its type as well as its colour.
  */
 export function PipRect(slot: number, size: number): { x: number; y: number; size: number } {
     const pip = size / 4;
-    const column = slot % 4;
-    const row = slot < 4 ? 0 : 3;
+    // Past the top and bottom rows, left then right on the second row, then on the third.
+    const side = slot - 8;
+    const column = slot < 8 ? slot % 4 : (side % 2) * 3;
+    const row = slot < 4 ? 0 : slot < 8 ? 3 : 1 + (Math.floor(side / 2) % 2);
     return { x: column * pip + 1, y: row * pip + 1, size: Math.max(1, pip - 2) };
 }

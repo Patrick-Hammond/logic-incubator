@@ -1,8 +1,8 @@
 /**
  * A level for the online tests, from an ASCII map: `#` solid, `D` the cells of
  * one door, `S` the start, `E` a way out, `$` a gold pickup, `k` the key to the
- * door when it's locked, `@` a spawner's (solid) cell - the gold marked for the
- * quest `gold`, if `quests` has one. Its doors open by the
+ * door when it's locked, `@` a spawner's (solid) cell, a digit a portal with
+ * that id - the gold marked for the quest `gold`, if `quests` has one. Its doors open by the
  * same rule as `Level`'s (`DoorOpens`) and can be set from a snapshot; pickups
  * are taken and dropped as `Level` does them. Two copies of the same map are
  * the host's level and a guest's.
@@ -15,6 +15,7 @@ import type { CollectedPickup } from "../../level/Level";
 import { NoLock } from "../../level/entities/Keys";
 import { PickupArea, PickupSpot, PickupValue } from "../../level/entities/Pickups";
 import { DefaultSpawnerValue, Spawner } from "../../level/entities/Spawners";
+import Portals, { Portal } from "../../level/Portals";
 import type { QuestDef } from "../../story/Quests";
 import type { NetLevel } from "../NetPlay";
 
@@ -29,6 +30,7 @@ export function NetTestLevel(rows: string[], lockId = NoLock, monsters: string[]
     const exits: Vec2Like[] = [];
     const pickups: Pickup[] = [];
     const spawners: Spawner[] = [];
+    const portals: Portal[] = [];
     let start: Vec2Like | undefined;
     rows.forEach((row, y) => row.split("").forEach((c, x) => {
         (collisionData[x] = collisionData[x] || [])[y] = c === "#" || c === "@";
@@ -44,12 +46,15 @@ export function NetTestLevel(rows: string[], lockId = NoLock, monsters: string[]
             pickups.push({ x, y, area: PickupArea({ x, y }, TileSize), value: { kind: "key", id: lockId }, sprite: "key" });
         } else if (c === "@") {
             spawners.push({ x, y, cells: [{ x, y }], value: { ...DefaultSpawnerValue(), monsters: monsters.slice(), hitPoints: 3 } });
+        } else if (/[0-9]/.test(c)) {
+            portals.push({ x, y, value: { portal: Number(c) } });
         }
     }));
     const width = rows[0].length;
     const height = rows.length;
     const isSolid = (x: number, y: number) => x < 0 || y < 0 || x >= width || y >= height || collisionData[x][y];
     const isDoor = (x: number, y: number) => door.cells.some(c => c.x === x && c.y === y);
+    const portalSet = new Portals(portals);
     let doorVersion = 0;
     const doors = door.cells.length ? [door] : [];
     const level: NetTestLevel = {
@@ -76,6 +81,7 @@ export function NetTestLevel(rows: string[], lockId = NoLock, monsters: string[]
         },
         IsFloor: (x, y) => !isSolid(x, y) && !isDoor(x, y),
         IsExit: (x, y) => exits.some(e => e.x === x && e.y === y),
+        PortalJump: (from, to) => portalSet.Jump(from, to, (x, y) => !isSolid(x, y)),
         IsTalker: () => false,
         Marked: (kind, quest) => (kind === "collect" ? pickups.filter(p => p.value.quest === quest).length : 0),
         IsDoorLocked: (x, y, canOpen) => isDoor(x, y) && !door.isOpen && !canOpen(door.lockId),

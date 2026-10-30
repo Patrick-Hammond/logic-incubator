@@ -125,7 +125,12 @@ export type NetEvent =
     /** Hero `hero` cast their light spell (`LIGHT_SPELL_CAST`). */
     | { e: "cast"; hero: number }
     /** Hero `hero` walked into the door on this cell, which no one has the key for (`DOOR_LOCKED`). */
-    | { e: "locked"; hero: number; x: number; y: number };
+    | { e: "locked"; hero: number; x: number; y: number }
+    /**
+     * Hero `hero` walked onto the portal on cell `fromX`, `fromY` and came out of the one on `x`, `y` (`HERO_TELEPORTED`) - heard, as where
+     * they are now the snapshots say, and the guest's own hero took it as it did (see `Prediction`).
+     */
+    | { e: "teleported"; hero: number; fromX: number; fromY: number; x: number; y: number };
 
 /** Host to every guest, 20 times a second and as a level ends: the world after step `tick` of level `round`, and what happened since the last one. */
 export type Snapshot = {
@@ -172,12 +177,20 @@ export function IsLastingEvent(event: NetEvent): boolean {
  */
 export function IsFleetingEvent(event: NetEvent): boolean {
     return (
-        event.e === "fired" || event.e === "stopped" || event.e === "hit" || event.e === "spawned" || event.e === "spawner-hit" || event.e === "cast" || event.e === "locked"
+        event.e === "fired" ||
+        event.e === "stopped" ||
+        event.e === "hit" ||
+        event.e === "spawned" ||
+        event.e === "spawner-hit" ||
+        event.e === "cast" ||
+        event.e === "locked" ||
+        event.e === "teleported"
     );
 }
 
 const EventKinds = [
-    "pickup", "keys", "spawner", "killed", "damaged", "died", "all-died", "completed", "shot", "quest", "fired", "stopped", "hit", "spawned", "woke", "spawner-hit", "cast", "locked"
+    "pickup", "keys", "spawner", "killed", "damaged", "died", "all-died", "completed", "shot", "quest", "fired", "stopped", "hit", "spawned", "woke", "spawner-hit", "cast", "locked",
+    "teleported"
 ];
 
 const HeroGone = 1;
@@ -355,6 +368,9 @@ function WriteEvents(writer: ByteWriter, events: ReadonlyArray<NetEvent>): void 
             case "locked":
                 writer.U8(event.hero).U16(event.x).U16(event.y);
                 break;
+            case "teleported":
+                writer.U8(event.hero).U16(event.fromX).U16(event.fromY).U16(event.x).U16(event.y);
+                break;
             case "spawner":
             case "spawner-hit":
                 writer.U16(event.index);
@@ -489,6 +505,8 @@ function ReadEvent(reader: ByteReader): NetEvent {
         case "keys":
         case "locked":
             return { e: kind, hero: reader.U8(), x: reader.U16(), y: reader.U16() };
+        case "teleported":
+            return { e: kind, hero: reader.U8(), fromX: reader.U16(), fromY: reader.U16(), x: reader.U16(), y: reader.U16() };
         case "spawner":
         case "spawner-hit":
             return { e: kind, index: reader.U16() };

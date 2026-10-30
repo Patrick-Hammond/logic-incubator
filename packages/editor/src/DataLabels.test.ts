@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { DescribeBoss, DescribeDataValue, DescribeDialog, DescribeLock, DescribePickup, DescribeSpawner, MapLabel, PickupLabel } from "./DataLabels";
+import { DataBrushName } from "@logic-incubator/engine/level/LevelFormat";
+import { DescribeBoss, DescribeDataValue, DescribeDialog, DescribeLock, DescribePickup, DescribeSpawner, MapLabel, PickupLabel, UnpairedPortalCells } from "./DataLabels";
 
 const WEAPON = { icon: "weapon_axe", shot: { sprite: "weapon_throwing_axe", speed: 5, damage: 2, cooldown: 0.4, range: 8 } };
 const TORCH = { brightness: 1, tint: 0xffc780, range: 7 };
@@ -34,6 +35,21 @@ describe("MapLabel", () => {
         expect(MapLabel({ kind: "gold", amount: 10 })).toBe("G10");
         expect(MapLabel({ lock: 3 })).toBe("L3");
         expect(MapLabel({ lock: 0 })).toBe("L0");
+        expect(MapLabel({ portal: 3 })).toBe("P3");
+        expect(MapLabel({ portal: 12, arrivalOnly: true })).toBe("A12");
+    });
+
+    it("finds the portals that go nowhere - their id no other portal's - for the map to mark", () => {
+        const at = (x: number, portal: number, arrivalOnly = false) => ({
+            name: DataBrushName.TELEPORT,
+            position: { x, y: 4 },
+            pixelOffset: { x: 0, y: 0 },
+            rotation: 0,
+            scale: { x: 1, y: 1 },
+            layerId: -99999,
+            data: arrivalOnly ? { portal, arrivalOnly } : { portal }
+        });
+        expect(UnpairedPortalCells([at(1, 1), at(2, 1), at(3, 2), at(4, 3, true)])).toEqual(new Set(["3,4"]));
     });
 
     it("says nothing for an unlocked door - every door by default, so a tag on each would be noise", () => {
@@ -103,6 +119,8 @@ describe("DescribeDataValue", () => {
         expect(DescribeDataValue({ script: "Hello there" })).toEqual({ text: "“Hello there”" });
         expect(DescribeDataValue(TORCH)).toEqual({ text: "1 bright · 7 tiles", colour: 0xffc780 });
         expect(DescribeDataValue({ lock: 2 })).toEqual({ text: "needs key 2" });
+        expect(DescribeDataValue({ portal: 4 })).toEqual({ text: "portal 4" });
+        expect(DescribeDataValue({ portal: 4, arrivalOnly: true })).toEqual({ text: "portal 4 · arrival only" });
         expect(DescribeDataValue({ monsters: ["big_demon"], interval: 4, maxAlive: 2, total: 0, activationRange: 10, hitPoints: 10 })).toEqual({ text: "big demon · every 4s · max 2" });
     });
 

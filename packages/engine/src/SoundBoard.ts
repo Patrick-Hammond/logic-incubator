@@ -10,9 +10,9 @@
 
 import type NamedSounds from "@logic-incubator/lib/assets/NamedSounds";
 import {
-    ALL_PLAYERS_DIED, BOSS_WOKE, DOOR_CLOSED, DOOR_LOCKED, DOOR_OPENED, GAME_PAUSED, KEYS_DROPPED, LEVEL_COMPLETED, LIGHT_SPELL_CAST, MONSTER_HIT, MONSTER_KILLED,
-    MONSTER_SPAWNED, NPC_SHOUTED, PICKUP_COLLECTED, PLAYER_DAMAGED, PLAYER_DIED, QUEST_UPDATED, SHOT_FIRED, SHOT_STOPPED, SPAWNER_DESTROYED, SPAWNER_HIT,
-    TALK_LINE, TALK_STARTED
+    ALL_PLAYERS_DIED, BOSS_WOKE, DOOR_CLOSED, DOOR_LOCKED, DOOR_OPENED, GAME_PAUSED, HERO_TELEPORTED, KEYS_DROPPED, LEVEL_COMPLETED, LIGHT_SPELL_CAST, MONSTER_HIT,
+    MONSTER_KILLED, MONSTER_SPAWNED, NPC_SHOUTED, PICKUP_COLLECTED, PLAYER_DAMAGED, PLAYER_DIED, QUEST_UPDATED, SHOT_FIRED, SHOT_STOPPED, SPAWNER_DESTROYED,
+    SPAWNER_HIT, TALK_LINE, TALK_STARTED
 } from "./Events";
 import type { AssetMetadata } from "./level/AssetMetadata";
 import type { MonsterDef, MonsterSounds, MonsterType } from "./level/entities/MonsterRoster";
@@ -55,6 +55,8 @@ export type SoundTable = {
     doorClose?: string;
     /** A hero walks into a door no one in the team has the key for. */
     doorLocked?: string;
+    /** A hero goes through a portal (see `Portals`). */
+    teleport?: string;
     /** Picking something up, by what it is - for a pickup whose sprite's metadata names no `sound`. */
     pickup?: Partial<Record<PickupKind, string>>;
     questGiven?: string;
@@ -79,8 +81,8 @@ export type SoundTable = {
 /** The events a `SoundBoard` plays sounds for. */
 export const SoundEvents: ReadonlyArray<string> = [
     SHOT_FIRED, SHOT_STOPPED, PLAYER_DAMAGED, PLAYER_DIED, LIGHT_SPELL_CAST, KEYS_DROPPED, ALL_PLAYERS_DIED, LEVEL_COMPLETED, MONSTER_HIT, MONSTER_KILLED,
-    MONSTER_SPAWNED, BOSS_WOKE, SPAWNER_HIT, SPAWNER_DESTROYED, DOOR_OPENED, DOOR_CLOSED, DOOR_LOCKED, PICKUP_COLLECTED, QUEST_UPDATED, TALK_STARTED,
-    TALK_LINE, NPC_SHOUTED, GAME_PAUSED
+    MONSTER_SPAWNED, BOSS_WOKE, SPAWNER_HIT, SPAWNER_DESTROYED, DOOR_OPENED, DOOR_CLOSED, DOOR_LOCKED, HERO_TELEPORTED, PICKUP_COLLECTED, QUEST_UPDATED,
+    TALK_STARTED, TALK_LINE, NPC_SHOUTED, GAME_PAUSED
 ];
 
 /** What one hero sounds like, by name (see `HeroSlot.sounds`) - a character's own voice. Either left out, the game's `SoundTable` has it. */
@@ -168,6 +170,9 @@ export default class SoundBoard {
                 break;
             case DOOR_LOCKED:
                 this.Play(table.doorLocked);
+                break;
+            case HERO_TELEPORTED:
+                this.Play(table.teleport);
                 break;
             case PICKUP_COLLECTED: {
                 const kinds = table.pickup || {};

@@ -1696,6 +1696,8 @@ What changes with more than one hero:
   (`PartyToughness`) - rather than more numerous.
 - **Falling.** A hero whose hearts run out drops the keys they carried where they fell (`PLAYER_DIED(hero)`) and stays on as a
   ghost; the rest play on. When every hero is down, `ALL_PLAYERS_DIED` ends the level.
+- **Portals.** A hero who walks onto a portal ([9.5.1](#951-portals)) comes out of its partner - and on a shared screen the rest
+  of the party comes too, onto the open floor around them, so no one is left off it.
 - **Getting out.** The first hero to step onto an `exit` cell ([9.5](#95-the-level-file)) ends the level for everyone
   (`LEVEL_COMPLETED(hero)`); every hero, fallen or not, starts the next one on their feet. To move on to another level, have
   `level` (and `levelBundle`) return it once you hear `LEVEL_COMPLETED`.
@@ -1817,7 +1819,9 @@ gives the host a `HostSession` and each guest a `GuestSession`, and `DungeonMain
 - **A guest's own hero moves at once.** It steps its own hero with the same code the host runs (`Prediction`), keeps the inputs the host
   hasn't played yet, and when a snapshot says where the host has it, starts from there and plays them again. When both agree - nearly
   always - nothing shows; a difference is drawn away over a few frames, or jumped if it's more than two tiles. Its own shots fly from the
-  moment they're fired, and the host's copy takes over.
+  moment they're fired, and the host's copy takes over. A portal it walks onto it takes at once too, as the host will - a portal is
+  decided by where the hero is alone - and another hero who went through one (or warped) is drawn at one end or the other, never
+  sliding across the map between two snapshots.
 - **Each screen follows its own hero**, and while that hero is down, a teammate still standing (and not away).
 - **The menu doesn't pause.** The run is everyone's, so opening the pause menu online only stands this player's hero still
   (`DungeonMain.Pause`).
@@ -1949,8 +1953,8 @@ over them (above, "arches" is drawn over the heroes as they walk beneath). A lev
 ([9.10](#910-npcs-dialogs-and-quests)); a level without it has none. The engine reads only what `LevelFormat.ts` types; the
 editor saves more of its own state alongside.
 
-There are exactly nine **data brushes**. The height (`z-index`) is painted on the **height** layer (`isHeight`, id -99997), at
-most one a cell and none where it's 0; the other eight on the one `attributes` data layer, which holds **one of each** on a cell -
+There are exactly ten **data brushes**. The height (`z-index`) is painted on the **height** layer (`isHeight`, id -99997), at
+most one a cell and none where it's 0; the other nine on the one `attributes` data layer, which holds **one of each** on a cell -
 a cell can be solid, an NPC's and a pickup all at once (a tile layer still holds one tile a cell):
 
 | Name | `data` | Effect |
@@ -1964,10 +1968,35 @@ a cell can be solid, an NPC's and a pickup all at once (a tile layer still holds
 | `boss` | a `BossValue` | One monster where it's painted - `{ monster, hitPoints?, quest? }`: the roster's type, its hit points (left out or 0: its kind's own) and the quest killing it counts for. It sleeps until a hero comes near it ([9.10](#910-npcs-dialogs-and-quests)). |
 | `spawner` | a `SpawnerValue` | A monster spawner where it's painted, set in its popup - the same settings as a spawner tile's (see `spawner` in [9.6](#96-assets-metajson-tile-behaviour-by-sprite-name)). Any sprite can be one: the brush makes the top tile on its cell that isn't floor (a gravestone, a statue, a wall) the spawner, drawn as itself, solid over its sprite's footprint and gone when it's destroyed. On bare floor it's drawn as the roster's `spawnerSprite` instead. Painted on a spawner tile's cell, it sets what that spawner does, rather than adding a second. |
 | `light` | a `LightValue` | A point light on its cell, set in its popup - the same settings as a lit tile's (see `light` in [9.6](#96-assets-metajson-tile-behaviour-by-sprite-name)): a light anywhere, with or without a torch. Painted on a lit tile's cell (a torch), it takes the place of that tile's light rather than adding a second, so it retunes the torch. It goes out with the tile it's on - the lit one, or else the top one that isn't floor - so a light painted on a gem goes when the gem's picked up, and one on a spawner when it's destroyed. On bare floor it's a light on its own, always on. It adds no glow sprite (a torch tile has its own). A brush whose value is missing a field is left out. |
+| `teleport` | a `TeleportValue` | A portal - `{ portal, arrivalOnly? }`: a hero who walks onto it comes out of another portal with the same id ([9.5.1](#951-portals)). It isn't drawn - paint a rune, a pad or a hole there too. |
 
 Doors are **not** brushes: they are ordinary tiles that carry their behaviour in `assets-meta.json`. A light, a pickup or a
 spawner can be either: a tile that is one by default, or a brush over any other tile - a `light` or `spawner` brush on bare
 floor too.
+
+#### 9.5.1 Portals
+
+A `teleport` brush makes its cell a **portal** with a portal id (`TeleportValue.portal`, a whole number from 0 to 9999). A hero
+who walks onto one comes out of another with the same id, standing on it, at once (`Portals`, `Level.PortalJump`):
+
+- **Two with an id are a pair**, each leading to the other. **Three or more make a ring**: each leads to the next with its id in
+  reading order - along each row, the top row first - and the last back round to the first.
+- **Arrival only** (`arrivalOnly: true`) is somewhere to come out, not to go in: walking onto it does nothing. A portal and an
+  arrival-only one with the same id are a one-way trip.
+- **No bouncing back.** A portal only sends a hero who has just walked onto it - whose step took them onto its cell from another.
+  One who comes out on a portal stays put, however long they stand or shuffle about on it, and goes back only once they've
+  stepped off and on again. Coming out on one any other way - starting the level there, a party brought through, warping (K) to a
+  teammate standing on one - isn't walking onto it either.
+- **Nowhere to go.** A portal on a cell no one can stand on - a wall, an NPC's, a spawner's until it's destroyed - is passed over
+  for the next in the ring. A portal whose id no other portal has goes nowhere; the level warns about each one as it loads
+  (`The portal at 4,9 goes nowhere...`), and the editor tags it with a `?`.
+- **Heroes only.** Monsters and shots pay portals no mind, and a hero who falls on one stays there.
+- **Together.** On a shared screen the rest of the party comes through too, onto the open floor nearest the portal (as at the
+  start), so no one is left off the screen; online, each hero goes alone. Each trip is `HERO_TELEPORTED(hero, fromX, fromY, toX, toY)`
+  ([9.8](#98-events-and-hooks)) - once, for the hero who walked on - and the camera cuts to them rather than sweeping across the
+  map (it cuts whenever what it follows moves more than half a view in one frame). The sound is `SoundTable.teleport`.
+- **Online**, a guest takes a portal its own hero walks onto at once, as the host will, and hears it then; the other heroes' trips
+  come with the host's snapshots ([9.3.2](#932-playing-online)).
 
 ### 9.6 `assets-meta.json`: tile behaviour by sprite name
 
@@ -2074,6 +2103,7 @@ All on `game.dispatcher`; the constants are in `@logic-incubator/engine/Events`:
 | `LIGHT_SPELL_CAST` | `(hero)` | A hero called up their mage-light. |
 | `DOOR_OPENED` / `DOOR_CLOSED` | `(sprite, index)` | A door opened or shut, and is drawn as `sprite` now. |
 | `DOOR_LOCKED` | `(hero, tileX, tileY)` | A hero walked into the door on that cell, and no one in the team has its key - once, until they walk away from it. |
+| `HERO_TELEPORTED` | `(hero, fromX, fromY, toX, toY)` | A hero walked onto the portal on the first cell and came out of the one on the second ([9.5.1](#951-portals)). On a shared screen the rest of the party came too; this is said once, for the one who walked on. |
 | `PICKUP_COLLECTED` | `(hero, tileX, tileY, collected)` | A hero picked up what was on that cell (gold, a key, a weapon...) - once for each cell their sprite reached; `collected` is each thing's `value` and the `sprite` it was drawn as. |
 | `KEYS_DROPPED` | `(hero, tileX, tileY)` | A fallen hero's keys landed on that cell, for the others to pick up. |
 | `NPC_BUMPED` | `(hero, tileX, tileY)` | A hero walked into the NPC on that cell, where they can talk (a Quest); `DungeonMain` starts the talk. |
@@ -2101,7 +2131,7 @@ the whole table can be filled in before the files exist, and a name without a fi
 | A kind of monster's `MonsterDef.sounds` | `hit`, `death`, `spawn`, `wake` (as a boss) |
 | A hero's `HeroSlot.sounds` (or `PlayerSetup.sounds`) | `hurt`, `death` - a character's own voice |
 | A sprite's `assets-meta.json` entry | `sound`: a pickup's as it's picked up, a door's as it turns into that sprite (its open sprite's as it opens, its closed one's as it shuts) |
-| The game's `sounds` (`SoundTable`) | `heroShot`, `monsterShot`, `shotWall`, `heroHurt`, `heroDeath`, `lightSpell`, `keysDropped`, `gameOver`, `levelComplete`, `monsterHit`, `monsterDeath`, `monsterSpawn`, `bossWake`, `bossDeath` (in place of the kind's own death), `spawnerHit`, `spawnerBreak`, `doorOpen`, `doorClose`, `doorLocked`, `pickup` (by kind: `gold`, `key`...), `questGiven`, `questProgress`, `questDone`, `talkStart`, `talkLine`, `shout`, `pause` |
+| The game's `sounds` (`SoundTable`) | `heroShot`, `monsterShot`, `shotWall`, `heroHurt`, `heroDeath`, `lightSpell`, `keysDropped`, `gameOver`, `levelComplete`, `monsterHit`, `monsterDeath`, `monsterSpawn`, `bossWake`, `bossDeath` (in place of the kind's own death), `spawnerHit`, `spawnerBreak`, `doorOpen`, `doorClose`, `doorLocked`, `teleport`, `pickup` (by kind: `gold`, `key`...), `questGiven`, `questProgress`, `questDone`, `talkStart`, `talkLine`, `shout`, `pause` |
 
 ```ts
 new DungeonMain({
@@ -2666,6 +2696,7 @@ export const EditorSetup: IDungeonEditorOptions = {
         [DataBrushName.EXIT]: "floor_ladder",
         [DataBrushName.SPAWNER]: "mob_spawner",
         [DataBrushName.LIGHT]: "flame_1_anim",
+        [DataBrushName.TELEPORT]: "button_blue_up",
     },
     mapStyle: new MyStyle(),                   // the game's tiles for generated maps (keys 1-8); without it those keys do nothing
 };
@@ -2744,7 +2775,7 @@ vertical **toolbar** of tools at the far right. Each palette tab ends in a **+**
 - **The attribute type.** The Attributes tab is a type selector: the type picked is the **active type**. Painting adds or replaces
   only that type on a cell, leaving the others there; erasing and filling touch only it; and the dropper picks it first. On the
   map the active type is drawn in full and every other type shrinks to a small **pip** - a coloured square always in the same
-  place on the cell for the same type (four along the top, the rest along the bottom), so you can tell them apart by place as
+  place on the cell for the same type (four along the top, four along the bottom, the rest down the sides), so you can tell them apart by place as
   well as colour. The tab's first chip, **All**, picks no type: every type is drawn in full, nothing is painted, and erasing takes
   whatever was painted last on the cell.
 - **The height layer** is always present too, under attributes in the list. Its tab has three brushes: **height N** paints that
@@ -2780,6 +2811,10 @@ vertical **toolbar** of tools at the far right. Each palette tab ends in a **+**
   read (and how many more), and Save waits until it does. A `boss`'s popup picks its monster from the roster's pictures, its hit
   points and its quest; a pickup's has a quest too. Each offers None and the level's quests, so make the quests (Q) first. On the
   map a dialog is tagged D, a boss B, and a pickup or boss that counts for a quest has a Q after its tag (G10Q).
+- To make **portals**, pick the `teleport` brush and paint two cells: they're portal 1, a pair. Press `+` (or `.`) for portal 2
+  and paint the next pair - `-` (or `,`) goes back - or set the id and **Arrival only** in its popup (Edit, or `E`). On the map a
+  portal is tagged with its id - P1, or A1 for an arrival-only one - and one that goes nowhere, its id no other portal's, has a ?
+  after it (P3?). Paint something there for the players to see too: the portal itself isn't drawn ([9.5.1](#951-portals)).
 
 ### 10.4 Generated maps and `IStyler`
 

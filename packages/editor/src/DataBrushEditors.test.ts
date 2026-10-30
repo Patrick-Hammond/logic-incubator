@@ -23,8 +23,16 @@ describe("DataBrushEditors", () => {
         expect(DataBrushEditorFor("door")).toBeDefined();
         expect(DataBrushEditorFor(DataBrushName.DIALOG)).toBeDefined();
         expect(DataBrushEditorFor(DataBrushName.BOSS)).toBeDefined();
+        expect(DataBrushEditorFor(DataBrushName.TELEPORT)).toBeDefined();
         expect(DataBrushEditorFor(DataBrushName.COLLISION)).toBeUndefined();
         expect(DataBrushEditorFor(DataBrushName.PLAYER_START)).toBeUndefined();
+    });
+
+    it("round-trips a portal through the form - its id a whole number, arrival only saved only where it's on", () => {
+        const editor = DataBrushEditorFor(DataBrushName.TELEPORT);
+        expect(editor.toForm(0)).toEqual({ portal: 1, arrivalOnly: false });
+        expect(editor.fromForm(editor.toForm({ portal: 7, arrivalOnly: true }))).toEqual({ portal: 7, arrivalOnly: true });
+        expect(editor.fromForm({ portal: 3.4, arrivalOnly: false })).toEqual({ portal: 3 });
     });
 
     it("round-trips a spawner through the form", () => {
@@ -42,7 +50,7 @@ describe("DataBrushEditors", () => {
     });
 
     it("gives every form field a value, so no control starts blank", () => {
-        [DataBrushName.SPAWNER, DataBrushName.LIGHT, DataBrushName.Z_INDEX, DataBrushName.PICKUP, "door", DataBrushName.DIALOG, DataBrushName.BOSS].forEach(name => {
+        [DataBrushName.SPAWNER, DataBrushName.LIGHT, DataBrushName.Z_INDEX, DataBrushName.PICKUP, "door", DataBrushName.DIALOG, DataBrushName.BOSS, DataBrushName.TELEPORT].forEach(name => {
             const editor = DataBrushEditorFor(name);
             const form = editor.toForm(0);
             editor.fields(noImages).forEach(field => expect(form, `${name}.${field.key}`).toHaveProperty(field.key));

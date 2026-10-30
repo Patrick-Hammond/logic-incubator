@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Vec2, Vec2Like } from "@logic-incubator/lib/math/Geometry";
 import { TileSize } from "../Constants";
-import { ALL_PLAYERS_DIED, DOOR_LOCKED, LEVEL_COMPLETED, LIGHT_SPELL_CAST, NPC_BUMPED, PICKUP_COLLECTED, QUEST_UPDATED } from "../Events";
+import { ALL_PLAYERS_DIED, DOOR_LOCKED, HERO_TELEPORTED, LEVEL_COMPLETED, LIGHT_SPELL_CAST, NPC_BUMPED, PICKUP_COLLECTED, QUEST_UPDATED } from "../Events";
 import type { IPlayerInput } from "../input/PlayerControl";
 import { DoorOpens } from "../level/Doors";
 import type { CollectedPickup } from "../level/Level";
@@ -11,11 +11,13 @@ import { LightSpell } from "../level/entities/LightSpell";
 import type { MonsterDef } from "../level/entities/MonsterRoster";
 import { PickupArea, PickupSpot, PickupValue } from "../level/entities/Pickups";
 import { WeaponDef } from "../level/entities/Projectiles";
+import Portals, { Portal } from "../level/Portals";
 import type { QuestDef } from "../story/Quests";
 import World, { StartCells, WarpDistance, WorldLevel } from "./World";
 
 /**
- * Whole steps of play for a party on ASCII maps (`#` solid, `D` the cells of one door, `S` the start, `E` a way out, `N` an NPC),
+ * Whole steps of play for a party on ASCII maps (`#` solid, `D` the cells of one door, `S` the start, `E` a way out, `N` an NPC,
+ * a digit a portal with that id, `a` an arrival-only portal 1),
  * with the real heroes, collision and encounter - only the level is a stand-in, its doors following the
  * same rule as `Level`'s (`DoorOpens`).
  */
@@ -39,11 +41,17 @@ function Level(rows: string[], lockId = NoLock, quests: QuestDef[] = []): TestLe
     const door = { cells: [] as Vec2Like[], isOpen: false, lockId };
     const exits: Vec2Like[] = [];
     const npcs: Vec2Like[] = [];
+    const portals: Portal[] = [];
     let start: Vec2Like | undefined;
     rows.forEach((row, y) => row.split("").forEach((c, x) => {
         (collisionData[x] = collisionData[x] || [])[y] = c === "#" || c === "N";
         if (c === "N") {
             npcs.push({ x, y });
+        }
+        if (/[0-9]/.test(c)) {
+            portals.push({ x, y, value: { portal: Number(c) } });
+        } else if (c === "a") {
+            portals.push({ x, y, value: { portal: 1, arrivalOnly: true } });
         }
         if (c === "D") {
             door.cells.push({ x, y });
@@ -57,6 +65,7 @@ function Level(rows: string[], lockId = NoLock, quests: QuestDef[] = []): TestLe
     const height = rows.length;
     const isSolid = (x: number, y: number) => x < 0 || y < 0 || x >= width || y >= height || collisionData[x][y];
     const isDoor = (x: number, y: number) => door.cells.some(c => c.x === x && c.y === y);
+    const portalSet = new Portals(portals);
     let doorVersion = 0;
     const level: TestLevel = {
         door,
@@ -78,6 +87,7 @@ function Level(rows: string[], lockId = NoLock, quests: QuestDef[] = []): TestLe
         RemoveSpawner: () => undefined,
         IsFloor: (x, y) => !isSolid(x, y) && !isDoor(x, y),
         IsExit: (x, y) => exits.some(e => e.x === x && e.y === y),
+        PortalJump: (from, to) => portalSet.Jump(from, to, (x, y) => !isSolid(x, y)),
         IsTalker: (x, y) => npcs.some(n => n.x === x && n.y === y),
         Marked: (kind, quest) => (kind === "collect" ? level.pickups.filter(p => p.value.quest === quest).length : 0),
         IsDoorLocked: (x, y, canOpen) => isDoor(x, y) && !door.isOpen && !canOpen(door.lockId),
@@ -469,6 +479,101 @@ describe("World", () => {
         world.Reset(SETUP, [undefined, undefined]);
         expect(world.Completed).toBe(false);
         expect(world.Living.length).toBe(2);
+    });
+});
+
+// Two rooms a wall apart, a portal 1 in each - the start beside the left one.
+const PORTALS = [
+    "################",
+    "#.S.1......#.1.#",
+    "#..........#...#",
+    "################"
+];
+
+describe("World's portals", () => {
+    /** Steps hero `index` with `input` until they've gone through a portal, or `frames` have gone by - returns the events said. */
+    function WalkThrough(world: World, events: { event: string; args: unknown[] }[], index: number, input: IPlayerInput, frames = 120) {
+        const before = events.length;
+        for (let i = 0; i < frames && !events.slice(before).some(e => e.event === HERO_TELEPORTED); i++) {
+            const inputs: IPlayerInput[] = [];
+            inputs[index] = input;
+            world.Step(inputs, 1, FRAME);
+        }
+        return events.slice(before).filter(e => e.event === HERO_TELEPORTED);
+    }
+
+    it("sends a hero who walks onto a portal out of the other one with its id - standing on it, and staying there till they step off and on again", () => {
+        const { world, events } = Setup(PORTALS, 1);
+        expect(WalkThrough(world, events, 0, Input(1, 0)).map(e => e.args)).toEqual([[0, 4, 1, 13, 1]]);
+        const hero = world.Heroes[0];
+        expect(hero.Position).toEqual({ x: 13 * TileSize, y: TileSize });
+        expect(hero.State.previous).toEqual(hero.State.position);
+
+        // Standing on it, or moving about on it, sends them nowhere.
+        for (let i = 0; i < 30; i++) {
+            world.Step([i % 2 ? Input(0, 1) : Input(0, -1)], 1, FRAME);
+        }
+        expect(events.filter(e => e.event === HERO_TELEPORTED)).toHaveLength(1);
+        expect(hero.Tile).toEqual({ x: 13, y: 1 });
+
+        // Off it to the right, and back on from there.
+        for (let i = 0; i < 30 && hero.Tile.x === 13; i++) {
+            world.Step([Input(1, 0)], 1, FRAME);
+        }
+        expect(hero.Tile).toEqual({ x: 14, y: 1 });
+        expect(WalkThrough(world, events, 0, Input(-1, 0)).map(e => e.args)).toEqual([[0, 13, 1, 4, 1]]);
+        expect(hero.Tile).toEqual({ x: 4, y: 1 });
+    });
+
+    it("lets an arrival-only portal be come out of, but not gone into", () => {
+        const { world, events } = Setup(PORTALS.map(row => row.replace(".1.#", ".a.#")), 1);
+        WalkThrough(world, events, 0, Input(1, 0));
+        const hero = world.Heroes[0];
+        expect(hero.Tile).toEqual({ x: 13, y: 1 });
+        for (let i = 0; i < 30 && hero.Tile.x === 13; i++) {
+            world.Step([Input(1, 0)], 1, FRAME);
+        }
+        expect(WalkThrough(world, events, 0, Input(-1, 0), 60)).toEqual([]);
+        expect(hero.Tile.x).toBe(12);
+    });
+
+    it("doesn't send on a hero who warps to a teammate standing on a portal", () => {
+        const { world, events } = Setup(PORTALS, 2);
+        Put(world, 0, { x: 2, y: 1 });
+        Put(world, 1, { x: 13, y: 1 });
+        world.Step([Input(0, 0, { warping: true })], 1, FRAME);
+        expect(world.Heroes[0].Tile).toEqual({ x: 13, y: 1 });
+        expect(events.filter(e => e.event === HERO_TELEPORTED)).toEqual([]);
+    });
+
+    it("on a shared screen, brings the rest of the party through with them, round where they come out - said once", () => {
+        const { world, events } = Setup(PORTALS, 3);
+        world.SetLeash({ width: 10, height: 10 });
+        expect(WalkThrough(world, events, 0, Input(1, 0))).toHaveLength(1);
+        const tiles = world.Heroes.map(hero => hero.Tile);
+        expect(tiles[0]).toEqual({ x: 13, y: 1 });
+        tiles.slice(1).forEach(tile => {
+            expect(tile.x).toBeGreaterThanOrEqual(12);
+            expect(Math.abs(tile.x - 13) + Math.abs(tile.y - 1)).toBe(1);
+        });
+        expect(new Set(tiles.map(tile => tile.x + "," + tile.y)).size).toBe(3);
+    });
+
+    it("sends only the one who walked on, where the party isn't held to one screen - and not one who has fallen", () => {
+        const { world, events } = Setup(PORTALS, 2);
+        const left = world.Heroes[1].Tile;
+        WalkThrough(world, events, 0, Input(1, 0));
+        expect(world.Heroes[0].Tile).toEqual({ x: 13, y: 1 });
+        expect(world.Heroes[1].Tile).toEqual(left);
+
+        world.SetLeash({ width: 10, height: 10 });
+        world.Heroes[1].Damage(6);
+        for (let i = 0; i < 30 && world.Heroes[0].Tile.x === 13; i++) {
+            world.Step([Input(1, 0)], 1, FRAME);
+        }
+        WalkThrough(world, events, 0, Input(-1, 0));
+        expect(world.Heroes[0].Tile).toEqual({ x: 4, y: 1 });
+        expect(world.Heroes[1].Tile).toEqual(left);
     });
 });
 

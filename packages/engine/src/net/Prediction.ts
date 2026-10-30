@@ -6,6 +6,7 @@
  * later inputs again from there - so where the guest guessed right nothing
  * changes, and where it didn't (a door, a warp the host saw otherwise) the
  * difference is drawn away over a few frames rather than jumped (`Offset`).
+ * A portal it walks onto it takes at once too, as the host will (`TakePortal`).
  * Pure - no pixi - so it runs under the plain node test runner.
  */
 
@@ -14,7 +15,7 @@ import { TileSize } from "../Constants";
 import { StepSeconds } from "../FixedStep";
 import type { IPlayerInput } from "../input/PlayerControl";
 import type Hero from "../sim/Hero";
-import { WarpTarget } from "../sim/World";
+import { PortalTrip, TakePortal, WarpTarget, WorldLevel } from "../sim/World";
 import type { MoveCollider } from "../view/helpers/PlayerMovement";
 import { ApplyHeroSnapshot } from "./HeroSync";
 import { HeroSnapshot, QuantiseInput } from "./PlayMessages";
@@ -26,6 +27,9 @@ const JumpDistance = 2 * TileSize;
 /** A difference smaller than this, in pixels, isn't counted as a correction. */
 const Unnoticed = 0.5;
 
+/** What a step needs of the level, besides the collider: the portals (see `TakePortal`). */
+export type PredictionLevel = Pick<WorldLevel, "PortalJump">;
+
 export default class Prediction {
     /** How far from where they are the hero is drawn, in pixels: what's left of the last corrections, shrinking each frame. */
     readonly Offset = new Vec2();
@@ -33,6 +37,7 @@ export default class Prediction {
     private seq = 0;
     private corrections = 0;
     private lastError = 0;
+    private trip: PortalTrip | null = null;
 
     /** How many snapshots have put the hero somewhere they hadn't guessed - by more than half a pixel - since the last `Reset`. */
     get Corrections(): number {
@@ -42,6 +47,11 @@ export default class Prediction {
     /** How far, in pixels, the last snapshot moved them. */
     get LastError(): number {
         return this.lastError;
+    }
+
+    /** The portal the hero went through in the last `Step`, if they did - for the guest to hear it at once. */
+    get Trip(): PortalTrip | null {
+        return this.trip;
     }
 
     /** How many inputs the host hasn't played yet. */
@@ -74,14 +84,12 @@ export default class Prediction {
     /**
      * One step of `hero` with `input`, numbered and kept - the numbered input is what to send. A fallen hero doesn't
      * move, but their inputs still go, so the host's count of them keeps up. `others` are the heroes they could warp
-     * to, as drawn; `collider` the world's.
+     * to, as drawn; `collider` the world's; `level` has the portals.
      */
-    Step(hero: Hero, input: IPlayerInput, others: ReadonlyArray<Hero>, collider: MoveCollider): IPlayerInput {
+    Step(hero: Hero, input: IPlayerInput, others: ReadonlyArray<Hero>, collider: MoveCollider, level: PredictionLevel): IPlayerInput {
         const numbered = QuantiseInput(input, ++this.seq);
         this.pending.push(numbered);
-        if (hero.Alive) {
-            Move(hero, numbered, others, collider);
-        }
+        this.trip = hero.Alive ? Move(hero, numbered, others, collider, level) : null;
         return numbered;
     }
 
@@ -89,7 +97,7 @@ export default class Prediction {
      * The host's snapshot of `hero`: back to where the host had them after the last input it played, then every
      * input since played again. Whatever that moves them by is drawn away over the next frames (`Offset`).
      */
-    Reconcile(hero: Hero, snapshot: HeroSnapshot, others: ReadonlyArray<Hero>, collider: MoveCollider): void {
+    Reconcile(hero: Hero, snapshot: HeroSnapshot, others: ReadonlyArray<Hero>, collider: MoveCollider, level: PredictionLevel): void {
         this.pending = this.pending.filter(input => (input.seq || 0) > snapshot.ack);
         const state = hero.Writable;
         const beforeX = state.position.x;
@@ -103,7 +111,7 @@ export default class Prediction {
         }
         if (hero.Alive) {
             this.pending.forEach(input => {
-                Move(hero, input, others, collider);
+                Move(hero, input, others, collider, level);
                 // Fired again only in replay: the shot went when it was first played.
                 hero.TakeShot();
             });
@@ -132,11 +140,13 @@ export default class Prediction {
     }
 }
 
-/** One step, as `World.Step` takes it: a warp to the party if asked for and allowed, then the move. */
-function Move(hero: Hero, input: IPlayerInput, others: ReadonlyArray<Hero>, collider: MoveCollider): void {
+/** One step, as `World.Step` takes it: a warp to the party if asked for and allowed, then the move, then through a portal walked onto - returned, if one was. */
+function Move(hero: Hero, input: IPlayerInput, others: ReadonlyArray<Hero>, collider: MoveCollider, level: PredictionLevel): PortalTrip | null {
     const to = input.warping ? WarpTarget(hero, others) : null;
     if (to) {
         hero.WarpTo(to.Position);
     }
+    const from = hero.Tile;
     hero.Step(input, 1, StepSeconds, collider);
+    return TakePortal(hero, from, level);
 }

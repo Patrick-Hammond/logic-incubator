@@ -769,12 +769,12 @@ describe("the spawner data brush", () => {
 });
 
 describe("the light data brush", () => {
-    it("is one of the palette's data brushes, the last of the attributes, starting as a torch", () => {
+    it("is one of the palette's data brushes, after the older attributes, starting as a torch", () => {
         const brushes = new EditorStore().state.dataBrushes;
         const attributes = brushes.filter(db => !db.height).map(db => db.name);
-        expect(attributes[attributes.length - 1]).toBe(DataBrushName.LIGHT);
-        // The pips have room for eight.
-        expect(attributes).toHaveLength(8);
+        // Last but the teleport, so the older types' pips keep their places.
+        expect(attributes.slice(-2)).toEqual([DataBrushName.LIGHT, DataBrushName.TELEPORT]);
+        expect(attributes).toHaveLength(9);
         expect(brushes.find(db => db.name === DataBrushName.LIGHT).value).toEqual({ brightness: 1, tint: 0xffc780, range: 7, flicker: 0.15 });
     });
 
@@ -796,6 +796,27 @@ describe("the light data brush", () => {
         store.Dispatch({ type: EditorActions.DATA_BRUSH_INC });
         expect(store.SelectedDataBrush.value).toEqual(value);
         expect(store.state.currentBrush.data).toEqual(value);
+    });
+});
+
+describe("the teleport data brush", () => {
+    it("is one of the palette's data brushes, starting as portal 1 - and is added to a map saved before it existed", () => {
+        const store = new EditorStore();
+        expect(store.state.dataBrushes.find(db => db.name === DataBrushName.TELEPORT).value).toEqual({ portal: 1 });
+        store.Load({ ...store.state, dataBrushes: store.state.dataBrushes.filter(db => db.name !== DataBrushName.TELEPORT) });
+        expect(store.state.dataBrushes.find(db => db.name === DataBrushName.TELEPORT)).toBeDefined();
+    });
+
+    it("steps its portal id with + and -, keeping arrival only, so the next pair can be painted without the popup", () => {
+        const store = new EditorStore();
+        store.Dispatch({ type: EditorActions.SELECT_LAYER, data: { layer: implicitLayers(store)[0] } });
+        store.Dispatch({ type: EditorActions.BRUSH_CHANGED, data: { name: DataBrushName.TELEPORT } });
+        store.Dispatch({ type: EditorActions.DATA_BRUSH_INC });
+        expect(store.state.currentBrush.data).toEqual({ portal: 2 });
+        expect(store.SelectedDataBrush.value).toEqual({ portal: 2 });
+        store.Dispatch({ type: EditorActions.SET_DATA_BRUSH_VALUE, data: { value: { portal: 0, arrivalOnly: true } } });
+        store.Dispatch({ type: EditorActions.DATA_BRUSH_DEC });
+        expect(store.state.currentBrush.data).toEqual({ portal: 0, arrivalOnly: true });
     });
 });
 

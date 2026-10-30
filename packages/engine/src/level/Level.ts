@@ -19,6 +19,7 @@ import {EffectiveLight, FindImplicitPlacements, FindLights, FindSpawners} from "
 import {Brush, DataBrushName, LevelFile, LevelLayer, MigrateLevelFile, TileLayerOrder} from "./LevelFormat";
 import {AmbientLightGrid, BakeLights, ComposeLighting, LightBake, LightBlockersFor, LightGrid, LightSource, OpenLightBlockers} from "./Lighting";
 import {FindMapBounds} from "./MapBounds";
+import Portals, {IsTeleportValue, Portal} from "./Portals";
 import {FindRegions, Region, RegionIdsTouching} from "./Regions";
 import SceneLights, {MovingLight} from "./SceneLights";
 
@@ -113,6 +114,8 @@ export default class Level {
     public playerStartPosition: Vec2Like | undefined;
     /** Every cell painted with the `EXIT` data brush, in normalised map coordinates - see `IsExit`. */
     public exits: Vec2Like[] = [];
+    /** The portals: every cell painted with the `TELEPORT` data brush, in normalised map coordinates - see `PortalJump`. */
+    public portals: Portals = new Portals();
     /** Every spawner tile and `SPAWNER` brush, one to a cell (see `ImplicitData.FindSpawners`), in normalised map coordinates. Each one's `cells` - the footprint of the tile it's drawn as, or of the roster's `spawnerSprite` - are solid (in `collisionData`) until `RemoveSpawner`. */
     public spawners: Spawner[] = [];
     /** The tile each spawner is drawn as, if it has one - see `SpawnerTile`. */
@@ -177,6 +180,14 @@ export default class Level {
     /** Whether the cell is a way out of the level (an `EXIT` brush) - where a hero standing ends it. */
     IsExit(tileX: number, tileY: number): boolean {
         return this.exits.some(exit => exit.x === tileX && exit.y === tileY);
+    }
+
+    /**
+     * Where a hero whose step took them from cell `from` to cell `to` comes out, if they've just walked onto a portal (a
+     * `TELEPORT` brush): the next portal with its id that isn't solid (see `Portals`). Null if they haven't, or it leads nowhere.
+     */
+    PortalJump(from: Vec2Like, to: Vec2Like): Vec2Like | null {
+        return this.portals.Jump(from, to, (x, y) => !this.IsSolid(x, y));
     }
 
     /** The NPC on the cell (a `DIALOG` brush), if there is one. */
@@ -513,6 +524,8 @@ export default class Level {
         const explicitPickups: { x: number; y: number; value: PickupValue }[] = [];
         /** Every `DIALOG` data brush, likewise - its NPC is whatever tile is drawn there. */
         const dialogs: { x: number; y: number; value: DialogValue }[] = [];
+        /** Every `TELEPORT` data brush, likewise. */
+        const portals: Portal[] = [];
         /** The tile made from each tile brush - a spawner is drawn as one of them, found among the brushes. */
         const tileOfBrush = new Map<Brush, Tile>();
         /** Per-cell door id (parallel to `doorData`, but tagged with *which* door type) - `FindDoorGroups` needs this to keep two different door types on adjacent cells from merging into one group. */
@@ -602,6 +615,11 @@ export default class Level {
                         break;
                     case DataBrushName.EXIT:
                         this.exits.push({x: posX, y: posY});
+                        break;
+                    case DataBrushName.TELEPORT:
+                        if(IsTeleportValue(brush.data)) {
+                            portals.push({x: posX, y: posY, value: brush.data});
+                        }
                         break;
                     case DataBrushName.PICKUP:
                         // A brush saved without a (valid) value is no pickup, rather than one that gives nothing.
@@ -749,6 +767,9 @@ export default class Level {
             }
         });
         pickupsByCell.forEach(pickup => this.pickups.push(pickup));
+
+        this.portals = new Portals(portals);
+        this.portals.Unpaired().forEach(({x, y, value}) => console.warn(`The portal at ${x},${y} goes nowhere: no other portal has its id (${value.portal}).`));
 
         this.depths = Array.from(depths).sort((a, b) => a - b);
 

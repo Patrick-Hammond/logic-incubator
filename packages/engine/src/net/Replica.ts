@@ -21,6 +21,8 @@ import type { HeroSnapshot, MonsterSnapshot, ProjectileSnapshot, Snapshot } from
 const KeptCount = 20;
 /** How far past the newest snapshot anything is carried on along its way, in steps, before it waits for the next. */
 const MaxAheadTicks = 6;
+/** A hero further than this, in pixels, from one snapshot to the next got there at once - a warp, a portal - and is drawn at one or the other, not on the way. */
+const HeroJump = 2 * TileSize;
 
 /** A monster as drawn, kept from frame to frame by its id so its animation runs on. */
 type DrawnMonster = MonsterLook & { position: Vec2; previous: Vec2; size: { width: number; height: number } };
@@ -253,7 +255,8 @@ export default class Replica implements EncounterView {
         if (!span || !hero) {
             return null;
         }
-        const next = span.to ? span.to.snapshot.heroes[index] : undefined;
+        const to = span.to ? span.to.snapshot.heroes[index] : undefined;
+        const next = to && Math.abs(to.x - hero.x) + Math.abs(to.y - hero.y) <= HeroJump ? to : undefined;
         const f = next ? span.f : 0;
         const moment = this.moment;
         moment.snapshot = hero;

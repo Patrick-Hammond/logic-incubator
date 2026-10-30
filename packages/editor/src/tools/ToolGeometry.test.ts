@@ -164,10 +164,10 @@ describe("BoundsOfCells", () => {
 });
 
 describe("PipRect", () => {
-    it("puts four pips along a cell's top and the rest along its bottom, a quarter of it each, inside their own quarters", () => {
+    it("puts four pips along a cell's top, four along its bottom and the rest down its sides, a quarter of it each, inside their own quarters", () => {
         const size = 32;
-        const pips = [0, 1, 2, 3, 4, 5, 6].map(slot => PipRect(slot, size));
-        expect(pips.map(p => `${p.x},${p.y}`)).toEqual(["1,1", "9,1", "17,1", "25,1", "1,25", "9,25", "17,25"]);
+        const pips = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map(slot => PipRect(slot, size));
+        expect(pips.map(p => `${p.x},${p.y}`)).toEqual(["1,1", "9,1", "17,1", "25,1", "1,25", "9,25", "17,25", "25,25", "1,9", "25,9", "1,17", "25,17"]);
         pips.forEach(p => expect(p.size).toBe(6));
         // Never nothing, however far the view's zoomed out.
         expect(PipRect(0, 2).size).toBe(1);
