@@ -10,7 +10,8 @@
  * read-only implicit layer (see `Canvas`) draws exactly the same list, so
  * what the overlay shows is what the game will do. Spawners and lights have
  * a function of their own each, `FindSpawners` and `FindLights`, as a
- * `SPAWNER` or `LIGHT` brush makes one too.
+ * `SPAWNER` or `LIGHT` brush makes one too, and so do the things a hero can
+ * push, `FindPushables`, which only a brush makes.
  */
 
 import { Vec2Like } from "@logic-incubator/lib/math/Geometry";
@@ -225,6 +226,80 @@ export function FindLights<B extends ImplicitBrush>(
         lights.push({ x: brush.position.x, y: brush.position.y, value: brush.data as LightValue, tile, brush });
     });
     return lights;
+}
+
+/** A thing a hero can push, as the level places it (see `FindPushables`), in the brushes' own space. */
+export type PushablePlacement<B> = {
+    x: number;
+    y: number;
+    /** The tile that's pushed - drawn as itself, wherever it's been pushed to. */
+    tile: B;
+    /** The `PUSHABLE` brush that makes it pushable. */
+    brush: B;
+    /** The cells it makes solid where it starts: its tile's sprite footprint (see `DoorFootprint`). */
+    cells: Vec2Like[];
+};
+
+/**
+ * Everything a hero can push, in the order its `PUSHABLE` brushes come - the same on every machine, as an online run's `pushed`
+ * event names one by its place in this list. Each is the top tile on its brush's cell that isn't floor (by `tileLayerOrder`, then
+ * the brushes' own order, as `FindSpawners` picks one), as big as its sprite (`sizeFor`; one cell without one). A brush makes
+ * nothing pushable - it's left out, and its tile stays put - where there's no such tile; where that tile is something else
+ * already, a door, a spawner, a pickup or a light; where a `SPAWNER`, `PICKUP`, `DIALOG` or `LIGHT` brush on its cell makes it
+ * one (a light is baked where it starts, so it couldn't go along); or where it would overlap one before it. What `Level` places, and what the editor's overlay outlines.
+ */
+export function FindPushables<B extends ImplicitBrush>(
+    brushes: ReadonlyArray<B>,
+    tileLayerOrder: (layerId: number) => number | undefined,
+    metaFor: (assetName: string) => AssetMetadata | undefined,
+    sizeFor: (assetName: string) => { width: number; height: number } | undefined,
+    tileSize: number
+): PushablePlacement<B>[] {
+    const cellKey = (x: number, y: number): string => x + "," + y;
+    /** cell -> the tiles anchored there, with their place in the drawing order */
+    const tilesAt = new Map<string, { tile: B; layer: number; index: number }[]>();
+    /** The cells with a data brush that makes their tile something else. */
+    const claimed = new Set<string>();
+    const brushesOf: B[] = [];
+    brushes.forEach((brush, index) => {
+        const key = cellKey(brush.position.x, brush.position.y);
+        const layer = tileLayerOrder(brush.layerId);
+        if (layer !== undefined) {
+            const here = tilesAt.get(key) || [];
+            here.push({ tile: brush, layer, index });
+            tilesAt.set(key, here);
+        } else if (brush.name === DataBrushName.PUSHABLE) {
+            brushesOf.push(brush);
+        } else if (brush.name === DataBrushName.SPAWNER || brush.name === DataBrushName.PICKUP || brush.name === DataBrushName.DIALOG ||
+            brush.name === DataBrushName.LIGHT) {
+            claimed.add(key);
+        }
+    });
+    const taken = new Set<string>();
+    const placements: PushablePlacement<B>[] = [];
+    brushesOf.forEach(brush => {
+        const { x, y } = brush.position;
+        if (claimed.has(cellKey(x, y))) {
+            return;
+        }
+        // Top first: the last layer drawn, and on it the last painted.
+        const here = (tilesAt.get(cellKey(x, y)) || []).sort((a, b) => b.layer - a.layer || b.index - a.index).map(entry => entry.tile);
+        const tile = here.find(t => {
+            const meta = metaFor(t.name);
+            return !meta || meta.category !== "floor";
+        });
+        const meta = tile && metaFor(tile.name);
+        if (!tile || meta?.door || EffectiveSpawner(tile, meta) || EffectivePickup(tile, meta) || EffectiveLight(tile, meta)) {
+            return;
+        }
+        const cells = DoorFootprint(tile.position, sizeFor(tile.name) || { width: tileSize, height: tileSize }, tile.pixelOffset, tileSize);
+        if (cells.some(cell => taken.has(cellKey(cell.x, cell.y)))) {
+            return;
+        }
+        cells.forEach(cell => taken.add(cellKey(cell.x, cell.y)));
+        placements.push({ x, y, tile, brush, cells });
+    });
+    return placements;
 }
 
 type TileProperty = "collidable";

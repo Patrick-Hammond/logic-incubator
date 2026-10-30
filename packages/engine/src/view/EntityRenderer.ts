@@ -7,6 +7,7 @@ import type {EncounterView} from "../Encounter";
 import {Between} from "../FixedStep";
 import MonsterRoster from "../level/entities/MonsterRoster";
 import {Projectile} from "../level/entities/Projectiles";
+import {Pushable, SlideEase, SlideSeconds} from "../level/entities/Pushables";
 import Level from "../level/Level";
 import {FootLight, LightGrid, LightToTint, SampleLight} from "../level/Lighting";
 import {Camera} from "./Camera";
@@ -30,6 +31,9 @@ const FallenAlpha = 0.35;
 /** How far inside the edges of a figure's 16 px footprint its light is sampled - see `FigureLight`. */
 const FootInset = 2;
 
+/** Where a pushable thing is drawn, sliding to the cell it was last pushed onto: from where it was drawn as it was pushed, `seconds` ago. */
+type Slide = {fromX: number; fromY: number; toX: number; toY: number; seconds: number};
+
 /** One sprite to draw into the entities layer: `x`/`y` on screen (already offset by the view), `feet` its bottom edge in the world, which is what the draw order sorts by, `turn` how it's flipped and turned (see `TileGD8Rotation` - 0 for as it is), and `light` its four corners' light (see `Lighting.FootLight`). */
 type Drawable = {x: number; y: number; feet: number; texture: Texture; turn: GD8Symmetry; light: Float32Array; alpha: number};
 
@@ -52,15 +56,17 @@ function MultiplyLight(light: Float32Array, tint: number): void {
 }
 
 /**
- * Draws everything that moves - the heroes, monsters and spawners into the
- * entities layer, sorted by their feet so whoever's lower on screen is in
- * front; shots into the projectiles layer as sprites, turned to face their
+ * Draws everything that moves - the heroes, monsters, spawners and whatever
+ * can be pushed into the entities layer, sorted by their feet so whoever's
+ * lower on screen is in front; shots into the projectiles layer as sprites, turned to face their
  * flight. Skips whatever stands where the heroes can't see (`IsCellVisible`),
  * and lights each one by the floor under its feet. The lights that move - the
  * heroes' torches, glowing shots - get a glow (see `Glow`) in the glows layer,
  * beneath the figures; mage-lights float over them, in the orbs layer.
  * Play moves in steps (see `FixedStep`), so everything is drawn between where
- * its last step started and where it ended, by the `alpha` it's given.
+ * its last step started and where it ended, by the `alpha` it's given - but a
+ * thing pushed, which is on its new cell at once, slides there over
+ * `SlideSeconds` of the frames' own time.
  */
 export default class EntityRenderer {
     private glows: GlowLayer | null = null;
@@ -76,6 +82,8 @@ export default class EntityRenderer {
     private glowLook: GlowLook = {tint: 0xffffff, alpha: 0, radius: 0};
     /** Where a monster or shot is drawn this frame, worked out into the same object each time. */
     private at: Vec2Like = {x: 0, y: 0};
+    /** Each pushable thing's slide, once it's first drawn - kept to the level it's of, as `Reset` clears it. */
+    private slides = new Map<Pushable, Slide>();
 
     constructor(private camera: Camera, private level: Level) {}
 
@@ -87,13 +95,15 @@ export default class EntityRenderer {
         this.projectiles = this.camera.root.getChildByName(ProjectilesLayer) as Container;
         // The old projectiles layer took its sprites with it when it was destroyed.
         this.sprites = [];
+        this.slides.clear();
     }
 
     /**
      * Draws the heroes (where each view was last `Place`d - but not one whose player has left) and everything in the
-     * encounter `alpha` (0 to 1) of the way between their last two steps.
+     * encounter `alpha` (0 to 1) of the way between their last two steps, and the level's pushable things `seconds` further
+     * along their slides.
      */
-    Render(heroes: ReadonlyArray<HeroView>, encounter: EncounterView, alpha = 1): void {
+    Render(heroes: ReadonlyArray<HeroView>, encounter: EncounterView, alpha = 1, seconds = 0): void {
         if (!this.glows || !this.entities || !this.orbs || !this.projectiles) {
             return;
         }
@@ -107,6 +117,7 @@ export default class EntityRenderer {
         drawables.length = 0;
 
         this.AddSpawners(encounter, origin);
+        this.AddPushables(origin, seconds);
         this.AddMonsters(encounter, origin, alpha);
         heroes.forEach(hero => !hero.Hero.Gone && this.AddHero(hero, origin));
 
@@ -157,6 +168,61 @@ export default class EntityRenderer {
                 alpha: 1
             });
         });
+    }
+
+    /** Each thing a hero can push, drawn as the tile it is, as `AddSpawners` draws a spawner's - sliding to where it was pushed. */
+    private AddPushables(origin: {x: number; y: number}, seconds: number): void {
+        this.level.pushables.forEach(pushable => {
+            const tile = this.level.PushableTile(pushable);
+            const texture = tile && (tile.anim ? tile.anim.texture : tile.texture);
+            if (!tile || !texture || !pushable.cells.some(cell => this.level.IsCellVisible(cell.x, cell.y))) {
+                return;
+            }
+            const at = this.Slid(pushable, seconds);
+            const left = at.x * TileSize - tile.pixelOffset.x;
+            const top = at.y * TileSize - tile.pixelOffset.y;
+            const feet = top + texture.height;
+            const light = this.NextLight();
+            FootLight(this.level.lightGrid, (left + FootInset) / TileSize, (left + texture.width - FootInset) / TileSize, (feet - FootInset) / TileSize, light);
+            this.drawables.push({
+                x: left - origin.x * TileSize,
+                y: top - origin.y * TileSize,
+                feet,
+                texture,
+                turn: TileGD8Rotation(tile.rotation, tile.scale.x, tile.scale.y),
+                light,
+                alpha: 1
+            });
+        });
+    }
+
+    /** The cell, in tiles and maybe between two, that `pushable` is drawn at this frame, `seconds` on from the last: on its own, or sliding to it since it was pushed. */
+    private Slid(pushable: Pushable, seconds: number): Vec2Like {
+        let slide = this.slides.get(pushable);
+        if (!slide) {
+            slide = {fromX: pushable.x, fromY: pushable.y, toX: pushable.x, toY: pushable.y, seconds: SlideSeconds};
+            this.slides.set(pushable, slide);
+        }
+        if (slide.toX !== pushable.x || slide.toY !== pushable.y) {
+            // From wherever it's drawn now, should it be pushed again before it's got there.
+            const drawn = this.Sliding(slide);
+            slide.fromX = drawn.x;
+            slide.fromY = drawn.y;
+            slide.toX = pushable.x;
+            slide.toY = pushable.y;
+            slide.seconds = 0;
+        } else {
+            slide.seconds += seconds;
+        }
+        return this.Sliding(slide);
+    }
+
+    /** Where `slide` has got to, into `at`. */
+    private Sliding(slide: Slide): Vec2Like {
+        const k = SlideEase(slide.seconds / SlideSeconds);
+        this.at.x = slide.fromX + (slide.toX - slide.fromX) * k;
+        this.at.y = slide.fromY + (slide.toY - slide.fromY) * k;
+        return this.at;
     }
 
     private AddMonsters(encounter: EncounterView, origin: {x: number; y: number}, alpha: number): void {

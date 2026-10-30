@@ -2,7 +2,7 @@
  * A level for the online tests, from an ASCII map: `#` solid, `D` the cells of
  * one door, `S` the start, `E` a way out, `$` a gold pickup, `k` the key to the
  * door when it's locked, `@` a spawner's (solid) cell, a digit a portal with
- * that id - the gold marked for the quest `gold`, if `quests` has one. Its doors open by the
+ * that id, `P` a one-cell crate a hero can push - the gold marked for the quest `gold`, if `quests` has one. Its doors open by the
  * same rule as `Level`'s (`DoorOpens`) and can be set from a snapshot; pickups
  * are taken and dropped as `Level` does them. Two copies of the same map are
  * the host's level and a guest's.
@@ -14,6 +14,7 @@ import { DoorOpens } from "../../level/Doors";
 import type { CollectedPickup } from "../../level/Level";
 import { NoLock } from "../../level/entities/Keys";
 import { PickupArea, PickupSpot, PickupValue } from "../../level/entities/Pickups";
+import { CanMove, Pushable } from "../../level/entities/Pushables";
 import { DefaultSpawnerValue, Spawner } from "../../level/entities/Spawners";
 import Portals, { Portal } from "../../level/Portals";
 import type { QuestDef } from "../../story/Quests";
@@ -31,9 +32,13 @@ export function NetTestLevel(rows: string[], lockId = NoLock, monsters: string[]
     const pickups: Pickup[] = [];
     const spawners: Spawner[] = [];
     const portals: Portal[] = [];
+    const pushables: Pushable[] = [];
     let start: Vec2Like | undefined;
     rows.forEach((row, y) => row.split("").forEach((c, x) => {
-        (collisionData[x] = collisionData[x] || [])[y] = c === "#" || c === "@";
+        (collisionData[x] = collisionData[x] || [])[y] = c === "#" || c === "@" || c === "P";
+        if (c === "P") {
+            pushables.push({ x, y, cells: [{ x, y }], sprite: "crate" });
+        }
         if (c === "D") {
             door.cells.push({ x, y });
         } else if (c === "S") {
@@ -108,6 +113,22 @@ export function NetTestLevel(rows: string[], lockId = NoLock, monsters: string[]
         DropPickup(x, y, value, sprite) {
             level.pickups.push({ x, y, area: PickupArea({ x, y }, TileSize), value, sprite });
             return { x, y };
+        },
+        pushables,
+        PushableAt: (x, y) => pushables.find(p => p.cells.some(c => c.x === x && c.y === y)) || null,
+        CanPush: (pushable, dx, dy, taken) =>
+            CanMove(pushable, dx, dy, (x, y) => !isSolid(x, y) && !isDoor(x, y) && !level.IsExit(x, y) && !taken(x, y), () => false),
+        MovePushable(index, x, y) {
+            const pushable = pushables[index];
+            if (!pushable) {
+                return;
+            }
+            pushable.cells.forEach(c => (collisionData[c.x][c.y] = false));
+            pushable.cells = pushable.cells.map(c => ({ x: c.x + x - pushable.x, y: c.y + y - pushable.y }));
+            pushable.cells.forEach(c => (collisionData[c.x][c.y] = true));
+            pushable.x = x;
+            pushable.y = y;
+            doorVersion++;
         }
     };
     return level;

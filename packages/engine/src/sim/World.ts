@@ -13,7 +13,8 @@
  * `ends` the level ends it as a way out does. A hero who walks onto a portal comes
  * out of its partner (see `Portals`) - on a shared screen with the whole party. A
  * lone hero on one machine can talk (`SetTalk`): walking into an NPC asks for the
- * talk (`NPC_BUMPED`). No camera
+ * talk (`NPC_BUMPED`). A hero who keeps walking into something pushable shoves it a
+ * cell on (`OBJECT_PUSHED`). No camera
  * and no sprites - `DungeonMain` draws it. Pure - no pixi - so it runs under the
  * plain node test runner.
  */
@@ -22,11 +23,12 @@ import { Vec2, Vec2Like } from "@logic-incubator/lib/math/Geometry";
 import { TileSize } from "../Constants";
 import type { PlayerSetup } from "../DungeonMain";
 import Encounter, { EncounterLevel, EncounterOptions, Monster } from "../Encounter";
-import { ALL_PLAYERS_DIED, DOOR_LOCKED, HERO_TELEPORTED, KEYS_DROPPED, LEVEL_COMPLETED, LIGHT_SPELL_CAST, NPC_BUMPED, PICKUP_COLLECTED, QUEST_UPDATED } from "../Events";
+import { ALL_PLAYERS_DIED, DOOR_LOCKED, HERO_TELEPORTED, KEYS_DROPPED, LEVEL_COMPLETED, LIGHT_SPELL_CAST, NPC_BUMPED, OBJECT_PUSHED, PICKUP_COLLECTED, QUEST_UPDATED } from "../Events";
 import type { IPlayerInput } from "../input/PlayerControl";
 import type { CollectedPickup } from "../level/Level";
 import { LightSpell } from "../level/entities/LightSpell";
 import { PickupCellsReached, PickupSpot, PickupValue } from "../level/entities/Pickups";
+import { BoxOnCell, Pushable, PushDelay, PushTarget } from "../level/entities/Pushables";
 import TileCollision from "../level/TileCollision";
 import QuestLog, { QuestDef, QuestHappening, QuestLevel, QuestState, QuestStatus } from "../story/Quests";
 import { BumpedNpc } from "../story/Talk";
@@ -52,6 +54,14 @@ export interface WorldLevel extends EncounterLevel, QuestLevel {
     readonly pickups: ReadonlyArray<PickupSpot>;
     CollectPickupsAt(tileX: number, tileY: number): CollectedPickup[];
     DropPickup(tileX: number, tileY: number, value: PickupValue, sprite: string | null): Vec2Like;
+    /** Everything a hero can push, where it is now - in the level's order, which an online run's `pushed` event names one by. */
+    readonly pushables: ReadonlyArray<Pushable>;
+    /** The thing a hero can push that's on the cell, if any. */
+    PushableAt(tileX: number, tileY: number): Pushable | null;
+    /** Whether `pushable` can go a cell `dx`, `dy` - onto open floor (see `Level.CanPush`), and nowhere `taken` says someone stands. */
+    CanPush(pushable: Pushable, dx: number, dy: number, taken: (tileX: number, tileY: number) => boolean): boolean;
+    /** Moves pushable `index` (of `pushables`) so its cell is `tileX`, `tileY`, its solid cells with it. */
+    MovePushable(index: number, tileX: number, tileY: number): void;
 }
 
 /** How far from the level's start, in steps over open floor, the rest of the party may be placed. */
@@ -156,6 +166,8 @@ export default class World {
     private bumping: boolean[] = [];
     /** By slot: whether that hero was walking into a door the team has no key for last step - `DOOR_LOCKED` is once, as they first do. */
     private locked: boolean[] = [];
+    /** By slot: what that hero has been walking into that can be pushed, which way, and for how long - null for nothing. See `Lean`. */
+    private leaning: Array<{ pushable: Pushable; dx: number; dy: number; seconds: number } | null> = [];
     /** The slot of the hero who met the goal of a quest that `ends` the level, since the last step - -1 for none. */
     private questEnd = -1;
     /** The slot of the hero whose doing is being recorded - who gets the credit for a quest it completes. */
@@ -217,6 +229,7 @@ export default class World {
         this.fallen = this.heroes.map(() => false);
         this.bumping = this.heroes.map(() => false);
         this.locked = this.heroes.map(() => false);
+        this.leaning = this.heroes.map(() => null);
         this.allDown = !this.heroes.length;
         this.completed = false;
         this.questEnd = -1;
@@ -302,6 +315,7 @@ export default class World {
                     this.options.emit(HERO_TELEPORTED, hero.Index, trip.from.x, trip.from.y, trip.to.x, trip.to.y);
                 }
                 this.Bump(hero, input);
+                this.Lean(hero, input, seconds);
                 // Taken as it's fired: a hero given two steps at once can fire in each.
                 const shot = hero.TakeShot();
                 if (shot) {
@@ -415,6 +429,38 @@ export default class World {
         if (npc && !was) {
             this.options.emit(NPC_BUMPED, hero.Index, npc.x, npc.y);
         }
+    }
+
+    /**
+     * Pushes what `hero`, given `input`, is walking into (see `PushTarget`) a cell on, once they've kept at it for `PushDelay`:
+     * if there's room for it there (`WorldLevel.CanPush`) and no one is standing in it (`OBJECT_PUSHED`, with the hero, which it
+     * is, the cell it's on now and its sprite). For the next cell they keep at it as long again.
+     */
+    private Lean(hero: Hero, input: IPlayerInput, seconds: number): void {
+        const level = this.level;
+        const target = PushTarget(hero.Position, input.direction, TileSize, (x, y) => level.PushableAt(x, y) !== null);
+        const pushable = target && level.PushableAt(target.x, target.y);
+        if (!target || !pushable) {
+            this.leaning[hero.Index] = null;
+            return;
+        }
+        const was = this.leaning[hero.Index];
+        const leaning = was && was.pushable === pushable && was.dx === target.dx && was.dy === target.dy ? was : { pushable, dx: target.dx, dy: target.dy, seconds: 0 };
+        this.leaning[hero.Index] = leaning;
+        leaning.seconds += seconds;
+        if (leaning.seconds < PushDelay || !level.CanPush(pushable, target.dx, target.dy, (x, y) => this.Standing(x, y))) {
+            return;
+        }
+        leaning.seconds = 0;
+        const index = level.pushables.indexOf(pushable);
+        level.MovePushable(index, pushable.x + target.dx, pushable.y + target.dy);
+        this.options.emit(OBJECT_PUSHED, hero.Index, index, pushable.x, pushable.y, pushable.sprite);
+    }
+
+    /** Whether anyone stands on the cell, even in part: a hero still in the level - away or not - or a monster. */
+    private Standing(tileX: number, tileY: number): boolean {
+        const on = (position: Vec2Like) => BoxOnCell(position, tileX, tileY, TileSize);
+        return this.heroes.some(hero => hero.Alive && !hero.Gone && on(hero.Position)) || this.encounter.monsters.some(m => !m.dead && on(m.position));
     }
 
     /** Deals with every hero who has fallen since the last look - whatever felled them - and ends the level if none is left in play. */

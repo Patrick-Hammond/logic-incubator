@@ -130,7 +130,9 @@ export type NetEvent =
      * Hero `hero` walked onto the portal on cell `fromX`, `fromY` and came out of the one on `x`, `y` (`HERO_TELEPORTED`) - heard, as where
      * they are now the snapshots say, and the guest's own hero took it as it did (see `Prediction`).
      */
-    | { e: "teleported"; hero: number; fromX: number; fromY: number; x: number; y: number };
+    | { e: "teleported"; hero: number; fromX: number; fromY: number; x: number; y: number }
+    /** Hero `hero` pushed the pushable thing at `index` (of the level's, in order) onto this cell (`OBJECT_PUSHED`). */
+    | { e: "pushed"; hero: number; index: number; x: number; y: number };
 
 /** Host to every guest, 20 times a second and as a level ends: the world after step `tick` of level `round`, and what happened since the last one. */
 export type Snapshot = {
@@ -165,9 +167,9 @@ export type LeaveMessage = { t: "leave" };
 
 export type PlayMessage = InputMessage | Snapshot | RestartMessage | PingMessage | CatchUpMessage | LeaveMessage;
 
-/** Whether `event` changes the level or a hero for good - a pickup, keys dropped, a spawner gone, a kind of shot, a quest moved on - rather than just being shown. */
+/** Whether `event` changes the level or a hero for good - a pickup, keys dropped, a spawner gone, a kind of shot, a quest moved on, something pushed - rather than just being shown. */
 export function IsLastingEvent(event: NetEvent): boolean {
-    return event.e === "pickup" || event.e === "keys" || event.e === "spawner" || event.e === "shot" || event.e === "quest";
+    return event.e === "pickup" || event.e === "keys" || event.e === "spawner" || event.e === "shot" || event.e === "quest" || event.e === "pushed";
 }
 
 /**
@@ -190,7 +192,7 @@ export function IsFleetingEvent(event: NetEvent): boolean {
 
 const EventKinds = [
     "pickup", "keys", "spawner", "killed", "damaged", "died", "all-died", "completed", "shot", "quest", "fired", "stopped", "hit", "spawned", "woke", "spawner-hit", "cast", "locked",
-    "teleported"
+    "teleported", "pushed"
 ];
 
 const HeroGone = 1;
@@ -407,6 +409,9 @@ function WriteEvents(writer: ByteWriter, events: ReadonlyArray<NetEvent>): void 
             case "cast":
                 writer.U8(event.hero);
                 break;
+            case "pushed":
+                writer.U8(event.hero).U16(event.index).U16(event.x).U16(event.y);
+                break;
         }
     });
 }
@@ -541,6 +546,8 @@ function ReadEvent(reader: ByteReader): NetEvent {
             return { e: kind, type: reader.U8() };
         case "cast":
             return { e: kind, hero: reader.U8() };
+        case "pushed":
+            return { e: kind, hero: reader.U8(), index: reader.U16(), x: reader.U16(), y: reader.U16() };
         default:
             throw new RangeError("Unknown event.");
     }

@@ -65,7 +65,7 @@ const StandingFootInset = 2 / TileSize;
  * player stays put. A tile that gives off light has a glow drawn over it, in
  * its own band (see `Glow`). The player, monsters and spawners render into their
  * own layer (`EntitiesLayer`) - a tile a spawner is drawn as too (see
- * `Level.SpawnerTile`) - over the glows of lights that move
+ * `Level.SpawnerTile`), and anything a hero can push (`Level.PushableTile`) - over the glows of lights that move
  * (`GlowsLayer`) and under those that float (`OrbsLayer`), and shots into one
  * above that (`ProjectilesLayer`); all four get the same `EffectiveZoom` factor
  * so they grow/shrink in step with the world. Those figures' layers go where the
@@ -286,7 +286,8 @@ export default class TileMapView extends GameComponent {
                                 const left = (x - originX) * TileSize - tile.pixelOffset.x;
                                 const top = (y - originY) * TileSize - tile.pixelOffset.y;
                                 // A spawner's tile is drawn with the figures, where it can flash when hit (see `EntityRenderer`) - only its glow is drawn here.
-                                if (!tile.spawner) {
+                                // So is a pushable thing's, wherever it's been pushed to.
+                                if (!tile.spawner && !tile.pushable) {
                                     const light = texture.height > TileSize ? this.StandingLight(x, y, tile.pixelOffset, texture) : this.cornerLight;
                                     // A new options object per tile: `tile()` writes the texture's frame into it.
                                     layer.tile(texture, left, top, { cornerTints: light });

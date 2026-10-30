@@ -50,6 +50,7 @@ configuration files and plugin interface. For explanations, examples and workflo
 [Level](#level) ·
 [Level file format](#level-file-format) ·
 [Portals](#portals) ·
+[Pushables](#pushables) ·
 [Asset metadata](#asset-metadata) ·
 [Lighting](#lighting) ·
 [Depth](#depth) ·
@@ -1286,6 +1287,7 @@ await relay.close();         // ends every connection and stops
 | `DOOR_OPENED` / `DOOR_CLOSED` | `"doorOpened"` / `"doorClosed"` | `(sprite, index)` - door `index` of `Level.doors` opened or shut, and is drawn as `sprite` now (`Level.SetDoorOpen`, on every machine) |
 | `DOOR_LOCKED` | `"doorLocked"` | `(hero, tileX, tileY)` - a hero walked into the door on that cell, and no one in the team has its key (`World.Step`); once, until they walk away from it |
 | `HERO_TELEPORTED` | `"heroTeleported"` | `(hero, fromX, fromY, toX, toY)` - a hero walked onto the portal on the first cell and came out of the one on the second (`World.Step`, `TakePortal`); on a shared screen the rest of the party came too, and this is said once, for the one who walked on. An online guest says it for its own hero as it predicts the trip, and for the others as the host's `teleported` event comes |
+| `OBJECT_PUSHED` | `"objectPushed"` | `(hero, index, tileX, tileY, sprite)` - a hero pushed something a cell on (`World.Step`, see [Pushables](#pushables)): which, by its place in `Level.pushables`, the cell it's on now, and the sprite it is. An online guest says it as the host's `pushed` event comes, for its own hero too |
 | `PICKUP_COLLECTED` | `"pickupCollected"` | `(hero, tileX, tileY, collected: CollectedPickup[])` - a hero picked up what was on that cell, each thing with the sprite it was drawn as; once for each cell, when their sprite reaches more than one in a step (`PickupCellsReached`) |
 | `KEYS_DROPPED` | `"keysDropped"` | `(hero, tileX, tileY)` - a fallen hero's keys landed on that cell |
 | `NPC_BUMPED` | `"npcBumped"` | `(hero, tileX, tileY)` - a hero walked into the NPC on that cell (a `DIALOG` brush), where talking is on (`World.SetTalk`); `DungeonMain` starts the talk |
@@ -1395,7 +1397,7 @@ live shot with a `light`, keyed by the shot, all where they're drawn - and moves
 `UpdateZoom`, `ZoomForParty` and `Follow` the centre of the box round the living heroes played here, where they're drawn (all of those, once they're down; after the
 lights, since moving the camera draws the tiles; the pull is the same per second at any frame rate - and where that centre has moved more than half a
 view since the last frame, through a portal, it cuts straight there). Last it draws the figures
-(`EntityRenderer.Render(views, encounter, alpha)`) and the HUD (`Hud.RenderHeroes`). Each level start re-seeds the encounter's random numbers
+(`EntityRenderer.Render(views, encounter, alpha, seconds)`) and the HUD (`Hud.RenderHeroes`). Each level start re-seeds the encounter's random numbers
 (`World.Reset`, which calls `Encounter.Reset`) from `seed()` - a new seed when it's left out or returns `undefined`, so an online run's machines,
 given the host's seed, spawn the same monsters.
 
@@ -1413,7 +1415,7 @@ on by having `level` (and `levelBundle`, and `music`) return the next one. The m
 `@logic-incubator/engine/level/Level` - `default class Level`. Built by `DungeonMain`; `LoadLevel` fills it.
 
 ```ts
-type Tile = Brush & { texture: Texture; anim?: AnimatedSprite; light?: number; glows?: boolean; spawner?: boolean; gone?: boolean };   // light: the index of the baked light that belongs to it (its own, or a LIGHT brush's on its cell - FindLights), put out when it goes; glows: it gives off light of its own, so has a glow over its flame; spawner: a spawner is drawn as it (EntityRenderer draws it, not TileMapView); gone: taken out of the level (RemoveTile - a torch picked up)
+type Tile = Brush & { texture: Texture; anim?: AnimatedSprite; light?: number; glows?: boolean; spawner?: boolean; pushable?: boolean; gone?: boolean };   // light: the index of the baked light that belongs to it (its own, or a LIGHT brush's on its cell - FindLights), put out when it goes; glows: it gives off light of its own, so has a glow over its flame; spawner: a spawner is drawn as it (EntityRenderer draws it, not TileMapView); pushable: it's a thing a hero can push (PushableTile), drawn by EntityRenderer wherever it's been pushed to, not TileMapView; gone: taken out of the level (RemoveTile - a torch picked up)
 type SoundLoop = { sound: string; x: number; y: number; range?: number; tile: Tile };   // a tile whose metadata names a loop: its sound, its cell's centre in tiles, its loopRange
 type Door = { cells: Vec2Like[]; tile: Tile; isOpen: boolean; regionIds: number[]; openSprite: string; closedSprite: string; lockId: number };
 type Pickup = PickupSpot & { tile: Tile | null; value: PickupValue };    // tile is null for a PICKUP brush on an empty cell; area (PickupSpot) the pixels
@@ -1427,19 +1429,20 @@ type Talker = Vec2Like & { value: DialogValue; script: DialogScript; tile: Tile 
 | `levelData` | `Tile[][][][]` | `[layer][x][y]` -> tiles at that cell, in paint order. |
 | `tileLayers` | `LevelLayer[]` | Drawn in order - not the data layers, nor the player layer (`TileLayerOrder`). |
 | `playerLayer` | `number` | How many of `tileLayers`, from the first, are drawn under the heroes, monsters and shots - where the level's player layer sits among them; the rest are drawn over them. All of them in a level without a player layer. |
-| `collisionData` | `boolean[][]` | Per cell: a `collidable` tile or the `collision` brush. |
+| `collisionData` | `boolean[][]` | Per cell: a `collidable` tile or the `collision` brush, a spawner's or an NPC's cell, or where something pushable is now. A `collision` brush on a cell a pushable thing starts on is taken to be for it, and goes with it. |
 | `heightData` | `number[][]` | From the `z-index` brushes - on the height layer, since version 2 of the format (`HEIGHT_LAYER_ID`); any data layer is read, the last brush on a cell winning. |
 | `lightGrid` | `LightGrid` | Light at every tile corner, baked from lights - every lit tile and `LIGHT` brush (`FindLights`) - with walls casting shadows; read it with `CellCornerLight`, `SampleLight` or `FootLight` ([Lighting](#lighting)). |
 | `lightBake` | `LightBake` | What `lightGrid` was built from (each light's `LightShape` and the corners' occlusion); `ComposeLighting(level.lightBake, scales, level.lightGrid)` rebuilds the grid with lights at new strengths. |
 | `lights` | `SceneLights` | Keeps `lightGrid` up to date frame by frame from `lightBake`: flicker, lights switched off, lights that move ([Lighting](#lighting)). |
 | `doorData`, `doors` | | Door footprints and the doors found. |
-| `doorVersion` | `number` | Goes up each time a door opens or closes - how anything worked out from which doors are closed (the monsters' flow field) knows it's stale. |
+| `doorVersion` | `number` | Goes up each time a door opens or closes, or something is pushed (`MovePushable`) - how anything worked out from which cells are closed (the monsters' flow field) knows it's stale. |
 | `regionData`, `boundaryRegionData`, `regions`, `visibleRegions` | | Region analysis; see below. |
 | `boundRect` | `Rectangle` | The map's bounds in cells. |
 | `playerStartPosition` | `Vec2Like \| undefined` | |
 | `exits` | `Vec2Like[]` | Every cell painted with the `exit` data brush - see `IsExit`. |
 | `portals` | `Portals` | Every cell painted with the `teleport` data brush, with its `TeleportValue` - see `PortalJump` and [Portals](#portals). Each one whose id no other portal has is warned of as the level loads. |
 | `spawners` | `Spawner[]` | Every spawner tile and `SPAWNER` brush, one to a cell (`FindSpawners`) - a brush on a spawner tile's cell decides what it does. Each is drawn as a tile on its cell (`SpawnerTile`) - a spawner tile, else the top one that isn't floor - or, with none, as the roster's `spawnerSprite`; that picture's footprint (`cells`) is solid until `RemoveSpawner`. |
+| `pushables` | `Pushable[]` | Everything a hero can push (`FindPushables`), in its brushes' order - its `pushed` event names one by its place here - each where it is now, its footprint (`cells`) solid ([Pushables](#pushables)). Each brush that pushes nothing is warned of as the level loads. |
 | `pickups` | `Pickup[]` | Every pickup not yet collected: each tile with a `pickup` in its metadata, each `PICKUP` brush (one to a cell, the brush winning), each key dropped (`DropPickup`). |
 | `depths` | | |
 | `talkers` | `Talker[]` | Every `DIALOG` brush: an NPC's cell (solid in `collisionData`, though it blocks no light), its script read against the level's quests (lines with mistakes left out, each warned of), and the top tile there. |
@@ -1452,13 +1455,17 @@ type Talker = Vec2Like & { value: DialogValue; script: DialogScript; tile: Tile 
 | `LoadLevel(file: LevelFile): void` | Builds everything from a level file (and the metadata store), first bringing a version 1 file up to date (`MigrateLevelFile`); throws for a file older than that or newer than `LevelVersion`. Unknown sprite names drop just their tiles, with a one-off warning. Emits `LEVEL_LOADED`. |
 | `Dispose(): void` | Stops animated tiles' sprites. |
 | `HeightAt(x, y): number` | |
-| `IsSolid(x, y): boolean` | A wall, a spawner, or anywhere off the map. Not a closed door - a hero walks onto one to open it. |
+| `IsSolid(x, y): boolean` | A wall, a spawner, an NPC, something pushable, or anywhere off the map. Not a closed door - a hero walks onto one to open it. |
 | `IsFloor(x, y): boolean` | Open floor: in a region and not solid - not a wall, a door, a spawner or off the map. Where the party starts (`StartCells`) and what's dropped lands. |
 | `IsExit(x, y): boolean` | Whether the cell is a way out (an `exit` brush): a hero standing on one ends the level (`World`). |
 | `PortalJump(from, to): Vec2Like \| null` | Where a hero whose step took them from cell `from` to cell `to` comes out, if they've just walked onto a portal: `portals.Jump` with the cells that aren't `IsSolid` to stand on. Null if they haven't (`to` is `from`, or no portal, or an arrival-only one), or it leads nowhere. |
 | `IsDoorClosed(x, y): boolean` | Whether the cell belongs to a door that is closed right now. Monsters can't enter one (their path and their movement both stop at it); the heroes can. A door with no sprite pair to swap never opens, so isn't in `doors` and doesn't count. |
 | `RemoveSpawner(spawner)` | Opens a destroyed spawner's cells, and takes away the tile it's drawn as (`SpawnerTile`), putting out its light if it gives one. |
 | `SpawnerTile(spawner): Tile \| null` | The tile a spawner is drawn as - the one `FindSpawners` picked on its cell - or null for one the roster's `spawnerSprite` stands in for. |
+| `PushableAt(x, y): Pushable \| null` | The pushable thing one of whose cells is this one, now. |
+| `PushableTile(pushable): Tile \| null` | The tile it is - drawn by `EntityRenderer` where it is now. |
+| `CanPush(pushable, dx, dy, taken: (x, y) => boolean): boolean` | Whether it can be pushed a cell `dx`, `dy` (`CanMove`): every cell it would move onto is open floor (`IsFloor`) that isn't a way out, a portal or a pickup, nor anywhere `taken` says someone stands, and none is a step a hero couldn't take (`IsHeightGap`). |
+| `MovePushable(index, x, y)` | Moves `pushables[index]` so its cell is `x`, `y`, its solid cells and its tile's `soundLoops` with it; the cells it leaves are open again, but for a wall there besides. Bumps `doorVersion`. What `World` does when a push goes, and an online guest with the host's `pushed` event. |
 | `IsDoorLocked(x, y, canOpen): boolean` | A closed door that doesn't open for the heroes (`canOpen(lockId)` says whether a lock does: it's unlocked, or one of them holds its key - `World.TeamCanOpen`) - what their collider treats as a wall. A closed door that opens for them isn't: they walk onto it to open it. |
 | `CollectPickupsAt(x, y): CollectedPickup[]` | Collects and hides every pickup at the cell; the caller applies them. `World.Step` calls it for each cell a hero in play reaches (`PickupCellsReached`), hero by hero in slot order, so the first there gets it; an online guest, for each cell the host's `PICKUP_COLLECTED` names. A pickup whose tile gives off light (a torch) takes its light with it: that baked light is switched off. |
 | `DropPickup(x, y, value: PickupValue, sprite): Vec2Like` | Puts a pickup down - a fallen hero's keys: on that cell, or the nearest open floor (`IsFloor`) when it's a door or a wall, so it can't be shut away. Drawn as `sprite` on the top tile layer under the heroes (`playerLayer`; the bottom one if every layer is over them; nothing is drawn for `null`); collected like any other. Returns the cell it landed on. |
@@ -1478,7 +1485,7 @@ type Talker = Vec2Like & { value: DialogValue; script: DialogScript; tile: Tile 
 
 ```ts
 const enum DataBrushName { PLAYER_START = "player-start", COLLISION = "collision", Z_INDEX = "z-index", PICKUP = "pickup", EXIT = "exit",
-                           DIALOG = "dialog", BOSS = "boss", SPAWNER = "spawner", LIGHT = "light", TELEPORT = "teleport" }
+                           DIALOG = "dialog", BOSS = "boss", SPAWNER = "spawner", LIGHT = "light", TELEPORT = "teleport", PUSHABLE = "pushable" }
 type DataBrushValue = number | LightValue | SpawnerValue | PickupValue | DoorLockValue | DialogValue | BossValue | TeleportValue;
 
 type Brush = {
@@ -1536,7 +1543,7 @@ there too. A level with none has no way out but to fall. `DIALOG` is an NPC (`{ 
 `SPAWNER` is a monster spawner (`SpawnerValue`, see [Spawners](#spawners)): it makes the top tile on its cell that isn't floor a spawner, drawn as
 that tile, as big as it and gone with it when it's destroyed. On bare floor it's drawn as the roster's `spawnerSprite`. Painted on a spawner
 tile's cell, it decides what that spawner does. `TELEPORT` makes its cell a portal (`TeleportValue`, see [Portals](#portals)); like `EXIT`, it
-isn't drawn.
+isn't drawn. `PUSHABLE` (no value) makes the top tile on its cell that isn't floor a thing a hero can push (see [Pushables](#pushables)).
 
 ---
 
@@ -1571,6 +1578,38 @@ torch), it takes the place of that tile's light, so it retunes the torch rather 
 else the top one that isn't floor - and goes out when that tile goes (a pickup taken, a spawner destroyed); on bare floor it stands on its own. One
 counts a cell, and one whose value isn't a whole light (`IsCompleteLightValue`) none - see `FindLights` in [Doors, regions and other level helpers](#doors-regions-and-other-level-helpers).
 Adding it didn't change the format's version: a version 2 file without one reads as it always did, and older code ignores one.
+
+---
+
+## Pushables
+
+`@logic-incubator/engine/level/entities/Pushables` (pure) - the things a `PUSHABLE` brush lets a hero push: a crate, a statue.
+
+```ts
+type Pushable = Vec2Like & { cells: Vec2Like[]; sprite: string };   // its brush's cell, where it is now; the cells it makes solid (its sprite's
+                                                                     // footprint, DoorFootprint), moved with it; its tile's name
+type PushAttempt = Vec2Like & { dx: number; dy: number };           // the cell walked into, and the way it's pushed
+const PushDelay = 0.25;      // seconds a hero has to keep walking into it before it moves
+const SlideSeconds = 0.15;   // seconds it's drawn sliding to its new cell
+PushTarget(position, direction, tileSize, isPushable: (x, y) => boolean): PushAttempt | null
+CanMove(pushable, dx, dy, open: (x, y) => boolean, heightBlocked: (from, to) => boolean): boolean
+BoxOnCell(position, tileX, tileY, tileSize): boolean   // whether a one-tile box (its top-left, in pixels) covers any of the cell
+SlideEase(t): number                                    // how far along its slide it's drawn, 0 to 1, t of the way through SlideSeconds
+```
+
+`PushTarget` is the cell a hero's box (`position`, its top-left) walking `direction` is walking into: only the cell straight ahead of their
+middle, 2 pixels past their box, and only along an axis they push more than 0.3 along - the one they push the more along first, then the
+other. `CanMove` says whether it can move a cell: each cell it would move onto that it isn't on already is `open`, and none is a step too high
+(`heightBlocked`). `World` leans: a hero walking into the same thing the same way adds up the seconds, and at `PushDelay`, if
+`WorldLevel.CanPush` (with no hero or monster in the way, `BoxOnCell`), it moves (`MovePushable`) and `OBJECT_PUSHED` is emitted. In play
+it's on its new cell at once; `EntityRenderer` draws it sliding there, quick at first (`SlideEase`), so the hero following stays behind its
+picture.
+
+`ImplicitData.FindPushables` places them as the level loads, and the editor's overlay outlines the same: the top tile on each brush's cell
+that isn't floor, as big as its sprite - not a door, a spawner, a pickup or a lit tile, nor one on a cell with a `SPAWNER`, `PICKUP`,
+`DIALOG` or `LIGHT` brush, nor one overlapping another's footprint. A pushable tile's own `collidable` and `blocksLight` aren't baked: its
+collision goes where it does, and it casts no shadow. Online, the host decides every push and sends it as a lasting `pushed` event, which a
+guest plays with `MovePushable` (see [Online play](#online-play)).
 
 ---
 
@@ -1667,7 +1706,7 @@ the dispatcher while the scene is shown (`ListenWhileShown` on each of `SoundEve
 type SoundTable = {   // each a sound by name (NamedSounds); one left out, or with no file, is silent
     heroShot?, monsterShot?, shotWall?, heroHurt?, heroDeath?, lightSpell?, keysDropped?, gameOver?, levelComplete?,
     monsterHit?, monsterDeath?, monsterSpawn?, bossWake?, bossDeath?, spawnerHit?, spawnerBreak?, doorOpen?, doorClose?,
-    doorLocked?, teleport?, pickup?: Partial<Record<PickupKind, string>>, questGiven?, questProgress?, questDone?, talkStart?, talkLine?, shout?, pause?,
+    doorLocked?, teleport?, push?, pickup?: Partial<Record<PickupKind, string>>, questGiven?, questProgress?, questDone?, talkStart?, talkLine?, shout?, pause?,
     footstep?, ambience?, bossMusic?: string;   // these three DungeonMain plays itself, not for an event; give bossMusic the music volume
 };
 const SoundEvents: ReadonlyArray<string>;   // the events it plays for
@@ -1687,6 +1726,7 @@ board.Heard(event: string, args: ReadonlyArray<unknown>): void
 | `DOOR_OPENED`, `DOOR_CLOSED` | the `sound` of the sprite the door turns into (`AssetMetadata`), `doorOpen` / `doorClose` |
 | `DOOR_LOCKED` | `doorLocked` |
 | `HERO_TELEPORTED` | `teleport` |
+| `OBJECT_PUSHED` | the `sound` of the sprite pushed (`AssetMetadata`), `push` |
 | `PICKUP_COLLECTED` | for each thing collected: its sprite's `sound`, then `pickup[kind]` |
 | `QUEST_UPDATED` | `questGiven` (now active, it wasn't), `questProgress` (active, it was), `questDone` (complete or finished, it wasn't) |
 | the rest | `LIGHT_SPELL_CAST` `lightSpell`, `KEYS_DROPPED` `keysDropped`, `ALL_PLAYERS_DIED` `gameOver`, `LEVEL_COMPLETED` `levelComplete`, `SPAWNER_HIT` `spawnerHit`, `SPAWNER_DESTROYED` `spawnerBreak`, `TALK_STARTED` `talkStart`, `TALK_LINE` `talkLine`, `NPC_SHOUTED` `shout`, `GAME_PAUSED` `pause` |
@@ -1794,7 +1834,7 @@ Pure helpers behind `Level`; exported for tests and tooling.
 | --- | --- |
 | `level/Doors` | `FindDoorGroups(doorIds): Vec2Like[][]` (connected islands of door cells), `DoorFootprint(anchor, spriteSize, offset, tileSize): Vec2Like[]` (the cells a sprite drawn top-left on a cell covers), `DoorOpens(door, tiles, canOpen): boolean` (whether a door should be open with heroes on `tiles`: one of them is in its cells, and it's open already or `canOpen(door.lockId)` - so it never shuts on anyone) |
 | `level/Regions` | `type Region = { id; cells }`, `type RegionMap`, `FindRegions(...)` (connected walkable components), `RegionIdsTouching(...)` |
-| `level/ImplicitData` | `EffectiveLight(brush, meta)`, `EffectiveSpawner(brush, meta)` (a placement's override else the sprite's default), `FindImplicitPlacements(...)` (collision, `lightBlocks`, doors, door locks, pickups), `FindLights(brushes, tileLayerOrder, metaFor)` (every light, as a `LightPlacement`: each lit tile's, then each `LIGHT` brush's - one a cell, the last, in place of that cell's tile lights - with the tile it belongs to, the top lit one, else the top one whose `category` isn't `floor`, else null, and the brush if any), `FindSpawners(brushes, tileLayerOrder, metaFor, sizeFor, tileSize, spawnerSpriteSize)` (every spawner tile and `SPAWNER` brush, one to a cell, as a `SpawnerPlacement`: its value, the tile it's drawn as - a spawner tile, else the top one whose `category` isn't `floor`, else null for the roster's sprite - the brush if any, and its footprint), `OrphanedExplicitData(...)` |
+| `level/ImplicitData` | `EffectiveLight(brush, meta)`, `EffectiveSpawner(brush, meta)` (a placement's override else the sprite's default), `FindImplicitPlacements(...)` (collision, `lightBlocks`, doors, door locks, pickups), `FindLights(brushes, tileLayerOrder, metaFor)` (every light, as a `LightPlacement`: each lit tile's, then each `LIGHT` brush's - one a cell, the last, in place of that cell's tile lights - with the tile it belongs to, the top lit one, else the top one whose `category` isn't `floor`, else null, and the brush if any), `FindSpawners(brushes, tileLayerOrder, metaFor, sizeFor, tileSize, spawnerSpriteSize)` (every spawner tile and `SPAWNER` brush, one to a cell, as a `SpawnerPlacement`: its value, the tile it's drawn as - a spawner tile, else the top one whose `category` isn't `floor`, else null for the roster's sprite - the brush if any, and its footprint), `FindPushables(brushes, tileLayerOrder, metaFor, sizeFor, tileSize)` (everything a `PUSHABLE` brush makes pushable, in the brushes' order, as a `PushablePlacement`: its brush's cell, the tile - the top one whose `category` isn't `floor`, and not a door, spawner, pickup or lit tile - the brush, and its footprint; see [Pushables](#pushables)), `OrphanedExplicitData(...)` |
 | `level/MapBounds` | `type MapBounds`, `FindMapBounds(brushes)` |
 | `level/TileCollision` | `default class TileCollision` - `new TileCollision(level, blocked?)`; `TestX(from, dir)`, `TestY(from, dir)`: the corrected position on a collision, else `null`. `blocked(x, y)` names extra cells that count as solid for that collider (asked live) - `Encounter` gives its monsters' collider the closed doors, `World` gives the heroes' the closed doors the team has no key for (`World.IsLockedOut`) |
 | `view/helpers/PlayerMovement` | `MoveDamping`, `CentreTile(position)`, `BoxCentre(position)`, `ResolveMove(...)`, `interface MoveCollider` |
@@ -1980,6 +2020,7 @@ each hero's input every step and draws it; a game rarely touches it directly.
 interface WorldLevel extends EncounterLevel, QuestLevel {   // the parts of Level a world uses
     playerStartPosition; quests; IsFloor(x, y); IsExit(x, y); PortalJump(from, to); IsTalker(x, y); IsDoorLocked(x, y, canOpen); UpdateDoors(tiles, canOpen);
     UpdateVisibleRegions(tiles); pickups: PickupSpot[]; CollectPickupsAt(x, y); DropPickup(x, y, value, sprite);
+    pushables: ReadonlyArray<Pushable>; PushableAt(x, y); CanPush(pushable, dx, dy, taken); MovePushable(index, x, y);   // see Pushables
 }
 
 new World(level: WorldLevel, options: EncounterOptions)
@@ -2034,7 +2075,9 @@ size (`Encounter.Reset(seed, heroes)`).
    and `Tile` - a pickup whose art any part of theirs overlaps, as both are drawn, unless it's up or down a step too high to climb
    (`IsHeightBlocked`), and anything on the cell they stand on. Each cell is collected whole (`CollectPickupsAt`, then `PICKUP_COLLECTED(hero, x, y, collected)` with that
    cell and what was on it), as an online guest does it from the event. A hero whose mage-light is lit by their step emits `LIGHT_SPELL_CAST(hero)`. Each thing picked up is counted toward the quests (a `collect` happening, with the pickup's `quest`). With talking on, a hero who has just walked into
-   an NPC (`BumpedNpc`) emits `NPC_BUMPED` - once as they reach it, not again while they keep pushing.
+   an NPC (`BumpedNpc`) emits `NPC_BUMPED` - once as they reach it, not again while they keep pushing. A hero who has kept walking into
+   something pushable for `PushDelay` shoves it a cell on, if `CanPush` with no living hero or monster in the way, and `OBJECT_PUSHED` is
+   emitted ([Pushables](#pushables)).
 4. A hero on an exit ends the level: `Completed` is set, `LEVEL_COMPLETED(hero)` emitted, and nothing else happens this step.
 5. Each fires the shots they took, if any (`Encounter.Fire` with their slot and the input's `seq`), and the encounter steps with the heroes in
    play - so a monster never goes for, or hits, one who is away.
@@ -2107,12 +2150,12 @@ same seed on any machine (mulberry32); `NewSeed()` - a fresh 32-bit seed, differ
 | Class | Module | Summary |
 | --- | --- | --- |
 | `Camera extends GameComponent` | `view/Camera` | `ViewRect`, `Scale`, `ScaledTileSize`, `Zoom`, `BaseViewWidth/Height`, `CurrentZ`, `EffectiveZoom` (the height zoom times `PartyZoom` - what the views scale by), `PartyZoom` (1, or less while a party is spread out); `Move(x, y)`, `CenterOn(x, y)`, `Follow(pixelX, pixelY, amount)`, `SetZ(z)`, `UpdateZoom(dt)`, `ZoomForParty(target, frames)` (eases `PartyZoom` towards `target` - from `PartyFrame.PartyZoom` - over `frames` 60ths of a second). Emits `CAMERA_MOVED`. `new Camera(cameraControl?)`. |
-| `TileMapView extends GameComponent` | `view/TileMap` | `new TileMapView(level, camera)`. Builds the tile layers, lit and banded by height, plus, in drawing order, the `GlowsLayer` (`"glows"`), `EntitiesLayer` (`"entities"`), `OrbsLayer` (`"orbs"`) and `ProjectilesLayer` (`"projectiles"`) (names from `view/helpers/FigureLayers`, re-exported here); `TileGD8Rotation(rotation, scaleX, scaleY)`. Those four go where the level's player layer is (`level.playerLayer`): each height band's tile layers before it are drawn under them, and those after it - in a part of the band of their own (`"z-<n> over"`), with their own glows - over them, every band's lowest z first again. Each tile is drawn with its cell's corner light (`CellCornerLight`); a tile taller than a cell (a door, a statue) stands up, so like a figure it takes `FootLight` along its foot. A tile a spawner is drawn as (`Tile.spawner`) is left to `EntityRenderer`. A tile that gives off light gets a glow over its flame in its own band (`view/helpers/Glow`), at its light's strength that frame. Emits `LEVEL_CREATED`. |
+| `TileMapView extends GameComponent` | `view/TileMap` | `new TileMapView(level, camera)`. Builds the tile layers, lit and banded by height, plus, in drawing order, the `GlowsLayer` (`"glows"`), `EntitiesLayer` (`"entities"`), `OrbsLayer` (`"orbs"`) and `ProjectilesLayer` (`"projectiles"`) (names from `view/helpers/FigureLayers`, re-exported here); `TileGD8Rotation(rotation, scaleX, scaleY)`. Those four go where the level's player layer is (`level.playerLayer`): each height band's tile layers before it are drawn under them, and those after it - in a part of the band of their own (`"z-<n> over"`), with their own glows - over them, every band's lowest z first again. Each tile is drawn with its cell's corner light (`CellCornerLight`); a tile taller than a cell (a door, a statue) stands up, so like a figure it takes `FootLight` along its foot. A tile a spawner is drawn as (`Tile.spawner`), or that's pushed about (`Tile.pushable`), is left to `EntityRenderer`. A tile that gives off light gets a glow over its flame in its own band (`view/helpers/Glow`), at its light's strength that frame. Emits `LEVEL_CREATED`. |
 | `HeroView` | `view/HeroView` | How one hero looks. `new HeroView(hero: Hero, animation)`; `Hero` (the hero it draws), `DrawPosition` (where they're drawn this frame, between their last two steps), `Texture`; `Reset(hero)` (point it at a new level's hero - `DungeonMain` keeps one view per slot from level to level), `SetSprite(animation)` (draw them with another animation; a no-op for the one already in use), `Place(alpha, offset?)` (places them, and their mage-light, for drawing `alpha` of the way through their last step, `offset` pixels from there - an online guest's correction being drawn away; call each frame after the steps), `Destroy()`. Their lights, as `MovingLight`s for `Level.UpdateLights` (null when they have none, and always once they've fallen), where they're drawn: `Light` (a torch they picked up, at their centre, dimming as it burns out) and `SpellLight` (their mage-light while it's lit, over the floor just behind them); `OrbPosition` is where the mage-light is drawn, floating and bobbing. |
 | `Effects extends GameComponent` | `view/Effects` | `new Effects(camera)`; `Play(art, config, x, y): Emitter \| undefined` starts a particle effect at a position in world pixels (`art`: a sprite or animation name, `config`: an `EmitterConfig` or `OldEmitterConfig`; `undefined` after a one-off warning when `art` isn't loaded). Its layer sits in the camera root just above the shots (`ProjectilesLayer`) - so under any tile layers drawn over the figures -, placed every frame like the entities layer (`view/helpers/EffectsPlacement`), and goes back there on `LEVEL_CREATED` (on top of everything, if there's no shots layer), which also drops the level's effects. Emitters update from `Tick` (only while shown); a finished one (not emitting, no particles) is destroyed, a continuous one runs until `emit = false`. `DungeonMain` attaches it - use `main.Effects`. |
 | `Hud extends GameComponent` | `view/Hud` | `new Hud(setup.hearts?)`; `RenderHeroes(heroes)` (every hero, in slot order, the fallen included: one gets the lone hero's panel, as `Render`; a party gets a `HudHeroRow` each, spread down the panel, and the team's keys at the bottom - every key any of them carries); `Render(health, gold, weaponIcon, inventory, keys, spell?)` (the lone hero's panel: hearts, gold, weapon, inventory, keys and `spell`, their `LightSpellState`, shown under the keys as a bar - the skin's `mp` bar, if it has one - and READY, LIT or RECHARGING with the seconds left; null or left out hides it). `SetNames(names: { name; own }[])` heads each row (in slot order) with `name` in place of PLAYER n, in the skin's `focus` colour for `own` - the players at this machine - and `muted` for the rest; rows made later take them too. Built from the UI kit (a `UiPanel`, a `UiIconRow` of hearts, `UiItemSlot`s and `UiInventoryGrid`s, `UiText`) in the skin of the loaded `ui` bundle - the game must load it first. Hearts are the game's own pictures when `setup.hearts` gives them (enlarged 3x, 2x in a party's rows), else the skin's. The keys panel shows each key's sprite and its id. Warns once per missing sprite. |
 | `HudHeroRow extends Container` | `view/HudHeroRow` | One hero's row when a party plays: PLAYER n or `SetName(name, own)`'s (and DOWN, the row dimmed, once they've fallen - LEFT once their player has gone, AWAY while their player's connection is gone) and their hearts, their weapon slot, gold and light spell bar, and a strip of the items they carry. `new HudHeroRow(theme, index, rowWidth, heartTextures?)`, `Render(hero: HudHero)` (redraws only what changed), `static Height(theme)`. Also exports `type HudHero` (what a row reads of a `Hero`), `SpellStatusText(spell)`, `FitScale(texture, box)` and `TextureOf(name)`, which `Hud` shares. |
-| `EntityRenderer` | `view/EntityRenderer` | `new EntityRenderer(camera, level)`; `Reset()` (call on `LEVEL_CREATED`), `Render(heroes: HeroView[], encounter, alpha = 1)` (each hero where their view was last `Place`d - a fallen one faint, a ghost where they fell, and one who is away as faint; monsters and shots `alpha` of the way through their last step; each spawner as its tile, `Level.SpawnerTile`, or the roster's sprite, red while it shows a hit). Draws a glow under the figures for each hero's torch and each glowing shot, and the mage-lights - a glow with a bright core - over them. |
+| `EntityRenderer` | `view/EntityRenderer` | `new EntityRenderer(camera, level)`; `Reset()` (call on `LEVEL_CREATED`), `Render(heroes: HeroView[], encounter, alpha = 1, seconds = 0)` (each hero where their view was last `Place`d - a fallen one faint, a ghost where they fell, and one who is away as faint; monsters and shots `alpha` of the way through their last step; each spawner as its tile, `Level.SpawnerTile`, or the roster's sprite, red while it shows a hit; each pushable thing as its tile, `Level.PushableTile`, lit along its foot and sliding for `SlideSeconds` of the frames' `seconds` after it's pushed). Draws a glow under the figures for each hero's torch and each glowing shot, and the mage-lights - a glow with a bright core - over them. |
 | `DialogView extends GameComponent` | `view/DialogView` | A talk with an NPC over the play area, in its own `UiLayer`: a `UiDialogue` across the bottom with the NPC's portrait, and once a line with choices has come out in full, a `UiMenu` of them above it. `new DialogView(events: DialogViewEvents)` with `{ next(), choose(index), end() }`, each told a frame after the key press that did it; `Open(line: DialogLine, portrait?: Texture)` (a talk's first line; the portrait drawn as big as the skin's frame takes, by whole pixels), `Say(line)`, `Close()`, `IsOpen`. Its scope (`"dialog"`) takes accept (`onAccept`: the box goes on) and cancel (`end`). `DungeonMain` drives it. |
 | `QuestTracker extends GameComponent` | `view/QuestTracker` | The quests under way and complete in the play area's top-left corner (name, `2/5` or DONE, then its `text`) over a shade, and a `UiToastHost` in the top-right: NEW QUEST as one is given, QUEST COMPLETE as one is met, and QUEST for each under way as a level begins. `Begin(log: QuestLog)` (a level started), `Render(log)` (call each frame; redrawn only when `log.Version` changes). Display-only (`input: false`). |
 | `ShoutView extends GameComponent` | `view/ShoutView` | What the NPCs shout (`story/Shouts`), in speech bubbles over them: the skin's `speech` tooltip pointing at each NPC's sprite (the part the atlas trimmed it to, so at the figure rather than the room over its head), in its own `UiLayer` (`input: false`), kept to the play area. `new ShoutView(level, camera)`; `Begin(talkers, context: DialogContext)` (a level started: one `Shouter` for each NPC whose script has a shout part; pass none for no shouting), `Render(seconds, hearers: ReadonlyArray<Vec2Like>)` (each frame: moves them on, with the centres of the heroes who can hear - a cell's NPC shouts while one is `InEarshot` and the cell `IsCellVisible`), `Hush()` (a talk started). `DungeonMain` drives it, and doesn't `Render` it during a talk. |
@@ -2159,7 +2202,7 @@ same level onto every machine, and the host's and guests' lobbies. All pure.
 `@logic-incubator/engine/net/NetMessages` - a kind byte, then JSON (a `level`'s body is its bytes).
 
 ```ts
-NetVersion = 10;    // a guest on another is refused ("version"); raise it whenever a message changes - this file's or PlayMessages' - or how a level sent in one is read
+NetVersion = 11;    // a guest on another is refused ("version"); raise it whenever a message changes - this file's or PlayMessages' - or how a level sent in one is read
 NameLength = 12;
 
 type LobbySeat = { peer: number; name: string; character: string | null };   // host's seat first; character: a game's id, null while choosing
@@ -2367,11 +2410,12 @@ type RestartMessage = { t: "restart"; round: number };                      // h
 type PingMessage = { t: "ping" | "pong"; id: number };
 type CatchUpMessage = { t: "catch-up"; round: number; events: NetEvent[] };   // host -> a guest back in: the round, every lasting event in it, then its end if it's over
 type LeaveMessage = { t: "leave" };                                          // guest -> host: leaving for good
-type NetEvent = pickup | keys | spawner | killed | damaged | died | all-died | completed | shot | quest   // the engine's events, and a new kind of shot's setup
+type NetEvent = pickup | keys | spawner | killed | damaged | died | all-died | completed | shot | quest | pushed   // the engine's events, and a new kind of shot's setup
              | fired | stopped | hit | spawned | woke | spawner-hit | cast | locked | teleported   // heard: SHOT_FIRED (shot by its number, hero), SHOT_STOPPED, MONSTER_HIT, MONSTER_SPAWNED, BOSS_WOKE, SPAWNER_HIT, LIGHT_SPELL_CAST, DOOR_LOCKED (hero, x, y), HERO_TELEPORTED (hero, fromX, fromY, x, y)
                                          // quest: { e: "quest"; index; state: QuestState; progress } - quest index of the level's moved on (QUEST_UPDATED)
+                                         // pushed: { e: "pushed"; hero; index; x; y } - pushable index of the level's pushed onto this cell (OBJECT_PUSHED)
                                          // killed carries boss; pickup carries no more than the cell - a guest finds what was there on its own copy
-IsLastingEvent(event): boolean           // pickup, keys, spawner, shot, quest - what changes the level or a hero for good, and goes in a catch-up
+IsLastingEvent(event): boolean           // pickup, keys, spawner, shot, quest, pushed - what changes the level or a hero for good, and goes in a catch-up
 IsFleetingEvent(event): boolean          // fired, stopped, hit, spawned, spawner-hit, cast, locked, teleported - a sound lost is nothing to wait for (not woke: it puts the boss music on)
 
 QuantiseInput(input, seq): IPlayerInput   // what the host will have of it: each axis to 1/127 - a guest steps its own hero with this, so both agree

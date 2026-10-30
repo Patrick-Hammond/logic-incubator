@@ -397,10 +397,12 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
                 { name: DataBrushName.BOSS, colour: 0xd00000, value: DefaultBossValue() },
                 // The colour the editor has always outlined a spawner tile's footprint in.
                 { name: DataBrushName.SPAWNER, colour: 0x9b5de5, value: DefaultSpawnerValue() },
-                // The colour the editor has always outlined a lit tile in. The light and the teleport come last of the attributes,
-                // so the older ones' pips keep their places.
+                // The colour the editor has always outlined a lit tile in. The light, the teleport and the pushable come last of
+                // the attributes, so the older ones' pips keep their places.
                 { name: DataBrushName.LIGHT, colour: 0xff8100, value: DefaultLightValue() },
                 { name: DataBrushName.TELEPORT, colour: 0xbdb2ff, value: DefaultTeleportValue() },
+                // Crate brown. It has no value - what's pushed is the tile under it.
+                { name: DataBrushName.PUSHABLE, colour: 0xa47148, value: 0 },
                 // The height layer's: the height painted, then raise and lower, which have no value of their own.
                 { name: DataBrushName.Z_INDEX, colour: 0x06d6a0, value: 1, height: true },
                 { name: RAISE_BRUSH, colour: 0xf4a259, value: null, height: true },

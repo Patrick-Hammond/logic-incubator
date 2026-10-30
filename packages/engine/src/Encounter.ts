@@ -52,7 +52,7 @@ export interface EncounterLevel {
     IsSolid(tileX: number, tileY: number): boolean;
     /** Whether the cell is part of a door that's closed - which monsters can't enter, though it isn't `IsSolid` (the player walks onto one to open it). */
     IsDoorClosed(tileX: number, tileY: number): boolean;
-    /** Goes up each time a door opens or closes - how the encounter knows the walkable cells have changed under it. */
+    /** Goes up each time a door opens or closes, or something is pushed - how the encounter knows the walkable cells have changed under it. */
     readonly doorVersion: number;
     IsCellVisible(tileX: number, tileY: number): boolean;
     HeightAt(tileX: number, tileY: number): number;
@@ -279,7 +279,7 @@ export default class Encounter implements EncounterView {
             return;
         }
         if (this.level.doorVersion !== this.doorVersion) {
-            // A door opened or closed: which cells monsters can cross changed, even if no hero has left their cell.
+            // A door opened or closed, or something was pushed: which cells monsters can cross changed, even if no hero has left their cell.
             this.doorVersion = this.level.doorVersion;
             this.flow.MarkDirty();
         }

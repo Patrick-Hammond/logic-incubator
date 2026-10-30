@@ -6,7 +6,7 @@ import { LinkMaker, PeerLink, PeerLinkBase } from "@logic-incubator/lib/net/Peer
 import { RelayHost } from "@logic-incubator/lib/net/RelayRooms";
 import RelaySession from "@logic-incubator/lib/net/RelaySession";
 import { TileSize } from "../Constants";
-import { ALL_PLAYERS_DIED, HERO_TELEPORTED, PICKUP_COLLECTED, QUEST_UPDATED, SHOT_FIRED, SHOT_STOPPED } from "../Events";
+import { ALL_PLAYERS_DIED, HERO_TELEPORTED, OBJECT_PUSHED, PICKUP_COLLECTED, QUEST_UPDATED, SHOT_FIRED, SHOT_STOPPED } from "../Events";
 import type { IPlayerInput } from "../input/PlayerControl";
 import { Chase } from "../level/entities/Behaviours";
 import MonsterRoster, { MonsterDef } from "../level/entities/MonsterRoster";
@@ -251,6 +251,42 @@ describe("an online run", () => {
         // Opened as the heroes went through, and shut behind them.
         expect(guest.level.doorVersion).toBeGreaterThanOrEqual(2);
         expect(guest.level.door.isOpen).toBe(run.host.level.door.isOpen);
+    });
+
+    it("pushes what a guest's hero walks into on the host, and moves it on every guest - and on one back after its connection went, quietly", async () => {
+        run.map = [
+            "##########",
+            "#S..P....#",
+            "#........#",
+            "##########"
+        ];
+        await run.Open(2);
+        await run.BeginAll();
+        // The first guest's hero starts beside the host's, and walks right into the crate.
+        expect(run.guests[0].world.Heroes[1].Tile).toEqual({ x: 2, y: 1 });
+        await run.Frames(30, hero => (hero === 1 ? Input(1) : undefined));
+        await run.Frames(30, () => undefined);
+        run.guests.forEach(guest => {
+            expect(guest.level.pushables[0]).toMatchObject({ x: 5, y: 1 });
+            expect(guest.level.IsSolid(4, 1)).toBe(false);
+            expect(guest.events).toContainEqual([OBJECT_PUSHED, 1, 0, 5, 1, "crate"]);
+        });
+        expect(run.host.level.pushables[0]).toMatchObject({ x: 5, y: 1 });
+        // Into the cell it left, as the host had them.
+        const mine = run.guests[0].world.Heroes[1];
+        expect(mine.Tile).toEqual({ x: 4, y: 1 });
+        expect(mine.Position.x).toBe(run.host.world.Heroes[1].Position.x);
+
+        const second = run.guests[1];
+        second.relay.Drop("lost");
+        // Long enough to push it once more, not twice.
+        await run.Frames(25, hero => (hero === 1 ? Input(1) : undefined));
+        expect(run.host.level.pushables[0].x).toBe(6);
+        expect(second.level.pushables[0].x).toBe(5);
+        await run.Rejoin(1);
+        await run.Frames(5, () => undefined);
+        expect(second.level.pushables[0]).toMatchObject({ x: 6, y: 1 });
+        expect(second.events.filter(event => event[0] === OBJECT_PUSHED)).toHaveLength(1);
     });
 
     it("gives a guest's copy a pickup the host's hero only reached into, by its own cell", async () => {

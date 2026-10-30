@@ -1541,8 +1541,9 @@ DungeonMain (a scene)
  │   ├─ Encounter     spawners, monsters (bosses among them), projectiles
  │   └─ QuestLog      how the level's quests stand
  ├─ HeroView          one per hero: how they're drawn, and the lights they carry
- ├─ EntityRenderer    draws the heroes, monsters, spawners and shots
- └─ Level             the loaded level: tiles, collision, doors, lights, regions, spawners, pickups, exits, NPCs, bosses, quests
+ ├─ EntityRenderer    draws the heroes, monsters, spawners, shots and the things pushed about
+ └─ Level             the loaded level: tiles, collision, doors, lights, regions, spawners, pickups, exits, NPCs, bosses, portals,
+                      things to push, quests
 ```
 
 `DungeonMain.OnShow` loads the level (asking `LevelAssets` to get its bundle ready first) and starts playing. The level ends when
@@ -1842,7 +1843,7 @@ gives the host a `HostSession` and each guest a `GuestSession`, and `DungeonMain
   as the host holds its hero (`ReconnectForMs`), saying hello with the token the host's start gave it. The host's lobby asks the run
   (`HostLobby.SetRejoin`, which `CreateNetPlay` sets to the `HostSession`) and lets it back in as the hero it was: the guest's lobby emits
   `REJOINED`, its `GuestSession` moves to the new connection, and the host sends a `catch-up` - the round and everything lasting that happened
-  in it (pickups, keys dropped, spawners destroyed, kinds of shot), which the guest does quietly, without the events firing, before it plays
+  in it (pickups, keys dropped, spawners destroyed, kinds of shot, things pushed), which the guest does quietly, without the events firing, before it plays
   on - and, if the level has ended meanwhile, how, which does fire, so the end screen shows - then a snapshot. If the host has started the
   level over meanwhile, the guest does too. The lobby closes - and the game should go back to its menu - if the host has left (`host-left`),
   won't have it back (`gone`: away too long), or the time is up (`lost`). Only guests reconnect: the host's connection going ends the run, as
@@ -1953,8 +1954,8 @@ over them (above, "arches" is drawn over the heroes as they walk beneath). A lev
 ([9.10](#910-npcs-dialogs-and-quests)); a level without it has none. The engine reads only what `LevelFormat.ts` types; the
 editor saves more of its own state alongside.
 
-There are exactly ten **data brushes**. The height (`z-index`) is painted on the **height** layer (`isHeight`, id -99997), at
-most one a cell and none where it's 0; the other nine on the one `attributes` data layer, which holds **one of each** on a cell -
+There are exactly eleven **data brushes**. The height (`z-index`) is painted on the **height** layer (`isHeight`, id -99997), at
+most one a cell and none where it's 0; the other ten on the one `attributes` data layer, which holds **one of each** on a cell -
 a cell can be solid, an NPC's and a pickup all at once (a tile layer still holds one tile a cell):
 
 | Name | `data` | Effect |
@@ -1969,6 +1970,7 @@ a cell can be solid, an NPC's and a pickup all at once (a tile layer still holds
 | `spawner` | a `SpawnerValue` | A monster spawner where it's painted, set in its popup - the same settings as a spawner tile's (see `spawner` in [9.6](#96-assets-metajson-tile-behaviour-by-sprite-name)). Any sprite can be one: the brush makes the top tile on its cell that isn't floor (a gravestone, a statue, a wall) the spawner, drawn as itself, solid over its sprite's footprint and gone when it's destroyed. On bare floor it's drawn as the roster's `spawnerSprite` instead. Painted on a spawner tile's cell, it sets what that spawner does, rather than adding a second. |
 | `light` | a `LightValue` | A point light on its cell, set in its popup - the same settings as a lit tile's (see `light` in [9.6](#96-assets-metajson-tile-behaviour-by-sprite-name)): a light anywhere, with or without a torch. Painted on a lit tile's cell (a torch), it takes the place of that tile's light rather than adding a second, so it retunes the torch. It goes out with the tile it's on - the lit one, or else the top one that isn't floor - so a light painted on a gem goes when the gem's picked up, and one on a spawner when it's destroyed. On bare floor it's a light on its own, always on. It adds no glow sprite (a torch tile has its own). A brush whose value is missing a field is left out. |
 | `teleport` | a `TeleportValue` | A portal - `{ portal, arrivalOnly? }`: a hero who walks onto it comes out of another portal with the same id ([9.5.1](#951-portals)). It isn't drawn - paint a rune, a pad or a hole there too. |
+| `pushable` | - | Lets a hero push the object it's painted over - a crate, a barrel, a statue ([9.5.2](#952-pushing-things)): the top tile on its cell that isn't floor, as a `spawner` brush picks one, solid over its sprite's footprint wherever it's pushed to. |
 
 Doors are **not** brushes: they are ordinary tiles that carry their behaviour in `assets-meta.json`. A light, a pickup or a
 spawner can be either: a tile that is one by default, or a brush over any other tile - a `light` or `spawner` brush on bare
@@ -1997,6 +1999,34 @@ who walks onto one comes out of another with the same id, standing on it, at onc
   map (it cuts whenever what it follows moves more than half a view in one frame). The sound is `SoundTable.teleport`.
 - **Online**, a guest takes a portal its own hero walks onto at once, as the host will, and hears it then; the other heroes' trips
   come with the host's snapshots ([9.3.2](#932-playing-online)).
+
+#### 9.5.2 Pushing things
+
+A `pushable` brush painted over an object - a crate, a barrel, a statue - lets the heroes push it about (`Pushables`,
+`ImplicitData.FindPushables`). The thing pushed is the **top tile on the brush's cell that isn't floor**, the one a `spawner` brush
+would pick, and it's as big as its sprite: a crate is one cell, a statue two cells high is two, and every cell of it is solid, to
+heroes, monsters and shots alike.
+
+- **Pushing.** A hero who keeps walking into it for a quarter of a second (`PushDelay`) shoves it one cell on, the way they're
+  walking, and can follow it and keep going. Brushing past doesn't move it: only the cell straight ahead of the hero's middle
+  counts, so they have to be more than half in line with it, and it's pushed along one axis at a time - the one they're walking
+  the more along. In play it's on its new cell at once; it's drawn sliding there over 0.15 s (`SlideSeconds`).
+- **Room to move.** It moves only if every cell it would move onto is open floor: not a wall or anything else solid (another
+  pushable thing, an NPC, a spawner), not a door, open or shut, not a way out, a portal or a pickup, and no hero or monster
+  standing there - and only up or down a step a hero could take ([9.7](#97-heights)). Push it into a corner and it's stuck there.
+- **What can't be pushed.** The brush pushes nothing - and the level warns about it as it loads (`The pushable at 65,47 has
+  nothing it can push...`) - on bare floor, over a door, a spawner, a pickup or a lit tile, on a cell that also has a `spawner`,
+  `pickup`, `dialog` or `light` brush, or where its sprite would overlap one painted before it. A light is baked where it starts,
+  so a thing that moves can't carry one; for the same reason a pushable thing casts no shadow.
+- **Painted collision goes with it.** A `collision` brush on a cell it starts on is taken to be for it, so it's solid wherever it's
+  pushed and the cell it leaves is open. A wall its sprite reaches into stays solid.
+- **The rest of the map follows.** The monsters find their way round it afresh each time it moves, as they do round a door, and a
+  sound its tile makes (a `loop`) moves with it.
+- **Each push** is `OBJECT_PUSHED(hero, index, tileX, tileY, sprite)` ([9.8](#98-events-and-hooks)), and plays the sprite's own
+  `sound` from `assets-meta.json`, or else `SoundTable.push`.
+- **Couch co-op and online** push the same way. Online the host decides every push, its own hero's or a guest's - someone may be
+  standing in the way that a guest can't see yet - and a guest moves the thing when the host's snapshot says so, a moment later.
+  A guest that drops and comes back finds each thing where it was pushed to ([9.3.2](#932-playing-online)).
 
 ### 9.6 `assets-meta.json`: tile behaviour by sprite name
 
@@ -2104,6 +2134,7 @@ All on `game.dispatcher`; the constants are in `@logic-incubator/engine/Events`:
 | `DOOR_OPENED` / `DOOR_CLOSED` | `(sprite, index)` | A door opened or shut, and is drawn as `sprite` now. |
 | `DOOR_LOCKED` | `(hero, tileX, tileY)` | A hero walked into the door on that cell, and no one in the team has its key - once, until they walk away from it. |
 | `HERO_TELEPORTED` | `(hero, fromX, fromY, toX, toY)` | A hero walked onto the portal on the first cell and came out of the one on the second ([9.5.1](#951-portals)). On a shared screen the rest of the party came too; this is said once, for the one who walked on. |
+| `OBJECT_PUSHED` | `(hero, index, tileX, tileY, sprite)` | A hero pushed something a cell on ([9.5.2](#952-pushing-things)): which, by its place in `Level.pushables`, the cell it's on now, and the sprite it is. |
 | `PICKUP_COLLECTED` | `(hero, tileX, tileY, collected)` | A hero picked up what was on that cell (gold, a key, a weapon...) - once for each cell their sprite reached; `collected` is each thing's `value` and the `sprite` it was drawn as. |
 | `KEYS_DROPPED` | `(hero, tileX, tileY)` | A fallen hero's keys landed on that cell, for the others to pick up. |
 | `NPC_BUMPED` | `(hero, tileX, tileY)` | A hero walked into the NPC on that cell, where they can talk (a Quest); `DungeonMain` starts the talk. |
@@ -2130,8 +2161,8 @@ the whole table can be filled in before the files exist, and a name without a fi
 | A shot's `ShotSetup` (a hero's weapon, a monster's `ranged`, a weapon pickup's `shot`) | `sound` as it's fired, `wallSound` as it stops against a wall |
 | A kind of monster's `MonsterDef.sounds` | `hit`, `death`, `spawn`, `wake` (as a boss) |
 | A hero's `HeroSlot.sounds` (or `PlayerSetup.sounds`) | `hurt`, `death` - a character's own voice |
-| A sprite's `assets-meta.json` entry | `sound`: a pickup's as it's picked up, a door's as it turns into that sprite (its open sprite's as it opens, its closed one's as it shuts) |
-| The game's `sounds` (`SoundTable`) | `heroShot`, `monsterShot`, `shotWall`, `heroHurt`, `heroDeath`, `lightSpell`, `keysDropped`, `gameOver`, `levelComplete`, `monsterHit`, `monsterDeath`, `monsterSpawn`, `bossWake`, `bossDeath` (in place of the kind's own death), `spawnerHit`, `spawnerBreak`, `doorOpen`, `doorClose`, `doorLocked`, `teleport`, `pickup` (by kind: `gold`, `key`...), `questGiven`, `questProgress`, `questDone`, `talkStart`, `talkLine`, `shout`, `pause` |
+| A sprite's `assets-meta.json` entry | `sound`: a pickup's as it's picked up, a door's as it turns into that sprite (its open sprite's as it opens, its closed one's as it shuts), a pushable thing's as it's pushed |
+| The game's `sounds` (`SoundTable`) | `heroShot`, `monsterShot`, `shotWall`, `heroHurt`, `heroDeath`, `lightSpell`, `keysDropped`, `gameOver`, `levelComplete`, `monsterHit`, `monsterDeath`, `monsterSpawn`, `bossWake`, `bossDeath` (in place of the kind's own death), `spawnerHit`, `spawnerBreak`, `doorOpen`, `doorClose`, `doorLocked`, `teleport`, `push`, `pickup` (by kind: `gold`, `key`...), `questGiven`, `questProgress`, `questDone`, `talkStart`, `talkLine`, `shout`, `pause` |
 
 ```ts
 new DungeonMain({
@@ -2697,6 +2728,7 @@ export const EditorSetup: IDungeonEditorOptions = {
         [DataBrushName.SPAWNER]: "mob_spawner",
         [DataBrushName.LIGHT]: "flame_1_anim",
         [DataBrushName.TELEPORT]: "button_blue_up",
+        [DataBrushName.PUSHABLE]: "crate",
     },
     mapStyle: new MyStyle(),                   // the game's tiles for generated maps (keys 1-8); without it those keys do nothing
 };
@@ -2767,11 +2799,11 @@ vertical **toolbar** of tools at the far right. Each palette tab ends in a **+**
   attributes layer is the exception for the tool: it always opens on the Attributes tool, ready to inspect what's placed, with
   its data brush still picked, so `B` (or clicking the brush in the palette) paints with it again. The height layer opens on the
   Brush with the height brush the first time.
-- The one **attributes** layer is always present. Player start, collision, pickups, exits, NPCs' dialogs, bosses, spawners and
-  lights are painted on it, one of each on a cell, and it also draws a read-only overlay of what the game *derives* from tiles' metadata
+- The one **attributes** layer is always present. Player start, collision, pickups, exits, NPCs' dialogs, bosses, spawners,
+  lights, portals and pushables are painted on it, one of each on a cell, and it also draws a read-only overlay of what the game *derives* from tiles' metadata
   (collision, door footprints, lights, spawners) so a cell's whole picture - hand-placed and intrinsic - is in one place. A painted
   spawner is a square on its own cell, with the footprint it makes solid outlined: the sprite it turns into a spawner, or the
-  roster's spawner sprite.
+  roster's spawner sprite. A painted pushable likewise outlines the sprite it makes pushable.
 - **The attribute type.** The Attributes tab is a type selector: the type picked is the **active type**. Painting adds or replaces
   only that type on a cell, leaving the others there; erasing and filling touch only it; and the dropper picks it first. On the
   map the active type is drawn in full and every other type shrinks to a small **pip** - a coloured square always in the same
@@ -2815,6 +2847,9 @@ vertical **toolbar** of tools at the far right. Each palette tab ends in a **+**
   and paint the next pair - `-` (or `,`) goes back - or set the id and **Arrival only** in its popup (Edit, or `E`). On the map a
   portal is tagged with its id - P1, or A1 for an arrival-only one - and one that goes nowhere, its id no other portal's, has a ?
   after it (P3?). Paint something there for the players to see too: the portal itself isn't drawn ([9.5.1](#951-portals)).
+- To make something **pushable**, paint the `pushable` brush (the last attribute type) over it - a crate, a barrel, a statue.
+  It has no value and no popup. The overlay outlines the sprite it will push, over its whole footprint; a brush with no outline
+  pushes nothing - it's on bare floor, or over something that can't be pushed ([9.5.2](#952-pushing-things)).
 
 ### 10.4 Generated maps and `IStyler`
 

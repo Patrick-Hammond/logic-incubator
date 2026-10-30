@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { AssetMetadata } from "./AssetMetadata";
-import { FindImplicitPlacements, FindLights, FindSpawners, ImplicitBrush, OrphanedExplicitData } from "./ImplicitData";
+import { FindImplicitPlacements, FindLights, FindPushables, FindSpawners, ImplicitBrush, OrphanedExplicitData } from "./ImplicitData";
 
 const TILE = 16;
 const TILE_LAYER = 0;
@@ -218,6 +218,46 @@ describe("FindSpawners", () => {
 
     it("leaves out a spawner brush whose value isn't one, and spawner tiles painted on a data layer", () => {
         expect(spawners([brush("spawner", 1, 1, DATA_LAYER, { data: 3 }), brush("goblin_camp", 2, 2, DATA_LAYER)])).toEqual([]);
+    });
+});
+
+describe("FindPushables", () => {
+    /** Tile layers 0 and up, drawn in that order; anything below is a data layer. */
+    const pushables = (brushes: ImplicitBrush[]) =>
+        FindPushables(brushes, layerId => (layerId >= 0 ? layerId : undefined), name => META[name], name => SIZES[name], TILE);
+    const marker = (x: number, y: number) => brush("pushable", x, y, DATA_LAYER, { data: 0 });
+
+    it("makes the top tile on its cell that isn't floor the thing pushed, as big as its sprite", () => {
+        const statue = brush("statue", 3, 3, 1, { pixelOffset: { x: 0, y: 16 } });
+        const crate = brush("crate", 3, 3, 1);
+        const pushable = marker(3, 3);
+        expect(pushables([brush("floor", 3, 3), statue, pushable])).toEqual([{ x: 3, y: 3, tile: statue, brush: pushable, cells: [{ x: 3, y: 2 }, { x: 3, y: 3 }] }]);
+        // The later layer, and on one layer the later brush; one with no size of its own is one cell.
+        expect(pushables([brush("floor", 3, 3, 2), statue, crate, pushable])[0].tile).toBe(crate);
+        expect(pushables([crate, brush("box", 3, 3, 0), pushable])[0]).toMatchObject({ tile: crate, cells: [{ x: 3, y: 3 }] });
+    });
+
+    it("pushes nothing on bare floor, or nothing at all", () => {
+        expect(pushables([brush("floor", 3, 3), marker(3, 3)])).toEqual([]);
+        expect(pushables([marker(3, 3)])).toEqual([]);
+    });
+
+    it("leaves a door, a spawner, a pickup or a light where it is - and a tile another brush on its cell makes one", () => {
+        ["door", "goblin_camp", "sack_gold", "torch"].forEach(name => expect(pushables([brush(name, 3, 3), marker(3, 3)])).toEqual([]));
+        expect(pushables([brush("crate", 3, 3, 0, { data: GOLD_PICKUP }), marker(3, 3)])).toEqual([]);
+        ["spawner", "pickup", "dialog", "light"].forEach(name => expect(pushables([brush("crate", 3, 3), brush(name, 3, 3, DATA_LAYER), marker(3, 3)])).toEqual([]));
+        // A brush on another cell is its own cell's.
+        expect(pushables([brush("crate", 3, 3), brush("spawner", 4, 3, DATA_LAYER), marker(3, 3)])).toHaveLength(1);
+    });
+
+    it("keeps to the order the brushes come in, and leaves out one that would overlap one before it", () => {
+        // The statue stands a cell tall over the crate's cell.
+        const brushes = [brush("crate", 6, 2), brush("statue", 3, 4, TILE_LAYER, { pixelOffset: { x: 0, y: 16 } }), brush("crate", 3, 3), marker(6, 2), marker(3, 4), marker(3, 3)];
+        expect(pushables(brushes).map(p => `${p.x},${p.y}`)).toEqual(["6,2", "3,4"]);
+    });
+
+    it("leaves tiles on data layers alone", () => {
+        expect(pushables([brush("crate", 3, 3, DATA_LAYER), marker(3, 3)])).toEqual([]);
     });
 });
 

@@ -5,7 +5,7 @@ import {Rectangle, RectangleLike, Vec2Like} from "@logic-incubator/lib/math/Geom
 import { AnimationSpeed, TileSize } from "../Constants";
 import {DOOR_CLOSED, DOOR_OPENED, LEVEL_LOADED} from "../Events";
 import AssetMetadataStore from "./AssetMetadata";
-import {HeightAt} from "./Depth";
+import {HeightAt, IsHeightGap} from "./Depth";
 import {DescribeDialogErrors, DialogScript, ParseDialog} from "../story/DialogScript";
 import {QuestDef, ReadQuests} from "../story/Quests";
 import {DialogValue, IsDialogValue} from "../story/Talk";
@@ -14,8 +14,9 @@ import {Boss, IsBossValue} from "./entities/Bosses";
 import MonsterRoster from "./entities/MonsterRoster";
 import {IsPickupValue, PickupArea, PickupSpot, PickupValue} from "./entities/Pickups";
 import {ArtBounds} from "./entities/Projectiles";
+import {CanMove, Pushable} from "./entities/Pushables";
 import {SanitiseSpawnerValue, Spawner} from "./entities/Spawners";
-import {EffectiveLight, FindImplicitPlacements, FindLights, FindSpawners} from "./ImplicitData";
+import {EffectiveLight, FindImplicitPlacements, FindLights, FindPushables, FindSpawners} from "./ImplicitData";
 import {Brush, DataBrushName, LevelFile, LevelLayer, MigrateLevelFile, TileLayerOrder} from "./LevelFormat";
 import {AmbientLightGrid, BakeLights, ComposeLighting, LightBake, LightBlockersFor, LightGrid, LightSource, OpenLightBlockers} from "./Lighting";
 import {FindMapBounds} from "./MapBounds";
@@ -33,6 +34,8 @@ export type Tile = Brush & {
     glows?: boolean;
     /** Set for the tile a spawner is drawn as (see `Level.SpawnerTile`): `EntityRenderer` draws it, with the figures, so `TileMapView` leaves it out. */
     spawner?: boolean;
+    /** Set for the tile of something a hero can push (see `Level.PushableTile`): `EntityRenderer` draws it, wherever it's been pushed to, so `TileMapView` leaves it out. */
+    pushable?: boolean;
     /** Set once the tile has been taken out of the level (a torch picked up): what it made, its `loop` for one, is over. */
     gone?: boolean;
 };
@@ -100,7 +103,7 @@ export default class Level {
     public doors: Door[] = [];
     /** [x][y] -> the door covering that cell - `doors`, by cell, for `IsDoorClosed`. */
     private doorAt: Door[][] = [];
-    /** Goes up each time a door opens or closes, so anything worked out from which doors are closed (the monsters' flow field) can tell it's gone stale. */
+    /** Goes up each time a door opens or closes, or something is pushed, so anything worked out from which cells are open (the monsters' flow field) can tell it's gone stale. */
     public doorVersion = 0;
     /** [x][y] -> region id for a walkable (non-collision, non-door) cell. See `Regions.ts`. */
     public regionData: number[][] = [];
@@ -120,6 +123,17 @@ export default class Level {
     public spawners: Spawner[] = [];
     /** The tile each spawner is drawn as, if it has one - see `SpawnerTile`. */
     private spawnerTiles = new Map<Spawner, Tile>();
+    /**
+     * Everything a hero can push (see `ImplicitData.FindPushables`), in normalised map coordinates, where it is now - each one's
+     * `cells` solid (in `collisionData`) wherever it's pushed to (see `MovePushable`). Online, an event names one by its place here.
+     */
+    public pushables: Pushable[] = [];
+    /** The tile each pushable thing is - see `PushableTile`. */
+    private pushableTiles = new Map<Pushable, Tile>();
+    /** [x][y] -> the pushable thing on that cell - `pushables`, by cell, for `PushableAt`. */
+    private pushableAt: (Pushable | undefined)[][] = [];
+    /** The cells, as "x,y", that were solid under a pushable thing where it started - a wall its sprite reaches into - which stay solid when it's pushed off them. */
+    private solidUnder = new Set<string>();
     /** Every pickup not yet collected: each tile with a `pickup` in its `AssetMetadata`, each `PICKUP` brush, each key dropped. See `CollectPickupsAt`. */
     public pickups: Pickup[] = [];
     /** Every NPC painted with the `DIALOG` data brush, in normalised map coordinates - each one's cell is solid (in `collisionData`). */
@@ -143,7 +157,7 @@ export default class Level {
         return HeightAt(this.heightData, tileX, tileY);
     }
 
-    /** Whether nothing can move into the given cell - a wall, a spawner or anywhere off the map. */
+    /** Whether nothing can move into the given cell - a wall, a spawner, something pushable or anywhere off the map. */
     IsSolid(tileX: number, tileY: number): boolean {
         if (tileX < 0 || tileY < 0 || tileX >= this.boundRect.width || tileY >= this.boundRect.height) {
             return true;
@@ -220,7 +234,7 @@ export default class Level {
         return 0;
     }
 
-    /** Whether the cell is open floor: walkable and in a region - not a wall, a door, a spawner or off the map. Where heroes start and what's dropped lands. */
+    /** Whether the cell is open floor: walkable and in a region - not a wall, a door, a spawner, something pushable or off the map. Where heroes start and what's dropped lands. */
     IsFloor(tileX: number, tileY: number): boolean {
         const column = this.regionData[tileX];
         return !!column && column[tileY] !== undefined && !this.IsSolid(tileX, tileY);
@@ -239,8 +253,10 @@ export default class Level {
             this.spawnerTiles.delete(spawner);
         }
         spawner.cells.forEach(({x, y}) => {
+            this.solidUnder.delete(x + "," + y);
             if (this.collisionData[ x ]) {
-                this.collisionData[ x ][ y ] = false;
+                // Still solid if its sprite reached under something pushable.
+                this.collisionData[ x ][ y ] = this.PushableAt(x, y) !== null;
             }
             const touching = this.boundaryRegionData[ x ]?.[ y ];
             if (touching && touching.length) {
@@ -456,6 +472,83 @@ export default class Level {
         return this.spawnerTiles.get(spawner) || null;
     }
 
+    /** The thing a hero can push that's on the cell (any of its `cells`), if there is one. */
+    PushableAt(tileX: number, tileY: number): Pushable | null {
+        const column = this.pushableAt[ tileX ];
+        return (column && column[ tileY ]) || null;
+    }
+
+    /** The tile a pushable thing is - the one on its brush's cell that `ImplicitData.FindPushables` picked. */
+    PushableTile(pushable: Pushable): Tile | null {
+        return this.pushableTiles.get(pushable) || null;
+    }
+
+    /**
+     * Whether `pushable` can be pushed a cell `dx`, `dy` (see `Pushables.CanMove`): every cell it would move onto is open floor
+     * (see `IsFloor`) - not a door, nor a way out, nor a portal (one stood on would lead nowhere), nor where something lies to be
+     * picked up, nor anywhere `taken` says someone stands - and none is a step up or down that a hero couldn't take (see `IsHeightGap`).
+     */
+    CanPush(pushable: Pushable, dx: number, dy: number, taken: (tileX: number, tileY: number) => boolean): boolean {
+        return CanMove(
+            pushable,
+            dx,
+            dy,
+            (x, y) =>
+                this.IsFloor(x, y) && !this.IsExit(x, y) && this.portals.At(x, y) === null && !this.pickups.some(p => p.x === x && p.y === y) && !taken(x, y),
+            (from, to) => IsHeightGap(this.HeightAt(from.x, from.y), this.HeightAt(to.x, to.y))
+        );
+    }
+
+    /**
+     * Moves pushable `index` (of `pushables`) so its cell is `tileX`, `tileY` - its solid cells, and any sound its tile makes, with
+     * it - where `CanPush` said it could go, or an online host says it went. The cells it leaves are open again, but for a wall
+     * it started over. Does nothing if it's there already.
+     */
+    MovePushable(index: number, tileX: number, tileY: number): void {
+        const pushable = this.pushables[ index ];
+        if (!pushable || (pushable.x === tileX && pushable.y === tileY)) {
+            return;
+        }
+        const dx = tileX - pushable.x;
+        const dy = tileY - pushable.y;
+        pushable.cells.forEach(({x, y}) => {
+            if (this.pushableAt[ x ] && this.pushableAt[ x ][ y ] === pushable) {
+                this.pushableAt[ x ][ y ] = undefined;
+                this.collisionData[ x ][ y ] = this.solidUnder.has(x + "," + y);
+            }
+        });
+        pushable.x = tileX;
+        pushable.y = tileY;
+        pushable.cells = pushable.cells.map(cell => ({x: cell.x + dx, y: cell.y + dy}));
+        this.Occupy(pushable);
+        const tile = this.pushableTiles.get(pushable);
+        this.soundLoops.forEach(loop => {
+            if (loop.tile === tile) {
+                loop.x += dx;
+                loop.y += dy;
+            }
+        });
+        // Monsters find their way round it from where it is now.
+        this.doorVersion++;
+    }
+
+    /** Makes `pushable`'s cells solid, and marks them as its (see `PushableAt`). */
+    private Occupy(pushable: Pushable): void {
+        pushable.cells.forEach(({x, y}) => {
+            if (x < 0 || y < 0) {
+                return;
+            }
+            if (this.collisionData[ x ] == null) {
+                this.collisionData[ x ] = [];
+            }
+            this.collisionData[ x ][ y ] = true;
+            if (this.pushableAt[ x ] == null) {
+                this.pushableAt[ x ] = [];
+            }
+            this.pushableAt[ x ][ y ] = pushable;
+        });
+    }
+
     /** Takes a tile out of its stack at the given cell, so it's no longer drawn, and puts out its light if it gives one. */
     private RemoveTile(x: number, y: number, tile: Tile): void {
         this.levelData.forEach(layer => {
@@ -505,6 +598,10 @@ export default class Level {
         this.doorAt = [];
         this.spawners = [];
         this.spawnerTiles.clear();
+        this.pushables = [];
+        this.pushableTiles.clear();
+        this.pushableAt = [];
+        this.solidUnder.clear();
         this.pickups = [];
         this.exits = [];
         this.talkers = [];
@@ -645,12 +742,28 @@ export default class Level {
             }
         });
 
+        // Only the tiles that were made: one missing from the sprite sheet can't be pushed about.
+        const pushablePlacements = FindPushables(
+            levelData.filter(brush => idMap[ brush.layerId ] == null || tileOfBrush.has(brush)),
+            layerId => idMap[ layerId ],
+            name => AssetMetadataStore.inst.Get(name),
+            name => AssetFactory.inst.CreateTexture(name),
+            TileSize
+        );
+        const pushed = new Set<Brush>(pushablePlacements.map(placement => placement.tile));
+        levelData.forEach(brush => {
+            if (brush.name === DataBrushName.PUSHABLE && idMap[ brush.layerId ] == null && !pushablePlacements.some(placement => placement.brush === brush)) {
+                console.warn(`The pushable at ${brush.position.x},${brush.position.y} has nothing it can push - no tile but floor, or one that's a door, a spawner, a pickup, a light, an NPC or another's - and is left out.`);
+            }
+        });
+
         // Intrinsic defaults from tiles' own AssetMetadata (collision, door footprints, pickups) - the
         // same list the editor's read-only implicit layer draws. They layer on top of the explicit
         // COLLISION/Z_INDEX brushes above rather than overwriting them. Lights and spawners, which a
-        // brush can make too, are placed below (see `FindLights` and `FindSpawners`).
+        // brush can make too, are placed below (see `FindLights` and `FindSpawners`). Not a pushable
+        // tile's: its collision goes where it does, and it casts no shadow, as the light is baked where it starts.
         const implicit = FindImplicitPlacements(
-            levelData,
+            levelData.filter(brush => !pushed.has(brush)),
             layerId => idMap[ layerId ] != null,
             name => AssetMetadataStore.inst.Get(name),
             name => AssetFactory.inst.CreateTexture(name),
@@ -668,6 +781,16 @@ export default class Level {
             }
             this.collisionData[ posX ][ posY ] = true;
         });
+        // A `COLLISION` brush where something pushable starts was painted to make it solid: it is anyway, wherever it goes, and the
+        // brush would be left behind as an invisible wall. Only what's solid there besides - a wall its sprite reaches into - stays.
+        const tileSolid = new Set<string>(implicit.collision.map(({x, y}) => (x - bounds.x1) + "," + (y - bounds.y1)));
+        pushablePlacements.forEach(placement => placement.cells.forEach(cell => {
+            const x = cell.x - bounds.x1;
+            const y = cell.y - bounds.y1;
+            if (x >= 0 && y >= 0 && this.collisionData[ x ] && !tileSolid.has(x + "," + y)) {
+                this.collisionData[ x ][ y ] = false;
+            }
+        }));
         // What stops light: walls and painted collision, before spawners add theirs below - a spawner is destroyed
         // in play and the light is baked once, so it would leave its shadow behind. A tile's `blocksLight` has the last word.
         const lightBlockers = LightBlockersFor(
@@ -800,6 +923,25 @@ export default class Level {
         this.regionData = regionMap.regionData;
         this.boundaryRegionData = regionMap.boundaryRegionData;
         this.regions = regionMap.regions;
+
+        // After the regions, which take in the floor under them: it's open once they're pushed off it.
+        pushablePlacements.forEach(placement => {
+            const tile = tileOfBrush.get(placement.tile);
+            if (!tile) {
+                return;
+            }
+            const cells = placement.cells.map(cell => ({x: cell.x - bounds.x1, y: cell.y - bounds.y1})).filter(cell => cell.x >= 0 && cell.y >= 0);
+            const pushable: Pushable = {x: placement.x - bounds.x1, y: placement.y - bounds.y1, cells, sprite: tile.name};
+            cells.forEach(({x, y}) => {
+                if (this.collisionData[ x ] && this.collisionData[ x ][ y ]) {
+                    this.solidUnder.add(x + "," + y);
+                }
+            });
+            tile.pushable = true;
+            this.pushables.push(pushable);
+            this.pushableTiles.set(pushable, tile);
+            this.Occupy(pushable);
+        });
 
         this.doors = FindDoorGroups(doorIds)
             .map(cells => {

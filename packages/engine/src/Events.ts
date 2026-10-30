@@ -61,6 +61,11 @@ export const HERO_TELEPORTED = "heroTeleported";
  * talk (`World.SetTalk`: one hero, on one machine). `DungeonMain` starts the talk.
  */
 export const NPC_BUMPED = "npcBumped";
+/**
+ * `(hero: number, index: number, tileX: number, tileY: number, sprite: string)` - a hero pushed something (see `Pushables`): which,
+ * by its place in `Level.pushables`, the cell it's on now, and the sprite it is.
+ */
+export const OBJECT_PUSHED = "objectPushed";
 /** `(hero: number, tileX: number, tileY: number)` - a talk with the NPC on that cell began: play holds still until `TALK_ENDED`. */
 export const TALK_STARTED = "talkStarted";
 /** The talk is over, and play goes on. */

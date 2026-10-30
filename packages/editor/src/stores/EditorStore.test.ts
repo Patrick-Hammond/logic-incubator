@@ -772,9 +772,9 @@ describe("the light data brush", () => {
     it("is one of the palette's data brushes, after the older attributes, starting as a torch", () => {
         const brushes = new EditorStore().state.dataBrushes;
         const attributes = brushes.filter(db => !db.height).map(db => db.name);
-        // Last but the teleport, so the older types' pips keep their places.
-        expect(attributes.slice(-2)).toEqual([DataBrushName.LIGHT, DataBrushName.TELEPORT]);
-        expect(attributes).toHaveLength(9);
+        // Last but the teleport and the pushable, so the older types' pips keep their places.
+        expect(attributes.slice(-3)).toEqual([DataBrushName.LIGHT, DataBrushName.TELEPORT, DataBrushName.PUSHABLE]);
+        expect(attributes).toHaveLength(10);
         expect(brushes.find(db => db.name === DataBrushName.LIGHT).value).toEqual({ brightness: 1, tint: 0xffc780, range: 7, flicker: 0.15 });
     });
 
@@ -817,6 +817,17 @@ describe("the teleport data brush", () => {
         store.Dispatch({ type: EditorActions.SET_DATA_BRUSH_VALUE, data: { value: { portal: 0, arrivalOnly: true } } });
         store.Dispatch({ type: EditorActions.DATA_BRUSH_DEC });
         expect(store.state.currentBrush.data).toEqual({ portal: 0, arrivalOnly: true });
+    });
+});
+
+describe("the pushable data brush", () => {
+    it("is the palette's last attribute type, with no value - and is added to a map saved before it existed", () => {
+        const store = new EditorStore();
+        const attributes = store.state.dataBrushes.filter(db => !db.height);
+        expect(attributes[ attributes.length - 1 ].name).toBe(DataBrushName.PUSHABLE);
+        expect(attributes[ attributes.length - 1 ].value).toBe(0);
+        store.Load({ ...store.state, dataBrushes: store.state.dataBrushes.filter(db => db.name !== DataBrushName.PUSHABLE) });
+        expect(store.state.dataBrushes.find(db => db.name === DataBrushName.PUSHABLE)).toBeDefined();
     });
 });
 

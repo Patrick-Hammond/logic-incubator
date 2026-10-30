@@ -1,7 +1,7 @@
 import {AnimatedSprite, BitmapText, Container, Graphics, interaction} from "pixi.js";
 import { Key } from "@logic-incubator/lib/io/Keyboard";
 import AssetMetadataStore from "@logic-incubator/engine/level/AssetMetadata";
-import { FindImplicitPlacements, FindLights, FindSpawners } from "@logic-incubator/engine/level/ImplicitData";
+import { FindImplicitPlacements, FindLights, FindPushables, FindSpawners } from "@logic-incubator/engine/level/ImplicitData";
 import MonsterRoster from "@logic-incubator/engine/level/entities/MonsterRoster";
 import { Brush, DataBrushName, HEIGHT_LAYER_ID, IsTileLayer } from "@logic-incubator/engine/level/LevelFormat";
 import AssetFactory from "@logic-incubator/lib/loading/AssetFactory";
@@ -261,7 +261,7 @@ export default class Canvas extends EditorComponent {
 
     /**
      * Outlines every placement the game derives from tiles' `AssetMetadata`
-     * (see `FindImplicitPlacements`, `FindLights` and `FindSpawners` - the same functions
+     * (see `FindImplicitPlacements`, `FindLights`, `FindSpawners` and `FindPushables` - the same functions
      * `Level` uses, so this is exactly what the game will get): collision, each cell of a door's
      * sprite footprint (labelled with its lock), lit tiles labelled with their
      * range, spawners with their monster count and pickups with their kind. Drawn
@@ -269,8 +269,9 @@ export default class Canvas extends EditorComponent {
      * squares of hand-painted data brushes. A lit tile with a painted light on its cell
      * isn't outlined - the painted light takes its place, and has its own square. A painted
      * spawner's square is just its own cell, so the overlay outlines the whole footprint it
-     * makes solid too - the tile it turns into a spawner, or the roster's sprite. While an
-     * attribute type is active, what isn't that type (doors never are) is drawn faintly.
+     * makes solid too - the tile it turns into a spawner, or the roster's sprite - and a
+     * pushable brush's the tile it makes pushable: one outlined in nothing pushes nothing. While an attribute type is active, what isn't that type (doors
+     * never are) is drawn faintly.
      */
     private DrawImplicitLayer(levelData: Brush[]): void {
         this.implicitContainer.removeChildren();
@@ -371,6 +372,15 @@ export default class Canvas extends EditorComponent {
             TileSize,
             spawnerSize
         );
+        const pushableColour = colourOf(DataBrushName.PUSHABLE);
+        const pushableStrength = strengthOf(DataBrushName.PUSHABLE);
+        FindPushables(
+            levelData,
+            layerId => tileLayerOrder.get(layerId),
+            name => AssetMetadataStore.inst.Get(name),
+            name => (this.assetFactory.Has(name) ? this.assetFactory.CreateTexture(name) : undefined),
+            TileSize
+        ).forEach(pushable => pushable.cells.forEach(cell => drawCell(cell.x, cell.y, pushableColour, pushableStrength)));
         spawners.forEach(spawner => {
             let labelPos: { x: number; y: number } | null = null;
             spawner.cells.forEach(cell => {

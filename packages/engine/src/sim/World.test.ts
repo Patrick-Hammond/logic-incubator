@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { Vec2, Vec2Like } from "@logic-incubator/lib/math/Geometry";
 import { TileSize } from "../Constants";
-import { ALL_PLAYERS_DIED, DOOR_LOCKED, HERO_TELEPORTED, LEVEL_COMPLETED, LIGHT_SPELL_CAST, NPC_BUMPED, PICKUP_COLLECTED, QUEST_UPDATED } from "../Events";
+import { ALL_PLAYERS_DIED, DOOR_LOCKED, HERO_TELEPORTED, LEVEL_COMPLETED, LIGHT_SPELL_CAST, NPC_BUMPED, OBJECT_PUSHED, PICKUP_COLLECTED, QUEST_UPDATED } from "../Events";
 import type { IPlayerInput } from "../input/PlayerControl";
+import { IsHeightGap } from "../level/Depth";
 import { DoorOpens } from "../level/Doors";
 import type { CollectedPickup } from "../level/Level";
 import { Chase } from "../level/entities/Behaviours";
@@ -11,15 +12,16 @@ import { LightSpell } from "../level/entities/LightSpell";
 import type { MonsterDef } from "../level/entities/MonsterRoster";
 import { PickupArea, PickupSpot, PickupValue } from "../level/entities/Pickups";
 import { WeaponDef } from "../level/entities/Projectiles";
+import { CanMove, Pushable, PushDelay } from "../level/entities/Pushables";
 import Portals, { Portal } from "../level/Portals";
 import type { QuestDef } from "../story/Quests";
 import World, { StartCells, WarpDistance, WorldLevel } from "./World";
 
 /**
  * Whole steps of play for a party on ASCII maps (`#` solid, `D` the cells of one door, `S` the start, `E` a way out, `N` an NPC,
- * a digit a portal with that id, `a` an arrival-only portal 1),
- * with the real heroes, collision and encounter - only the level is a stand-in, its doors following the
- * same rule as `Level`'s (`DoorOpens`).
+ * a digit a portal with that id, `a` an arrival-only portal 1, `P` a one-cell crate a hero can push), with the real heroes, collision
+ * and encounter - only the level is a stand-in, its doors following the same rule as `Level`'s (`DoorOpens`), and what can be
+ * pushed where too (`CanMove`).
  */
 
 const FRAME = 1 / 60;
@@ -42,9 +44,10 @@ function Level(rows: string[], lockId = NoLock, quests: QuestDef[] = []): TestLe
     const exits: Vec2Like[] = [];
     const npcs: Vec2Like[] = [];
     const portals: Portal[] = [];
+    const pushables: Pushable[] = [];
     let start: Vec2Like | undefined;
     rows.forEach((row, y) => row.split("").forEach((c, x) => {
-        (collisionData[x] = collisionData[x] || [])[y] = c === "#" || c === "N";
+        (collisionData[x] = collisionData[x] || [])[y] = c === "#" || c === "N" || c === "P";
         if (c === "N") {
             npcs.push({ x, y });
         }
@@ -52,6 +55,9 @@ function Level(rows: string[], lockId = NoLock, quests: QuestDef[] = []): TestLe
             portals.push({ x, y, value: { portal: Number(c) } });
         } else if (c === "a") {
             portals.push({ x, y, value: { portal: 1, arrivalOnly: true } });
+        }
+        if (c === "P") {
+            pushables.push({ x, y, cells: [{ x, y }], sprite: "crate" });
         }
         if (c === "D") {
             door.cells.push({ x, y });
@@ -109,6 +115,25 @@ function Level(rows: string[], lockId = NoLock, quests: QuestDef[] = []): TestLe
         DropPickup(x, y, value, sprite) {
             level.pickups.push({ ...Spot(x, y), value, sprite });
             return { x, y };
+        },
+        pushables,
+        PushableAt: (x, y) => pushables.find(p => p.cells.some(c => c.x === x && c.y === y)) || null,
+        CanPush: (pushable, dx, dy, taken) =>
+            CanMove(
+                pushable,
+                dx,
+                dy,
+                (x, y) => !isSolid(x, y) && !isDoor(x, y) && !level.IsExit(x, y) && !level.pickups.some(p => p.x === x && p.y === y) && !taken(x, y),
+                (from, to) => IsHeightGap(level.HeightAt(from.x, from.y), level.HeightAt(to.x, to.y))
+            ),
+        MovePushable(index, x, y) {
+            const pushable = pushables[index];
+            pushable.cells.forEach(c => (collisionData[c.x][c.y] = false));
+            pushable.cells = pushable.cells.map(c => ({ x: c.x + x - pushable.x, y: c.y + y - pushable.y }));
+            pushable.cells.forEach(c => (collisionData[c.x][c.y] = true));
+            pushable.x = x;
+            pushable.y = y;
+            doorVersion++;
         }
     };
     return level;
@@ -658,6 +683,121 @@ describe("World's quests and talk", () => {
             world.Step([Input(1, 0)], 1, FRAME);
         }
         expect(events.some(e => e.event === NPC_BUMPED)).toBe(false);
+    });
+});
+
+describe("World's pushing", () => {
+    // The start, a crate two cells to its right, and room past it.
+    const YARD = [
+        "##########",
+        "#.S.P...E#",
+        "#........#",
+        "##########"
+    ];
+    /** Steps hero 0 with `input` for `seconds`, a 60th at a time. */
+    const Walk = (world: World, input: IPlayerInput, seconds: number) => {
+        for (let t = 0; t < seconds; t += FRAME) {
+            world.Step([input], 1, FRAME);
+        }
+    };
+    const pushes = (events: { event: string; args: unknown[] }[]) => events.filter(e => e.event === OBJECT_PUSHED).map(e => e.args);
+
+    it("shoves a crate a cell on once a hero has kept walking into it, then needs as long again for the next", () => {
+        const { level, world, events } = Setup(YARD, 1);
+        let leaning = 0;
+        while (!pushes(events).length && leaning < 1) {
+            world.Step([Input(1, 0)], 1, FRAME);
+            leaning += world.Heroes[0].Tile.x === 3 ? FRAME : 0;
+        }
+        expect(pushes(events)).toEqual([[0, 0, 5, 1, "crate"]]);
+        // Against it the whole while, for as long as it takes and no longer.
+        expect(world.Heroes[0].Tile.x).toBe(3);
+        expect(leaning).toBeCloseTo(PushDelay, 1);
+        expect(level.pushables[0]).toMatchObject({ x: 5, y: 1 });
+        expect(level.IsSolid(4, 1)).toBe(false);
+        expect(level.IsSolid(5, 1)).toBe(true);
+        // Following it up and leaning on it again moves it again - but not straight away.
+        Walk(world, Input(1, 0), 0.15);
+        expect(world.Heroes[0].Tile.x).toBe(4);
+        expect(level.pushables[0].x).toBe(5);
+        Walk(world, Input(1, 0), PushDelay);
+        expect(level.pushables[0].x).toBe(6);
+    });
+
+    it("doesn't push what a hero only brushes past, nor what they're less than half in line with", () => {
+        const { level, world, events } = Setup(YARD, 1);
+        Walk(world, Input(1, 0), PushDelay * 0.6);
+        Walk(world, Input(0, 1), 0.2);
+        Walk(world, Input(0, -1), 0.2);
+        Walk(world, Input(1, 0), PushDelay * 0.6);
+        expect(pushes(events)).toEqual([]);
+        // Mostly in the row below it, walking right along its foot.
+        Put(world, 0, { x: 3, y: 1.6 });
+        Walk(world, Input(1, 0), 1);
+        expect(level.pushables[0].x).toBe(4);
+    });
+
+    it("pushes along one axis, straight, though a hero walks into it on a slant - held to its row by the walls", () => {
+        const { level, world } = Setup(["#########", "#S.P....#", "#########"], 1);
+        Walk(world, Input(1, 0.5), 0.5);
+        expect(level.pushables[0]).toMatchObject({ x: 4, y: 1, cells: [{ x: 4, y: 1 }] });
+    });
+
+    it("won't push into a wall, another crate, a door, a way out or a pickup", () => {
+        const blocked = (rows: string[], from: Vec2Like, input: IPlayerInput) => {
+            const { level, world, events } = Setup(rows, 1);
+            level.pickups.push({ ...Spot(7, 1), value: { kind: "gold", amount: 5 }, sprite: null });
+            Put(world, 0, from);
+            Walk(world, input, 1);
+            return pushes(events);
+        };
+        expect(blocked(["######", "#S.P##", "######"], { x: 2, y: 1 }, Input(1, 0))).toEqual([]);
+        expect(blocked(["#######", "#S.PP.#", "#######"], { x: 2, y: 1 }, Input(1, 0))).toEqual([]);
+        expect(blocked(["#######", "#S.PD.#", "#######"], { x: 2, y: 1 }, Input(1, 0))).toEqual([]);
+        expect(blocked(["#######", "#S.PE.#", "#######"], { x: 2, y: 1 }, Input(1, 0))).toEqual([]);
+        expect(blocked(["#########", "#S...P..#", "#########"], { x: 4, y: 1 }, Input(1, 0))).toEqual([[0, 0, 6, 1, "crate"]]);
+    });
+
+    it("won't push onto anyone - another hero, or a monster - and pushes the moment they're out of the way", () => {
+        const { level, world, events } = Setup(YARD, 2);
+        Put(world, 0, { x: 3, y: 1 });
+        // Half on the cell it would go to.
+        Put(world, 1, { x: 5.5, y: 1 });
+        for (let t = 0; t < 1; t += FRAME) {
+            world.Step([Input(1, 0), Input()], 1, FRAME);
+        }
+        expect(pushes(events)).toEqual([]);
+        world.Heroes[1].Damage(6);
+        world.Step([Input(1, 0), Input()], 1, FRAME);
+        expect(pushes(events)).toEqual([[0, 0, 5, 1, "crate"]]);
+
+        const monsters = Setup(YARD, 1);
+        // One that holds still, where it stands.
+        monsters.world.encounter.monsters.push({ ...WalkerAt(5, 1), def: { ...Walker, speed: 0 } });
+        Put(monsters.world, 0, { x: 3, y: 1 });
+        Walk(monsters.world, Input(1, 0), 1);
+        expect(pushes(monsters.events)).toEqual([]);
+        expect(level.pushables[0].x).toBe(5);
+    });
+
+    it("won't push up or down a step a hero couldn't take", () => {
+        const pushed = (heights: (x: number) => number) => {
+            const { level, world, events } = Setup(YARD, 1);
+            level.HeightAt = x => heights(x);
+            Put(world, 0, { x: 3, y: 1 });
+            Walk(world, Input(1, 0), 0.5);
+            return pushes(events).length;
+        };
+        expect(pushed(x => (x >= 5 ? 2 : 0))).toBe(0);
+        expect(pushed(x => (x >= 5 ? -2 : 0))).toBe(0);
+        expect(pushed(x => (x >= 5 ? 1 : 0))).toBe(1);
+    });
+
+    it("lets monsters find their way round a crate where it is now", () => {
+        const { level, world } = Setup(YARD, 1);
+        const before = level.doorVersion;
+        Walk(world, Input(1, 0), 0.5);
+        expect(level.doorVersion).toBe(before + 1);
     });
 });
 

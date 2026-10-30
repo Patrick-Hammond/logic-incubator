@@ -509,7 +509,7 @@ export class DungeonMain extends GameComponent {
         this.level.UpdateLights(this.lightTime, this.MovingLights(entities, alpha));
         this.MoveCamera(frames, seconds);
 
-        this.renderer.Render(this.views, entities, alpha);
+        this.renderer.Render(this.views, entities, alpha, seconds);
         if (this.world.Heroes.length) {
             this.hud.RenderHeroes(this.world.Heroes);
         }

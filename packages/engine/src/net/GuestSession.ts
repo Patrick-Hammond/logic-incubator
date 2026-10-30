@@ -5,7 +5,7 @@
  * (see `Replica`, `PlayClock`), and its own hero ahead, moved the moment the
  * player moves and put right as the host's word on it comes (see
  * `Prediction`). What happened in between - pickups, keys dropped, spawners
- * destroyed, doors - it does to its own level as it's told, and it passes on
+ * destroyed, doors, things pushed - it does to its own level as it's told, and it passes on
  * the host's events (see Events.ts) as its own, so a HUD, sounds or an end
  * screen hear of them as they would offline. Over a direct link a snapshot
  * may be lost, or come after a newer one; what happened always comes, in
@@ -20,8 +20,8 @@ import { RelayHost } from "@logic-incubator/lib/net/RelayRooms";
 import type RelaySession from "@logic-incubator/lib/net/RelaySession";
 import type { EncounterView } from "../Encounter";
 import {
-    ALL_PLAYERS_DIED, BOSS_WOKE, DOOR_LOCKED, HERO_TELEPORTED, KEYS_DROPPED, LEVEL_COMPLETED, MONSTER_HIT, MONSTER_KILLED, MONSTER_SPAWNED, PICKUP_COLLECTED, PLAYER_DAMAGED,
-    PLAYER_DIED, LIGHT_SPELL_CAST, QUEST_UPDATED, SHOT_FIRED, SHOT_STOPPED, SPAWNER_DESTROYED, SPAWNER_HIT
+    ALL_PLAYERS_DIED, BOSS_WOKE, DOOR_LOCKED, HERO_TELEPORTED, KEYS_DROPPED, LEVEL_COMPLETED, MONSTER_HIT, MONSTER_KILLED, MONSTER_SPAWNED, OBJECT_PUSHED,
+    PICKUP_COLLECTED, PLAYER_DAMAGED, PLAYER_DIED, LIGHT_SPELL_CAST, QUEST_UPDATED, SHOT_FIRED, SHOT_STOPPED, SPAWNER_DESTROYED, SPAWNER_HIT
 } from "../Events";
 import type { IPlayerInput } from "../input/PlayerControl";
 import MonsterRoster from "../level/entities/MonsterRoster";
@@ -391,6 +391,15 @@ export default class GuestSession extends PlaySession {
                     emit(HERO_TELEPORTED, event.hero, event.fromX, event.fromY, event.x, event.y);
                 }
                 break;
+            case "pushed": {
+                // Its own hero's push too: pushing is the host's to decide, as there may be someone in the way it can't see yet.
+                const pushable = level.pushables[event.index];
+                if (pushable) {
+                    level.MovePushable(event.index, event.x, event.y);
+                    emit(OBJECT_PUSHED, event.hero, event.index, event.x, event.y, pushable.sprite);
+                }
+                break;
+            }
             case "stopped": {
                 const setup = this.replica!.Shot(event.shot);
                 if (setup) {

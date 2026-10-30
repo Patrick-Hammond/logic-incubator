@@ -49,6 +49,10 @@ import type { TeleportValue } from "./Portals";
  *
  * `TELEPORT` makes its cell a portal, with a portal id: a hero who walks onto it comes out of another portal with the same id
  * (see `Portals`). Like `EXIT`, it isn't drawn - paint something there for the players to see.
+ *
+ * `PUSHABLE`, painted over an object - a crate, a statue - lets a hero push it: it makes the top tile on its cell that isn't
+ * floor the thing pushed, as `SPAWNER` picks its tile, solid over its sprite's footprint wherever it is, and a hero walking into
+ * it moves it on a cell if there's room (see `Pushables`, `ImplicitData.FindPushables`). It has no value of its own.
  */
 export const enum DataBrushName {
     PLAYER_START = "player-start",
@@ -60,7 +64,8 @@ export const enum DataBrushName {
     BOSS = "boss",
     SPAWNER = "spawner",
     LIGHT = "light",
-    TELEPORT = "teleport"
+    TELEPORT = "teleport",
+    PUSHABLE = "pushable"
 }
 
 /**
