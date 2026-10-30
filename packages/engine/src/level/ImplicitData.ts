@@ -8,8 +8,9 @@
  * One source of truth for both consumers: `Level.LoadLevel` bakes these
  * into its collision/door/light/spawner/pickup data, and the editor's
  * read-only implicit layer (see `Canvas`) draws exactly the same list, so
- * what the overlay shows is what the game will do. Spawners have a function
- * of their own, `FindSpawners`, as a `SPAWNER` brush makes one too.
+ * what the overlay shows is what the game will do. Spawners and lights have
+ * a function of their own each, `FindSpawners` and `FindLights`, as a
+ * `SPAWNER` or `LIGHT` brush makes one too.
  */
 
 import { Vec2Like } from "@logic-incubator/lib/math/Geometry";
@@ -18,7 +19,7 @@ import { DoorFootprint, EffectiveDoorLock } from "./Doors";
 import { IsPickupValue, PickupValue } from "./entities/Pickups";
 import { IsSpawnerValue, SpawnerCells, SpawnerPlacements, SpawnerValue } from "./entities/Spawners";
 import { DataBrushName } from "./LevelFormat";
-import { IsLightValue, LightValue } from "./Lighting";
+import { IsCompleteLightValue, IsLightValue, LightValue } from "./Lighting";
 
 export type ImplicitBrush = { name: string; position: Vec2Like; pixelOffset: Vec2Like; layerId: number; data?: unknown };
 
@@ -29,15 +30,13 @@ export type ImplicitPlacements = {
     lightBlocks: { x: number; y: number; blocks: boolean }[];
     /** Every cell of every door tile's sprite footprint (see `DoorFootprint`), tagged with that door's `id`. */
     doors: { x: number; y: number; id: number }[];
-    /** A tile's effective light (its own override, or its asset's default) - see `EffectiveLight`. */
-    lights: { x: number; y: number; value: LightValue }[];
     /** One per door placement, at its footprint's first cell: the lock id a key has to match to open it (see `EffectiveDoorLock`). */
     doorLocks: { x: number; y: number; lock: number }[];
     /** A tile's effective pickup (its own override, or its asset's default) - see `EffectivePickup`. */
     pickups: { x: number; y: number; value: PickupValue }[];
 };
 
-/** A tile's light: its own placement carries an override (painted or set via the data-select tool) if `data` is already a `LightValue`, else its asset's default from `AssetMetadata`, else none. */
+/** A tile's light: its own placement carries an override (set via the data-select tool) if `data` is already a `LightValue`, else its asset's default from `AssetMetadata`, else none. A `LIGHT` brush on its cell takes its place - see `FindLights`. */
 export function EffectiveLight(brush: ImplicitBrush, meta: AssetMetadata | undefined): LightValue | undefined {
     return IsLightValue(brush.data) ? brush.data : meta?.light;
 }
@@ -64,7 +63,7 @@ export function FindImplicitPlacements(
     sizeFor: (assetName: string) => { width: number; height: number },
     tileSize: number
 ): ImplicitPlacements {
-    const placements: ImplicitPlacements = { collision: [], lightBlocks: [], doors: [], doorLocks: [], lights: [], pickups: [] };
+    const placements: ImplicitPlacements = { collision: [], lightBlocks: [], doors: [], doorLocks: [], pickups: [] };
     brushes.forEach(brush => {
         if (!isTileLayer(brush.layerId)) {
             return;
@@ -85,10 +84,6 @@ export function FindImplicitPlacements(
                 footprint.forEach(cell => placements.doors.push({ x: cell.x, y: cell.y, id }));
                 placements.doorLocks.push({ x: footprint[0].x, y: footprint[0].y, lock: EffectiveDoorLock(brush, meta) });
             }
-        }
-        const light = EffectiveLight(brush, meta);
-        if (light) {
-            placements.lights.push({ x, y, value: light });
         }
         const pickup = EffectivePickup(brush, meta);
         if (pickup) {
@@ -164,10 +159,78 @@ export function FindSpawners<B extends ImplicitBrush>(
     });
 }
 
+/** A light as the level places it (see `FindLights`), in the brushes' own space. */
+export type LightPlacement<B> = {
+    x: number;
+    y: number;
+    value: LightValue;
+    /** The tile it belongs to, which puts it out when it goes - a torch picked up, a spawner destroyed - or null for one that stands on its own. */
+    tile: B | null;
+    /** The `LIGHT` brush that sets it, if it's a painted one. */
+    brush: B | null;
+};
+
+/**
+ * Every light on the map: each lit tile's own (see `EffectiveLight`), and each `LIGHT` brush's, which puts a light on
+ * any cell. A brush takes the place of its cell's tile lights, so it retunes a torch rather than doubling it, and belongs
+ * to the top lit tile there; on a cell with no lit tile it belongs to the top tile that isn't floor (as `FindSpawners`
+ * picks one), so a light painted on a gem goes when the gem's picked up, and on bare floor it stands on its own. One brush
+ * a cell counts - the last painted, should a hand-edited file have more - and one without a whole light value (see
+ * `IsCompleteLightValue`) none. `tileLayerOrder` is a tile layer's place in the drawing order, as `FindSpawners` has it.
+ * Tile lights come first, in the brushes' order, then the painted ones. What `Level` bakes, and what the editor's overlay marks.
+ */
+export function FindLights<B extends ImplicitBrush>(
+    brushes: ReadonlyArray<B>,
+    tileLayerOrder: (layerId: number) => number | undefined,
+    metaFor: (assetName: string) => AssetMetadata | undefined
+): LightPlacement<B>[] {
+    const cellKey = (x: number, y: number): string => x + "," + y;
+    /** cell -> the tiles anchored there, with their place in the drawing order */
+    const tilesAt = new Map<string, { tile: B; layer: number; index: number }[]>();
+    /** cell -> the `LIGHT` brush painted there */
+    const painted = new Map<string, B>();
+    brushes.forEach((brush, index) => {
+        const key = cellKey(brush.position.x, brush.position.y);
+        const layer = tileLayerOrder(brush.layerId);
+        if (layer !== undefined) {
+            const here = tilesAt.get(key) || [];
+            here.push({ tile: brush, layer, index });
+            tilesAt.set(key, here);
+        } else if (brush.name === DataBrushName.LIGHT && IsCompleteLightValue(brush.data)) {
+            painted.set(key, brush);
+        }
+    });
+
+    const lights: LightPlacement<B>[] = [];
+    brushes.forEach(brush => {
+        const { x, y } = brush.position;
+        if (tileLayerOrder(brush.layerId) === undefined || painted.has(cellKey(x, y))) {
+            return;
+        }
+        const value = EffectiveLight(brush, metaFor(brush.name));
+        if (value) {
+            lights.push({ x, y, value, tile: brush, brush: null });
+        }
+    });
+    painted.forEach((brush, key) => {
+        // Top first: the last layer drawn, and on it the last painted.
+        const here = (tilesAt.get(key) || []).sort((a, b) => b.layer - a.layer || b.index - a.index).map(entry => entry.tile);
+        const tile =
+            here.find(t => EffectiveLight(t, metaFor(t.name)) !== undefined) ||
+            here.find(t => {
+                const meta = metaFor(t.name);
+                return !meta || meta.category !== "floor";
+            }) ||
+            null;
+        lights.push({ x: brush.position.x, y: brush.position.y, value: brush.data as LightValue, tile, brush });
+    });
+    return lights;
+}
+
 type TileProperty = "collidable";
 const TILE_PROPERTIES: TileProperty[] = ["collidable"];
 
-/** The data brush that can stand in for each property on a tile's cell - just `COLLISION` now that a light lives on the tile itself (see `EffectiveLight`) rather than a separate data brush that could outlive it. A `SPAWNER` brush isn't one either: it's a spawner with or without a tile under it, so erasing a spawner tile leaves it be. Doors have none - their footprint only ever comes from the tile. */
+/** The data brush that can stand in for each property on a tile's cell - just `COLLISION`. A `LIGHT` or `SPAWNER` brush isn't one: it's a light or a spawner with or without a tile under it, so erasing a torch or a spawner tile leaves it be. Doors have none - their footprint only ever comes from the tile. */
 const EXPLICIT_COUNTERPART: { [dataBrushName: string]: TileProperty } = {
     [DataBrushName.COLLISION]: "collidable"
 };
@@ -175,8 +238,7 @@ const EXPLICIT_COUNTERPART: { [dataBrushName: string]: TileProperty } = {
 /**
  * The data brushes in `remaining` that erasing the `erased` tiles leaves with
  * no tile to belong to: a `COLLISION` brush on a cell that just lost its last
- * collidable tile, a `LIGHT` brush on one that just lost its last lit tile.
- * Erasing a wall already drops its implicit collision (nothing stores it), but
+ * collidable tile. Erasing a wall already drops its implicit collision (nothing stores it), but
  * a map painted before `collidable` existed also has hand-painted collision
  * under its walls, which would otherwise outlive the wall and keep the cell
  * blocked. Collision on a cell that never had a collidable tile is a deliberate

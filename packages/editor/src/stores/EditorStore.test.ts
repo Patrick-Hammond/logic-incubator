@@ -768,6 +768,37 @@ describe("the spawner data brush", () => {
     });
 });
 
+describe("the light data brush", () => {
+    it("is one of the palette's data brushes, the last of the attributes, starting as a torch", () => {
+        const brushes = new EditorStore().state.dataBrushes;
+        const attributes = brushes.filter(db => !db.height).map(db => db.name);
+        expect(attributes[attributes.length - 1]).toBe(DataBrushName.LIGHT);
+        // The pips have room for eight.
+        expect(attributes).toHaveLength(8);
+        expect(brushes.find(db => db.name === DataBrushName.LIGHT).value).toEqual({ brightness: 1, tint: 0xffc780, range: 7, flicker: 0.15 });
+    });
+
+    it("is added to a map saved since it went, and keeps the value of one saved before", () => {
+        const store = new EditorStore();
+        store.Load({ ...store.state, dataBrushes: store.state.dataBrushes.filter(db => db.name !== DataBrushName.LIGHT) });
+        expect(store.state.dataBrushes.find(db => db.name === DataBrushName.LIGHT)).toBeDefined();
+        const old = { brightness: 0.5, tint: 0xff8100, range: 5 };
+        store.Load({ ...store.state, dataBrushes: store.state.dataBrushes.map(db => (db.name === DataBrushName.LIGHT ? { ...db, value: old } : db)) });
+        expect(store.state.dataBrushes.find(db => db.name === DataBrushName.LIGHT).value).toEqual(old);
+    });
+
+    it("takes the value its popup sets, carried onto the brush that's painted, and isn't stepped by + and -", () => {
+        const store = new EditorStore();
+        store.Dispatch({ type: EditorActions.SELECT_LAYER, data: { layer: implicitLayers(store)[0] } });
+        store.Dispatch({ type: EditorActions.BRUSH_CHANGED, data: { name: DataBrushName.LIGHT } });
+        const value = { brightness: 0.6, tint: 0x6688ff, range: 12 };
+        store.Dispatch({ type: EditorActions.SET_DATA_BRUSH_VALUE, data: { value } });
+        store.Dispatch({ type: EditorActions.DATA_BRUSH_INC });
+        expect(store.SelectedDataBrush.value).toEqual(value);
+        expect(store.state.currentBrush.data).toEqual(value);
+    });
+});
+
 describe("data layer eyes", () => {
     const layer = (store: EditorStore, id: number) => store.state.layers.find(l => l.id === id);
     const select = (store: EditorStore, id: number) => store.Dispatch({ type: EditorActions.SELECT_LAYER, data: { layer: layer(store, id) } });

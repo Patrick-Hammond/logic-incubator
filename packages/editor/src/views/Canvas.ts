@@ -1,7 +1,7 @@
 import {AnimatedSprite, BitmapText, Container, Graphics, interaction} from "pixi.js";
 import { Key } from "@logic-incubator/lib/io/Keyboard";
 import AssetMetadataStore from "@logic-incubator/engine/level/AssetMetadata";
-import { FindImplicitPlacements, FindSpawners } from "@logic-incubator/engine/level/ImplicitData";
+import { FindImplicitPlacements, FindLights, FindSpawners } from "@logic-incubator/engine/level/ImplicitData";
 import MonsterRoster from "@logic-incubator/engine/level/entities/MonsterRoster";
 import { Brush, DataBrushName, HEIGHT_LAYER_ID, IsTileLayer } from "@logic-incubator/engine/level/LevelFormat";
 import AssetFactory from "@logic-incubator/lib/loading/AssetFactory";
@@ -17,9 +17,8 @@ import { EditorFontName } from "../EditorAssets";
 import { ActiveAttributeType, EditorActions, EditorTool, IEditorState, IMPLICIT_LAYER_ID, IsHeightLayer, MouseButtonState } from "../stores/EditorStore";
 import { LevelDataActions, LevelDataState } from "../stores/LevelDataStore";
 
-/** Doors and lights aren't paintable data brushes any more, so they have no palette colour of their own to borrow - these match their old ones (LIGHT's former swatch colour) so the map looks the same as before the change. A pickup and a spawner do have one - the PICKUP or SPAWNER brush's, whether it's painted or a tile's own. */
+/** A door isn't a paintable data brush, so it has no palette colour of its own to borrow. A pickup, a spawner and a light do have one - the PICKUP, SPAWNER or LIGHT brush's, whether it's painted or a tile's own. */
 const IMPLICIT_DOOR_COLOUR = 0x4cc9f0;
-const IMPLICIT_LIGHT_COLOUR = 0xff8100;
 /** How strongly what isn't the active attribute type is drawn on the derived-data overlay, against 1 for what is. */
 const OTHER_TYPE_STRENGTH = 0.3;
 /** The heatmap's fill with the height layer selected, and as an underlay while another layer is and its eye's open. */
@@ -258,15 +257,16 @@ export default class Canvas extends EditorComponent {
 
     /**
      * Outlines every placement the game derives from tiles' `AssetMetadata`
-     * (see `FindImplicitPlacements` and `FindSpawners` - the same functions `Level`
-     * uses, so this is exactly what the game will get): collision, each cell of a door's
-     * sprite footprint (labelled with its lock), intrinsic lights labelled with their
+     * (see `FindImplicitPlacements`, `FindLights` and `FindSpawners` - the same functions
+     * `Level` uses, so this is exactly what the game will get): collision, each cell of a door's
+     * sprite footprint (labelled with its lock), lit tiles labelled with their
      * range, spawners with their monster count and pickups with their kind. Drawn
      * outlined over a faint fill, so it reads differently from the solid
-     * squares of hand-painted data brushes. A painted spawner's square is just
-     * its own cell, so the overlay outlines the whole footprint it makes solid too -
-     * the tile it turns into a spawner, or the roster's sprite. While an attribute type
-     * is active, what isn't that type (lights and doors never are) is drawn faintly.
+     * squares of hand-painted data brushes. A lit tile with a painted light on its cell
+     * isn't outlined - the painted light takes its place, and has its own square. A painted
+     * spawner's square is just its own cell, so the overlay outlines the whole footprint it
+     * makes solid too - the tile it turns into a spawner, or the roster's sprite. While an
+     * attribute type is active, what isn't that type (doors never are) is drawn faintly.
      */
     private DrawImplicitLayer(levelData: Brush[]): void {
         this.implicitContainer.removeChildren();
@@ -347,11 +347,12 @@ export default class Canvas extends EditorComponent {
             drawCell(pickup.x, pickup.y, pickupColour, pickupStrength);
             labelCell(pickup.x, pickup.y, MapLabel(pickup.value), pickupStrength);
         });
-        const lightStrength = strengthOf(null);
-        placements.lights.forEach(light => {
-            // Labelled once, by the first light on the cell.
-            if (drawCell(light.x, light.y, IMPLICIT_LIGHT_COLOUR, lightStrength)) {
-                labelCell(light.x, light.y, light.value.range.toString(), lightStrength);
+        const lightColour = colourOf(DataBrushName.LIGHT);
+        const lightStrength = strengthOf(DataBrushName.LIGHT);
+        FindLights(levelData, layerId => tileLayerOrder.get(layerId), name => AssetMetadataStore.inst.Get(name)).forEach(light => {
+            // Labelled once, by the first light on the cell - and not at all where a painted light takes the tiles' place.
+            if (!light.brush && drawCell(light.x, light.y, lightColour, lightStrength)) {
+                labelCell(light.x, light.y, MapLabel(light.value), lightStrength);
             }
         });
         const spawnerSprite = MonsterRoster.inst.SpawnerSprite;

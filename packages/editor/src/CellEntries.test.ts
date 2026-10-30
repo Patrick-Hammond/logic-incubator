@@ -55,6 +55,17 @@ describe("CellEntriesAt", () => {
         expect(entriesAt([], { x: 0, y: 0 })).toEqual([{ type: "height", target: null, height: 0 }]);
     });
 
+    it("marks a tile's light that a light painted on its own cell replaces - and only there", () => {
+        const blue = { brightness: 0.6, tint: 0x6688ff, range: 9 };
+        const levelData = [brush("torch", 2, 2, floor.id), brush(DataBrushName.LIGHT, 2, 2, attributes.id, blue), brush("torch", 3, 3, floor.id)];
+        const entries = entriesAt(levelData, { x: 2, y: 2 });
+        expect(entries.map(EntryName)).toEqual(["light", "light", "height 0"]);
+        expect(entries[0]).toMatchObject({ type: "data", target: levelData[1] });
+        expect(entries[1]).toMatchObject({ type: "tile", kind: "light", replaced: true });
+        expect(SummariseCell(entries)).toBe("light");
+        expect(entriesAt(levelData, { x: 3, y: 3 })[0]).not.toHaveProperty("replaced");
+    });
+
     it("lists what's on hidden layers too - the inspector shows the cell as the game has it", () => {
         const hidden = CellEntriesAt([brush("torch", 0, 0, floor.id)], [{ ...floor, visible: false } as LevelLayer], { x: 0, y: 0 }, LOOKUPS);
         expect(hidden.map(EntryName)).toEqual(["light", "height 0"]);

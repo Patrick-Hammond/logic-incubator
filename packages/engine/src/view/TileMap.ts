@@ -294,7 +294,7 @@ export default class TileMapView extends GameComponent {
                                         layer.tileRotate(TileGD8Rotation(tile.rotation, tile.scale.x, tile.scale.y));
                                     }
                                 }
-                                if (tile.light !== undefined) {
+                                if (tile.light !== undefined && tile.glows) {
                                     const lights = this.level.lights;
                                     LookOfGlow(lights.Colour(tile.light), lights.Scale(tile.light), this.glowLook);
                                     glows.Add(left + texture.width / 2, top + texture.height * GlowFlameY, this.glowLook, TileSize);

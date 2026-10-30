@@ -1949,8 +1949,8 @@ over them (above, "arches" is drawn over the heroes as they walk beneath). A lev
 ([9.10](#910-npcs-dialogs-and-quests)); a level without it has none. The engine reads only what `LevelFormat.ts` types; the
 editor saves more of its own state alongside.
 
-There are exactly eight **data brushes**. The height (`z-index`) is painted on the **height** layer (`isHeight`, id -99997), at
-most one a cell and none where it's 0; the other seven on the one `attributes` data layer, which holds **one of each** on a cell -
+There are exactly nine **data brushes**. The height (`z-index`) is painted on the **height** layer (`isHeight`, id -99997), at
+most one a cell and none where it's 0; the other eight on the one `attributes` data layer, which holds **one of each** on a cell -
 a cell can be solid, an NPC's and a pickup all at once (a tile layer still holds one tile a cell):
 
 | Name | `data` | Effect |
@@ -1963,10 +1963,11 @@ a cell can be solid, an NPC's and a pickup all at once (a tile layer still holds
 | `dialog` | `{ script }` | An NPC to talk to, painted over their tile: the cell is solid (but casts no shadow), and in a Quest walking into it starts a talk by its `script` ([9.10](#910-npcs-dialogs-and-quests)). In co-op and online the NPC only stands there. |
 | `boss` | a `BossValue` | One monster where it's painted - `{ monster, hitPoints?, quest? }`: the roster's type, its hit points (left out or 0: its kind's own) and the quest killing it counts for. It sleeps until a hero comes near it ([9.10](#910-npcs-dialogs-and-quests)). |
 | `spawner` | a `SpawnerValue` | A monster spawner where it's painted, set in its popup - the same settings as a spawner tile's (see `spawner` in [9.6](#96-assets-metajson-tile-behaviour-by-sprite-name)). Any sprite can be one: the brush makes the top tile on its cell that isn't floor (a gravestone, a statue, a wall) the spawner, drawn as itself, solid over its sprite's footprint and gone when it's destroyed. On bare floor it's drawn as the roster's `spawnerSprite` instead. Painted on a spawner tile's cell, it sets what that spawner does, rather than adding a second. |
+| `light` | a `LightValue` | A point light on its cell, set in its popup - the same settings as a lit tile's (see `light` in [9.6](#96-assets-metajson-tile-behaviour-by-sprite-name)): a light anywhere, with or without a torch. Painted on a lit tile's cell (a torch), it takes the place of that tile's light rather than adding a second, so it retunes the torch. It goes out with the tile it's on - the lit one, or else the top one that isn't floor - so a light painted on a gem goes when the gem's picked up, and one on a spawner when it's destroyed. On bare floor it's a light on its own, always on. It adds no glow sprite (a torch tile has its own). A brush whose value is missing a field is left out. |
 
-Lights and doors are **not** brushes: they are ordinary tiles that carry their behaviour in
-`assets-meta.json`. A pickup or a spawner can be either: a tile that is one by default, or a brush over any other tile -
-a `spawner` brush on bare floor too.
+Doors are **not** brushes: they are ordinary tiles that carry their behaviour in `assets-meta.json`. A light, a pickup or a
+spawner can be either: a tile that is one by default, or a brush over any other tile - a `light` or `spawner` brush on bare
+floor too.
 
 ### 9.6 `assets-meta.json`: tile behaviour by sprite name
 
@@ -1993,7 +1994,7 @@ a deleted one is removed - with a warning if it had anything in it); you only fi
 | `category` | Which palette tab the **level editor** lists the sprite under: `floor`, `walls`, `entities`, `weapons`, `items`, `misc` or `user` ([10.3](#103-layers-data-brushes-and-palette-categories)). Has no effect in play. A sprite with none is listed under Misc; an unknown value is a build error (and a console warning at run time). |
 | `collidable` | Blocks movement, and light. |
 | `blocksLight` | Whether the sprite stops light, where that should differ from `collidable`: `false` lets light past a solid tile (a table, a fence, a window), `true` stops it at one you can walk through. Left out, a tile stops light if it is collidable. Where tiles on one cell disagree, `true` wins. A value that isn't `true` or `false` is dropped with a console warning. |
-| `light` | A point light: `brightness` (its strength at its own cell, added on top of the ambient light; 1 is a normal torch, clamped to 0..2), `tint` (hex colour as a number; a warm colour reads as firelight against the cool ambient), `range` (radius in tiles), and optionally `flicker` (how far its strength wavers either way, as a share of itself: 0.15 is a torch; left out or 0, it's steady). Its sprite gets a soft glow over its flame (centred across the art, a third of the way down), in the light's colour. Baked once at level load at the corners of the tile grid, so it is blended smoothly across tiles, and fades out smoothly to nothing at its range. Overlapping lights add up, and light can go above 1 to brighten the art (capped). Where no light reaches, a dim, cool ambient light. Sprites, and tiles taller than a cell such as doors, are lit by the floor under their feet. Walls and other light-blocking tiles cast soft shadows, and the floor is a little darker along the foot of a wall and in a room's corners. A torch placed on a wall shines from the wall's open side (south first), so it lights the room it faces and not what's behind it. Height counts: a ledge two or more steps above the light hides its top, while stairs (one step a tile) stay lit. Spawners and doors don't cast shadows. A hand-edited light missing a field is dropped with a console warning naming the sprite rather than baking black. |
+| `light` | A point light (the `light` data brush puts one anywhere - [9.5](#95-the-level-file)): `brightness` (its strength at its own cell, added on top of the ambient light; 1 is a normal torch, clamped to 0..2), `tint` (hex colour as a number; a warm colour reads as firelight against the cool ambient), `range` (radius in tiles), and optionally `flicker` (how far its strength wavers either way, as a share of itself: 0.15 is a torch; left out or 0, it's steady). Its sprite gets a soft glow over its flame (centred across the art, a third of the way down), in the light's colour. Baked once at level load at the corners of the tile grid, so it is blended smoothly across tiles, and fades out smoothly to nothing at its range. Overlapping lights add up, and light can go above 1 to brighten the art (capped). Where no light reaches, a dim, cool ambient light. Sprites, and tiles taller than a cell such as doors, are lit by the floor under their feet. Walls and other light-blocking tiles cast soft shadows, and the floor is a little darker along the foot of a wall and in a room's corners. A torch placed on a wall shines from the wall's open side (south first), so it lights the room it faces and not what's behind it. Height counts: a ledge two or more steps above the light hides its top, while stairs (one step a tile) stay lit. Spawners and doors don't cast shadows. A hand-edited light missing a field is dropped with a console warning naming the sprite rather than baking black. |
 | `door` | `id` pairs a door's two sprites (closed and open); `open` says which half this is. The door swaps when a hero's tile enters any of its footprint cells and swaps back when the last of them leaves, so it reads as "walked open" - unless that placement is locked, when the team needs its key ([9.6.1](#961-keys-and-locked-doors)). |
 | `spawner` | Produces `monsters` (a pool, picked at random) every `interval` s, at most `maxAlive` at once, `total` in all (0 = unlimited), only while a hero is within `activationRange` tiles' walk (0 = always). `hitPoints` is the damage to destroy it (0 = indestructible). Its sprite's footprint is solid until destroyed, when the tile goes too. The `spawner` data brush ([9.5](#95-the-level-file)) makes any other sprite one. |
 | `sound` | What the sprite sounds like, by name ([5.9](#59-sound)): a pickup's as it's picked up, a door's as the door turns into it. Left out, the game's `sounds` has it ([9.8](#98-events-and-hooks)). One that isn't a string is dropped with a console warning. |
@@ -2664,6 +2665,7 @@ export const EditorSetup: IDungeonEditorOptions = {
         [DataBrushName.PICKUP]: "sack_gold",
         [DataBrushName.EXIT]: "floor_ladder",
         [DataBrushName.SPAWNER]: "mob_spawner",
+        [DataBrushName.LIGHT]: "flame_1_anim",
     },
     mapStyle: new MyStyle(),                   // the game's tiles for generated maps (keys 1-8); without it those keys do nothing
 };
@@ -2734,8 +2736,8 @@ vertical **toolbar** of tools at the far right. Each palette tab ends in a **+**
   attributes layer is the exception for the tool: it always opens on the Attributes tool, ready to inspect what's placed, with
   its data brush still picked, so `B` (or clicking the brush in the palette) paints with it again. The height layer opens on the
   Brush with the height brush the first time.
-- The one **attributes** layer is always present. Player start, collision, pickups, exits, NPCs' dialogs, bosses and spawners are
-  painted on it, one of each on a cell, and it also draws a read-only overlay of what the game *derives* from tiles' metadata
+- The one **attributes** layer is always present. Player start, collision, pickups, exits, NPCs' dialogs, bosses, spawners and
+  lights are painted on it, one of each on a cell, and it also draws a read-only overlay of what the game *derives* from tiles' metadata
   (collision, door footprints, lights, spawners) so a cell's whole picture - hand-placed and intrinsic - is in one place. A painted
   spawner is a square on its own cell, with the footprint it makes solid outlined: the sprite it turns into a spawner, or the
   roster's spawner sprite.
@@ -2764,6 +2766,11 @@ vertical **toolbar** of tools at the far right. Each palette tab ends in a **+**
   its ×, Esc, a click on the same cell or on an empty one, or by selecting a tile layer.
 - Painting a torch or a spawner **tile** is enough; its light or spawner values come from `assets-meta.json`. Use Edit on its
   row in the cell inspector to override them for one placement.
+- Or paint a **light** brush (the flame, last of the attribute types) anywhere: on bare floor for a light with no torch -
+  a glowing rune, a shaft of daylight, a lift to a dark corner - or over a sprite to make it glow and go out with it when
+  it's picked up or destroyed. Its popup (Edit, or `E`, with the brush picked) has brightness, tint, range and flicker; a new
+  one starts as a torch. Painted over a torch, it replaces the torch's light: the overlay stops outlining the torch's, and the
+  cell inspector marks the torch's row *replaced by the painted light*. On the map it's tagged with its range, like a lit tile.
 - Or paint a **spawner** brush over any sprite - a gravestone, a statue - to make that sprite the spawner: it's drawn as
   itself, its footprint is solid, and it's gone once destroyed. Floor never becomes one: on bare floor the brush is drawn as the
   roster's spawner sprite. Its popup (Edit, or `E`, with the brush picked) has the same settings as a spawner tile's, and the

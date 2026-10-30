@@ -16,13 +16,18 @@
 import { Vec2Like } from "@logic-incubator/lib/math/Geometry";
 
 /**
- * A light's authored properties - intrinsic to a tile via `AssetMetadata.light`, or set on one placement (see
- * `Level.LoadLevel`). `flicker`, from 0 (steady, the default) up, is how far its strength wavers either way as a
- * share of itself: 0.15 is a torch. See `FlickerScale`.
+ * A light's authored properties - intrinsic to a tile via `AssetMetadata.light`, set on one placement, or painted
+ * as a `LIGHT` data brush (see `ImplicitData.FindLights`). `flicker`, from 0 (steady, the default) up, is how far
+ * its strength wavers either way as a share of itself: 0.15 is a torch. See `FlickerScale`.
  */
 export type LightValue = { brightness: number; tint: number; range: number; flicker?: number };
 
-/** Narrows a `Brush.data`/`DataBrush.value` to `LightValue`. Collision, z-index and player-start keep a plain number, but `SpawnerValue` is an object too, so this keys off `range` rather than just "is an object". Deliberately loose past that - callers that already trust the shape (e.g. a `LIGHT` brush placement) only need "is this the light variant"; see `IsCompleteLightValue` for untrusted input. */
+/** What a new light starts as - the `LIGHT` brush's, and the light popup's for a value that isn't one: a torch, warm and wavering. */
+export function DefaultLightValue(): LightValue {
+    return { brightness: 1, tint: 0xffc780, range: 7, flicker: 0.15 };
+}
+
+/** Narrows a `Brush.data`/`DataBrush.value` to `LightValue`. Collision, z-index and player-start keep a plain number, but `SpawnerValue` is an object too, so this keys off `range` rather than just "is an object". Deliberately loose past that - callers that already trust the shape (e.g. a tile's own override) only need "is this the light variant"; see `IsCompleteLightValue` for untrusted input, such as a `LIGHT` brush in a level file. */
 export function IsLightValue(value: unknown): value is LightValue {
     return typeof value === "object" && value !== null && "range" in value;
 }

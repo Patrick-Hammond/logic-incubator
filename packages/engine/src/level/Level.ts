@@ -15,7 +15,7 @@ import MonsterRoster from "./entities/MonsterRoster";
 import {IsPickupValue, PickupArea, PickupSpot, PickupValue} from "./entities/Pickups";
 import {ArtBounds} from "./entities/Projectiles";
 import {SanitiseSpawnerValue, Spawner} from "./entities/Spawners";
-import {EffectiveLight, FindImplicitPlacements, FindSpawners} from "./ImplicitData";
+import {EffectiveLight, FindImplicitPlacements, FindLights, FindSpawners} from "./ImplicitData";
 import {Brush, DataBrushName, LevelFile, LevelLayer, MigrateLevelFile, TileLayerOrder} from "./LevelFormat";
 import {AmbientLightGrid, BakeLights, ComposeLighting, LightBake, LightBlockersFor, LightGrid, LightSource, OpenLightBlockers} from "./Lighting";
 import {FindMapBounds} from "./MapBounds";
@@ -26,8 +26,10 @@ export type Tile = Brush & {
     texture: Texture;
     /** Set for tiles painted with an animated brush; `TileMapView` reads its live `.texture` each render instead of `texture`. */
     anim?: AnimatedSprite;
-    /** Set for a tile that gives off light (see `ImplicitData.EffectiveLight`): which of the level's baked lights is its own - see `SceneLights`. */
+    /** Set for a tile a light belongs to - its own (see `ImplicitData.EffectiveLight`), or a `LIGHT` brush's on its cell (see `ImplicitData.FindLights`): which of the level's baked lights it is, put out when the tile goes - see `SceneLights`. */
     light?: number;
+    /** Set with `light` for a tile that gives off light of its own - a torch - which has a glow drawn over its flame (see `Glow`), in its light's colour even when a `LIGHT` brush retunes it. A tile a painted light only belongs to - a gem, a statue - has none. */
+    glows?: boolean;
     /** Set for the tile a spawner is drawn as (see `Level.SpawnerTile`): `EntityRenderer` draws it, with the figures, so `TileMapView` leaves it out. */
     spawner?: boolean;
     /** Set once the tile has been taken out of the level (a torch picked up): what it made, its `loop` for one, is over. */
@@ -85,7 +87,7 @@ export default class Level {
     public collisionData: boolean[][] = [];
     /** Per-cell height painted with the `Z_INDEX` data brush, on the height layer (see `HEIGHT_LAYER_ID`). */
     public heightData: number[][] = [];
-    /** Light at every tile corner, baked from point lights - both the `LIGHT` data brush and any placed tile with `light` in its `AssetMetadata` - with walls casting shadows (see `Lighting.ComposeLighting`; read it with `CellCornerLight`/`SampleLight`/`FootLight`). */
+    /** Light at every tile corner, baked from point lights - any placed tile with `light` in its `AssetMetadata` (or its own override), and the `LIGHT` data brush - with walls casting shadows (see `Lighting.ComposeLighting`; read it with `CellCornerLight`/`SampleLight`/`FootLight`). */
     public lightGrid: LightGrid = AmbientLightGrid(0, 0);
     /** What `lightGrid` was built from: each light's shadowed reach and the corners' ambient occlusion. Rebuild the grid from it with `ComposeLighting` to change a light's strength without casting its rays again. */
     public lightBake: LightBake = BakeLights([], OpenLightBlockers(0, 0));
@@ -470,18 +472,6 @@ export default class Level {
         return null;
     }
 
-    /** Finds a tile at the given cell that gives off light and isn't yet matched to one of the baked lights, searching every tile layer. Null if there's none. */
-    private FindLightTile(x: number, y: number): Tile | null {
-        for (const layer of this.levelData) {
-            const stack = layer && layer[x] && layer[x][y];
-            const found = stack && stack.find(t => t.light === undefined && EffectiveLight(t, AssetMetadataStore.inst.Get(t.name)) !== undefined);
-            if (found) {
-                return found;
-            }
-        }
-        return null;
-    }
-
     /** Stops animated tiles' sprites so reloading a level (or dropping it, when the scene is destroyed) doesn't leave them ticking in the background forever. */
     Dispose(): void {
         this.levelData.forEach(layer =>
@@ -517,6 +507,8 @@ export default class Level {
         const spawnerSize = hasSpawnerSprite ? AssetFactory.inst.CreateTexture(spawnerSprite) : undefined;
         const depths = new Set<number>([0]);
         const lights: LightSource[] = [];
+        /** The tile each of `lights` belongs to, at the same index - null for one standing on its own. */
+        const lightTiles: (Tile | null)[] = [];
         /** Every `PICKUP` data brush, in normalised map coordinates - resolved against the tiles once they're built, below. */
         const explicitPickups: { x: number; y: number; value: PickupValue }[] = [];
         /** Every `DIALOG` data brush, likewise - its NPC is whatever tile is drawn there. */
@@ -635,11 +627,10 @@ export default class Level {
             }
         });
 
-        // Intrinsic defaults from tiles' own AssetMetadata (collision, door footprints, lights,
-        // spawners) - the same list the editor's read-only implicit layer draws. Lights/spawners
-        // layer on top of the explicit COLLISION/Z_INDEX brushes above rather than overwriting them;
-        // a tile's own placement can override its own light/spawner (see `ImplicitData.EffectiveLight`/
-        // `EffectiveSpawner`), so there's nothing left here to take precedence over.
+        // Intrinsic defaults from tiles' own AssetMetadata (collision, door footprints, pickups) - the
+        // same list the editor's read-only implicit layer draws. They layer on top of the explicit
+        // COLLISION/Z_INDEX brushes above rather than overwriting them. Lights and spawners, which a
+        // brush can make too, are placed below (see `FindLights` and `FindSpawners`).
         const implicit = FindImplicitPlacements(
             levelData,
             layerId => idMap[ layerId ] != null,
@@ -684,7 +675,15 @@ export default class Level {
             }
             doorIds[ posX ][ posY ] = doorId;
         });
-        implicit.lights.forEach(({x, y, value}) => lights.push({x: x - bounds.x1, y: y - bounds.y1, value}));
+        FindLights(
+            levelData,
+            layerId => idMap[ layerId ],
+            name => AssetMetadataStore.inst.Get(name)
+        ).forEach(({x, y, value, tile}) => {
+            lights.push({x: x - bounds.x1, y: y - bounds.y1, value});
+            // None for a sprite missing from the sheet - nothing's drawn there to take the light with it.
+            lightTiles.push((tile && tileOfBrush.get(tile)) || null);
+        });
         // Solid, like a spawner, but added after the light's blockers: an NPC casts no shadow across the room.
         const questIds = this.quests.map(quest => quest.id);
         dialogs.forEach(({x, y, value}) => {
@@ -756,10 +755,10 @@ export default class Level {
         this.lightBake = BakeLights(lights, lightBlockers);
         this.lightGrid = ComposeLighting(this.lightBake);
         this.lights = new SceneLights(this.lightBake, this.lightGrid);
-        lights.forEach((light, i) => {
-            const tile = this.FindLightTile(light.x, light.y);
+        lightTiles.forEach((tile, i) => {
             if (tile) {
                 tile.light = i;
+                tile.glows = EffectiveLight(tile, AssetMetadataStore.inst.Get(tile.name)) !== undefined;
             }
         });
         this.soundLoops = [];

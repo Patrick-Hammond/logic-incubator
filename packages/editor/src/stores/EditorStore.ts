@@ -7,6 +7,7 @@ import { DefaultBossValue } from "@logic-incubator/engine/level/entities/Bosses"
 import { DefaultPickupValue } from "@logic-incubator/engine/level/entities/Pickups";
 import { DefaultSpawnerValue } from "@logic-incubator/engine/level/entities/Spawners";
 import { Brush, DataBrushName, DataBrushValue, HEIGHT_LAYER_ID, IsTileLayer, TileLayerKind } from "@logic-incubator/engine/level/LevelFormat";
+import { DefaultLightValue } from "@logic-incubator/engine/level/Lighting";
 import { DefaultDialogValue } from "@logic-incubator/engine/story/Talk";
 import { ClampHeight } from "../Heights";
 import { Layer } from "./LevelDataStore";
@@ -84,11 +85,11 @@ export const MaxEditableLayers = 16;
 
 /**
  * Fixed id of "attributes", the data layer every data brush but the height is painted on - player-start,
- * collision, pickups, exits, dialogs, bosses, spawners - as many on a cell as there are kinds, one of each
+ * collision, pickups, exits, dialogs, bosses, spawners, lights - as many on a cell as there are kinds, one of each
  * (see `LevelDataActions`). The data brush picked is its active type (see `ActiveAttributeType`): painting,
  * erasing and the map's full squares are that type's, the rest shrink to pips. It also draws the read-only
  * overlay of what the game derives from tiles' own `AssetMetadata` (collision, door footprints, lights,
- * spawners - see `FindImplicitPlacements`), so a cell's full picture - hand-placed and intrinsic - is always in
+ * spawners - see `FindImplicitPlacements`, `FindLights` and `FindSpawners`), so a cell's full picture - hand-placed and intrinsic - is always in
  * one place. `isData: true` is what keeps `Level.LoadLevel` from ever mistaking it for a tile layer; its id is
  * what everything else (duplicating, reordering, the layer badge) keys off, since it's one of the layers that's
  * always there rather than something a user added. Always present (re-added on load/reset). There's
@@ -395,6 +396,8 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
                 { name: DataBrushName.BOSS, colour: 0xd00000, value: DefaultBossValue() },
                 // The colour the editor has always outlined a spawner tile's footprint in.
                 { name: DataBrushName.SPAWNER, colour: 0x9b5de5, value: DefaultSpawnerValue() },
+                // The colour the editor has always outlined a lit tile in. Last of the attributes, so the others' pips keep their places.
+                { name: DataBrushName.LIGHT, colour: 0xff8100, value: DefaultLightValue() },
                 // The height layer's: the height painted, then raise and lower, which have no value of their own.
                 { name: DataBrushName.Z_INDEX, colour: 0x06d6a0, value: 1, height: true },
                 { name: RAISE_BRUSH, colour: 0xf4a259, value: null, height: true },
@@ -859,7 +862,7 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
         return ToolFitsLayer(tool, layers.find(layer => layer.selected)) ? tool : EditorTool.BRUSH;
     }
 
-    /** Plain +/- stepping only applies to a numeric data brush value (a height) - a pickup's, spawner's, dialog's or boss's is set in its popup instead. */
+    /** Plain +/- stepping only applies to a numeric data brush value (a height) - a pickup's, spawner's, light's, dialog's or boss's is set in its popup instead. */
     private CalcDataBrushValue(value: DataBrushValue, actionType: EditorActions): DataBrushValue {
         if (typeof value !== "number") {
             return value;

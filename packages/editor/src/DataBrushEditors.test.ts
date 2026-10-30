@@ -6,6 +6,7 @@ import { DefaultSpawnerValue } from "@logic-incubator/engine/level/entities/Spaw
 import { DefaultBossValue } from "@logic-incubator/engine/level/entities/Bosses";
 import { DefaultDialogValue } from "@logic-incubator/engine/story/Talk";
 import { DataBrushName } from "@logic-incubator/engine/level/LevelFormat";
+import { DefaultLightValue } from "@logic-incubator/engine/level/Lighting";
 import { DataBrushEditorFor } from "./DataBrushEditors";
 import { IsFieldVisible } from "./ui/dialog/FormDialog";
 
@@ -14,9 +15,9 @@ MonsterRoster.inst.Load(TEST_MONSTERS);
 const noImages = { monster: () => undefined, hasSprite: () => true };
 
 describe("DataBrushEditors", () => {
-    it("only offers an editor for a value the game reads - collision and player-start have none, light keeps its though it isn't a paintable data brush any more", () => {
+    it("only offers an editor for a value the game reads - collision and player-start have none", () => {
         expect(DataBrushEditorFor(DataBrushName.SPAWNER)).toBeDefined();
-        expect(DataBrushEditorFor("light")).toBeDefined();
+        expect(DataBrushEditorFor(DataBrushName.LIGHT)).toBeDefined();
         expect(DataBrushEditorFor(DataBrushName.Z_INDEX)).toBeDefined();
         expect(DataBrushEditorFor(DataBrushName.PICKUP)).toBeDefined();
         expect(DataBrushEditorFor("door")).toBeDefined();
@@ -41,7 +42,7 @@ describe("DataBrushEditors", () => {
     });
 
     it("gives every form field a value, so no control starts blank", () => {
-        [DataBrushName.SPAWNER, "light", DataBrushName.Z_INDEX, DataBrushName.PICKUP, "door", DataBrushName.DIALOG, DataBrushName.BOSS].forEach(name => {
+        [DataBrushName.SPAWNER, DataBrushName.LIGHT, DataBrushName.Z_INDEX, DataBrushName.PICKUP, "door", DataBrushName.DIALOG, DataBrushName.BOSS].forEach(name => {
             const editor = DataBrushEditorFor(name);
             const form = editor.toForm(0);
             editor.fields(noImages).forEach(field => expect(form, `${name}.${field.key}`).toHaveProperty(field.key));
@@ -49,12 +50,17 @@ describe("DataBrushEditors", () => {
     });
 
     it("saves a light with no flicker as a steady one, without the field", () => {
-        const light = DataBrushEditorFor("light");
+        const light = DataBrushEditorFor(DataBrushName.LIGHT);
         expect(light.fromForm({ ...light.toForm({ brightness: 1, tint: 0xffffff, range: 5, flicker: 0.2 }), lightFlicker: 0 })).toEqual({ brightness: 1, tint: 0xffffff, range: 5 });
     });
 
+    it("starts a light that isn't one yet as a torch - the light brush's own first value", () => {
+        const light = DataBrushEditorFor(DataBrushName.LIGHT);
+        expect(light.fromForm(light.toForm(0))).toEqual(DefaultLightValue());
+    });
+
     it("round-trips a light and a height", () => {
-        const light = DataBrushEditorFor("light");
+        const light = DataBrushEditorFor(DataBrushName.LIGHT);
         const value = { brightness: 0.8, tint: 0x123456, range: 7.5 };
         expect(light.fromForm(light.toForm(value))).toEqual(value);
         const torch = { brightness: 1, tint: 0xffc780, range: 15, flicker: 0.15 };

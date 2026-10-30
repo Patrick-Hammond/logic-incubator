@@ -4,13 +4,10 @@
  * values. Brushes whose value the game never reads (player-start, collision)
  * have no entry, so the editor offers no edit button for them.
  *
- * "light" is keyed by its old `DataBrushName` string even though it isn't a
- * paintable data brush any more - a light is now an ordinary tile placement
- * (see `ImplicitData.EffectiveLight`), edited by the data-select tool clicking
- * it on the map rather than a palette chip, but it's the exact same value shape
- * and the exact same dialog either way. A pickup and a spawner are both: the
- * `PICKUP`/`SPAWNER` data brush, and the same value on a tile that gives one
- * (`EffectivePickup`/`EffectiveSpawner`) - one popup for either. "door" is
+ * A light, a pickup and a spawner are each both: the `LIGHT`/`PICKUP`/`SPAWNER`
+ * data brush, and the same value on a tile that gives one (`EffectiveLight`/
+ * `EffectivePickup`/`EffectiveSpawner`, edited by the data-select tool clicking
+ * it on the map) - one popup for either. "door" is
  * only ever a tile's own value (`EffectiveDoorLock`): there's no door data brush. A dialog's script
  * and a boss are painted data brushes, each with its popup; so are the level's quests, which a pickup,
  * a boss and a script name by id - their list is `QuestsDialog`'s, and the popups offer them from it.
@@ -25,7 +22,7 @@ import { NoLock } from "@logic-incubator/engine/level/entities/Keys";
 import MonsterRoster, { MonsterType } from "@logic-incubator/engine/level/entities/MonsterRoster";
 import { DefaultPickupValue, IsPickupValue, PickupKind, PickupKinds, PickupValue } from "@logic-incubator/engine/level/entities/Pickups";
 import { DefaultSpawnerValue, IsSpawnerValue, SanitiseSpawnerValue } from "@logic-incubator/engine/level/entities/Spawners";
-import { IsLightValue, LightValue, MAX_BRIGHTNESS } from "@logic-incubator/engine/level/Lighting";
+import { DefaultLightValue, IsLightValue, LightValue, MAX_BRIGHTNESS } from "@logic-incubator/engine/level/Lighting";
 import { DataBrushName, DataBrushValue } from "@logic-incubator/engine/level/LevelFormat";
 import { DescribeDialogErrors, ParseDialog } from "@logic-incubator/engine/story/DialogScript";
 import type { QuestDef } from "@logic-incubator/engine/story/Quests";
@@ -109,7 +106,7 @@ function ScriptProblem(script: string, images?: EditorImages): string | null {
 }
 
 /** A torch: what a new light starts as. */
-const DEFAULT_LIGHT: LightValue = { brightness: 1, tint: 0xffc780, range: 7, flicker: 0.15 };
+const DEFAULT_LIGHT: LightValue = DefaultLightValue();
 
 /** The fields that set a light, their keys starting `prefix`; shown only while `visibleWhen` says so, if given. */
 function LightFields(prefix: string, visibleWhen?: (form: FormValues) => boolean): FieldSpec[] {
@@ -213,10 +210,9 @@ const EDITORS: { [name: string]: DataBrushEditor } = {
         fromForm: form => Number(form.value)
     },
 
-    // Not DataBrushName.LIGHT - it isn't one any more (see the module doc comment) - but the same string.
-    light: {
+    [DataBrushName.LIGHT]: {
         title: "Light",
-        subtitle: "A point light, baked when the level loads. Walls cast its shadows.",
+        subtitle: "A point light, baked when the level loads. Walls cast its shadows. Painted over a torch, it takes the place of the torch's own.",
         fields: () => LightFields("light"),
         toForm: value => LightToForm("light", IsLightValue(value) ? value : DEFAULT_LIGHT),
         fromForm: form => LightFromForm("light", form)

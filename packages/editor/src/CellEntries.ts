@@ -9,7 +9,8 @@ import { Vec2Like } from "@logic-incubator/lib/math/Geometry";
 import { AssetMetadata } from "@logic-incubator/engine/level/AssetMetadata";
 import { EffectiveDoorLock } from "@logic-incubator/engine/level/Doors";
 import { EffectiveLight, EffectivePickup, EffectiveSpawner } from "@logic-incubator/engine/level/ImplicitData";
-import { Brush, DataBrushValue, HEIGHT_LAYER_ID, IsTileLayer, LevelLayer } from "@logic-incubator/engine/level/LevelFormat";
+import { Brush, DataBrushName, DataBrushValue, HEIGHT_LAYER_ID, IsTileLayer, LevelLayer } from "@logic-incubator/engine/level/LevelFormat";
+import { IsCompleteLightValue } from "@logic-incubator/engine/level/Lighting";
 import { FootprintReach } from "./tools/ToolGeometry";
 
 /** What a tile can carry of its own, rather than as a data brush - what `OpenDataBrushDialog` calls each one's editor. */
@@ -17,12 +18,13 @@ export type TileValueKind = "light" | "spawner" | "pickup" | "door";
 
 /**
  * One thing on a cell: a data brush painted on a data layer (`target` is it), a tile's own value (`target` is the
- * tile, which `SET_DATA` writes an edit onto, and `kind` says which value), or the cell's height (`target` is its
- * brush on the height layer, or null where it's unpainted - 0).
+ * tile, which `SET_DATA` writes an edit onto, and `kind` says which value - `replaced` for a light a `LIGHT` brush on
+ * the tile's own cell takes the place of, see `FindLights`), or the cell's height (`target` is its brush on the height
+ * layer, or null where it's unpainted - 0).
  */
 export type CellEntry =
     | { type: "data"; target: Brush }
-    | { type: "tile"; target: Brush; kind: TileValueKind; value: DataBrushValue }
+    | { type: "tile"; target: Brush; kind: TileValueKind; value: DataBrushValue; replaced?: boolean }
     | { type: "height"; target: Brush | null; height: number };
 
 /** What `CellEntriesAt` needs from the art: each brush's footprint, and each tile's metadata. */
@@ -75,6 +77,8 @@ export function CellEntriesAt(levelData: ReadonlyArray<Brush>, layers: ReadonlyA
 
     const data: CellEntry[] = [];
     const tiles: { entry: CellEntry; order: number; index: number }[] = [];
+    /** The cells with a light painted on them, which takes the place of the lights of the tiles anchored there. */
+    const painted = new Set<string>();
     let height: CellEntry = { type: "height", target: null, height: 0 };
     levelData.forEach((brush, index) => {
         if (brush.layerId === HEIGHT_LAYER_ID) {
@@ -82,6 +86,9 @@ export function CellEntriesAt(levelData: ReadonlyArray<Brush>, layers: ReadonlyA
                 height = { type: "height", target: brush, height: brush.data };
             }
         } else if (dataLayers.has(brush.layerId)) {
+            if (brush.name === DataBrushName.LIGHT && IsCompleteLightValue(brush.data)) {
+                painted.add(brush.position.x + "," + brush.position.y);
+            }
             if (near(brush) && covers(lookups.dataFootprint(brush))) {
                 data.push({ type: "data", target: brush });
             }
@@ -90,6 +97,11 @@ export function CellEntriesAt(levelData: ReadonlyArray<Brush>, layers: ReadonlyA
             if (own && covers(lookups.tileFootprint(brush))) {
                 tiles.push({ entry: { type: "tile", target: brush, kind: own.kind, value: own.value }, order: tileOrder.get(brush.layerId), index });
             }
+        }
+    });
+    tiles.forEach(({ entry }) => {
+        if (entry.type === "tile" && entry.kind === "light" && painted.has(entry.target.position.x + "," + entry.target.position.y)) {
+            entry.replaced = true;
         }
     });
     // On top first: a later layer, or later on the same one.
@@ -109,10 +121,10 @@ export function EntryName(entry: CellEntry): string {
     }
 }
 
-/** A cell's entries in one line, for the label beside the cursor - "collision · dialog · light · height 2" - leaving out a height of 0. Empty for an empty cell. */
+/** A cell's entries in one line, for the label beside the cursor - "collision · dialog · light · height 2" - leaving out a height of 0, and a tile's light a painted one replaces. Empty for an empty cell. */
 export function SummariseCell(entries: ReadonlyArray<CellEntry>): string {
     return entries
-        .filter(entry => entry.type !== "height" || entry.height !== 0)
+        .filter(entry => (entry.type !== "height" || entry.height !== 0) && (entry.type !== "tile" || !entry.replaced))
         .map(EntryName)
         .join(" · ");
 }

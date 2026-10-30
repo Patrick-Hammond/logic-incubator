@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { AssetMetadata } from "./AssetMetadata";
-import { FindImplicitPlacements, FindSpawners, ImplicitBrush, OrphanedExplicitData } from "./ImplicitData";
+import { FindImplicitPlacements, FindLights, FindSpawners, ImplicitBrush, OrphanedExplicitData } from "./ImplicitData";
 
 const TILE = 16;
 const TILE_LAYER = 0;
@@ -46,7 +46,7 @@ describe("FindImplicitPlacements", () => {
         const result = find([brush("wall", 1, 2), brush("floor", 3, 3), brush("unknown", 4, 4)]);
         expect(result.collision).toEqual([{ x: 1, y: 2 }]);
         expect(result.doors).toEqual([]);
-        expect(result.lights).toEqual([]);
+        expect(result.pickups).toEqual([]);
     });
 
     it("lists every cell of a tile with blocksLight, with its value, and nothing for tiles without one", () => {
@@ -71,21 +71,6 @@ describe("FindImplicitPlacements", () => {
         expect(result.doors.map(d => `${d.x},${d.y}`).sort()).toEqual(["28,-3", "28,-4", "29,-3", "29,-4"]);
     });
 
-    it("reports a tile's intrinsic light", () => {
-        expect(find([brush("torch", 2, 2)]).lights).toEqual([{ x: 2, y: 2, value: META.torch.light }]);
-    });
-
-    it("prefers a placement's own override over its asset's intrinsic light - see EffectiveLight", () => {
-        const override = { brightness: 0.5, tint: 0xffffff, range: 3 };
-        const result = find([brush("torch", 2, 2, TILE_LAYER, { data: override })]);
-        expect(result.lights).toEqual([{ x: 2, y: 2, value: override }]);
-    });
-
-    it("falls back to the intrinsic light when the placement's own data isn't a light value", () => {
-        expect(find([brush("torch", 2, 2, TILE_LAYER, { data: 4 })]).lights).toEqual([{ x: 2, y: 2, value: META.torch.light }]);
-        expect(find([brush("torch", 2, 2, TILE_LAYER, { data: null })]).lights).toEqual([{ x: 2, y: 2, value: META.torch.light }]);
-    });
-
     it("reports a tile's intrinsic pickup - no per-instance override, unlike light/spawner", () => {
         expect(find([brush("sack_gold", 6, 6)]).pickups).toEqual([{ x: 6, y: 6, value: GOLD_PICKUP }]);
     });
@@ -100,8 +85,70 @@ describe("FindImplicitPlacements", () => {
         ]);
         expect(result.collision).toEqual([]);
         expect(result.doors).toEqual([]);
-        expect(result.lights).toEqual([]);
         expect(result.pickups).toEqual([]);
+    });
+});
+
+describe("FindLights", () => {
+    /** Tile layers 0 and up, drawn in that order; anything below is a data layer. */
+    const lights = (brushes: ImplicitBrush[]) => FindLights(brushes, layerId => (layerId >= 0 ? layerId : undefined), name => META[name]);
+    const BLUE = { brightness: 0.8, tint: 0x6688ff, range: 9 };
+
+    it("gives a lit tile its asset's light, belonging to it, and nothing to tiles with none", () => {
+        const torch = brush("torch", 2, 2);
+        expect(lights([brush("floor", 2, 2), torch, brush("wall", 3, 3)])).toEqual([{ x: 2, y: 2, value: META.torch.light, tile: torch, brush: null }]);
+    });
+
+    it("prefers a placement's own override over its asset's light - see EffectiveLight", () => {
+        const override = { brightness: 0.5, tint: 0xffffff, range: 3 };
+        expect(lights([brush("torch", 2, 2, TILE_LAYER, { data: override })]).map(l => l.value)).toEqual([override]);
+    });
+
+    it("falls back to the asset's light when the placement's own data isn't a light value", () => {
+        expect(lights([brush("torch", 2, 2, TILE_LAYER, { data: 4 })]).map(l => l.value)).toEqual([META.torch.light]);
+        expect(lights([brush("torch", 2, 2, TILE_LAYER, { data: null })]).map(l => l.value)).toEqual([META.torch.light]);
+    });
+
+    it("puts a painted light on bare floor, or nothing, standing on its own", () => {
+        const onFloor = brush("light", 5, 5, DATA_LAYER, { data: BLUE });
+        expect(lights([brush("floor", 5, 5), onFloor])).toEqual([{ x: 5, y: 5, value: BLUE, tile: null, brush: onFloor }]);
+        const alone = brush("light", 7, 1, DATA_LAYER, { data: BLUE });
+        expect(lights([alone])).toEqual([{ x: 7, y: 1, value: BLUE, tile: null, brush: alone }]);
+    });
+
+    it("retunes a torch a light's painted over instead of doubling it, and the light stays the torch's", () => {
+        const torch = brush("torch", 2, 2);
+        const painted = brush("light", 2, 2, DATA_LAYER, { data: BLUE });
+        expect(lights([torch, brush("torch", 3, 2), painted])).toEqual([
+            { x: 3, y: 2, value: META.torch.light, tile: expect.objectContaining({ position: { x: 3, y: 2 } }), brush: null },
+            { x: 2, y: 2, value: BLUE, tile: torch, brush: painted }
+        ]);
+    });
+
+    it("belongs to the lit tile on its cell before any other, even one under it", () => {
+        const torch = brush("torch", 1, 1, 0);
+        const painted = brush("light", 1, 1, DATA_LAYER, { data: BLUE });
+        expect(lights([torch, brush("statue", 1, 1, 1), painted])[0].tile).toBe(torch);
+    });
+
+    it("belongs to the top tile that isn't floor on a cell with no lit tile - a gem goes with its light", () => {
+        const gem = brush("sack_gold", 4, 4, 1);
+        const painted = brush("light", 4, 4, DATA_LAYER, { data: BLUE });
+        expect(lights([brush("floor", 4, 4, 0), gem, brush("floor", 4, 4, 0), painted])[0].tile).toBe(gem);
+        // The later layer's, and on one layer the later brush's.
+        const first = brush("statue", 6, 6, 0);
+        const second = brush("table", 6, 6, 0);
+        expect(lights([first, second, brush("light", 6, 6, DATA_LAYER, { data: BLUE })])[0].tile).toBe(second);
+    });
+
+    it("counts one painted light a cell, the last, and leaves out one whose value isn't a whole light", () => {
+        const last = brush("light", 1, 1, -2, { data: BLUE });
+        expect(lights([brush("light", 1, 1, DATA_LAYER, { data: META.torch.light }), last]).map(l => l.brush)).toEqual([last]);
+        expect(lights([brush("light", 1, 1, DATA_LAYER, { data: { range: 4 } }), brush("light", 2, 2, DATA_LAYER, { data: 3 })])).toEqual([]);
+    });
+
+    it("leaves out a lit tile painted on a data layer", () => {
+        expect(lights([brush("torch", 3, 3, DATA_LAYER)])).toEqual([]);
     });
 });
 
@@ -184,7 +231,7 @@ describe("OrphanedExplicitData", () => {
         expect(orphans([brush("wall", 1, 1)], [under, elsewhere])).toEqual([under]);
     });
 
-    it("never orphans a light or a spawner brush - a light lives on its tile now, so goes with it, and a spawner brush is a spawner with or without a tile", () => {
+    it("never orphans a light or a spawner brush - each is a light or a spawner with or without a tile under it", () => {
         const light = brush("light", 2, 2, DATA_LAYER, { data: { brightness: 0.5, tint: 0xffffff, range: 3 } });
         const spawner = brush("spawner", 4, 4, DATA_LAYER, { data: SPAWNER_VALUE });
         expect(orphans([brush("torch", 2, 2)], [light])).toEqual([]);

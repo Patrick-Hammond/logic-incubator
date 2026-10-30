@@ -16,11 +16,14 @@ import type { DoorLockValue } from "./Doors";
 import type { LightValue } from "./Lighting";
 
 /**
- * The data brushes: painted on data layers, and read by the engine rather than drawn. A light is no
- * longer among them - it's placed as an ordinary tile brush instead, carrying its value via
- * `AssetMetadata` (a default per asset name) or, per placement, an override in that tile's own
- * `Brush.data` (see `ImplicitData.EffectiveLight`). "light" still identifies its kind of value
- * wherever one's edited (see `DataBrushEditors`) - just not as a paintable brush name any more.
+ * The data brushes: painted on data layers, and read by the engine rather than drawn.
+ *
+ * `LIGHT` puts a point light on its cell, with or without a tile there that gives one. A lit tile - a
+ * torch - has a light of its own already (its asset's `AssetMetadata`, or an override in that tile's own
+ * `Brush.data`, see `ImplicitData.EffectiveLight`); a `LIGHT` brush on its cell takes the place of that
+ * light, so it retunes the torch rather than doubling it. It goes out with the tile it's on - the lit one,
+ * or else the top one that isn't floor, a pickup taken or a spawner destroyed - and on bare floor it's a
+ * light on its own (see `ImplicitData.FindLights`).
  *
  * `SPAWNER` puts a monster spawner on its cell: the same as painting a spawner tile (one whose asset
  * has a `spawner` in `AssetMetadata`, see `ImplicitData.EffectiveSpawner`), but with its settings in
@@ -51,7 +54,8 @@ export const enum DataBrushName {
     EXIT = "exit",
     DIALOG = "dialog",
     BOSS = "boss",
-    SPAWNER = "spawner"
+    SPAWNER = "spawner",
+    LIGHT = "light"
 }
 
 /**

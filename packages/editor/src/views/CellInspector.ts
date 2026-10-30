@@ -16,8 +16,7 @@ import { ButtonEl, El, InjectStyles } from "../ui/dom/Dom";
 import EditorOverlay from "../ui/dom/EditorOverlay";
 import { EditorCellEntries } from "./CellLookups";
 
-/** The swatch colours of what a tile carries of its own that has no data brush to borrow one from - the map's (see `Canvas`). */
-const LIGHT_COLOUR = 0xff8100;
+/** The swatch colour of a door, which a tile carries of its own and has no data brush to borrow one from - the map's (see `Canvas`). */
 const DOOR_COLOUR = 0x4cc9f0;
 /** A height of 0 isn't drawn on the heatmap at all; its swatch is the panel's well instead. */
 const GROUND_COLOUR = 0x1f1f23;
@@ -166,8 +165,8 @@ export default class CellInspector extends EditorComponent {
                     active: entry.target.name === ActiveAttributeType(state)
                 };
             case "tile": {
-                const colour = entry.kind === "light" ? LIGHT_COLOUR : entry.kind === "door" ? DOOR_COLOUR : colourOf(entry.kind);
-                const about = DescribeDataValue(entry.value).text;
+                const colour = entry.kind === "door" ? DOOR_COLOUR : colourOf(entry.kind);
+                const about = entry.replaced ? "replaced by the painted light" : DescribeDataValue(entry.value).text;
                 return { colour, name: entry.kind, detail: (about ? about + " · " : "") + entry.target.name, active: false };
             }
             default:
