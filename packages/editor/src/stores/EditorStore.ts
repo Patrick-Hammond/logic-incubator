@@ -229,6 +229,29 @@ export function WithDefaultLayers(layers: Layer[]): Layer[] {
     return result;
 }
 
+/**
+ * `layers` with the data layers' eyes following the selection: a data layer just selected (it wasn't in `before`) is shown, and
+ * one just left is hidden, so attributes or heights are drawn over the map while they're edited and are out of the tiles' way
+ * otherwise. A data layer the selection didn't move keeps its eye, so heights shown by hand under another layer stay shown
+ * while moving between tile layers. Without `before` - a new store, or a level just opened - each data layer is shown only if
+ * it's the one selected. The same array if no eye changes.
+ */
+export function WithDataLayerEyes(before: ReadonlyArray<Layer> | null | undefined, layers: Layer[]): Layer[] {
+    let changed = false;
+    const result = layers.map(layer => {
+        if (!layer.isData) {
+            return layer;
+        }
+        const was = before && before.find(old => old.id === layer.id);
+        if ((before && !!(was && was.selected) === layer.selected) || layer.visible === layer.selected) {
+            return layer;
+        }
+        changed = true;
+        return { ...layer, visible: layer.selected };
+    });
+    return changed ? result : layers;
+}
+
 /** One more than the highest tile layer id, or 0 for the first. ("attributes", the height layer and the player layer have their own fixed ids.) */
 export function NextTileLayerId(layers: Layer[]): number {
     return layers.filter(IsTileLayer).reduce((next, layer) => Math.max(next, layer.id + 1), 0);
@@ -406,7 +429,8 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
      * otherwise switch scenes on load or disable the editor shortcuts again. Likewise the current `tool`.
      */
     Load(state: IEditorState): void {
-        const layers = WithDefaultLayers((state && state.layers) || []);
+        // A level opens showing only the selected layer's data, as if it had just been selected.
+        const layers = WithDataLayerEyes(null, WithDefaultLayers((state && state.layers) || []));
         super.Load({
             ...state,
             currentScene: this.state.currentScene,
@@ -433,7 +457,7 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
         if (action.type === EditorActions.SELECT_LAYER && action.data && action.data.layer && action.data.layer.isPlayer) {
             return state;
         }
-        const layers = WithDefaultLayers(this.UpdateLayers(state.layers, action));
+        const layers = WithDataLayerEyes(state.layers, WithDefaultLayers(this.UpdateLayers(state.layers, action)));
         const switched = this.SwitchLayer(state, layers, action, this.UpdateBrush(state.currentBrush, action), this.UpdateTool(state.tool, action));
         const newState = {
             dataBrushes: this.UpdateDataBrushes(state.dataBrushes, action),

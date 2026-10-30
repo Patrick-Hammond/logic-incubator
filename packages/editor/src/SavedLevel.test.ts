@@ -21,7 +21,7 @@ describe("the editor's saves", () => {
         expect(opened.save.levelData.levelData).toEqual([{ ...height, layerId: HEIGHT_LAYER_ID }]);
         store.Load(opened.save.editorData);
         expect(store.state.layers.filter(layer => layer.id === HEIGHT_LAYER_ID)).toEqual([
-            { id: HEIGHT_LAYER_ID, name: "height", isData: true, isHeight: true, visible: true, selected: false }
+            { id: HEIGHT_LAYER_ID, name: "height", isData: true, isHeight: true, visible: false, selected: false }
         ]);
     });
 

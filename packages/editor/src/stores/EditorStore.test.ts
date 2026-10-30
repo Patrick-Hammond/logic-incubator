@@ -20,7 +20,8 @@ import EditorStore, {
     PLAYER_LAYER_ID,
     PlayerLayerMoved,
     RAISE_BRUSH,
-    ToolFitsLayer
+    ToolFitsLayer,
+    WithDataLayerEyes
 } from "./EditorStore";
 
 MonsterRoster.inst.Load(TEST_MONSTERS);
@@ -767,13 +768,65 @@ describe("the spawner data brush", () => {
     });
 });
 
+describe("data layer eyes", () => {
+    const layer = (store: EditorStore, id: number) => store.state.layers.find(l => l.id === id);
+    const select = (store: EditorStore, id: number) => store.Dispatch({ type: EditorActions.SELECT_LAYER, data: { layer: layer(store, id) } });
+    const eyes = (store: EditorStore) => [layer(store, IMPLICIT_LAYER_ID).visible, layer(store, HEIGHT_LAYER_ID).visible];
+    const floorId = (store: EditorStore) => store.state.layers.find(l => l.kind === "floor").id;
+    const wallsId = (store: EditorStore) => store.state.layers.find(l => l.kind === "walls").id;
+
+    it("open on the data layer selected and close on the one left", () => {
+        const store = new EditorStore();
+        expect(eyes(store)).toEqual([false, false]);
+        select(store, IMPLICIT_LAYER_ID);
+        expect(eyes(store)).toEqual([true, false]);
+        select(store, HEIGHT_LAYER_ID);
+        expect(eyes(store)).toEqual([false, true]);
+        select(store, floorId(store));
+        expect(eyes(store)).toEqual([false, false]);
+    });
+
+    it("leave an eye opened by hand alone while the selection moves between other layers", () => {
+        const store = new EditorStore();
+        store.Dispatch({ type: EditorActions.TOGGLE_LAYER_VISIBILITY, data: { layer: layer(store, HEIGHT_LAYER_ID) } });
+        expect(eyes(store)).toEqual([false, true]);
+        select(store, wallsId(store));
+        select(store, IMPLICIT_LAYER_ID);
+        expect(eyes(store)).toEqual([true, true]);
+        // And one closed by hand on the selected layer stays closed until it's left and come back to.
+        store.Dispatch({ type: EditorActions.TOGGLE_LAYER_VISIBILITY, data: { layer: layer(store, IMPLICIT_LAYER_ID) } });
+        store.Dispatch({ type: EditorActions.BRUSH_CHANGED, data: { name: DataBrushName.COLLISION } });
+        expect(layer(store, IMPLICIT_LAYER_ID).visible).toBe(false);
+    });
+
+    it("show only the selected data layer's when a level is opened, whatever it was saved with", () => {
+        const store = new EditorStore();
+        const saved = store.state.layers.map(l => (l.isData ? { ...l, visible: true } : l));
+        store.Load({ ...store.state, layers: saved });
+        expect(eyes(store)).toEqual([false, false]);
+        store.Load({ ...store.state, layers: saved.map(l => ({ ...l, selected: l.id === HEIGHT_LAYER_ID })) });
+        expect(eyes(store)).toEqual([false, true]);
+    });
+
+    it("change nothing - the same array - where no eye moves", () => {
+        const store = new EditorStore();
+        const layers = store.state.layers;
+        expect(WithDataLayerEyes(layers, layers)).toBe(layers);
+        expect(WithDataLayerEyes(null, layers)).toBe(layers);
+        // Tile layers' eyes are never touched.
+        const hiddenFloor = layers.map(l => (l.kind === "floor" ? { ...l, visible: false, selected: false } : l));
+        expect(WithDataLayerEyes(null, hiddenFloor)).toBe(hiddenFloor);
+    });
+});
+
 describe("EditorStore height layer", () => {
     const height = (store: EditorStore) => store.state.layers.find(layer => layer.id === HEIGHT_LAYER_ID);
     const select = (store: EditorStore, id: number) => store.Dispatch({ type: EditorActions.SELECT_LAYER, data: { layer: store.state.layers.find(layer => layer.id === id) } });
 
     it("is there from the start, after attributes: a data layer marked as the heights', and not a tile layer", () => {
         const store = new EditorStore();
-        expect(height(store)).toEqual({ id: HEIGHT_LAYER_ID, name: "height", selected: false, visible: true, isData: true, isHeight: true });
+        // Hidden: only the selected data layer's eye starts open (see WithDataLayerEyes).
+        expect(height(store)).toEqual({ id: HEIGHT_LAYER_ID, name: "height", selected: false, visible: false, isData: true, isHeight: true });
         expect(store.state.layers.map(layer => layer.id).slice(0, 2)).toEqual([IMPLICIT_LAYER_ID, HEIGHT_LAYER_ID]);
         expect(EditableLayerCount(store.state.layers)).toBe(2);
     });
@@ -793,14 +846,14 @@ describe("EditorStore height layer", () => {
         expect(store.state.layers.filter(layer => layer.id === HEIGHT_LAYER_ID)).toHaveLength(1);
     });
 
-    it("gives one a level file brought (see MigrateLevelFile) the editor's own fields - shown, not selected - where it was", () => {
+    it("gives one a level file brought (see MigrateLevelFile) the editor's own fields - not selected, so hidden - where it was", () => {
         const store = new EditorStore();
         const fromFile = { id: HEIGHT_LAYER_ID, name: "height", isData: true, isHeight: true } as unknown as (typeof store.state.layers)[0];
         store.Load({
             ...store.state,
             layers: [{ id: IMPLICIT_LAYER_ID, name: "attributes", selected: false, visible: true, isData: true }, fromFile, { id: 0, name: "floor", selected: true, visible: true, isData: false, kind: "floor" }]
         });
-        expect(height(store)).toMatchObject({ visible: true, selected: false });
+        expect(height(store)).toMatchObject({ visible: false, selected: false });
         expect(store.state.layers.filter(layer => layer.id === HEIGHT_LAYER_ID)).toHaveLength(1);
         expect(store.state.layers[1].id).toBe(HEIGHT_LAYER_ID);
     });

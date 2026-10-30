@@ -2750,9 +2750,12 @@ vertical **toolbar** of tools at the far right. Each palette tab ends in a **+**
   stroke, however long you hold on it - for shaping slopes. Erase flattens to 0, Fill fills a run of cells of the same height,
   Ctrl+drag and Stamp set a rectangle, and the dropper picks a cell's height. Heights run from -999 to 999. On the map the
   heights are a **heatmap** - greens low through reds high, blues below 0, nothing at 0 - strong, with each cell's number and a
-  red line on every edge too steep to step over (more than one height apart), while the height layer is selected, and faint
-  under the other layers, so you can see the ground's shape while painting attributes or tiles (hide the height layer with its
-  eye to drop it).
+  red line on every edge too steep to step over (more than one height apart), while the height layer is selected. Open its eye
+  while another layer is selected to keep it faintly under that one, to see the ground's shape while painting attributes or tiles.
+- **The data layers' eyes follow the selection.** Selecting attributes or height opens its eye, and leaving it closes it again,
+  so each draws over the map only while it's being edited. An eye you open or close by hand stays as you left it until that
+  layer is next selected or left, so heights opened under the tile layers stay while you move between them. A level opens
+  showing only the selected layer's data.
 - **The cell inspector.** With the Attributes tool (`A`), on attributes or height, hovering a cell lists what's on it beside
   the cursor (`pickup · collision · height 3`), and clicking it opens a panel beside the cell with everything there: each
   attribute painted on it, each tile's own light, spawner, pickup or door lock covering it (from any cell of its sprite), and

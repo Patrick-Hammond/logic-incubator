@@ -27,7 +27,7 @@ type LayerRow = { row: HTMLElement; eyeButton: HTMLButtonElement; eye: HTMLImage
 /** The player layer's row, as a tooltip. */
 const PlayerLayerTitle = "Where the player, monsters and shots are drawn: the layers above this line are drawn under them, the layers below it over them.";
 /** The height layer's row, as a tooltip. */
-const HeightLayerTitle = "The cells' heights, drawn as a heatmap - faintly under the other layers while it's shown (the eye).";
+const HeightLayerTitle = "The cells' heights, drawn as a heatmap while it's selected. Open its eye to keep it faintly under the other layers.";
 
 function Icon(assets: Assets, name: string): HTMLImageElement {
     const img = document.createElement("img");

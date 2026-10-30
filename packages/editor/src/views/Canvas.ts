@@ -22,7 +22,7 @@ const IMPLICIT_DOOR_COLOUR = 0x4cc9f0;
 const IMPLICIT_LIGHT_COLOUR = 0xff8100;
 /** How strongly what isn't the active attribute type is drawn on the derived-data overlay, against 1 for what is. */
 const OTHER_TYPE_STRENGTH = 0.3;
-/** The heatmap's fill with the height layer selected, and as an underlay while another layer is. */
+/** The heatmap's fill with the height layer selected, and as an underlay while another layer is and its eye's open. */
 const HEIGHT_ALPHA = 0.55;
 const HEIGHT_UNDERLAY_ALPHA = 0.3;
 /** The line along a step no hero can take - a height difference of more than one. */
@@ -204,8 +204,9 @@ export default class Canvas extends EditorComponent {
 
     /**
      * The height layer as a heatmap (see `HeightColour`): each painted cell tinted for its height - strongly, with its number and a red
-     * line along every step too high to take (see `BlockedEdges`), while the height layer is selected, and faintly under the others, so
-     * the lie of the land shows while attributes or tiles are painted. Nothing at all while the layer's hidden. Only the painted cells
+     * line along every step too high to take (see `BlockedEdges`), while the height layer is selected, and faintly under the others when
+     * its eye's opened by hand, so the lie of the land shows while attributes or tiles are painted. Nothing at all while the layer's
+     * hidden - as it is whenever another layer's selected, until then (see `WithDataLayerEyes`). Only the painted cells
      * cost anything, and a cell at an extreme height no more than any other.
      */
     private DrawHeights(levelData: Brush[], container: Container | null): void {
