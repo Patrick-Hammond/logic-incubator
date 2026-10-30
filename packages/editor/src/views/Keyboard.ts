@@ -7,8 +7,8 @@ import {GenerateMap, IMap, MapType} from "../maps/Generators";
 import {ApplyMapStyle, IStyler} from "../maps/Styler";
 import {GenerateZTest} from "../maps/ZTest";
 import { OpenQuestsDialog } from "../QuestsDialog";
-import {EditorSave, MakeEditorSave, SaveLevel} from "../SavedLevel";
-import {EditorActions, IEditorState, IMPLICIT_LAYER_ID} from "../stores/EditorStore";
+import {EditorSave, MakeEditorSave, OpenEditorSave, SaveLevel} from "../SavedLevel";
+import {EditorActions, IEditorState, IsFixedLayer} from "../stores/EditorStore";
 import {LevelDataActions, LevelDataState} from "../stores/LevelDataStore";
 
 export default class Keyboard extends EditorComponent {
@@ -66,9 +66,9 @@ export default class Keyboard extends EditorComponent {
                         }
                         break;
                     case Key.D:
-                        // There's only ever the one "attributes" layer - and COPY below would otherwise
+                        // There's only ever the one "attributes" layer and height layer - and COPY below would otherwise
                         // copy into whatever layer happens to be last.
-                        if (shift && this.editorStore.SelectedLayer && this.editorStore.SelectedLayer.id !== IMPLICIT_LAYER_ID) {
+                        if (shift && this.editorStore.SelectedLayer && !IsFixedLayer(this.editorStore.SelectedLayer)) {
                             this.editorStore.Dispatch({ type: EditorActions.DUPLICATE_LAYER });
                             this.levelDataStore.Dispatch({
                                 type: LevelDataActions.COPY,
@@ -93,9 +93,14 @@ export default class Keyboard extends EditorComponent {
                     case Key.L:
                         ShowOpenFileDialog().then((fileList: FileList) => {
                             LoadTextFile(fileList[0]).then((text: string) => {
-                                const data = JSON.parse(text);
-                                this.editorStore.Load(data.editorData);
-                                this.levelDataStore.Load(data.levelData);
+                                // Brought up to date if it's from the version before; anything else isn't opened, and the map stays as it was.
+                                const opened = OpenEditorSave(JSON.parse(text));
+                                if (opened.error) {
+                                    alert("This level can't be opened. " + opened.error);
+                                    return;
+                                }
+                                this.editorStore.Load(opened.save.editorData);
+                                this.levelDataStore.Load(opened.save.levelData);
                             });
                         });
                         break;

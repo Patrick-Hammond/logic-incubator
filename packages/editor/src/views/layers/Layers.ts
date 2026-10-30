@@ -2,7 +2,17 @@ import type Assets from "@logic-incubator/lib/assets/Assets";
 import EditorComponent from "../../EditorComponent";
 import { EditorIcon } from "../../EditorAssets";
 import { TileLayerKind } from "@logic-incubator/engine/level/LevelFormat";
-import {EditableLayerCount, EditorActions, IEditorState, IMPLICIT_LAYER_ID, IsRemovableLayer, MaxEditableLayers, PlayerLayerMoved} from "../../stores/EditorStore";
+import {
+    EditableLayerCount,
+    EditorActions,
+    IEditorState,
+    IMPLICIT_LAYER_ID,
+    IsFixedLayer,
+    IsHeightLayer,
+    IsRemovableLayer,
+    MaxEditableLayers,
+    PlayerLayerMoved
+} from "../../stores/EditorStore";
 import {Layer, LevelDataActions} from "../../stores/LevelDataStore";
 import {IsFormDialogOpen, OpenFormDialog} from "../../ui/dialog/FormDialog";
 import {ButtonEl, El, InjectStyles} from "../../ui/dom/Dom";
@@ -16,6 +26,8 @@ type LayerRow = { row: HTMLElement; eyeButton: HTMLButtonElement; eye: HTMLImage
 
 /** The player layer's row, as a tooltip. */
 const PlayerLayerTitle = "Where the player, monsters and shots are drawn: the layers above this line are drawn under them, the layers below it over them.";
+/** The height layer's row, as a tooltip. */
+const HeightLayerTitle = "The cells' heights, drawn as a heatmap - faintly under the other layers while it's shown (the eye).";
 
 function Icon(assets: Assets, name: string): HTMLImageElement {
     const img = document.createElement("img");
@@ -29,11 +41,13 @@ function Icon(assets: Assets, name: string): HTMLImageElement {
  * reorder. A new tile layer is a floor layer, a walls layer, or a generic one
  * (see `TileLayerKind`); every level keeps at least one floor and one walls
  * layer (see `WithDefaultLayers`), so the last of each can't be removed.
- * There's no "add data layer" - "attributes", the one data layer,
- * is always there, can be painted on like any other, and can't be removed,
- * duplicated or reordered (only renamed - double-click it, or the rename
- * button): it's always drawn on top of the tile stack (see `Canvas`), so
- * moving it within the list wouldn't change anything anyway. The player
+ * There's no "add data layer" - "attributes" and the height layer, the two data
+ * layers, are always there, can be painted on like any other, and can't be removed,
+ * duplicated or reordered (only renamed - double-click one, or the rename
+ * button): they're always drawn on top of the tile stack, the heatmap under
+ * the attributes (see `Canvas`), so moving them within the list wouldn't change
+ * anything anyway. Hiding the height layer hides the heatmap, which otherwise
+ * stays as an underlay while any other layer is painted. The player
  * layer isn't a layer to paint on at all, but a divider showing where the
  * figures are drawn in the game (see `PLAYER_LAYER_ID`): it can't be selected,
  * and moves with the up and down buttons on its own row, or as a layer is
@@ -100,9 +114,9 @@ export default class Layers extends EditorComponent {
         layers.forEach((layer, index) => {
             const row = this.rows[index];
             const isPlayer = !!layer.isPlayer;
-            const kind = layer.id === IMPLICIT_LAYER_ID ? "auto" : layer.isData ? "data" : isPlayer ? "player" : layer.kind || "tile";
+            const kind = layer.id === IMPLICIT_LAYER_ID ? "auto" : IsHeightLayer(layer) ? "height" : layer.isData ? "data" : isPlayer ? "player" : layer.kind || "tile";
             row.name.textContent = layer.name;
-            row.row.title = isPlayer ? PlayerLayerTitle : layer.name;
+            row.row.title = isPlayer ? PlayerLayerTitle : IsHeightLayer(layer) ? HeightLayerTitle : layer.name;
             row.row.setAttribute("aria-selected", String(layer.selected));
             row.row.classList.toggle("ly-divider", isPlayer);
             row.row.classList.toggle("ly-hidden", !layer.visible);
@@ -119,11 +133,11 @@ export default class Layers extends EditorComponent {
 
         const selectedIndex = layers.findIndex(layer => layer.selected);
         const selected = layers[selectedIndex];
-        const editable = selected != null && selected.id !== IMPLICIT_LAYER_ID;
+        const editable = selected != null && !IsFixedLayer(selected);
         this.addButton.disabled = EditableLayerCount(layers) >= MaxEditableLayers;
         this.removeButton.disabled = !IsRemovableLayer(layers, selected);
         this.removeButton.title = selected && selected.kind && this.removeButton.disabled ? `Every level keeps a ${selected.kind} layer` : "Remove layer";
-        // Renamable even for "attributes" (reordering/duplicating/removing aren't - those stay gated on `editable`).
+        // Renamable even for "attributes" and the height layer (reordering/duplicating/removing aren't - those stay gated on `editable`).
         this.renameButton.disabled = selected == null;
         this.upButton.disabled = !editable || selectedIndex <= 0;
         this.downButton.disabled = !editable || selectedIndex >= layers.length - 1;
@@ -228,11 +242,11 @@ export default class Layers extends EditorComponent {
             return;
         }
         this.editorStore.Dispatch({ type: EditorActions.REMOVE_LAYER });
-        // Not layers[0] - that's "attributes", better left for its own kind of data than picked by default - nor the player layer, which can't be.
+        // Not "attributes" or the height layer, better left for their own kinds of data than picked by default - nor the player layer, which can't be.
         const layers = this.editorStore.state.layers;
         this.editorStore.Dispatch({
             type: EditorActions.SELECT_LAYER,
-            data: { layer: layers.find(layer => layer.id !== IMPLICIT_LAYER_ID && !layer.isPlayer) || layers[0] }
+            data: { layer: layers.find(layer => !IsFixedLayer(layer)) || layers[0] }
         });
         this.levelDataStore.Dispatch({ type: LevelDataActions.ERASE_LAYER, data: { destLayer: selectedLayer } });
     }
@@ -280,6 +294,7 @@ const STYLES = `
 .ly-floor { color: #f3dfb8; background: #5c4526; }
 .ly-walls { color: #f7c6bd; background: #5c2f29; }
 .ly-player { color: #c9f2c0; background: #2e5230; }
+.ly-height { color: #c8f7e6; background: #1f5446; }
 .ly-row .ly-move { display: none; width: 18px; height: 18px; }
 .ly-row .ly-move img { width: 12px; height: 12px; opacity: 0.75; }
 .ly-row.ly-divider { cursor: default; color: var(--ed-muted); font-style: italic; }

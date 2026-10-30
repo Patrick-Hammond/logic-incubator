@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import AssetMetadataStore from "@logic-incubator/engine/level/AssetMetadata";
-import { Brush, DataBrushName } from "@logic-incubator/engine/level/LevelFormat";
+import { Brush, DataBrushName, HEIGHT_LAYER_ID } from "@logic-incubator/engine/level/LevelFormat";
 import LevelDataStore, { Layer, LevelDataActions } from "./LevelDataStore";
 
 const TILE_LAYER: Layer = { id: 0, name: "layer 0", selected: true, visible: true, isData: false };
@@ -148,5 +148,76 @@ describe("LevelDataStore quests", () => {
         const store = new LevelDataStore(20);
         store.Load({ levelData: [] } as never);
         expect(store.state.quests).toEqual([]);
+    });
+});
+
+describe("LevelDataStore several attribute types on a cell", () => {
+    const at = (name: string, x: number, y: number) => brush(name, x, y, DATA_LAYER.id);
+
+    it("PAINT on a data layer replaces only a brush of its own name - and on a tile layer, whatever was there", () => {
+        const store = storeWith([at(DataBrushName.COLLISION, 1, 1), at(DataBrushName.DIALOG, 1, 1), brush("floor", 1, 1)]);
+        store.Dispatch({ type: LevelDataActions.PAINT, data: { brush: at(DataBrushName.EXIT, 1, 1), viewOffset: NO_OFFSET, layers: LAYERS } });
+        store.Dispatch({ type: LevelDataActions.PAINT, data: { brush: at(DataBrushName.COLLISION, 1, 1), viewOffset: NO_OFFSET, layers: LAYERS } });
+        store.Dispatch({ type: LevelDataActions.PAINT, data: { brush: brush("wall", 1, 1), viewOffset: NO_OFFSET, layers: LAYERS } });
+        expect(names(store)).toEqual(["collision@1,1", "dialog@1,1", "exit@1,1", "wall@1,1"]);
+    });
+
+    it("PAINT_CELLS likewise", () => {
+        const store = storeWith([at(DataBrushName.COLLISION, 0, 0), at(DataBrushName.DIALOG, 0, 0)]);
+        store.Dispatch({ type: LevelDataActions.PAINT_CELLS, data: { brush: at(DataBrushName.COLLISION, 9, 9), cells: [{ x: 0, y: 0 }, { x: 1, y: 0 }], layers: LAYERS } });
+        expect(names(store)).toEqual(["collision@0,0", "collision@1,0", "dialog@0,0"]);
+    });
+
+    it("without the layers, treats every layer as a tile layer, as it always did", () => {
+        const store = storeWith([at(DataBrushName.COLLISION, 1, 1)]);
+        store.Dispatch({ type: LevelDataActions.PAINT, data: { brush: at(DataBrushName.DIALOG, 1, 1), viewOffset: NO_OFFSET } });
+        expect(names(store)).toEqual(["dialog@1,1"]);
+    });
+
+    it("ERASE with a data brush picked takes only that type; with none, the last painted", () => {
+        const store = storeWith([at(DataBrushName.COLLISION, 1, 1), at(DataBrushName.DIALOG, 1, 1), at(DataBrushName.EXIT, 1, 1)]);
+        store.Dispatch({ type: LevelDataActions.ERASE, data: { brush: at(DataBrushName.COLLISION, 1, 1), viewOffset: NO_OFFSET, layers: LAYERS } });
+        expect(names(store)).toEqual(["dialog@1,1", "exit@1,1"]);
+        // Nothing of the type here: nothing goes.
+        store.Dispatch({ type: LevelDataActions.ERASE, data: { brush: at(DataBrushName.BOSS, 1, 1), viewOffset: NO_OFFSET, layers: LAYERS } });
+        expect(names(store)).toEqual(["dialog@1,1", "exit@1,1"]);
+        store.Dispatch({ type: LevelDataActions.ERASE, data: { brush: at("", 1, 1), viewOffset: NO_OFFSET, layers: LAYERS } });
+        expect(names(store)).toEqual(["dialog@1,1"]);
+    });
+
+    it("ERASE_RECT with a data brush picked takes only that type from each cell", () => {
+        const store = storeWith([at(DataBrushName.COLLISION, 0, 0), at(DataBrushName.DIALOG, 0, 0), at(DataBrushName.COLLISION, 1, 0)]);
+        store.Dispatch({
+            type: LevelDataActions.ERASE_RECT,
+            data: { brush: at(DataBrushName.COLLISION, 0, 0), rectTopLeft: { x: 0, y: 0 }, rectBottomRight: { x: 1, y: 0 }, viewOffset: NO_OFFSET, layers: LAYERS }
+        });
+        expect(names(store)).toEqual(["dialog@0,0"]);
+    });
+
+    it("REMOVE takes the one brush it's given, as one undo step", () => {
+        const collision = at(DataBrushName.COLLISION, 1, 1);
+        const dialog = at(DataBrushName.DIALOG, 1, 1);
+        const store = storeWith([collision, dialog]);
+        store.Dispatch({ type: LevelDataActions.REMOVE, data: { target: dialog }, canUndo: true });
+        expect(store.state.levelData).toEqual([collision]);
+        store.Undo();
+        expect(store.state.levelData).toEqual([collision, dialog]);
+    });
+});
+
+describe("LevelDataStore heights", () => {
+    const heights = (store: LevelDataStore) => store.state.levelData.filter(b => b.layerId === HEIGHT_LAYER_ID).map(b => `${b.position.x},${b.position.y}=${b.data}`).sort();
+
+    it("SET_HEIGHT sets cells, steps them, and flattens them to nothing, each as one undo step", () => {
+        const store = storeWith([brush("floor", 0, 0)]);
+        store.Dispatch({ type: LevelDataActions.SET_HEIGHT, data: { cells: [{ x: 0, y: 0 }, { x: 1, y: 0 }], heightChange: { height: 2 } }, canUndo: true });
+        expect(heights(store)).toEqual(["0,0=2", "1,0=2"]);
+        store.Dispatch({ type: LevelDataActions.SET_HEIGHT, data: { cells: [{ x: 1, y: 0 }, { x: 2, y: 0 }], heightChange: { delta: -1 } }, canUndo: true });
+        expect(heights(store)).toEqual(["0,0=2", "1,0=1", "2,0=-1"]);
+        store.Dispatch({ type: LevelDataActions.SET_HEIGHT, data: { cells: [{ x: 0, y: 0 }], heightChange: { height: 0 } }, canUndo: true });
+        expect(heights(store)).toEqual(["1,0=1", "2,0=-1"]);
+        expect(names(store)).toContain("floor@0,0");
+        store.Undo();
+        expect(heights(store)).toEqual(["0,0=2", "1,0=1", "2,0=-1"]);
     });
 });

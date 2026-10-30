@@ -16,7 +16,7 @@ import {IsPickupValue, PickupArea, PickupSpot, PickupValue} from "./entities/Pic
 import {ArtBounds} from "./entities/Projectiles";
 import {SanitiseSpawnerValue, Spawner} from "./entities/Spawners";
 import {EffectiveLight, FindImplicitPlacements, FindSpawners} from "./ImplicitData";
-import {Brush, DataBrushName, LevelFile, LevelLayer, TileLayerOrder} from "./LevelFormat";
+import {Brush, DataBrushName, LevelFile, LevelLayer, MigrateLevelFile, TileLayerOrder} from "./LevelFormat";
 import {AmbientLightGrid, BakeLights, ComposeLighting, LightBake, LightBlockersFor, LightGrid, LightSource, OpenLightBlockers} from "./Lighting";
 import {FindMapBounds} from "./MapBounds";
 import {FindRegions, Region, RegionIdsTouching} from "./Regions";
@@ -83,7 +83,7 @@ export default class Level {
     public playerLayer = 0;
     /** Per-cell collision: `true` if any tile placed there has `collidable: true` in `AssetMetadata`, or the cell was painted with the `COLLISION` data brush (an explicit override/addition on top of the intrinsic default). */
     public collisionData: boolean[][] = [];
-    /** Per-cell height painted with the `Z_INDEX` data brush. */
+    /** Per-cell height painted with the `Z_INDEX` data brush, on the height layer (see `HEIGHT_LAYER_ID`). */
     public heightData: number[][] = [];
     /** Light at every tile corner, baked from point lights - both the `LIGHT` data brush and any placed tile with `light` in its `AssetMetadata` - with walls casting shadows (see `Lighting.ComposeLighting`; read it with `CellCornerLight`/`SampleLight`/`FootLight`). */
     public lightGrid: LightGrid = AmbientLightGrid(0, 0);
@@ -491,8 +491,10 @@ export default class Level {
         );
     }
 
+    /** Builds the level from `file` - brought up to date first if it's from the version before (see `MigrateLevelFile`, which throws for one it can't read). */
     LoadLevel(file: LevelFile): void {
 
+        file = MigrateLevelFile(file);
         this.Dispose();
 
         this.tileLayers = [];

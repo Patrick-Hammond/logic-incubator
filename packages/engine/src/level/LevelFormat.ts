@@ -1,8 +1,9 @@
 /**
  * The level file: what the editor saves (its S export, and the localStorage copy Enter plays) and
  * the engine loads (`Level.LoadLevel`). The engine owns it - the editor is only its writer, and
- * saves more of its own state alongside, which the engine ignores. Types, one enum and two small
- * helpers, so importing it pulls in no other module at runtime.
+ * saves more of its own state alongside, which the engine ignores. Types, one enum, a few small
+ * helpers and the migration from the version before (`MigrateLevelFile`), so importing it pulls in
+ * no other module at runtime.
  */
 
 import type { Vec2Like } from "@logic-incubator/lib/math/Geometry";
@@ -53,10 +54,28 @@ export const enum DataBrushName {
     SPAWNER = "spawner"
 }
 
+/**
+ * The level file's `version`. Version 2 put every height (`Z_INDEX`) on a layer of its own, the height layer (`HEIGHT_LAYER_ID`),
+ * at most one a cell and none for 0, and lets any other data layer hold several data brushes on a cell - one of each name. A file
+ * without a `version` is version 1, from before. Only the version just before this one is brought up to date as a file is opened
+ * (see `MigrateLevelFile`): anything older, or newer than this code, is refused.
+ */
+export const LevelVersion = 2;
+
+/**
+ * Fixed id of the height layer (`isHeight`): the data layer the cells' heights are painted on, as `Z_INDEX` brushes - one a cell at
+ * most, and none where it's 0, the height of anything unpainted. Its id and flag are the format's, so a level file says which layer it
+ * is without knowing the editor; the engine reads a `Z_INDEX` from any data layer, as it always has.
+ */
+export const HEIGHT_LAYER_ID = -99997;
+
 /** A data brush's value - a number (`Z_INDEX`'s height), or a light's, spawner's, pickup's, door lock's, dialog's or boss's settings. */
 export type DataBrushValue = number | LightValue | SpawnerValue | PickupValue | DoorLockValue | DialogValue | BossValue;
 
-/** One placed tile or data brush. `position` is in map cells; `layerId` is its layer's `id`; `data` is null on a tile. */
+/**
+ * One placed tile or data brush. `position` is in map cells; `layerId` is its layer's `id`; `data` is null on a tile. A tile layer has
+ * one tile a cell; a data layer one of each data brush name a cell, so a cell can be both solid and an NPC's, say.
+ */
 export type Brush = {
     name: string;
     position: Vec2Like;
@@ -77,10 +96,10 @@ export type TileLayerKind = "floor" | "walls";
 /**
  * A layer, as far as the engine reads one: tile layers draw in list order, data layers (`isData`) hold data brushes and
  * aren't drawn, and the player layer (`isPlayer`) holds nothing - it marks where the heroes, monsters and shots are drawn
- * among the tile layers: those before it under them, those after it over them (see `TileLayerOrder`). `kind` is the
- * editor's (see `TileLayerKind`).
+ * among the tile layers: those before it under them, those after it over them (see `TileLayerOrder`). The height layer
+ * (`isHeight`, always a data layer too) holds the heights (see `HEIGHT_LAYER_ID`). `kind` is the editor's (see `TileLayerKind`).
  */
-export type LevelLayer = { id: number; name: string; isData: boolean; kind?: TileLayerKind; isPlayer?: boolean };
+export type LevelLayer = { id: number; name: string; isData: boolean; kind?: TileLayerKind; isPlayer?: boolean; isHeight?: boolean };
 
 /** Whether `layer` is a tile layer - one with tiles painted on it, drawn - rather than a data layer or the player layer. */
 export function IsTileLayer(layer: LevelLayer): boolean {
@@ -110,9 +129,75 @@ export function TileLayerOrder(layers: ReadonlyArray<LevelLayer>): { tileLayers:
 /**
  * A saved level. The nesting is the editor's - `editorData` is its whole state and `levelData`
  * its level store's - of which the engine reads only what's typed here. `quests` are the level's
- * quests (see `Quests`) - none in a level saved before there were any.
+ * quests (see `Quests`) - none in a level saved before there were any. `version` is `LevelVersion`
+ * as it was when the file was saved - left out, 1.
  */
 export type LevelFile = {
+    version?: number;
     editorData: { layers: LevelLayer[] };
     levelData: { levelData: Brush[]; quests?: QuestDef[] };
 };
+
+/** The version a level file was saved as: its `version`, or 1 for a file from before there was one. */
+export function LevelVersionOf(file: LevelFile): number {
+    return file.version == null ? 1 : file.version;
+}
+
+/**
+ * `file` as this version of the format has it: the same file if it's already `LevelVersion`, or a copy brought up from the
+ * version just before (see `LevelVersion`). Throws, saying why, for a file older than that or newer than this code knows -
+ * only the one step is kept, so each version's migration can be dropped with the next.
+ */
+export function MigrateLevelFile<T extends LevelFile>(file: T): T {
+    const version = LevelVersionOf(file);
+    if (version === LevelVersion) {
+        return file;
+    }
+    if (version === LevelVersion - 1) {
+        return MigrateFrom1(file);
+    }
+    throw new Error(
+        version > LevelVersion
+            ? `This level was saved as version ${version}, which is newer than this game reads (version ${LevelVersion}).`
+            : `This level was saved as version ${version}, which is too old to open: only version ${LevelVersion - 1} levels are brought up to date (to version ${LevelVersion}).`
+    );
+}
+
+/**
+ * Version 1 to 2: every height moves to the height layer, which is added to the layers (after the first data layer - "attributes",
+ * in any level the editor saved - or first). Where a cell had more than one, the last is kept, as the engine read it; a height of 0,
+ * the same as none, is dropped. Every other brush is left as it was.
+ */
+function MigrateFrom1<T extends LevelFile>(file: T): T {
+    const layers = file.editorData.layers;
+    const tileLayerIds = layers.filter(IsTileLayer).map(layer => layer.id);
+    const heights: { [cell: string]: Brush } = {};
+    const cells: string[] = [];
+    const rest = file.levelData.levelData.filter(brush => {
+        if (brush.name !== DataBrushName.Z_INDEX || tileLayerIds.indexOf(brush.layerId) > -1) {
+            return true;
+        }
+        const cell = brush.position.x + "," + brush.position.y;
+        if (!(cell in heights)) {
+            cells.push(cell);
+        }
+        heights[cell] = brush;
+        return false;
+    });
+    const moved = cells
+        .map(cell => heights[cell])
+        .filter(brush => typeof brush.data === "number" && brush.data !== 0)
+        .map(brush => ({ ...brush, layerId: HEIGHT_LAYER_ID }));
+
+    let withHeight = layers.filter(layer => layer.id !== HEIGHT_LAYER_ID);
+    const heightLayer: LevelLayer = { id: HEIGHT_LAYER_ID, name: "height", isData: true, isHeight: true };
+    const firstData = withHeight.findIndex(layer => layer.isData);
+    withHeight = withHeight.slice(0, firstData + 1).concat(heightLayer, withHeight.slice(firstData + 1));
+
+    return {
+        ...file,
+        version: 2,
+        editorData: { ...file.editorData, layers: withHeight },
+        levelData: { ...file.levelData, levelData: rest.concat(moved) }
+    };
+}

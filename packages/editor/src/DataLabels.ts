@@ -12,7 +12,7 @@ import { IsDoorLockValue } from "@logic-incubator/engine/level/Doors";
 import { BossValue, IsBossValue } from "@logic-incubator/engine/level/entities/Bosses";
 import { IsLocked } from "@logic-incubator/engine/level/entities/Keys";
 import { IsPickupValue, PickupValue } from "@logic-incubator/engine/level/entities/Pickups";
-import { IsSpawnerValue } from "@logic-incubator/engine/level/entities/Spawners";
+import { IsSpawnerValue, SpawnerValue } from "@logic-incubator/engine/level/entities/Spawners";
 import { IsLightValue } from "@logic-incubator/engine/level/Lighting";
 import { DataBrushValue } from "@logic-incubator/engine/level/LevelFormat";
 import { ShoutPart } from "@logic-incubator/engine/story/DialogScript";
@@ -117,4 +117,40 @@ export function DescribeDialog(script: string): string {
 /** What a door's lock id means, for a tooltip or the card: unlocked, or the key it needs. */
 export function DescribeLock(lock: number): string {
     return IsLocked(lock) ? `needs key ${lock}` : "unlocked";
+}
+
+/** A spawner in a few words: "skeleton · every 5s · max 3", or how many types it draws from. */
+export function DescribeSpawner(spawner: SpawnerValue): string {
+    const types = spawner.monsters.length === 1 ? spawner.monsters[0].replace(/_/g, " ") : `${spawner.monsters.length} types`;
+    return `${types} · every ${spawner.interval}s · max ${spawner.maxAlive}`;
+}
+
+/**
+ * Any data value in a few words, for the selected-brush card and the cell inspector - and, for a light, its tint to
+ * show beside them. A number (a height) is just the number; a value with nothing to say about it (player start,
+ * collision, an exit) is empty.
+ */
+export function DescribeDataValue(value: DataBrushValue | null | undefined): { text: string; colour?: number } {
+    if (typeof value === "number") {
+        return { text: String(value) };
+    }
+    if (IsPickupValue(value)) {
+        return { text: DescribePickup(value) };
+    }
+    if (IsDialogValue(value)) {
+        return { text: DescribeDialog(value.script) };
+    }
+    if (IsBossValue(value)) {
+        return { text: DescribeBoss(value) };
+    }
+    if (IsLightValue(value)) {
+        return { text: `${value.brightness} bright · ${value.range} tiles`, colour: value.tint };
+    }
+    if (IsSpawnerValue(value)) {
+        return { text: DescribeSpawner(value) };
+    }
+    if (IsDoorLockValue(value)) {
+        return { text: DescribeLock(value.lock) };
+    }
+    return { text: "" };
 }

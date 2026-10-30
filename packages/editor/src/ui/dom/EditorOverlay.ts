@@ -2,7 +2,7 @@ import Game from "@logic-incubator/lib/game/Game";
 import { EditorHeight, EditorWidth, GridBounds, SidebarWidth, ToolbarWidth } from "../../Layout";
 import { El, InjectStyles, InjectTheme } from "./Dom";
 
-export type OverlaySlot = "brushes" | "selected" | "layers" | "tools" | "help";
+export type OverlaySlot = "brushes" | "selected" | "layers" | "tools" | "help" | "float";
 
 /**
  * Hosts the editor's DOM side panels (brushes, selected brush, layers), the
@@ -18,6 +18,8 @@ export type OverlaySlot = "brushes" | "selected" | "layers" | "tools" | "help";
  *
  * Each view fills its own named slot; the slots are made up front, so the
  * panels' order doesn't depend on which view happens to be created first.
+ * The "float" slot covers the whole stage, for a popup placed over the map
+ * (the cell inspector); like the root, only what's put in it takes the pointer.
  */
 export default class EditorOverlay {
     private static _inst: EditorOverlay;
@@ -81,6 +83,8 @@ export default class EditorOverlay {
         help.style.height = EditorHeight - GridBounds.bottom + "px";
         this.slots.help = this.root.appendChild(help);
 
+        this.slots.float = this.root.appendChild(El("div", "eo-float"));
+
         this.root.addEventListener("mousedown", e => {
             if (e.target instanceof Element && e.target.closest("button")) {
                 e.preventDefault();
@@ -132,6 +136,8 @@ const STYLES = `
 .eo-layers { flex: 0 0 232px; }
 .eo-tools { position: absolute; }
 .eo-help { position: absolute; display: flex; align-items: center; }
+.eo-float { position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none; }
+.eo-float > * { pointer-events: auto; }
 .eo-root kbd {
     display: inline-block; min-width: 9px; padding: 0 4px; box-sizing: border-box;
     background: var(--ed-well); border: 1px solid var(--ed-button-border); border-bottom-width: 2px; border-radius: 3px;

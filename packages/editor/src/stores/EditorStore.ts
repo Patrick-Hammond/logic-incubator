@@ -6,8 +6,9 @@ import { InitalScale } from "../Layout";
 import { DefaultBossValue } from "@logic-incubator/engine/level/entities/Bosses";
 import { DefaultPickupValue } from "@logic-incubator/engine/level/entities/Pickups";
 import { DefaultSpawnerValue } from "@logic-incubator/engine/level/entities/Spawners";
-import { Brush, DataBrushName, DataBrushValue, IsTileLayer, TileLayerKind } from "@logic-incubator/engine/level/LevelFormat";
+import { Brush, DataBrushName, DataBrushValue, HEIGHT_LAYER_ID, IsTileLayer, TileLayerKind } from "@logic-incubator/engine/level/LevelFormat";
 import { DefaultDialogValue } from "@logic-incubator/engine/story/Talk";
+import { ClampHeight } from "../Heights";
 import { Layer } from "./LevelDataStore";
 
 export const enum EditorActions {
@@ -40,6 +41,8 @@ export const enum EditorActions {
     CHANGE_SCENE,
     SET_TOOL,
     PICK_BRUSH,
+    /** Opens the cell inspector on `position` (map coordinates), or closes it given none - see `IEditorState.inspectedCell`. */
+    INSPECT_CELL,
     REFRESH,
     RESET
 }
@@ -53,7 +56,8 @@ export const enum MouseButtonState {
 
 /**
  * What a left-click/drag on the map does - picked from the toolbar (see `Toolbar`, `Tools`). The data-select
- * tool is only on offer while a data layer is selected (see `ToolFitsLayer`), as that's where data lives.
+ * tool, which opens the cell inspector, is only on offer while a data layer (attributes or height) is selected
+ * (see `ToolFitsLayer`), as that's where data lives.
  */
 export const enum EditorTool {
     BRUSH = "brush",
@@ -65,7 +69,7 @@ export const enum EditorTool {
     MOVE = "move"
 }
 
-/** Whether `tool` can be used with `layer` selected: every tool can, except data-select, which wants a data layer (the "attributes" one). */
+/** Whether `tool` can be used with `layer` selected: every tool can, except data-select, which wants a data layer (attributes or height). */
 export function ToolFitsLayer(tool: EditorTool, layer: Layer | undefined): boolean {
     return tool !== EditorTool.DATA_SELECT || (layer !== undefined && layer.isData);
 }
@@ -75,25 +79,56 @@ export function PaintsWithBrush(tool: EditorTool): boolean {
     return tool === EditorTool.BRUSH || tool === EditorTool.STAMP || tool === EditorTool.FILL;
 }
 
-/** Max editable (non-attributes) layers - a sanity cap; the Layers panel's list scrolls past what fits. */
+/** Max editable (tile) layers - a sanity cap; the Layers panel's list scrolls past what fits. */
 export const MaxEditableLayers = 16;
 
 /**
- * Fixed id of "attributes", the one data layer: player-start, collision and z-index are painted
- * onto it like any data brush, and it also draws the read-only overlay of what the game derives
- * from tiles' own `AssetMetadata` (collision, door footprints, lights, spawners - see
- * `FindImplicitPlacements`), so a cell's full picture - hand-placed and intrinsic - is always in
- * one place. `isData: true` is what keeps `Level.LoadLevel` from ever mistaking it for a tile
- * layer; its id is what everything else (duplicating, reordering, the layer badge) keys off, since
- * it's the one layer that's always there rather than something a user added. Always present
- * (re-added on load/reset). There's deliberately no way to add another data layer alongside it -
- * painting height/collision on more than one was never useful and just made "which layer is this
- * on" a question worth asking.
+ * Fixed id of "attributes", the data layer every data brush but the height is painted on - player-start,
+ * collision, pickups, exits, dialogs, bosses, spawners - as many on a cell as there are kinds, one of each
+ * (see `LevelDataActions`). The data brush picked is its active type (see `ActiveAttributeType`): painting,
+ * erasing and the map's full squares are that type's, the rest shrink to pips. It also draws the read-only
+ * overlay of what the game derives from tiles' own `AssetMetadata` (collision, door footprints, lights,
+ * spawners - see `FindImplicitPlacements`), so a cell's full picture - hand-placed and intrinsic - is always in
+ * one place. `isData: true` is what keeps `Level.LoadLevel` from ever mistaking it for a tile layer; its id is
+ * what everything else (duplicating, reordering, the layer badge) keys off, since it's one of the layers that's
+ * always there rather than something a user added. Always present (re-added on load/reset). There's
+ * deliberately no way to add another data layer alongside it and the height layer (`HEIGHT_LAYER_ID`) - more
+ * just made "which layer is this on" a question worth asking.
  */
 export const IMPLICIT_LAYER_ID = -99999;
 
 function ImplicitLayer(): Layer {
     return { id: IMPLICIT_LAYER_ID, name: "attributes", selected: false, visible: true, isData: true };
+}
+
+/** Whether `layer` is the height layer (see `HEIGHT_LAYER_ID`): a data layer painted with heights, drawn as a heatmap, rather than with data brushes. */
+export function IsHeightLayer(layer: Layer | undefined): boolean {
+    return layer != null && layer.id === HEIGHT_LAYER_ID;
+}
+
+/** Whether `layer` is one of the layers every level always has, one of each, which can't be removed, duplicated or moved: "attributes", the height layer or the player layer. */
+export function IsFixedLayer(layer: Layer | undefined): boolean {
+    return layer != null && (layer.id === IMPLICIT_LAYER_ID || layer.id === HEIGHT_LAYER_ID || !!layer.isPlayer);
+}
+
+function HeightLayer(): Layer {
+    return { id: HEIGHT_LAYER_ID, name: "height", selected: false, visible: true, isData: true, isHeight: true };
+}
+
+/**
+ * `layers` with the height layer (see `HEIGHT_LAYER_ID`) - after "attributes", if it was missing - or the same array if it was there.
+ * One a level file brought it (see `MigrateLevelFile`) has none of the editor's own fields yet, so it's given them: shown, not selected.
+ */
+function WithHeightLayer(layers: Layer[]): Layer[] {
+    const existing = layers.find(IsHeightLayer);
+    if (!existing) {
+        const at = layers.findIndex(layer => layer.id === IMPLICIT_LAYER_ID) + 1;
+        return layers.slice(0, at).concat(HeightLayer(), layers.slice(at));
+    }
+    if (typeof existing.visible !== "boolean" || typeof existing.selected !== "boolean") {
+        return layers.map(layer => (layer === existing ? { ...layer, visible: layer.visible !== false, selected: !!layer.selected } : layer));
+    }
+    return layers;
 }
 
 /**
@@ -130,8 +165,8 @@ function PlayerLayer(): Layer {
 }
 
 /**
- * `layers` with the player layer moved past the next tile layer up the list (`up`) or down it - stepping over "attributes",
- * which isn't drawn in the game, so every move changes what's drawn over the figures. The same array if there's no tile
+ * `layers` with the player layer moved past the next tile layer up the list (`up`) or down it - stepping over "attributes" and the
+ * height layer, which aren't drawn in the game, so every move changes what's drawn over the figures. The same array if there's no tile
  * layer that way to move past.
  */
 export function PlayerLayerMoved(layers: Layer[], up: boolean): Layer[] {
@@ -161,21 +196,21 @@ function WithLayerAdded(layers: Layer[], layer: Layer): Layer[] {
 export const DefaultTileLayerKinds: ReadonlyArray<TileLayerKind> = ["floor", "walls"];
 
 /**
- * `layers` with "attributes" (see `WithImplicitLayer`), at least one floor and one walls layer, and the
- * player layer (see `PLAYER_LAYER_ID`) - a new level starts with just those four, and a level saved before
- * layers had kinds gets an empty one of each, after "attributes" (so the tiles it already has stay drawn on
- * top), and one saved before the player layer gets it last. Something is always selected: the first floor
- * layer, if nothing was. Untouched (the same array) if there's nothing to add.
+ * `layers` with "attributes" (see `WithImplicitLayer`), the height layer (see `WithHeightLayer`), at least one
+ * floor and one walls layer, and the player layer (see `PLAYER_LAYER_ID`) - a new level starts with just those
+ * five, and a level saved before layers had kinds gets an empty one of each, after "attributes" (so the tiles it
+ * already has stay drawn on top), and one saved before the player layer gets it last. Something is always
+ * selected: the first floor layer, if nothing was. Untouched (the same array) if there's nothing to add.
  */
 export function WithDefaultLayers(layers: Layer[]): Layer[] {
-    let result = WithImplicitLayer(layers);
+    let result = WithHeightLayer(WithImplicitLayer(layers));
     let nextId = NextTileLayerId(result);
     DefaultTileLayerKinds.forEach((kind, index) => {
         if (result.some(layer => layer.kind === kind)) {
             return;
         }
-        // After the last of the kinds before it (walls go over floor), else straight after "attributes".
-        let at = result.findIndex(layer => layer.id === IMPLICIT_LAYER_ID) + 1;
+        // After the last of the kinds before it (walls go over floor), else straight after "attributes" and the height layer.
+        let at = Math.max(result.findIndex(layer => layer.id === IMPLICIT_LAYER_ID), result.findIndex(IsHeightLayer)) + 1;
         result.forEach((layer, i) => {
             if (layer.kind && DefaultTileLayerKinds.indexOf(layer.kind) < index) {
                 at = Math.max(at, i + 1);
@@ -194,25 +229,51 @@ export function WithDefaultLayers(layers: Layer[]): Layer[] {
     return result;
 }
 
-/** One more than the highest tile layer id, or 0 for the first. ("attributes" and the player layer have their own fixed ids.) */
+/** One more than the highest tile layer id, or 0 for the first. ("attributes", the height layer and the player layer have their own fixed ids.) */
 export function NextTileLayerId(layers: Layer[]): number {
     return layers.filter(IsTileLayer).reduce((next, layer) => Math.max(next, layer.id + 1), 0);
 }
 
-/** Whether `layer` can be removed: never "attributes" or the player layer, nor the last floor or walls layer. */
+/** Whether `layer` can be removed: never "attributes", the height layer or the player layer, nor the last floor or walls layer. */
 export function IsRemovableLayer(layers: Layer[], layer: Layer | undefined): boolean {
-    if (!layer || layer.id === IMPLICIT_LAYER_ID || layer.isPlayer) {
+    if (!layer || IsFixedLayer(layer)) {
         return false;
     }
     return !layer.kind || layers.some(other => other.kind === layer.kind && other.id !== layer.id);
 }
 
-/** The tile layers, which `MaxEditableLayers` caps - not "attributes", nor the player layer. */
+/** The tile layers, which `MaxEditableLayers` caps - not "attributes", the height layer or the player layer. */
 export function EditableLayerCount(layers: Layer[]): number {
     return layers.filter(IsTileLayer).length;
 }
 
-export type DataBrush = { name: string; colour: number; value: DataBrushValue };
+/** A data brush in the palette: its colour on the map, and the value it paints. `height` marks the height layer's brushes (see `IsHeightBrushName`). */
+export type DataBrush = { name: string; colour: number; value: DataBrushValue; height?: boolean };
+
+/**
+ * The height layer's raise and lower brushes: each cell painted with one goes up (or down) by one, once a stroke. They're the
+ * editor's, never saved - what's saved is the cell's `Z_INDEX`, the height layer's third brush, which paints its value (see `WithHeights`).
+ */
+export const RAISE_BRUSH = "height-raise";
+export const LOWER_BRUSH = "height-lower";
+
+/** Whether the named brush is painted on the height layer - `Z_INDEX`, raise or lower - rather than on "attributes". */
+export function IsHeightBrushName(name: string): boolean {
+    return name === DataBrushName.Z_INDEX || name === RAISE_BRUSH || name === LOWER_BRUSH;
+}
+
+/**
+ * The attribute type being painted, erased and drawn in full on the map - the data brush picked while a data layer other than
+ * the height layer is selected - or null for none: then every type is drawn in full, and erasing takes whatever was painted last.
+ */
+export function ActiveAttributeType(state: Pick<IEditorState, "layers" | "currentBrush" | "dataBrushes">): string | null {
+    const layer = state.layers.find(l => l.selected);
+    const name = state.currentBrush.name;
+    if (!layer || !layer.isData || IsHeightLayer(layer) || IsHeightBrushName(name)) {
+        return null;
+    }
+    return state.dataBrushes.some(db => db.name === name) ? name : null;
+}
 
 /**
  * A sprite (its first frame, for an animation) drawn over each data brush's colour in the palette
@@ -224,6 +285,25 @@ export type DataBrushIcons = { readonly [K in DataBrushName]?: string };
 /** `icons`' sprite for the named data brush, if it has one. */
 export function DataBrushIcon(icons: DataBrushIcons, name: string): string | undefined {
     return (icons as { readonly [name: string]: string | undefined })[name];
+}
+
+/** The editor's own icon (see `EditorIcon`) for a brush the game has no sprite for - the raise and lower brushes' arrows. */
+export function DataBrushEditorIcon(name: string): string | undefined {
+    return name === RAISE_BRUSH ? "arrow-up" : name === LOWER_BRUSH ? "arrow-down" : undefined;
+}
+
+/** What the palette, the selected-brush card and the inspector call a data brush: its name, but the height layer's are "height", "raise" and "lower". */
+export function DataBrushLabel(name: string): string {
+    switch (name) {
+        case DataBrushName.Z_INDEX:
+            return "height";
+        case RAISE_BRUSH:
+            return "raise";
+        case LOWER_BRUSH:
+            return "lower";
+        default:
+            return name;
+    }
 }
 
 interface IActionData {
@@ -265,6 +345,8 @@ export interface IEditorState {
      * back to a layer picks up where it was left, e.g. a floor tile on the floor layer and a wall on the walls one.
      */
     layerMemory: { [layerId: string]: LayerMemory };
+    /** The cell the inspector is open on (see `CellInspector`), in map coordinates, or null while it's closed. Never kept from a save. */
+    inspectedCell: Vec2Like | null;
 }
 
 export default class EditorStore extends Store<IEditorState, IActionData> {
@@ -284,13 +366,16 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
             dataBrushes: [
                 { name: DataBrushName.PLAYER_START, colour: 0xfe3464, value: 0 },
                 { name: DataBrushName.COLLISION, colour: 0xffd166, value: 0 },
-                { name: DataBrushName.Z_INDEX, colour: 0x06d6a0, value: 0 },
                 { name: DataBrushName.PICKUP, colour: 0xf15bb5, value: DefaultPickupValue() },
                 { name: DataBrushName.EXIT, colour: 0x4cc9f0, value: 0 },
                 { name: DataBrushName.DIALOG, colour: 0x8ac926, value: DefaultDialogValue() },
                 { name: DataBrushName.BOSS, colour: 0xd00000, value: DefaultBossValue() },
                 // The colour the editor has always outlined a spawner tile's footprint in.
-                { name: DataBrushName.SPAWNER, colour: 0x9b5de5, value: DefaultSpawnerValue() }
+                { name: DataBrushName.SPAWNER, colour: 0x9b5de5, value: DefaultSpawnerValue() },
+                // The height layer's: the height painted, then raise and lower, which have no value of their own.
+                { name: DataBrushName.Z_INDEX, colour: 0x06d6a0, value: 1, height: true },
+                { name: RAISE_BRUSH, colour: 0xf4a259, value: null, height: true },
+                { name: LOWER_BRUSH, colour: 0x5b8bd6, value: null, height: true }
             ],
             layers: [],
             mouseButtonState: MouseButtonState.UP,
@@ -301,7 +386,8 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
             // `currentScene === EDITOR` in Keyboard) dead until the first Enter toggled it into place.
             currentScene: Scenes.EDITOR,
             tool: EditorTool.BRUSH,
-            layerMemory: {}
+            layerMemory: {},
+            inspectedCell: null
         };
     }
 
@@ -329,7 +415,9 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
             dataBrushes: this.ReconcileDataBrushes(state && state.dataBrushes),
             layers,
             // A save from before layers were remembered has none.
-            layerMemory: (state && state.layerMemory) || {}
+            layerMemory: (state && state.layerMemory) || {},
+            // A cell of the map that was open - or of another one.
+            inspectedCell: null
         });
     }
 
@@ -359,7 +447,8 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
             viewScale: this.UpdateViewScale(state.viewScale, action),
             currentScene: this.UpdateCurrentScene(state.currentScene, action),
             tool: this.UsableTool(switched.tool, layers),
-            layerMemory: switched.layerMemory
+            layerMemory: switched.layerMemory,
+            inspectedCell: this.UpdateInspectedCell(state.inspectedCell, action, layers)
         };
         return newState as IEditorState;
     }
@@ -367,11 +456,12 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
     /**
      * When the selected layer changes - picked in the panel, or by adding, removing or the dropper - the layer
      * being left remembers its tool and brush, and the one selected gets back its own (or, the first time, the
-     * empty brush and whatever tool was in use). A data layer ("attributes") always comes back on the data arrow,
-     * though, keeping just its brush: it's where placed data is edited, and picking one of its data brushes to
-     * paint switches to the brush (see `UpdateTool`). The dropper's pick is the exception to both: it's the brush
-     * wanted next, so it's kept, with the dropper. `brush` and `tool` are what the action would otherwise leave.
-     * Memory of a layer that's gone is dropped.
+     * empty brush and whatever tool was in use). "attributes" always comes back on the data arrow, though,
+     * keeping just its brush: it's where placed data is inspected, and picking one of its data brushes to paint
+     * switches to the brush (see `UpdateTool`). The height layer starts on the brush with the height brush picked,
+     * as painting heights is all there is to do on it. The dropper's pick is the exception to all of these: it's
+     * the brush wanted next, so it's kept, with the dropper. `brush` and `tool` are what the action would
+     * otherwise leave. Memory of a layer that's gone is dropped.
      */
     private SwitchLayer(state: IEditorState, layers: Layer[], action: IAction<IActionData>, brush: Brush, tool: EditorTool): { brush: Brush; tool: EditorTool; layerMemory: { [layerId: string]: LayerMemory } } {
         let layerMemory = state.layerMemory || this.DefaultState().layerMemory;
@@ -387,7 +477,13 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
                 brush = remembered
                     ? { ...remembered.brush, layerId: to.id, position: state.currentBrush.position }
                     : { ...this.DefaultState().currentBrush, layerId: to.id, position: state.currentBrush.position };
-                if (to.isData) {
+                if (IsHeightLayer(to)) {
+                    if (!remembered) {
+                        const height = (state.dataBrushes || []).find(db => db.name === DataBrushName.Z_INDEX);
+                        brush = { ...brush, name: DataBrushName.Z_INDEX, data: height ? height.value : 1 };
+                    }
+                    tool = remembered ? remembered.tool : EditorTool.BRUSH;
+                } else if (to.isData) {
                     tool = EditorTool.DATA_SELECT;
                 } else if (remembered) {
                     tool = remembered.tool;
@@ -633,8 +729,8 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
                 return PlayerLayerMoved(layers, action.type === EditorActions.MOVE_PLAYER_LAYER_UP);
             case EditorActions.DUPLICATE_LAYER: {
                 const selectedLayer = this.SelectedLayer;
-                // There's only ever the one "attributes" layer, and the one player layer - what's left to duplicate is always a tile layer.
-                if (!selectedLayer || selectedLayer.id === IMPLICIT_LAYER_ID || selectedLayer.isPlayer) {
+                // There's only ever the one "attributes" layer, height layer and player layer - what's left to duplicate is always a tile layer.
+                if (!selectedLayer || IsFixedLayer(selectedLayer)) {
                     return layers;
                 }
                 const newLayer = { ...selectedLayer, id: NextTileLayerId(layers), selected: false };
@@ -697,6 +793,23 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
         }
     }
 
+    /** The inspector's cell - closed by a reset, a scene change or a tile layer being selected, as it's the data layers' (see `ToolFitsLayer`). */
+    private UpdateInspectedCell(cell: Vec2Like | null, action: IAction<IActionData>, layers: Layer[]): Vec2Like | null {
+        const selected = layers.find(layer => layer.selected);
+        if (!selected || !selected.isData) {
+            return null;
+        }
+        switch (action.type) {
+            case EditorActions.INSPECT_CELL:
+                return (action.data && action.data.position) || null;
+            case EditorActions.RESET:
+            case EditorActions.CHANGE_SCENE:
+                return null;
+            default:
+                return cell || null;
+        }
+    }
+
     private UpdateTool(tool: EditorTool, action: IAction<IActionData>): EditorTool {
         switch (action.type) {
             case EditorActions.SET_TOOL:
@@ -728,7 +841,7 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
             return value;
         }
         const inc = actionType === EditorActions.DATA_BRUSH_INC ? 1 : -1;
-        return Math.max(Math.min(value + inc, 999), -999);
+        return ClampHeight(value + inc);
     }
 
     get SelectedDataBrush(): DataBrush {

@@ -1425,7 +1425,7 @@ type Talker = Vec2Like & { value: DialogValue; script: DialogScript; tile: Tile 
 | `tileLayers` | `LevelLayer[]` | Drawn in order - not the data layers, nor the player layer (`TileLayerOrder`). |
 | `playerLayer` | `number` | How many of `tileLayers`, from the first, are drawn under the heroes, monsters and shots - where the level's player layer sits among them; the rest are drawn over them. All of them in a level without a player layer. |
 | `collisionData` | `boolean[][]` | Per cell: a `collidable` tile or the `collision` brush. |
-| `heightData` | `number[][]` | From the `z-index` brush. |
+| `heightData` | `number[][]` | From the `z-index` brushes - on the height layer, since version 2 of the format (`HEIGHT_LAYER_ID`); any data layer is read, the last brush on a cell winning. |
 | `lightGrid` | `LightGrid` | Light at every tile corner, baked from lights with walls casting shadows; read it with `CellCornerLight`, `SampleLight` or `FootLight` ([Lighting](#lighting)). |
 | `lightBake` | `LightBake` | What `lightGrid` was built from (each light's `LightShape` and the corners' occlusion); `ComposeLighting(level.lightBake, scales, level.lightGrid)` rebuilds the grid with lights at new strengths. |
 | `lights` | `SceneLights` | Keeps `lightGrid` up to date frame by frame from `lightBake`: flicker, lights switched off, lights that move ([Lighting](#lighting)). |
@@ -1445,7 +1445,7 @@ type Talker = Vec2Like & { value: DialogValue; script: DialogScript; tile: Tile 
 
 | Method | Description |
 | --- | --- |
-| `LoadLevel(file: LevelFile): void` | Builds everything from a level file (and the metadata store). Unknown sprite names drop just their tiles, with a one-off warning. Emits `LEVEL_LOADED`. |
+| `LoadLevel(file: LevelFile): void` | Builds everything from a level file (and the metadata store), first bringing a version 1 file up to date (`MigrateLevelFile`); throws for a file older than that or newer than `LevelVersion`. Unknown sprite names drop just their tiles, with a one-off warning. Emits `LEVEL_LOADED`. |
 | `Dispose(): void` | Stops animated tiles' sprites. |
 | `HeightAt(x, y): number` | |
 | `IsSolid(x, y): boolean` | A wall, a spawner, or anywhere off the map. Not a closed door - a hero walks onto one to open it. |
@@ -1469,7 +1469,7 @@ type Talker = Vec2Like & { value: DialogValue; script: DialogScript; tile: Tile 
 
 ## Level file format
 
-`@logic-incubator/engine/level/LevelFormat` - types, one enum and two helpers; no runtime imports.
+`@logic-incubator/engine/level/LevelFormat` - types, one enum, a few helpers and the migration from the version before; no runtime imports.
 
 ```ts
 const enum DataBrushName { PLAYER_START = "player-start", COLLISION = "collision", Z_INDEX = "z-index", PICKUP = "pickup", EXIT = "exit",
@@ -1488,16 +1488,37 @@ type Brush = {
 
 type TileLayerKind = "floor" | "walls";   // the editor's: a floor/walls layer takes only that category's tiles
 type LevelLayer = { id: number; name: string; isData: boolean; kind?: TileLayerKind;
-                    isPlayer?: boolean };   // the player layer: holds nothing, marks where the figures are drawn among the tile layers
+                    isPlayer?: boolean;     // the player layer: holds nothing, marks where the figures are drawn among the tile layers
+                    isHeight?: boolean };   // the height layer (a data layer too): the cells' heights, as Z_INDEX brushes
+
+const LevelVersion = 2;            // the format's version: what a file saved now says it is
+const HEIGHT_LAYER_ID = -99997;    // the height layer's fixed id
 
 function IsTileLayer(layer: LevelLayer): boolean;   // not a data layer, nor the player layer
 function TileLayerOrder(layers: LevelLayer[]): { tileLayers: LevelLayer[]; playerLayer: number };
 
 type LevelFile = {
+    version?: number;                                          // LevelVersion when it was saved; left out, 1
     editorData: { layers: LevelLayer[] };
     levelData: { levelData: Brush[]; quests?: QuestDef[] };   // quests: see Quests and dialogs; left out, none
 };
+
+function LevelVersionOf(file: LevelFile): number;             // its version, or 1
+function MigrateLevelFile<T extends LevelFile>(file: T): T;   // brought up to LevelVersion from the version before; throws for any other
 ```
+
+**Versions.** A file says which version of the format it was saved as (`version`; a file from before there was one is version 1).
+`MigrateLevelFile` returns a file that's already `LevelVersion` as it is, brings one from the version just before up to date (a copy -
+the file given is untouched), and throws, saying why, for anything else: older than that, or newer than the code. Only that one step is
+kept, so each version's migration can go with the next. `Level.LoadLevel` and the editor (its own save, and a file opened with L) both
+open files through it. Version 2 moved the heights:
+
+- **The height layer** (`HEIGHT_LAYER_ID`, `isHeight`, a data layer) holds every cell's height as a `Z_INDEX` brush: at most one a cell,
+  and none for 0, the height of anything unpainted. Migrating a version 1 file moves each `Z_INDEX` from whatever data layer it was on to
+  the height layer (the last one on a cell, as the engine read it; a 0 is dropped) and adds the layer after the first data layer
+  ("attributes"), or first if there's none.
+- **Any other data layer** holds one data brush of each name on a cell, so a cell can be solid, an NPC's and a pickup at once; a tile
+  layer still holds one tile a cell.
 
 The **player layer** (`isPlayer`) is a divider among the layers: the tile layers before it are drawn under the heroes, monsters,
 spawners, shots and particle effects, and those after it over them - an arch or a treetop to walk under. `TileLayerOrder(layers)` gives
@@ -2553,7 +2574,8 @@ interface IDungeonEditorOptions {
 ```
 
 Add it with `sceneManager.AddScene(Scenes.EDITOR, new DungeonEditor(options))`, **after** loading the `editor` bundle (its components read icons in `OnInitialise`).
-It attaches `Canvas`, `BrushTool`, `Tools`, `Palette`, `Layers`, `SelectedBrush`, `Toolbar`, `Keyboard` and `Menu`, restores the localStorage save, and keeps the
+It attaches `Canvas`, `BrushTool`, `Tools`, `Palette`, `Layers`, `SelectedBrush`, `Toolbar`, `CellInspector`, `Keyboard` and `Menu`, restores the localStorage save
+(through `OpenEditorSave`: a version 1 save is brought up to date, and one it can't open is reported in an alert and the editor starts empty), and keeps the
 editor/game toggle (Enter) correct by listening to `LEVEL_CREATED`. The editor's DOM overlay is visible only while the editor scene is shown. `OnDestroy` removes the
 overlay and injected styles and resets the editor's shared stores.
 
@@ -2569,8 +2591,9 @@ EditorFontName(assets: Assets): string                 // the face of the editor
 
 ## SavedLevel
 
-`@logic-incubator/editor/SavedLevel`: `type EditorSave = LevelFile & { editorData: IEditorState; levelData: LevelDataState }`; `MakeEditorSave(editorData, levelData)`;
-`SaveLevel(save)`, `LoadSavedLevel(): EditorSave | undefined` - the localStorage copy (key `dungeonLevel`) saved when Enter hands the level to the game.
+`@logic-incubator/editor/SavedLevel`: `type EditorSave = LevelFile & { editorData: IEditorState; levelData: LevelDataState }`; `MakeEditorSave(editorData, levelData)`
+(stamped `version: LevelVersion`); `OpenEditorSave(file): { save } | { error }` - a save or a file opened in the editor, through `MigrateLevelFile`: brought up to date,
+or why it can't be opened; `SaveLevel(save)`, `LoadSavedLevel(): EditorSave | undefined` - the localStorage copy (key `dungeonLevel`) saved when Enter hands the level to the game.
 
 ## Map styling
 
@@ -2598,15 +2621,21 @@ Both extend lib's `Store`.
 `@logic-incubator/editor/stores/EditorStore` - `default class EditorStore` (UI state: tool, brush, layers, zoom, scene):
 `const enum EditorActions` (`BRUSH_MOVED`, `ROTATE_BRUSH`, `FLIP_BRUSH_H`, `FLIP_BRUSH_V`, `BRUSH_CHANGED`, `BRUSH_HOVERED`, `BRUSH_VISIBLE`, `BRUSH_NUDGE`,
 `DATA_BRUSH_INC`, `DATA_BRUSH_DEC`, `SET_DATA_BRUSH_VALUE`, `ZOOM_IN`, `ZOOM_OUT`, `MOUSE_BUTTON`, `CHANGE_SCENE`, `RESET`, `DUPLICATE_LAYER`,
-`MOVE_PLAYER_LAYER_UP`, `MOVE_PLAYER_LAYER_DOWN` (see `PlayerLayerMoved`), `REFRESH`, ...),
+`MOVE_PLAYER_LAYER_UP`, `MOVE_PLAYER_LAYER_DOWN` (see `PlayerLayerMoved`), `INSPECT_CELL` (`data.position`: opens the cell inspector there, or closes it given none), `REFRESH`, ...),
 `const enum EditorTool { BRUSH = "brush", ERASE = "erase", DATA_SELECT = "data-select", STAMP = "stamp", DROPPER = "dropper", FILL = "fill", MOVE = "move" }`,
-`const enum MouseButtonState { LEFT_DOWN, RIGHT_DOWN, UP, MIDDLE_DOWN }`, `IMPLICIT_LAYER_ID = -99999` (the always-present `attributes` data layer),
-`PLAYER_LAYER_ID = -99998` (the always-present player layer, `isPlayer` - a divider showing where the figures are drawn among the tile layers; never selected, painted, hidden, renamed, removed or duplicated - `SELECT_LAYER` with it changes nothing), `PlayerLayerMoved(layers, up)` (the player layer moved past the next tile layer up or down the list, stepping over "attributes"; the same array when there's none that way),
-`MaxEditableLayers = 16`, `EditableLayerCount(layers)` (the tile layers), `DefaultTileLayerKinds` (`["floor", "walls"]`), `WithDefaultLayers(layers)` (adds "attributes", a floor and a walls layer, and the player layer - last, over every tile layer - if missing, and selects the floor if nothing is; the store applies it on every action and load), `NextTileLayerId(layers)`, `IsRemovableLayer(layers, layer)` (not "attributes" or the player layer, nor the last floor or walls layer), `ADD_LAYER` takes an optional `kind` (a new or duplicated layer goes last, or just before the player layer while that's last, so it's drawn under the figures), `ToolFitsLayer(tool, layer)` (data-select is only usable with a data layer selected - the store switches back to the brush when it isn't, and the toolbar hides its button), `PaintsWithBrush(tool)` (the brush, stamp and fill: the tools that show the brush on the cursor, and the ones `BRUSH_CHANGED` keeps - it switches any other tool to the brush), `type DataBrush = { name; colour; value }`, `type DataBrushIcons = { readonly [K in DataBrushName]?: string }`,
-`DataBrushIcon(icons, name)`, `type LayerMemory = { tool; brush }`, `interface IEditorState` (its `layerMemory`, keyed by layer id, is each layer's tool and brush from when another layer was selected, restored when it is selected again, except when the dropper picked the brush; a layer with none gets the empty brush and keeps the current tool; a data layer always comes back on data-select, whatever its memory says, keeping just the brush - except when the dropper picked a brush on it).
+`const enum MouseButtonState { LEFT_DOWN, RIGHT_DOWN, UP, MIDDLE_DOWN }`, `IMPLICIT_LAYER_ID = -99999` (the always-present `attributes` data layer, holding every data brush but the heights, one of each name a cell),
+the height layer (`HEIGHT_LAYER_ID` from `LevelFormat`, always present after "attributes"; `IsHeightLayer(layer)`), `IsFixedLayer(layer)` ("attributes", the height layer or the player layer: never removed, duplicated or moved),
+`PLAYER_LAYER_ID = -99998` (the always-present player layer, `isPlayer` - a divider showing where the figures are drawn among the tile layers; never selected, painted, hidden, renamed, removed or duplicated - `SELECT_LAYER` with it changes nothing), `PlayerLayerMoved(layers, up)` (the player layer moved past the next tile layer up or down the list, stepping over "attributes" and the height layer; the same array when there's none that way),
+`MaxEditableLayers = 16`, `EditableLayerCount(layers)` (the tile layers), `DefaultTileLayerKinds` (`["floor", "walls"]`), `WithDefaultLayers(layers)` (adds "attributes", the height layer after it, a floor and a walls layer, and the player layer - last, over every tile layer - if missing, gives a height layer read from a file the editor's `visible`/`selected`, and selects the floor if nothing is; the store applies it on every action and load), `NextTileLayerId(layers)`, `IsRemovableLayer(layers, layer)` (not a fixed layer, nor the last floor or walls layer), `ADD_LAYER` takes an optional `kind` (a new or duplicated layer goes last, or just before the player layer while that's last, so it's drawn under the figures), `ToolFitsLayer(tool, layer)` (data-select - the inspector's arrow - is only usable with a data layer selected, attributes or height - the store switches back to the brush when it isn't, and the toolbar hides its button), `PaintsWithBrush(tool)` (the brush, stamp and fill: the tools that show the brush on the cursor, and the ones `BRUSH_CHANGED` keeps - it switches any other tool to the brush), `type DataBrush = { name; colour; value; height? }` (`height`: one of the height layer's brushes), `type DataBrushIcons = { readonly [K in DataBrushName]?: string }`,
+`DataBrushIcon(icons, name)`, `RAISE_BRUSH = "height-raise"` and `LOWER_BRUSH = "height-lower"` (the height layer's raise and lower brushes: each cell a stroke covers goes up or down one, once; the editor's, never saved),
+`IsHeightBrushName(name)` (`Z_INDEX`, raise or lower), `DataBrushLabel(name)` ("height", "raise", "lower", or the name), `DataBrushEditorIcon(name)` (the editor's arrow icon for raise and lower),
+`ActiveAttributeType(state): string | null` (the data brush picked while "attributes" is selected - the type painted, erased and drawn in full; null for All, or on any other layer), `type LayerMemory = { tool; brush }`, `interface IEditorState` (its `inspectedCell` is the cell the inspector is open on, or null - never kept from a save, and closed by a reset, a scene change or a tile layer being selected; its `layerMemory`, keyed by layer id, is each layer's tool and brush from when another layer was selected, restored when it is selected again, except when the dropper picked the brush; a layer with none gets the empty brush and keeps the current tool; "attributes" always comes back on data-select, whatever its memory says, keeping just the brush, and the height layer with no memory starts on the brush with the height brush - except when the dropper picked a brush on it).
 
 `@logic-incubator/editor/stores/LevelDataStore` - `default class LevelDataStore` (the painted brushes): `type Layer = LevelLayer & { selected; visible }`,
-`type LevelDataState = { levelData: LevelData; quests: QuestDef[] }`, `const enum LevelDataActions` (`COPY`, `RESET`, `SET_QUESTS` - `data.quests`, the quest list's -, paint/erase actions, ...).
+`type LevelDataState = { levelData: LevelData; quests: QuestDef[] }`, `const enum LevelDataActions` (`COPY`, `RESET`, `SET_QUESTS` - `data.quests`, the quest list's -,
+`SET_DATA` and `REMOVE` - one placed brush, `data.target`, by identity: the inspector's Edit and Delete -, `SET_HEIGHT` - `data.cells` set to `data.heightChange`'s `height` or moved by its `delta`, on the height layer (`WithHeights`) -, paint/erase actions, ...).
+The paint and erase actions take the editor's `layers`, which decide what they replace: on a tile layer a brush replaces whatever is on its cell, and erasing takes the last one
+painted; on a data layer a brush replaces only one of its own name, and erasing with a named brush (the active type) takes only that name. Without `layers` every layer counts as a tile layer.
 `Load` gives a level saved without quests (or a generated map) none; `RESET` clears them.
 
 Layout constants (`@logic-incubator/editor/Layout`): `EditorWidth` (1280), `EditorHeight` (720), `InitalScale` (1.5), `SidebarWidth` (260), `ToolbarWidth` (40), `GridBounds`.
@@ -2624,16 +2653,20 @@ Used by the editor's own views; available for editor extensions.
 | Module | Exports |
 | --- | --- |
 | `ui/dom/Dom` | `El(tag, className, text?)`, `ButtonEl(className, text?, title?)`, `InjectStyles(id, css)`, `RemoveInjectedStyles()`, `InjectTheme()` |
-| `ui/dom/EditorOverlay` | `default class EditorOverlay` - singleton DOM overlay (`inst`, `Destroy()`), `Slot(name: OverlaySlot): HTMLElement` with `OverlaySlot = "brushes" \| "selected" \| "layers" \| "tools" \| "help"`, `SetVisible(visible)` |
+| `ui/dom/EditorOverlay` | `default class EditorOverlay` - singleton DOM overlay (`inst`, `Destroy()`), `Slot(name: OverlaySlot): HTMLElement` with `OverlaySlot = "brushes" \| "selected" \| "layers" \| "tools" \| "help" \| "float"` (`"float"` covers the whole stage for a popup over the map - the cell inspector; only what's put in it takes the pointer), `SetVisible(visible)` |
 | `ui/dom/SpriteCanvas` | `default class SpriteCanvas` (draws textures to a 2D canvas); `FitIcon`, `VisibleBounds`, `DrawTexture`, `DrawDataBrushSwatch` |
 | `ui/dialog/FormDialog` | `OpenFormDialog(options: FormDialogOptions): Promise<FormValues \| null>`, `IsFormDialogOpen()`, `InjectFormStyles()` (its look - `fd-overlay`, `fd-panel`, `fd-header`... - for another modal to share); field specs `NumberField`, `TextField`, `TextAreaField` (lines of text: a script - Enter in it is a new line, not Save), `ColourField`, `ToggleField`, `ChoiceField` (exactly one option; an option's `image` draws a picture on its chip, as a multi-choice's does), `MultiChoiceField` (`FieldSpec`), `ChoiceOption`; any field can have `visibleWhen(values)` to show only while it applies to the other values (a pickup's key id only for a key); `IsFieldVisible(field, values)`; options may set `saveLabel` and `cancelLabel` (`null` leaves Cancel out - a message with just an OK, which the sprite editor uses for alerts and confirms) |
 | `DataBrushEditors` | `DataBrushEditorFor(name): DataBrushEditor \| undefined` - the dialog definitions for editing a value: `"light"` (brightness, tint, range and flicker), `"spawner"` (the `SPAWNER` brush's name - the same popup for the brush and for a spawner tile), `"pickup"` (the `PICKUP` brush's name - the same popup for the brush and for a tile that gives one; a weapon's shot can be set to give off light, and a light to carry has a light and how long it burns), `"door"` (a door tile's lock: a Locked checkbox that reveals its key id), the height, `"dialog"` (a script box, read as it's typed against the level's quests: the first mistake and how many more) and `"boss"` (its monster, hit points and quest). A pickup and a boss choose the quest they count for from None and the level's. `EditorImages` carries the lookups they need from the game's art and the level (`monster`, `hasSprite`, `quests?`) |
 | `DataBrushDialog` | `OpenDataBrushDialog(name, value, context?, quests?)` - the popup for a value, with the level's quests to offer; `MonsterImage(type)` (a monster's chip picture, cached) |
 | `QuestEditor` | The quest popup's pure parts: `QuestFields(images)`, `QuestToForm(quest)`, `QuestFromForm(form, was)` (a goal of a kind it doesn't know keeps its fields), `QuestProblem(form, others)`, `NewQuestId(quests)`, `DescribeQuest(quest)` |
 | `QuestsDialog` | `OpenQuestsDialog(quests): Promise<QuestDef[] \| null>` - the quest list (Q): Edit, Remove, Add quest; resolves with the new list on Save, null if cancelled or unchanged; `IsQuestsDialogOpen()` |
-| `DataLabels` | `PickupLabel(pickup)`, `MapLabel(value)` (the short tag drawn over a value on the attributes overlay: `G10`, `H2`, `K3`, `W`, `I`, `T` for a light to carry (a torch), `L3` for a locked door - an unlocked one has no tag -, `D` for a dialog, `B` for a boss, a spawner's number of monster types, and a `Q` after a pickup's or boss's that counts for a quest; only characters the bitmap font has), `DescribePickup(pickup)`, `DescribeBoss(boss)`, `DescribeDialog(script)` (its first line, not a part's name, how many lines, and `shouts` when it has a shout part), `DescribeLock(lock)` (pure) |
+| `DataLabels` | `PickupLabel(pickup)`, `MapLabel(value)` (the short tag drawn over a value on the attributes overlay: `G10`, `H2`, `K3`, `W`, `I`, `T` for a light to carry (a torch), `L3` for a locked door - an unlocked one has no tag -, `D` for a dialog, `B` for a boss, a spawner's number of monster types, and a `Q` after a pickup's or boss's that counts for a quest; only characters the bitmap font has), `DescribePickup(pickup)`, `DescribeBoss(boss)`, `DescribeDialog(script)` (its first line, not a part's name, how many lines, and `shouts` when it has a shout part), `DescribeLock(lock)`, `DescribeSpawner(spawner)`, `DescribeDataValue(value): { text }` (any data value in a line - a number, pickup, dialog, boss, light, spawner or door lock - for the selected-brush card and the inspector) (pure) |
+| `Heights` | The height layer's pure rules: `MaxHeight` (999), `ClampHeight(h)`, `CellKey(cell)`, `HeightMap(levelData)` (cell key -> height), `HeightAtCell(levelData, cell)`, `IsHeightBrush(brush)`, `MakeHeightBrush(cell, height)`, `type HeightChange = { height?; delta? }`, `WithHeights(levelData, cells, change)` (each cell once, clamped; a cell at 0 has no brush; the same array if nothing changed), `HeightColour(h)` (the heatmap's colour: greens through reds up, blues down), `BlockedEdges(heights)` (the cell edges a hero can't step over - `IsHeightGap` - which the map marks in red) |
+| `CellEntries` | `type CellEntry` (a data brush, a tile's own light/spawner/pickup/door lock, or the cell's height), `type CellLookups`, `TileValueOf(brush, meta)`, `CellEntriesAt(levelData, layers, cell, lookups)` (everything on a cell, on any layer, shown or not: data brushes, then tiles' values from the top, then always the height), `EntryName(entry)`, `SummariseCell(entries)` (the cursor's one-line summary, leaving out a height of 0) (pure) |
+| `views/CellLookups` | `EditorCellLookups(levelData, layers)` (footprints and metadata from the loaded art), `EditorCellEntries(levelData, layers, cell)` |
+| `views/CellInspector` | `default class CellInspector` - the inspector panel in the `"float"` slot, following `IEditorState.inspectedCell`: one row per `CellEntry`, with Edit (its value's popup) and Delete (`REMOVE`, or `SET_HEIGHT` to 0) as one undo step each; a tile's own value has no Delete. Esc or its × closes it |
 | `views/PaletteCategories` | `type TileSet = { id: AssetCategory; name; brushes: string[] }`; `GroupByCategory(names, categoryOf): TileSet[]` (one set per category, in `AssetCategories` order, empty ones included, each sorted by name); `EmptyTabHint(id, canCreate?): string` (pure); `ShowsCategory(kind, category)` (a floor/walls layer shows only its own tab, any other tile layer all but those two); `TakesCategory(kind, category)` (a floor/walls layer paints only its own category, a generic one anything); `EmptyTabHint(id, canCreate?)` mentions the tab's + when the sprite editor is available |
-| `tools/ToolGeometry` | `SpanRect(a, b)`, `RectCells(rect, border?)`, `InRect(rect, x, y)`, `FloodFill(start, bounds, keyAt)`, `TopmostBrushAt(...)` (a brush is only at its anchor cell), `TopmostBrushCovering(brushes, layers, cell, footprintOf, accept?)` (a brush is on top at every cell of its footprint - what the data-select tool uses, so a 2x2 spawner or door is the target wherever it's clicked), `BoundsOfCells(cells)`, `type CellRect` |
+| `tools/ToolGeometry` | `SpanRect(a, b)`, `RectCells(rect, border?)`, `InRect(rect, x, y)`, `FloodFill(start, bounds, keyAt)`, `TopmostBrushAt(...)` (a brush is only at its anchor cell), `TopmostBrushCovering(brushes, layers, cell, footprintOf, accept?)` (a brush is on top at every cell of its footprint, so a 2x2 spawner or door is the target wherever it's clicked), `BoundsOfCells(cells)`, `PipRect(slot, size)` (where an attribute type's pip sits on a cell, by its palette slot: four along the top, the rest along the bottom), `type CellRect` |
 
 ## Sprite editor
 

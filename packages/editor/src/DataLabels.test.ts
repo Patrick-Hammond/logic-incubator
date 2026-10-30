@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DescribeBoss, DescribeDialog, DescribeLock, DescribePickup, MapLabel, PickupLabel } from "./DataLabels";
+import { DescribeBoss, DescribeDataValue, DescribeDialog, DescribeLock, DescribePickup, DescribeSpawner, MapLabel, PickupLabel } from "./DataLabels";
 
 const WEAPON = { icon: "weapon_axe", shot: { sprite: "weapon_throwing_axe", speed: 5, damage: 2, cooldown: 0.4, range: 8 } };
 const TORCH = { brightness: 1, tint: 0xffc780, range: 7 };
@@ -93,5 +93,25 @@ describe("DescribePickup, DescribeBoss, DescribeDialog and DescribeLock", () => 
         expect(DescribeLock(-1)).toBe("unlocked");
         expect(DescribeLock(0)).toBe("needs key 0");
         expect(DescribeLock(3)).toBe("needs key 3");
+    });
+});
+
+describe("DescribeDataValue", () => {
+    it("puts any value in a few words, with a light's tint beside them", () => {
+        expect(DescribeDataValue(3)).toEqual({ text: "3" });
+        expect(DescribeDataValue({ kind: "gold", amount: 10 })).toEqual({ text: "10 gold" });
+        expect(DescribeDataValue({ script: "Hello there" })).toEqual({ text: "“Hello there”" });
+        expect(DescribeDataValue(TORCH)).toEqual({ text: "1 bright · 7 tiles", colour: 0xffc780 });
+        expect(DescribeDataValue({ lock: 2 })).toEqual({ text: "needs key 2" });
+        expect(DescribeDataValue({ monsters: ["big_demon"], interval: 4, maxAlive: 2, total: 0, activationRange: 10, hitPoints: 10 })).toEqual({ text: "big demon · every 4s · max 2" });
+    });
+
+    it("has nothing to say about no value", () => {
+        expect(DescribeDataValue(null)).toEqual({ text: "" });
+        expect(DescribeDataValue(undefined)).toEqual({ text: "" });
+    });
+
+    it("counts a spawner's monster types when it has several", () => {
+        expect(DescribeSpawner({ monsters: ["imp", "goblin"], interval: 2, maxAlive: 5, total: 0, activationRange: 10, hitPoints: 10 })).toBe("2 types · every 2s · max 5");
     });
 });
