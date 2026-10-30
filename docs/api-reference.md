@@ -1290,7 +1290,7 @@ await relay.close();         // ends every connection and stops
 | `OBJECT_PUSHED` | `"objectPushed"` | `(hero, index, tileX, tileY, sprite)` - a hero pushed something a cell on (`World.Step`, see [Pushables](#pushables)): which, by its place in `Level.pushables`, the cell it's on now, and the sprite it is. An online guest says it as the host's `pushed` event comes, for its own hero too |
 | `PICKUP_COLLECTED` | `"pickupCollected"` | `(hero, tileX, tileY, collected: CollectedPickup[])` - a hero picked up what was on that cell, each thing with the sprite it was drawn as; once for each cell, when their sprite reaches more than one in a step (`PickupCellsReached`) |
 | `KEYS_DROPPED` | `"keysDropped"` | `(hero, tileX, tileY)` - a fallen hero's keys landed on that cell |
-| `NPC_BUMPED` | `"npcBumped"` | `(hero, tileX, tileY)` - a hero walked into the NPC on that cell (a `DIALOG` brush), where talking is on (`World.SetTalk`); `DungeonMain` starts the talk |
+| `NPC_BUMPED` | `"npcBumped"` | `(hero, tileX, tileY)` - a hero walked into the NPC on that cell (a `DIALOG` brush), where talking is on (`World.SetTalk`); `DungeonMain` counts up to the talk (`TalkCountdown`) and starts it if the hero stays by the NPC |
 | `TALK_STARTED` | `"talkStarted"` | `(hero, tileX, tileY)` - a talk with that cell's NPC began: play holds still until `TALK_ENDED` |
 | `TALK_ENDED` | `"talkEnded"` | - (the talk is over, play goes on) |
 | `TALK_LINE` | `"talkLine"` | - (the talk went on to its next line; `TALK_STARTED` is its first) |
@@ -1353,9 +1353,12 @@ main.Restart(): void                    // starts over now, every hero on their 
 ```
 
 **Talks and quests** ([Quests and dialogs](#quests-and-dialogs)): a level started offline with one hero turns talking on (`World.SetTalk(true)`; off
-otherwise), and `NPC_BUMPED` starts a talk: a `DialogRunner` over the NPC's script, with the world's quests and flags, rewards going to the
+otherwise), and `NPC_BUMPED` starts the countdown to a talk (`story/Talk`'s `TalkCountdown`): while play runs, the `ShoutView` shows the
+NPC's dots in a bubble (`Wait`), and once they're up and a dot's time has passed - `TalkDots * TalkDotSeconds`, 3 seconds - the talk starts,
+unless the hero has left the NPC's side (`BesideNpc`) or fallen first. A script that `SaysAnything` not at all skips the wait (its actions run at
+once, as before). The talk is a `DialogRunner` over the NPC's script, with the world's quests and flags, rewards going to the
 hero (`Hero.ApplyPickup`), shown in a `DialogView` with the NPC's tile as the portrait. `TALK_STARTED` and `TALK_ENDED` frame it; a level
-starting over ends it. A `QuestTracker` over the play area shows `World.quests` every frame and is told of each level start (`Begin`).
+starting over ends it, and the countdown with it (as the level ending does). A `QuestTracker` over the play area shows `World.quests` every frame and is told of each level start (`Begin`).
 A `ShoutView`, under the `Hud`, draws what the NPCs shout (their script's `shout` part) while the hero is in earshot; it's given the
 level's NPCs only when talking is on, and a talk hushes it.
 The tracker and the talk are attached after the `Hud` and before the `overlay`, so a game's overlay (a pause menu) stays on top - it should stop taking keys
@@ -2158,7 +2161,7 @@ same seed on any machine (mulberry32); `NewSeed()` - a fresh 32-bit seed, differ
 | `EntityRenderer` | `view/EntityRenderer` | `new EntityRenderer(camera, level)`; `Reset()` (call on `LEVEL_CREATED`), `Render(heroes: HeroView[], encounter, alpha = 1, seconds = 0)` (each hero where their view was last `Place`d - a fallen one faint, a ghost where they fell, and one who is away as faint; monsters and shots `alpha` of the way through their last step; each spawner as its tile, `Level.SpawnerTile`, or the roster's sprite, red while it shows a hit; each pushable thing as its tile, `Level.PushableTile`, lit along its foot and sliding for `SlideSeconds` of the frames' `seconds` after it's pushed). Draws a glow under the figures for each hero's torch and each glowing shot, and the mage-lights - a glow with a bright core - over them. |
 | `DialogView extends GameComponent` | `view/DialogView` | A talk with an NPC over the play area, in its own `UiLayer`: a `UiDialogue` across the bottom with the NPC's portrait, and once a line with choices has come out in full, a `UiMenu` of them above it. `new DialogView(events: DialogViewEvents)` with `{ next(), choose(index), end() }`, each told a frame after the key press that did it; `Open(line: DialogLine, portrait?: Texture)` (a talk's first line; the portrait drawn as big as the skin's frame takes, by whole pixels), `Say(line)`, `Close()`, `IsOpen`. Its scope (`"dialog"`) takes accept (`onAccept`: the box goes on) and cancel (`end`). `DungeonMain` drives it. |
 | `QuestTracker extends GameComponent` | `view/QuestTracker` | The quests under way and complete in the play area's top-left corner (name, `2/5` or DONE, then its `text`) over a shade, and a `UiToastHost` in the top-right: NEW QUEST as one is given, QUEST COMPLETE as one is met, and QUEST for each under way as a level begins. `Begin(log: QuestLog)` (a level started), `Render(log)` (call each frame; redrawn only when `log.Version` changes). Display-only (`input: false`). |
-| `ShoutView extends GameComponent` | `view/ShoutView` | What the NPCs shout (`story/Shouts`), in speech bubbles over them: the skin's `speech` tooltip pointing at each NPC's sprite (the part the atlas trimmed it to, so at the figure rather than the room over its head), in its own `UiLayer` (`input: false`), kept to the play area. `new ShoutView(level, camera)`; `Begin(talkers, context: DialogContext)` (a level started: one `Shouter` for each NPC whose script has a shout part; pass none for no shouting), `Render(seconds, hearers: ReadonlyArray<Vec2Like>)` (each frame: moves them on, with the centres of the heroes who can hear - a cell's NPC shouts while one is `InEarshot` and the cell `IsCellVisible`), `Hush()` (a talk started). `DungeonMain` drives it, and doesn't `Render` it during a talk. |
+| `ShoutView extends GameComponent` | `view/ShoutView` | What the NPCs shout (`story/Shouts`), in speech bubbles over them: the skin's `speech` tooltip pointing at each NPC's sprite (the part the atlas trimmed it to, so at the figure rather than the room over its head), in its own `UiLayer` (`input: false`), kept to the play area. `new ShoutView(level, camera)`; `Begin(talkers, context: DialogContext)` (a level started: one `Shouter` for each NPC whose script has a shout part; pass none for no shouting), `Render(seconds, hearers: ReadonlyArray<Vec2Like>)` (each frame: moves them on, with the centres of the heroes who can hear - a cell's NPC shouts while one is `InEarshot` and the cell `IsCellVisible`), `Wait(talker: Talker \| null, dots, seconds)` (before each `Render`: the NPC counting up to a talk, if any, and how far - drawn as that many dots in a bubble of its own, fading in over `ShoutFadeIn`; that NPC keeps quiet meanwhile), `Hush()` (a talk started: the shouts and the dots go). `DungeonMain` drives it, and doesn't `Render` it during a talk. |
 | `TilePlacement` | `view/helpers/TilePlacement` | Pure: `TileRect(view: CameraView, cell, z, size, offset): PlacedRect` - where `TileMapView` draws a tile `size` pixels big, `offset` up and left of a cell's corner, on a cell of height `z`, in the camera's root (that height's band's scale and origin). `CameraView = { centre, baseWidth, baseHeight, scale, zoom, currentZ }`, as the `Camera`'s getters give them. |
 | `GlowLayer extends Container` | `view/GlowLayer` | Glows added onto what's beneath them, from a pool of sprites: `Begin()`, `Add(x, y, look, pixelsPerTile)` per glow, `End()`. `CreateGlowTexture()` makes the soft white texture they're drawn with (the caller destroys it). |
 | `Glow` | `view/helpers/Glow` | Pure: `GlowTextureSize`, `GlowRadius` (1.25 tiles), `GlowStrength` (0.3), `GlowFlameY` (0.3 - a lit tile's glow sits this far down its art), `OrbCoreRadius`; `GlowPixels(size)` (premultiplied white, fading like `LightFalloff`), `type GlowLook = { tint, alpha, radius }`, `LookOfGlow(rgb, scale, out)` (the light's colour at full saturation, stronger the brighter it is, swelling a little as it flickers), `LookOfOrbCore(rgb, scale, out)` (small, pale and nearly opaque). |
@@ -2532,7 +2535,22 @@ for a gap, and shouts again only while a hero is still near. A hero coming near 
 
 `@logic-incubator/engine/story/Talk`: `type DialogValue = { script: string }` (a `DIALOG` brush's), `IsDialogValue(value)`,
 `DefaultDialogValue()`; `BumpedNpc(position, direction, isNpc, tileSize): Vec2Like | null` - the NPC's cell a hero at `position` (their box's
-top-left, in pixels) is walking into, pushing `direction` (past 0.3 on an axis), felt 2 pixels beyond their box.
+top-left, in pixels) is walking into, pushing `direction` (past 0.3 on an axis), felt 2 pixels beyond their box. And the wait between walking
+into an NPC and talking, so one walked into by mistake can be walked away from:
+
+```ts
+const TalkDots = 3;                  // dots the bubble counts up to
+const TalkDotSeconds = 1;            // seconds from one dot to the next, and from the last to the talk
+BesideNpc(position, cell, tileSize): boolean   // the hero's box (top-left `position`), grown by half a tile, overlaps the NPC's cell
+SaysAnything(script, context: DialogContext): boolean   // the talk reaches a line said - past actions (not run), through the jumps whose ifs hold
+type DueTalk = Vec2Like & { hero: number };    // a talk to start: which hero, and the NPC's cell
+
+const countdown = new TalkCountdown();
+countdown.Begin(hero, cell): void              // walked into it: one dot - or carries on, if it's this hero's and this NPC's already
+countdown.Update(seconds, beside): DueTalk | null   // each frame of play: the talk once it's due; not beside calls it off
+countdown.Waiting: DueTalk | null, countdown.Dots: number, countdown.Seconds: number   // Dots 1 to TalkDots while it counts, 0 otherwise
+countdown.Cancel(): void
+```
 
 `@logic-incubator/engine/level/entities/Bosses`: `type BossValue = { monster: MonsterType; hitPoints?: number; quest?: string }`,
 `type Boss = Vec2Like & { value: BossValue }`, `IsBossValue(value)` (the only value with a lone `monster`), `DefaultBossValue()` (the roster's

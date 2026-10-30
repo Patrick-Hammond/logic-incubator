@@ -1965,7 +1965,7 @@ a cell can be solid, an NPC's and a pickup all at once (a tile layer still holds
 | `z-index` | number | The cell's **height** ([9.7](#97-heights)), on the height layer. |
 | `pickup` | a `PickupValue` | Turns whatever tile is on top at that cell into a pickup (it disappears when collected), for an item that isn't one by default. Edited with its popup - choose gold, health, a key, a weapon, an item or a light to carry. |
 | `exit` | - | A way out: the first hero to step on it ends the level (`LEVEL_COMPLETED`). It isn't drawn - paint stairs or a ladder there too. A level without one is played until everyone falls. |
-| `dialog` | `{ script }` | An NPC to talk to, painted over their tile: the cell is solid (but casts no shadow), and in a Quest walking into it starts a talk by its `script` ([9.10](#910-npcs-dialogs-and-quests)). In co-op and online the NPC only stands there. |
+| `dialog` | `{ script }` | An NPC to talk to, painted over their tile: the cell is solid (but casts no shadow), and in a Quest walking into it, and staying by them while a speech bubble counts up three dots, starts a talk by its `script` ([9.10](#910-npcs-dialogs-and-quests)). In co-op and online the NPC only stands there. |
 | `boss` | a `BossValue` | One monster where it's painted - `{ monster, hitPoints?, quest? }`: the roster's type, its hit points (left out or 0: its kind's own) and the quest killing it counts for. It sleeps until a hero comes near it ([9.10](#910-npcs-dialogs-and-quests)). |
 | `spawner` | a `SpawnerValue` | A monster spawner where it's painted, set in its popup - the same settings as a spawner tile's (see `spawner` in [9.6](#96-assets-metajson-tile-behaviour-by-sprite-name)). Any sprite can be one: the brush makes the top tile on its cell that isn't floor (a gravestone, a statue, a wall) the spawner, drawn as itself, solid over its sprite's footprint and gone when it's destroyed. On bare floor it's drawn as the roster's `spawnerSprite` instead. Painted on a spawner tile's cell, it sets what that spawner does, rather than adding a second. |
 | `light` | a `LightValue` | A point light on its cell, set in its popup - the same settings as a lit tile's (see `light` in [9.6](#96-assets-metajson-tile-behaviour-by-sprite-name)): a light anywhere, with or without a torch. Painted on a lit tile's cell (a torch), it takes the place of that tile's light rather than adding a second, so it retunes the torch. It goes out with the tile it's on - the lit one, or else the top one that isn't floor - so a light painted on a gem goes when the gem's picked up, and one on a spawner when it's destroyed. On bare floor it's a light on its own, always on. It adds no glow sprite (a torch tile has its own). A brush whose value is missing a field is left out. |
@@ -2137,7 +2137,7 @@ All on `game.dispatcher`; the constants are in `@logic-incubator/engine/Events`:
 | `OBJECT_PUSHED` | `(hero, index, tileX, tileY, sprite)` | A hero pushed something a cell on ([9.5.2](#952-pushing-things)): which, by its place in `Level.pushables`, the cell it's on now, and the sprite it is. |
 | `PICKUP_COLLECTED` | `(hero, tileX, tileY, collected)` | A hero picked up what was on that cell (gold, a key, a weapon...) - once for each cell their sprite reached; `collected` is each thing's `value` and the `sprite` it was drawn as. |
 | `KEYS_DROPPED` | `(hero, tileX, tileY)` | A fallen hero's keys landed on that cell, for the others to pick up. |
-| `NPC_BUMPED` | `(hero, tileX, tileY)` | A hero walked into the NPC on that cell, where they can talk (a Quest); `DungeonMain` starts the talk. |
+| `NPC_BUMPED` | `(hero, tileX, tileY)` | A hero walked into the NPC on that cell, where they can talk (a Quest); `DungeonMain` counts up to the talk in a bubble over the NPC, and starts it if the hero stays by them. |
 | `TALK_STARTED` | `(hero, tileX, tileY)` | A talk began: play holds still until `TALK_ENDED`. A game's own UI should stop taking the keys meanwhile. |
 | `TALK_ENDED` | - | The talk is over, and play goes on. |
 | `TALK_LINE` | - | The talk went on to its next line. |
@@ -2266,11 +2266,14 @@ top-left corner lists it - its name, how far it has got (2/5, or DONE) and its t
 is given and met, and, as the level starts, which are under way from the start. Every change emits `QUEST_UPDATED`.
 
 **NPCs.** Paint the `dialog` brush over an NPC's tile - any sprite: a dwarf standing in a doorway. Its cell becomes solid, and
-walking into it starts a talk by the brush's **script**, typed in its popup. While they talk, play holds still. The talk is a box
+walking into it starts a talk by the brush's **script**, typed in its popup - not at once: a speech bubble over the NPC counts up
+one dot, two, then three, a second apart, and a second after the third the talk starts. A hero who walks away from the NPC
+(half a tile back, or on past them) before then calls it off, so one walked into by mistake can be left be; walking into them
+again starts the dots over. Play goes on while the dots count. While they talk, play holds still. The talk is a box
 across the bottom of the play area, the NPC's tile beside it as their portrait and who's speaking on a plate above it, with the
 player's choices in a menu over it once a line has come out in full. Accept (Space, or a gamepad's A) shows the rest of a line and goes on,
-the arrows and accept pick a choice, and cancel (Escape, B) walks away. A talk starts as the hero walks into the NPC, not again
-while they keep pushing against them.
+the arrows and accept pick a choice, and cancel (Escape, B) walks away. The dots start as the hero walks into the NPC, not again
+while they keep pushing against them. A script whose talk says nothing (one that's all shout part, say) shows no dots.
 
 **Scripts** are read a line at a time ([9.11](#911-quest-scripting-by-example) works through one for each kind of quest):
 
@@ -2645,7 +2648,7 @@ Gold, glorious gold.
 
 Before the quest is given he shouts one of the first three lines as a hero comes within 5 tiles, and another every few seconds
 while they stay. While the hero is looking for the gold he reminds them, and once it's handed in he's happy. A prisoner who only
-calls out is a script that's all shout part: walking into them starts no talk.
+calls out is a script that's all shout part: walking into them starts no talk, and shows no dots.
 
 #### Mistakes to avoid
 

@@ -23,6 +23,7 @@ import type {NetPlay} from "./net/NetPlay";
 import World from "./sim/World";
 import SoundBoard, {HeroSounds, SoundEvents, SoundTable} from "./SoundBoard";
 import DialogRunner, {DialogLine} from "./story/DialogRunner";
+import {BesideNpc, SaysAnything, TalkCountdown} from "./story/Talk";
 import type {EncounterView} from "./Encounter";
 import {Camera} from "./view/Camera";
 import DialogView from "./view/DialogView";
@@ -160,6 +161,8 @@ export class DungeonMain extends GameComponent {
     private dialog: DialogView | undefined;
     /** The talk with an NPC going on - see `StartTalk` - or null. */
     private talk: {runner: DialogRunner; hero: number} | null = null;
+    /** The wait for a talk, between a hero walking into an NPC and it starting - see `OnNpcBumped`. */
+    private readonly countdown = new TalkCountdown();
     private effects: Effects | undefined;
     private shouts: ShoutView | undefined;
     /** The centres of the heroes who hear the NPCs shout - gathered into the same array each frame (see `Hearers`). */
@@ -337,7 +340,7 @@ export class DungeonMain extends GameComponent {
         // The level is over either way: everyone down, or a hero out.
         this.Listen(this.game.dispatcher, ALL_PLAYERS_DIED, this.OnLevelOver);
         this.Listen(this.game.dispatcher, LEVEL_COMPLETED, this.OnLevelOver);
-        this.Listen(this.game.dispatcher, NPC_BUMPED, this.StartTalk);
+        this.Listen(this.game.dispatcher, NPC_BUMPED, this.OnNpcBumped);
         this.Tick(this.OnUpdate);
     }
 
@@ -366,6 +369,7 @@ export class DungeonMain extends GameComponent {
 
     /** Every hero is down, or one got out: hold still, then start over - with whatever level `level` hands back - shortly, or when told to (always, for an online guest, whose host says when). */
     private OnLevelOver(): void {
+        this.countdown.Cancel();
         if (this.options.manualRestart || !this.CanRestart) {
             this.waitingForRestart = true;
         } else {
@@ -380,6 +384,7 @@ export class DungeonMain extends GameComponent {
         const seed = this.options.seed && this.options.seed();
         const net = (this.options.net && this.options.net()) || null;
         this.EndTalk();
+        this.countdown.Cancel();
         this.world.Reset(setup, slots.map(slot => (slot.lightSpell === undefined ? setup.lightSpell : slot.lightSpell || undefined)), seed);
         this.heroSounds = slots.map(slot => slot.sounds || setup.sounds);
         // Talking is for a Quest: one hero, on this machine alone - and so is hearing the NPCs shout.
@@ -500,6 +505,9 @@ export class DungeonMain extends GameComponent {
         if (net) {
             net.Frame(frames);
         }
+        if (this.Running) {
+            this.CountToTalk(seconds);
+        }
         const alpha = this.fixedStep.Alpha;
         this.views.forEach((view, i) => view.Place(alpha, net && net.DrawOffset(i)));
         const entities = (net && net.Entities) || this.world.encounter;
@@ -558,8 +566,46 @@ export class DungeonMain extends GameComponent {
     }
 
     /**
-     * A hero walked into an NPC (`NPC_BUMPED`): the talk starts - play holds still while it goes on - with what its script
-     * says first, unless it says nothing at all. What it hands out goes to that hero.
+     * A hero walked into an NPC (`NPC_BUMPED`): a bubble over the NPC counts up three dots, and if the hero is still by
+     * them then, the talk starts (see `CountToTalk`) - so one walked into by mistake can be walked away from. A script that
+     * says nothing has nothing to wait for: it runs at once, for its actions.
+     */
+    private OnNpcBumped(hero: number, tileX: number, tileY: number): void {
+        const talker = this.level && this.level.TalkerAt(tileX, tileY);
+        const world = this.world;
+        if (!talker || !world || this.talk || this.net) {
+            return;
+        }
+        if (SaysAnything(talker.script, {quests: world.quests, flags: world.flags, Reward: () => undefined})) {
+            this.countdown.Begin(hero, talker);
+        } else {
+            this.StartTalk(hero, tileX, tileY);
+        }
+    }
+
+    /**
+     * Counts on, by `seconds` of play, to the talk a hero walked into an NPC for, and starts it once it's due - unless they've
+     * walked away from the NPC, or fallen, first. The NPC's bubble shows how far it has got.
+     */
+    private CountToTalk(seconds: number): void {
+        const countdown = this.countdown;
+        const waiting = countdown.Waiting;
+        if (waiting) {
+            const hero = this.world.Heroes[waiting.hero];
+            const beside = !!hero && hero.Alive && !hero.Gone && BesideNpc(hero.Position, waiting, TileSize);
+            const due = countdown.Update(seconds, beside);
+            if (due) {
+                this.StartTalk(due.hero, due.x, due.y);
+                return;
+            }
+        }
+        const still = countdown.Waiting;
+        this.shouts.Wait(still && this.level.TalkerAt(still.x, still.y), countdown.Dots, countdown.Seconds);
+    }
+
+    /**
+     * The talk with an NPC starts - play holds still while it goes on - with what its script says first, unless it says
+     * nothing at all. What it hands out goes to that hero.
      */
     private StartTalk(hero: number, tileX: number, tileY: number): void {
         const talker = this.level && this.level.TalkerAt(tileX, tileY);
