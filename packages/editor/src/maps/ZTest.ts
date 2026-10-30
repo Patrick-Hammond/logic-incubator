@@ -1,9 +1,9 @@
-import { Brush, DataBrushName } from "@logic-incubator/engine/level/LevelFormat";
+import { Brush, DataBrushName, HEIGHT_LAYER_ID } from "@logic-incubator/engine/level/LevelFormat";
 import { MapTiles } from "./Generators";
 
 /**
  * A hand-built map for exercising height / scaling without editor painting.
- * One flat walkable grid; height comes from `Z_INDEX` brushes on a data layer
+ * One flat walkable grid; height comes from `Z_INDEX` brushes on the height layer
  * (same as the editor workflow), covering every cell of the raised areas:
  *
  *   low room    x  2..18   h 0   -- player spawns here, door on the right
@@ -15,7 +15,7 @@ import { MapTiles } from "./Generators";
  */
 
 const TILE_LAYER = 0;
-const DATA_LAYER = 999; // any id not used by a tile layer -> parsed as data
+const DATA_LAYER = HEIGHT_LAYER_ID;
 const ROW = 8;
 const STEP_H = [1, 1, 2, 2, 3, 3]; // height for strip columns x = 19..24
 const HIGH_H = 3;

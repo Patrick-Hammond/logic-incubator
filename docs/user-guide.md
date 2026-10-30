@@ -1922,14 +1922,25 @@ A level is JSON that the editor writes and the engine reads (`LevelFile`):
 
 ```jsonc
 {
-  "editorData": { "layers": [ { "id": -99999, "name": "attributes", "isData": true }, { "id": 1, "name": "Layer 1", "isData": false },
+  "version": 2,
+  "editorData": { "layers": [ { "id": -99999, "name": "attributes", "isData": true }, { "id": -99997, "name": "height", "isData": true, "isHeight": true },
+                               { "id": 1, "name": "Layer 1", "isData": false },
                                { "id": -99998, "name": "player", "isData": false, "isPlayer": true }, { "id": 2, "name": "arches", "isData": false } ] },
   "levelData":  { "levelData": [
       { "name": "floor_1", "position": { "x": 3, "y": 2 }, "pixelOffset": { "x": 0, "y": 0 }, "rotation": 0, "scale": { "x": 1, "y": 1 }, "layerId": 1, "data": null },
-      { "name": "player-start", "position": { "x": 1, "y": 1 }, "pixelOffset": { "x": 0, "y": 0 }, "rotation": 0, "scale": { "x": 1, "y": 1 }, "layerId": -99999, "data": null }
+      { "name": "player-start", "position": { "x": 1, "y": 1 }, "pixelOffset": { "x": 0, "y": 0 }, "rotation": 0, "scale": { "x": 1, "y": 1 }, "layerId": -99999, "data": null },
+      { "name": "z-index", "position": { "x": 3, "y": 2 }, "pixelOffset": { "x": 0, "y": 0 }, "rotation": 0, "scale": { "x": 1, "y": 1 }, "layerId": -99997, "data": 2 }
   ] }
 }
 ```
+
+`version` is the format's version (`LevelVersion`, 2 now). A file without one is **version 1**, from before the height layer, and
+is brought up to date as it's opened - by the game (`Level.LoadLevel`) and by the editor (its own save, or a file opened with L) -
+through `MigrateLevelFile`: its heights move to the height layer and the file is version 2 from then on (the editor saves it so).
+Only the version just before the current one is migrated. A file that's older than that, or newer than the code reading it, is
+refused with an error saying which version it is: the game throws, and the editor shows it in an alert and starts empty. So when
+the format moves on again, open each level in the editor (or run it through `MigrateLevelFile`) and save it before the next
+version after that drops the migration.
 
 A **brush** is one placed thing: a tile (`name` is a bare sprite or animation name, `data` null) or a data brush (on a
 data layer). Layers draw in list order, later on top. The **player layer** (`isPlayer`) has no brushes: it marks where the
@@ -1938,13 +1949,15 @@ over them (above, "arches" is drawn over the heroes as they walk beneath). A lev
 ([9.10](#910-npcs-dialogs-and-quests)); a level without it has none. The engine reads only what `LevelFormat.ts` types; the
 editor saves more of its own state alongside.
 
-There are exactly eight **data brushes**, painted on the one `attributes` data layer:
+There are exactly eight **data brushes**. The height (`z-index`) is painted on the **height** layer (`isHeight`, id -99997), at
+most one a cell and none where it's 0; the other seven on the one `attributes` data layer, which holds **one of each** on a cell -
+a cell can be solid, an NPC's and a pickup all at once (a tile layer still holds one tile a cell):
 
 | Name | `data` | Effect |
 | --- | --- | --- |
 | `player-start` | - | Where the heroes start (required: a level without one throws "Player start position is not defined"); a party spreads onto the open floor nearest it. |
 | `collision` | - | Marks a cell solid, in addition to whatever tiles there declare. |
-| `z-index` | number | The cell's **height** ([9.7](#97-heights)). |
+| `z-index` | number | The cell's **height** ([9.7](#97-heights)), on the height layer. |
 | `pickup` | a `PickupValue` | Turns whatever tile is on top at that cell into a pickup (it disappears when collected), for an item that isn't one by default. Edited with its popup - choose gold, health, a key, a weapon, an item or a light to carry. |
 | `exit` | - | A way out: the first hero to step on it ends the level (`LEVEL_COMPLETED`). It isn't drawn - paint stairs or a ladder there too. A level without one is played until everyone falls. |
 | `dialog` | `{ script }` | An NPC to talk to, painted over their tile: the cell is solid (but casts no shadow), and in a Quest walking into it starts a talk by its `script` ([9.10](#910-npcs-dialogs-and-quests)). In co-op and online the NPC only stands there. |
@@ -2030,7 +2043,8 @@ with a bright core.
 
 ### 9.7 Heights
 
-The `z-index` data brush paints an integer height per cell. Height is **visual only** - movement and collision stay on one
+The height layer holds an integer height per cell (a `z-index` brush; a cell without one is at 0), painted in the editor with
+the height, raise and lower brushes ([10.3](#103-layers-data-brushes-and-palette-categories)). Height is **visual only** - movement and collision stay on one
 flat grid (a step of more than one height is blocked, and nothing is picked up across one) - but it drives a distinctive look: tiles are drawn in bands by
 height, the band the hero stands on is always 1:1 (with a party, the first hero still standing), bands above are larger
 and bands below recede and fade, and the camera zooms a little as they climb. Tunables are in `engine/level/Depth.ts`.
@@ -2294,12 +2308,12 @@ can be; [Mistakes to avoid](#mistakes-to-avoid) at the end covers what trips a s
 
 1. **Add the quest first.** Press Q, then Add quest: its name, its id (what scripts call it - `hoard`), and its goal. The
    pickup, boss and dialog popups only offer the level's quests, and a script that names one the level hasn't got won't save.
-2. **Mark what counts for it.** For a collect quest, select the attributes layer, pick the Attributes tool (A) and click each
-   pickup, then choose the quest under *Counts for quest*. A tile that isn't a pickup by default needs a `pickup` brush over
-   it first. For a boss, pick the `boss` brush on the Data tab, press E to choose its monster and *Killing it counts for
+2. **Mark what counts for it.** For a collect quest, select the attributes layer, pick the Attributes tool (A), click each
+   pickup and press Edit on its row in the cell inspector, then choose the quest under *Counts for quest*. A tile that isn't a
+   pickup by default needs a `pickup` brush over it first. For a boss, pick the `boss` brush on the Attributes tab, press E to choose its monster and *Killing it counts for
    quest*, and paint it where it should wait. A script goal, and a kill goal of any monster of a type, need nothing marked.
 3. **Paint the NPC.** Put their sprite (a dwarf, from the Entities tab) on a tile layer, then paint the `dialog` brush over
-   the same cell on the attributes layer. Press E with the brush selected, or click a placed one with A, to type its script.
+   the same cell on the attributes layer. Press E with the brush selected, or click a placed one with A and press Edit on its row, to type its script.
    Save waits until every line reads, and the footer names the first that doesn't.
 4. **Play it** with Enter. The quests start over each time the level does.
 
@@ -2613,13 +2627,16 @@ its icons then):
 // src/editor/Editor.ts - only the dev build's entry point imports this
 import { DungeonEditor, ResumeEditorScene } from "@logic-incubator/editor/DungeonEditor";
 import { EditorBundle } from "@logic-incubator/editor/EditorAssets";
-import { LoadSavedLevel } from "@logic-incubator/editor/SavedLevel";
+import { LoadSavedLevel, OpenEditorSave } from "@logic-incubator/editor/SavedLevel";
 
 // GameEditor is the game's own little interface (see in-dungeons-we-dwell's Dungeon.ts): what its boot code needs of the editor.
 export const Editor: GameEditor = {
     bundles: [EditorBundle],                              // loaded before create()
     create: () => new DungeonEditor(EditorSetup),
-    savedLevel: LoadSavedLevel,                           // the editor's latest save, if any
+    savedLevel: () => {                                   // the editor's latest save, if any - and if this build can open it
+        const saved = LoadSavedLevel();                   // (a newer version's is passed over for the shipped level; 9.5)
+        return saved && OpenEditorSave(saved).save;
+    },
     startScene: ResumeEditorScene,                        // optional: come back up in the editor after the sprite editor's reload (10.6)
 };
 ```
@@ -2663,11 +2680,11 @@ vertical **toolbar** of tools at the far right. Each palette tab ends in a **+**
 | Key | Tool | What it does |
 | --- | --- | --- |
 | `B` | Brush | Left paints; right erases; Ctrl+drag paints a filled rectangle. Picking a brush in the palette (even the one already picked) switches to the Brush from Erase, Attributes, Dropper or Move; Stamp and Fill paint with it too, so they stay. |
-| `X` | Erase | Erases from the selected layer; Ctrl+drag a rectangle. |
-| `A` | Attributes (data select) | Click a placed light, spawner, pickup, door, height, dialog or boss - any cell of its sprite (or a spawner brush's footprint), not just the top-left - to edit its value in a dialog. Only offered while a data layer (the attributes layer) is selected; its button is hidden, and the key does nothing, with a tile layer selected. Selecting the attributes layer switches to it. |
+| `X` | Erase | Erases from the selected layer; Ctrl+drag a rectangle. On attributes it takes only the active type ([10.3](#103-layers-data-brushes-and-palette-categories)), or with All picked whatever was painted last; on the height layer it flattens to 0. |
+| `A` | Attributes (inspect) | Hover a cell to see what's on it beside the cursor; click it to open the **cell inspector** - everything on the cell, with Edit and Delete for each ([10.3](#103-layers-data-brushes-and-palette-categories)). Only offered while a data layer (attributes or height) is selected; its button is hidden, and the key does nothing, with a tile layer selected. Selecting the attributes layer switches to it. |
 | `U` | Stamp | Drag a rectangle of the brush; hold Ctrl for just the border; right-drag erases a rectangle. Esc cancels. |
-| `I` | Dropper | Click a tile to paint with it (on the attributes layer, a data brush with its value). |
-| `G` | Fill | Flood-fills matching cells on the selected layer, up to the edge of the view. |
+| `I` | Dropper | Click a tile to paint with it (on the attributes layer, a data brush with its value - the active type's, if the cell has one; on the height layer, the cell's height). |
+| `G` | Fill | Flood-fills matching cells on the selected layer, up to the edge of the view (on attributes, by whether a cell has the active type; on the height layer, cells of the same height). |
 | `M` | Move | Drag to pan. Middle-drag or Space+drag pans with any tool. |
 
 **Keyboard**
@@ -2682,7 +2699,7 @@ vertical **toolbar** of tools at the far right. Each palette tab ends in a **+**
 | `Ctrl+Q` | Clear the map (asks first). |
 | `H` / `V` / `R` | Flip the brush horizontally / vertically / rotate it. |
 | Arrow keys | Nudge the brush's pixel offset. |
-| `+` / `-` (numpad) | Raise / lower the data brush's value (a height, for `z-index`). |
+| `+` / `-` (numpad) | Raise / lower the data brush's value (the height brush's height, on the height layer). |
 | `Shift+D` | Duplicate the selected layer. |
 | `T` | Preview the game's title screen (if `titleScene` is set). |
 | `1`-`7` | Generate a map (digger, rogue, uniform, divided maze, eller maze, icey maze, cellular) in your tiles. |
@@ -2692,8 +2709,8 @@ vertical **toolbar** of tools at the far right. Each palette tab ends in a **+**
 
 - **The palette is split into tabs by category**: **Floor** (floor tiles, edges, pits and stairs), **Walls** (walls, doors and
   columns), **Entities** (monsters and characters, and the spawner marker), **Weapons**, **Items** (pickups, gold, chests,
-  potions), **Misc** (everything else - torches, levers, hearts, loose props) and **User** (content your users add). A data
-  layer shows the **Data** tab instead.
+  potions), **Misc** (everything else - torches, levers, hearts, loose props) and **User** (content your users add). The
+  attributes layer shows the **Attributes** tab instead, and the height layer the **Height** tab.
   Each sprite's tab is its `category` in `assets-meta.json` ([9.6](#96-assets-metajson-tile-behaviour-by-sprite-name)); a sprite
   without one is under Misc, so a new sprite is findable at once and you sort it later. Inside a tab the sprites are in name order,
   which keeps an animation (`wall_fountain_mid_red_anim`) next to the tiles it goes with. Empty tabs stay (the User tab starts
@@ -2708,26 +2725,48 @@ vertical **toolbar** of tools at the far right. Each palette tab ends in a **+**
   be selected, hidden, renamed or removed; move it with the arrows on its own row (each step moves it past one tile layer), or move a
   tile layer past it with the panel's arrows. Every level has one: a new level starts with it last, and an older level gets it last when
   opened, which draws everything under the figures, as before. A layer added while it's last goes in just above it.
-- Every level has a **floor** and a **walls** layer as well as attributes and the player row (a new level starts with just those four, and an
+- Every level has a **floor** and a **walls** layer as well as attributes, height and the player row (a new level starts with just those five, and an
   older level gets an empty one of each when opened). A floor layer shows only the **Floor** tab and paints only `floor`
   tiles; a walls layer likewise only **Walls**. Any other tile layer shows every tab but those two. The **+** in the layer
   panel asks whether the new layer is generic, floor or walls. The last floor layer and the last walls layer can't be removed.
 - Each layer remembers its own tool and tile: switch from the floor layer to the walls layer and back, and the floor tile and
   tool you were using are picked again (saved with the level). A layer you haven't used yet starts with no brush. The
-  attributes layer is the exception for the tool: it always opens on the Attributes tool, ready to edit what's placed, with
-  its data brush still picked, so `B` (or clicking the brush in the palette) paints with it again.
-- The one **attributes** layer is always present. Player start, collision, z-index, pickups, exits, NPCs' dialogs, bosses and spawners are painted on it, and it also
-  draws a read-only overlay of what the game *derives* from tiles' metadata (collision, door footprints, lights,
-  spawners) so a cell's whole picture - hand-placed and intrinsic - is in one place. A painted spawner is a square on its own
-  cell, with the footprint it makes solid outlined: the sprite it turns into a spawner, or the roster's spawner sprite.
-- Painting a torch or a spawner **tile** is enough; its light or spawner values come from `assets-meta.json`. Use the
-  Attributes tool to override them for one placement.
+  attributes layer is the exception for the tool: it always opens on the Attributes tool, ready to inspect what's placed, with
+  its data brush still picked, so `B` (or clicking the brush in the palette) paints with it again. The height layer opens on the
+  Brush with the height brush the first time.
+- The one **attributes** layer is always present. Player start, collision, pickups, exits, NPCs' dialogs, bosses and spawners are
+  painted on it, one of each on a cell, and it also draws a read-only overlay of what the game *derives* from tiles' metadata
+  (collision, door footprints, lights, spawners) so a cell's whole picture - hand-placed and intrinsic - is in one place. A painted
+  spawner is a square on its own cell, with the footprint it makes solid outlined: the sprite it turns into a spawner, or the
+  roster's spawner sprite.
+- **The attribute type.** The Attributes tab is a type selector: the type picked is the **active type**. Painting adds or replaces
+  only that type on a cell, leaving the others there; erasing and filling touch only it; and the dropper picks it first. On the
+  map the active type is drawn in full and every other type shrinks to a small **pip** - a coloured square always in the same
+  place on the cell for the same type (four along the top, the rest along the bottom), so you can tell them apart by place as
+  well as colour. The tab's first chip, **All**, picks no type: every type is drawn in full, nothing is painted, and erasing takes
+  whatever was painted last on the cell.
+- **The height layer** is always present too, under attributes in the list. Its tab has three brushes: **height N** paints that
+  height (`+`/`-` change N; Edit or `E` types it), **raise** and **lower** step each cell they cover up or down by one - once a
+  stroke, however long you hold on it - for shaping slopes. Erase flattens to 0, Fill fills a run of cells of the same height,
+  Ctrl+drag and Stamp set a rectangle, and the dropper picks a cell's height. Heights run from -999 to 999. On the map the
+  heights are a **heatmap** - greens low through reds high, blues below 0, nothing at 0 - strong, with each cell's number and a
+  red line on every edge too steep to step over (more than one height apart), while the height layer is selected, and faint
+  under the other layers, so you can see the ground's shape while painting attributes or tiles (hide the height layer with its
+  eye to drop it).
+- **The cell inspector.** With the Attributes tool (`A`), on attributes or height, hovering a cell lists what's on it beside
+  the cursor (`pickup · collision · height 3`), and clicking it opens a panel beside the cell with everything there: each
+  attribute painted on it, each tile's own light, spawner, pickup or door lock covering it (from any cell of its sprite), and
+  its height. Each row has **Edit** (its value's popup) and **Delete**; a tile's own value has no Delete (erase the tile), and
+  deleting the height flattens the cell. The active type's row is marked. Each Edit or Delete is one undo step. Close it with
+  its ×, Esc, a click on the same cell or on an empty one, or by selecting a tile layer.
+- Painting a torch or a spawner **tile** is enough; its light or spawner values come from `assets-meta.json`. Use Edit on its
+  row in the cell inspector to override them for one placement.
 - Or paint a **spawner** brush over any sprite - a gravestone, a statue - to make that sprite the spawner: it's drawn as
   itself, its footprint is solid, and it's gone once destroyed. Floor never becomes one: on bare floor the brush is drawn as the
   roster's spawner sprite. Its popup (Edit, or `E`, with the brush picked) has the same settings as a spawner tile's, and the
-  Attributes tool edits one already placed. Painted over a spawner tile, it sets what that spawner does.
-- A `dialog` brush's popup is a box for its NPC's **script** (Edit, or `E`, with the brush picked; or click a placed one with
-  the Attributes tool), read as you type: the footer names the first line that doesn't
+  cell inspector edits one already placed. Painted over a spawner tile, it sets what that spawner does.
+- A `dialog` brush's popup is a box for its NPC's **script** (Edit, or `E`, with the brush picked; or Edit on its row in the
+  cell inspector), read as you type: the footer names the first line that doesn't
   read (and how many more), and Save waits until it does. A `boss`'s popup picks its monster from the roster's pictures, its hit
   points and its quest; a pickup's has a quest too. Each offers None and the level's quests, so make the quests (Q) first. On the
   map a dialog is tagged D, a boss B, and a pickup or boss that counts for a quest has a Q after its tag (G10Q).

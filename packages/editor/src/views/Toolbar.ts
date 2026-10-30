@@ -27,7 +27,7 @@ const TOOLS: ToolInfo[] = [
         name: "Data select",
         key: Key.A,
         keyLabel: "A",
-        hint: "Click a placed light, spawner, pickup, door, height, dialog or boss - any cell of it - to edit its value. Only available with the attributes layer selected, and selecting that layer switches to this."
+        hint: "Click a cell to inspect everything on it - its attributes, its tiles' lights, spawners, pickups and doors, and its height - and edit or delete each. Only available with the attributes or height layer selected; selecting attributes switches to this."
     },
     {
         tool: EditorTool.STAMP,
@@ -43,7 +43,7 @@ const TOOLS: ToolInfo[] = [
         name: "Dropper",
         key: Key.I,
         keyLabel: "I",
-        hint: "Click a tile to paint with it (on a data layer, a data brush - with its value)."
+        hint: "Click a tile to paint with it (on attributes, a data brush with its value - the active type's first; on the height layer, the cell's height)."
     },
     {
         tool: EditorTool.FILL,

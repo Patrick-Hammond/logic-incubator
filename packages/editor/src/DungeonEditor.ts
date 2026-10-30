@@ -2,7 +2,7 @@ import { LEVEL_CREATED } from "@logic-incubator/engine/Events";
 import { Scenes } from "@logic-incubator/engine/Constants";
 import EditorComponent from "./EditorComponent";
 import { IStyler } from "./maps/Styler";
-import { LoadSavedLevel } from "./SavedLevel";
+import { LoadSavedLevel, OpenEditorSave } from "./SavedLevel";
 import { PeekRecovery, TakeRecovery } from "./sprite/Recovery";
 import { PeekResumeNote, TakeResumeNote } from "./sprite/Resume";
 import { BrowserStorage } from "./sprite/SpriteEditor";
@@ -11,6 +11,7 @@ import { RemoveInjectedStyles } from "./ui/dom/Dom";
 import EditorOverlay from "./ui/dom/EditorOverlay";
 import BrushTool from "./views/Brush";
 import Canvas from "./views/Canvas";
+import CellInspector from "./views/CellInspector";
 import Keyboard from "./views/Keyboard";
 import Layers from "./views/layers/Layers";
 import Menu from "./views/Menu";
@@ -67,6 +68,7 @@ export class DungeonEditor extends EditorComponent {
         this.Attach(new Layers());
         this.Attach(new SelectedBrush(this.options.dataBrushIcons));
         this.Attach(new Toolbar());
+        this.Attach(new CellInspector());
         this.Attach(new Keyboard(this.options.titleScene, this.options.mapStyle));
         this.Attach(new Menu(this.options.titleScene));
 
@@ -74,11 +76,14 @@ export class DungeonEditor extends EditorComponent {
         // off until it's shown - see `OnShow`.
         EditorOverlay.inst.SetVisible(false);
 
-        // load local saved map
+        // load local saved map - brought up to date if it's from the version before
         const saved = LoadSavedLevel();
-        if (saved) {
-            this.editorStore.Load(saved.editorData);
-            this.levelDataStore.Load(saved.levelData);
+        const opened = saved && OpenEditorSave(saved);
+        if (opened && opened.save) {
+            this.editorStore.Load(opened.save.editorData);
+            this.levelDataStore.Load(opened.save.levelData);
+        } else if (opened) {
+            alert("The level saved in this browser can't be opened, so the editor starts on a blank map. " + opened.error);
         }
     }
 

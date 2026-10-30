@@ -2,20 +2,32 @@ import {Container, SCALE_MODES} from "pixi.js";
 import AssetFactory from "@logic-incubator/lib/loading/AssetFactory";
 import { AnimationSpeed } from "@logic-incubator/engine/Constants";
 import AssetMetadataStore, { AssetCategory } from "@logic-incubator/engine/level/AssetMetadata";
-import { TileLayerKind } from "@logic-incubator/engine/level/LevelFormat";
+import { DataBrushName, TileLayerKind } from "@logic-incubator/engine/level/LevelFormat";
 import EditorComponent from "../EditorComponent";
 import { EditorIcon } from "../EditorAssets";
-import { DataBrushIcon, DataBrushIcons, EditorActions, EditorTool, IEditorState, PaintsWithBrush } from "../stores/EditorStore";
+import {
+    DataBrush,
+    DataBrushEditorIcon,
+    DataBrushIcon,
+    DataBrushIcons,
+    DataBrushLabel,
+    EditorActions,
+    EditorTool,
+    IEditorState,
+    IsHeightLayer,
+    PaintsWithBrush
+} from "../stores/EditorStore";
 import { ButtonEl, El, InjectStyles } from "../ui/dom/Dom";
 import EditorOverlay from "../ui/dom/EditorOverlay";
-import SpriteCanvas from "../ui/dom/SpriteCanvas";
+import SpriteCanvas, { DATA_SWATCH_SIZE } from "../ui/dom/SpriteCanvas";
 import { EmptyTabHint, GroupByCategory, ShowsCategory } from "./PaletteCategories";
+import { PipRect } from "../tools/ToolGeometry";
 
 /** A tab and its own scrolling page (so each keeps its scroll position). `category`: a tile set's, not the data page's. */
 type Page = { tab: HTMLButtonElement; body: HTMLElement; animated: SpriteCanvas[]; category?: AssetCategory };
 
-/** What the selected layer can be painted with. */
-type Mode = "tiles" | "data";
+/** What the selected layer can be painted with: tiles, the attribute types, or heights. */
+type Mode = "tiles" | "attributes" | "height";
 
 /** Tile thumbnails are drawn at 2x, as the Pixi palette did. */
 const TILE_SCALE = 2;
@@ -24,16 +36,22 @@ const SWATCH_SCALE = 4;
 
 /**
  * The brush picker: a tab per category (Floor, Walls, Entities, Weapons, Items, Misc, User) over a
- * scrolling grid of that category's tile brushes, or the data brushes when a data layer is selected. Only
- * the tabs the selected layer takes are shown: just Floor on a floor layer, just Walls on a walls layer, and
- * all but those two on any other tile layer (see `ShowsCategory`). A sprite's category is set in the game's
- * assets-meta.json (see `AssetCategories`); one with none is under Misc.
+ * scrolling grid of that category's tile brushes - or, with "attributes" selected, its types, and with the
+ * height layer, its brushes. Only the tabs the selected layer takes are shown: just Floor on a floor layer,
+ * just Walls on a walls layer, and all but those two on any other tile layer (see `ShowsCategory`). A sprite's
+ * category is set in the game's assets-meta.json (see `AssetCategories`); one with none is under Misc.
  * Hovering a brush previews it in `SelectedBrush`; clicking picks it.
+ *
+ * The attribute types are the attributes layer's type selector: the one picked is the active type (see
+ * `ActiveAttributeType`), and All - no type - draws them all in full again.
  */
 export default class Palette extends EditorComponent {
     private tabs: HTMLElement;
     private tileSetPages: Page[] = [];
     private dataPage: Page;
+    private heightPage: Page;
+    /** The height brush's chip label, which shows the height it paints. */
+    private heightLabel: HTMLElement = null;
     private activeTileSet = 0;
     private mode: Mode = null;
     /** The selected tile layer's kind, which picks the tile tabs shown (see `ShowsCategory`). */
@@ -89,16 +107,23 @@ export default class Palette extends EditorComponent {
         });
 
         const dataBrushes = this.editorStore.state.dataBrushes;
-        this.dataPage = this.AddPage(panel, "Data", dataBrushes.length);
+        const attributes = dataBrushes.filter(db => !db.height);
+        this.dataPage = this.AddPage(panel, "Attributes", attributes.length);
+        this.dataPage.body.appendChild(
+            El("div", "pl-hint", "Pick a type to paint, erase and fill only that type; the others shrink to pips. With A, click a cell to see everything on it.")
+        );
         const chips = this.dataPage.body.appendChild(El("div", "pl-chips"));
-        dataBrushes.forEach(dataBrush => {
-            const chip = ButtonEl("pl-chip", undefined, dataBrush.name);
-            const swatch = new SpriteCanvas();
-            const iconName = DataBrushIcon(this.icons, dataBrush.name);
-            swatch.ShowSwatch(dataBrush.colour, iconName ? this.assetFactory.CreateTexture(iconName) : null, SWATCH_SCALE);
-            chip.append(swatch.canvas, El("span", "pl-chip-label", dataBrush.name));
-            chips.appendChild(this.AddBrushEvents(chip, dataBrush.name));
-        });
+        chips.appendChild(this.AllTypesChip(attributes));
+        attributes.forEach(dataBrush => chips.appendChild(this.DataChip(dataBrush)));
+
+        const heights = dataBrushes.filter(db => db.height);
+        this.heightPage = this.AddPage(panel, "Height", heights.length);
+        this.heightPage.body.appendChild(
+            El("div", "pl-hint", "Height paints its number (+/- to change it); raise and lower step each cell by one. Erase flattens to 0; the dropper picks a cell's height.")
+        );
+        const heightChips = this.heightPage.body.appendChild(El("div", "pl-chips"));
+        heights.forEach(dataBrush => heightChips.appendChild(this.DataChip(dataBrush)));
+        this.ShowHeightValue();
 
         this.Own(this.editorStore.Subscribe(this.Render, this));
         this.Tick(this.Animate);
@@ -110,6 +135,67 @@ export default class Palette extends EditorComponent {
         if (prevState.currentBrush.name !== state.currentBrush.name) {
             this.Highlight(state.currentBrush.name);
             this.ShowTabOf(state.currentBrush.name);
+        }
+        if (prevState.dataBrushes !== state.dataBrushes) {
+            this.ShowHeightValue();
+        }
+    }
+
+    /** A data brush's chip: its swatch - the game's sprite over its colour, or the editor's arrow for raise and lower - and its name. */
+    private DataChip(dataBrush: DataBrush): HTMLElement {
+        const label = DataBrushLabel(dataBrush.name);
+        const chip = ButtonEl("pl-chip", undefined, label);
+        const swatch = new SpriteCanvas();
+        const iconName = DataBrushIcon(this.icons, dataBrush.name);
+        const editorIcon = DataBrushEditorIcon(dataBrush.name);
+        const icon = iconName ? this.assetFactory.CreateTexture(iconName) : editorIcon ? this.game.assets.Texture(EditorIcon(editorIcon)) : null;
+        swatch.ShowSwatch(dataBrush.colour, icon, SWATCH_SCALE);
+        const text = El("span", "pl-chip-label", label);
+        if (dataBrush.name === DataBrushName.Z_INDEX) {
+            this.heightLabel = text;
+        }
+        chip.append(swatch.canvas, text);
+        return this.AddBrushEvents(chip, dataBrush.name);
+    }
+
+    /**
+     * All: no type picked, so every type is drawn in full and erasing takes whatever was painted last - and the data arrow, as
+     * there's nothing to paint with. Its swatch is every type's pip, where each sits on the map (see `Canvas`).
+     */
+    private AllTypesChip(attributes: DataBrush[]): HTMLElement {
+        const chip = ButtonEl("pl-chip", undefined, "Every type in full; erase takes the last painted");
+        const canvas = document.createElement("canvas");
+        const size = DATA_SWATCH_SIZE * SWATCH_SCALE;
+        canvas.width = canvas.height = size;
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+            ctx.fillStyle = "rgba(255, 255, 255, 0.08)";
+            ctx.fillRect(0, 0, size, size);
+            attributes.forEach((dataBrush, slot) => {
+                const pip = PipRect(slot, size);
+                ctx.fillStyle = "#" + ("00000" + dataBrush.colour.toString(16)).slice(-6);
+                ctx.fillRect(pip.x, pip.y, pip.size, pip.size);
+            });
+        }
+        chip.append(canvas, El("span", "pl-chip-label", "all"));
+        chip.addEventListener("pointerenter", () => this.editorStore.Dispatch({ type: EditorActions.BRUSH_HOVERED, data: { name: "" } }));
+        chip.addEventListener("click", () => {
+            if (this.editorStore.state.currentBrush.name !== "") {
+                this.editorStore.Dispatch({ type: EditorActions.BRUSH_CHANGED, data: { name: "" } });
+            }
+            if (this.editorStore.state.tool !== EditorTool.DATA_SELECT) {
+                this.editorStore.Dispatch({ type: EditorActions.SET_TOOL, data: { tool: EditorTool.DATA_SELECT } });
+            }
+        });
+        this.items[""] = chip;
+        return chip;
+    }
+
+    /** The height brush's label says what it paints: "height 2". */
+    private ShowHeightValue(): void {
+        const height = this.editorStore.state.dataBrushes.find(db => db.name === DataBrushName.Z_INDEX);
+        if (this.heightLabel && height) {
+            this.heightLabel.textContent = `height ${height.value}`;
         }
     }
 
@@ -127,7 +213,7 @@ export default class Palette extends EditorComponent {
         if (!layer) {
             return;
         }
-        const mode: Mode = layer.isData ? "data" : "tiles";
+        const mode: Mode = !layer.isData ? "tiles" : IsHeightLayer(layer) ? "height" : "attributes";
         const kind = layer.isData ? undefined : layer.kind;
         if (mode !== this.mode || kind !== this.kind) {
             this.mode = mode;
@@ -147,8 +233,8 @@ export default class Palette extends EditorComponent {
     /** Shows the tabs that apply to the selected layer, and the active one's page. */
     private ShowPages(): void {
         const active = this.ActivePage();
-        const inMode = this.mode === "tiles" ? this.tileSetPages.filter(page => this.IsTabShown(page)) : [this.dataPage];
-        this.tileSetPages.concat(this.dataPage).forEach(page => {
+        const inMode = this.mode === "tiles" ? this.tileSetPages.filter(page => this.IsTabShown(page)) : [this.ActivePage()];
+        this.tileSetPages.concat(this.dataPage, this.heightPage).forEach(page => {
             page.tab.style.display = inMode.indexOf(page) > -1 ? "" : "none";
             page.tab.setAttribute("aria-selected", String(page === active));
             page.body.style.display = page === active ? "" : "none";
@@ -159,8 +245,10 @@ export default class Palette extends EditorComponent {
         switch (this.mode) {
             case "tiles":
                 return this.tileSetPages[this.activeTileSet] || null;
-            case "data":
+            case "attributes":
                 return this.dataPage;
+            case "height":
+                return this.heightPage;
             default:
                 return null;
         }
@@ -287,6 +375,7 @@ const STYLES = `
     background: var(--ed-well); border: 1px solid transparent; border-radius: 3px; cursor: pointer;
 }
 .pl-chips { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.pl-hint { padding: 0 2px 8px; color: var(--ed-faint); font-size: 11px; line-height: 1.35; }
 .pl-chip {
     display: flex; flex-direction: column; align-items: center; gap: 5px; min-width: 0; padding: 6px 2px 5px;
     background: var(--ed-well); color: var(--ed-chip-text); border: 1px solid var(--ed-divider); border-radius: 5px;

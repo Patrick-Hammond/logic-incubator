@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BoundsOfCells, FloodFill, FootprintReach, RectCells, SpanRect, TopmostBrushAt, TopmostBrushCovering } from "./ToolGeometry";
+import { BoundsOfCells, FloodFill, FootprintReach, PipRect, RectCells, SpanRect, TopmostBrushAt, TopmostBrushCovering } from "./ToolGeometry";
 
 const key = (cells: { x: number; y: number }[]) => cells.map(c => `${c.x},${c.y}`).sort();
 
@@ -160,5 +160,16 @@ describe("BoundsOfCells", () => {
 
     it("is empty for none", () => {
         expect(BoundsOfCells([])).toEqual({ x: 0, y: 0, width: 0, height: 0 });
+    });
+});
+
+describe("PipRect", () => {
+    it("puts four pips along a cell's top and the rest along its bottom, a quarter of it each, inside their own quarters", () => {
+        const size = 32;
+        const pips = [0, 1, 2, 3, 4, 5, 6].map(slot => PipRect(slot, size));
+        expect(pips.map(p => `${p.x},${p.y}`)).toEqual(["1,1", "9,1", "17,1", "25,1", "1,25", "9,25", "17,25"]);
+        pips.forEach(p => expect(p.size).toBe(6));
+        // Never nothing, however far the view's zoomed out.
+        expect(PipRect(0, 2).size).toBe(1);
     });
 });

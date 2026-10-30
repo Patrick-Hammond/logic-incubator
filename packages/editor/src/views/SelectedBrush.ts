@@ -2,17 +2,23 @@ import { Key } from "@logic-incubator/lib/io/Keyboard";
 import AssetFactory from "@logic-incubator/lib/loading/AssetFactory";
 import AssetMetadataStore from "@logic-incubator/engine/level/AssetMetadata";
 import { AnimationSpeed } from "@logic-incubator/engine/Constants";
-import { IsBossValue } from "@logic-incubator/engine/level/entities/Bosses";
-import { IsPickupValue } from "@logic-incubator/engine/level/entities/Pickups";
-import { IsSpawnerValue } from "@logic-incubator/engine/level/entities/Spawners";
-import { IsLightValue } from "@logic-incubator/engine/level/Lighting";
-import { DataBrushValue } from "@logic-incubator/engine/level/LevelFormat";
-import { IsDialogValue } from "@logic-incubator/engine/story/Talk";
-import { DescribeBoss, DescribeDialog, DescribePickup } from "../DataLabels";
+import { DataBrushName, DataBrushValue } from "@logic-incubator/engine/level/LevelFormat";
+import { DescribeDataValue } from "../DataLabels";
 import { OpenDataBrushDialog } from "../DataBrushDialog";
 import { DataBrushEditorFor } from "../DataBrushEditors";
 import EditorComponent from "../EditorComponent";
-import { DataBrushIcon, DataBrushIcons, EditorActions, IEditorState } from "../stores/EditorStore";
+import { EditorIcon } from "../EditorAssets";
+import {
+    DataBrushEditorIcon,
+    DataBrushIcon,
+    DataBrushIcons,
+    DataBrushLabel,
+    EditorActions,
+    IEditorState,
+    IsHeightLayer,
+    LOWER_BRUSH,
+    RAISE_BRUSH
+} from "../stores/EditorStore";
 import { ButtonEl, El, InjectStyles } from "../ui/dom/Dom";
 import EditorOverlay from "../ui/dom/EditorOverlay";
 import SpriteCanvas, { DATA_SWATCH_SIZE } from "../ui/dom/SpriteCanvas";
@@ -107,16 +113,23 @@ export default class SelectedBrush extends EditorComponent {
 
     private ShowBrush(name: string): void {
         this.shownName = name;
-        this.nameText.textContent = name || "No brush";
+        const dataBrush = this.editorStore.state.dataBrushes.find(db => db.name === name);
+        const layer = this.editorStore.SelectedLayer;
+        // No brush on "attributes" is its All: every type drawn in full.
+        const allTypes = !name && layer != null && layer.isData && !IsHeightLayer(layer);
+        this.nameText.textContent = dataBrush ? DataBrushLabel(name) : allTypes ? "All types" : name || "No brush";
         this.nameText.title = name;
 
-        const dataBrush = this.editorStore.state.dataBrushes.find(db => db.name === name);
         const known = this.assetFactory.Has(name);
         if (dataBrush) {
             const iconName = DataBrushIcon(this.icons, dataBrush.name);
-            const icon = iconName ? this.assetFactory.CreateTexture(iconName) : null;
+            const editorIcon = DataBrushEditorIcon(dataBrush.name);
+            const icon = iconName ? this.assetFactory.CreateTexture(iconName) : editorIcon ? this.game.assets.Texture(EditorIcon(editorIcon)) : null;
             this.preview.ShowSwatch(dataBrush.colour, icon, PREVIEW_SIZE / DATA_SWATCH_SIZE);
-            this.kindText.textContent = "Data brush";
+            this.kindText.textContent = HeightBrushKind(name) || "Data brush";
+        } else if (allTypes) {
+            this.preview.Clear();
+            this.kindText.textContent = "Every type in full; pick one to paint";
         } else if (name && known) {
             const frames = this.assetFactory.CreateTextures(name);
             this.preview.ShowFitted(frames, PREVIEW_SIZE);
@@ -166,23 +179,7 @@ export default class SelectedBrush extends EditorComponent {
     }
 
     private DescribeValue(value: DataBrushValue): { text: string; colour?: number } {
-        if (IsPickupValue(value)) {
-            return { text: DescribePickup(value) };
-        }
-        if (IsDialogValue(value)) {
-            return { text: DescribeDialog(value.script) };
-        }
-        if (IsBossValue(value)) {
-            return { text: DescribeBoss(value) };
-        }
-        if (IsLightValue(value)) {
-            return { text: `${value.brightness} bright · ${value.range} tiles`, colour: value.tint };
-        }
-        if (IsSpawnerValue(value)) {
-            const types = value.monsters.length === 1 ? value.monsters[0].replace(/_/g, " ") : `${value.monsters.length} types`;
-            return { text: `${types} · every ${value.interval}s · max ${value.maxAlive}` };
-        }
-        return { text: `${value} · +/- to adjust` };
+        return typeof value === "number" ? { text: `${value} · +/- to adjust` } : DescribeDataValue(value);
     }
 
     private Animate(delta: number): void {
@@ -269,3 +266,17 @@ const STYLES = `
 .sb-value-text { overflow: hidden; text-overflow: ellipsis; }
 .sb-chip { flex: 0 0 auto; width: 10px; height: 10px; border: 1px solid rgba(255, 255, 255, 0.35); border-radius: 2px; }
 `;
+
+/** What the card says a height layer brush is, or undefined for any other. */
+function HeightBrushKind(name: string): string | undefined {
+    switch (name) {
+        case DataBrushName.Z_INDEX:
+            return "Height brush";
+        case RAISE_BRUSH:
+            return "Height brush · each cell +1";
+        case LOWER_BRUSH:
+            return "Height brush · each cell -1";
+        default:
+            return undefined;
+    }
+}
