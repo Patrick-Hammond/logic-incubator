@@ -2,7 +2,7 @@ import { LEVEL_CREATED } from "@logic-incubator/engine/Events";
 import { Scenes } from "@logic-incubator/engine/Constants";
 import EditorComponent from "./EditorComponent";
 import { IStyler } from "./maps/Styler";
-import { LoadSavedLevel, OpenEditorSave } from "./SavedLevel";
+import { LevelContent, LoadSavedLevel, MakeEditorSave, OpenEditorSave, SaveOnLeave } from "./SavedLevel";
 import { PeekRecovery, TakeRecovery } from "./sprite/Recovery";
 import { PeekResumeNote, TakeResumeNote } from "./sprite/Resume";
 import { BrowserStorage } from "./sprite/SpriteEditor";
@@ -85,6 +85,30 @@ export class DungeonEditor extends EditorComponent {
         } else if (opened) {
             alert("The level saved in this browser can't be opened, so the editor starts on a blank map. " + opened.error);
         }
+        this.SaveWhenLeaving();
+    }
+
+    /**
+     * Keeps the level in the browser as the page goes - the tab or the browser closed, a reload, another address - as well as on
+     * Enter, so painting that was never played isn't lost; `SaveOnLeave` says when it's needed. On the tab going out of sight too,
+     * the last thing a browser reliably says before a tab is thrown away; `pagehide` covers the rest. Both can come as one page
+     * goes, but the second finds the level already stored.
+     */
+    private SaveWhenLeaving(): void {
+        const save = () => MakeEditorSave(this.editorStore.state, this.levelDataStore.state);
+        const opened = LevelContent(save());
+        const leave = () => SaveOnLeave(save(), opened);
+        const hidden = () => {
+            if (document.visibilityState === "hidden") {
+                leave();
+            }
+        };
+        window.addEventListener("pagehide", leave);
+        document.addEventListener("visibilitychange", hidden);
+        this.Own(() => {
+            window.removeEventListener("pagehide", leave);
+            document.removeEventListener("visibilitychange", hidden);
+        });
     }
 
     /** The views are gone by now, and have taken their own panels off the page; this lets go of what they shared. */

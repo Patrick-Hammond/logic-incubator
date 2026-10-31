@@ -1441,7 +1441,7 @@ type Talker = Vec2Like & { value: DialogValue; script: DialogScript; tile: Tile 
 | `doorVersion` | `number` | Goes up each time a door opens or closes, or something is pushed (`MovePushable`) - how anything worked out from which cells are closed (the monsters' flow field) knows it's stale. |
 | `regionData`, `boundaryRegionData`, `regions`, `visibleRegions` | | Region analysis; see below. |
 | `boundRect` | `Rectangle` | The map's bounds in cells. |
-| `playerStartPosition` | `Vec2Like \| undefined` | |
+| `playerStartPosition` | `Vec2Like \| undefined` | The `player-start` cell, or the middle of `boundRect` if the level has none. Set afresh on every `LoadLevel`. |
 | `exits` | `Vec2Like[]` | Every cell painted with the `exit` data brush - see `IsExit`. |
 | `portals` | `Portals` | Every cell painted with the `teleport` data brush, with its `TeleportValue` - see `PortalJump` and [Portals](#portals). Each one whose id no other portal has is warned of as the level loads. |
 | `spawners` | `Spawner[]` | Every spawner tile and `SPAWNER` brush, one to a cell (`FindSpawners`) - a brush on a spawner tile's cell decides what it does. Each is drawn as a tile on its cell (`SpawnerTile`) - a spawner tile, else the top one that isn't floor - or, with none, as the roster's `spawnerSprite`; that picture's footprint (`cells`) is solid until `RemoveSpawner`. |
@@ -2062,7 +2062,7 @@ TakePortal(hero, from: Vec2Like, level: Pick<WorldLevel, "PortalJump">): PortalT
 ```
 
 `Reset` (call on every `LEVEL_CREATED`) makes one hero per entry of `lightSpells`, each with that spell, if any, and `setup`'s hit points and
-weapons, on the cells `StartCells` gives round the level's `playerStartPosition` (it throws without one), and resets the encounter with the party's
+weapons, on the cells `StartCells` gives round the level's `playerStartPosition` (it throws if the level was never loaded), and resets the encounter with the party's
 size (`Encounter.Reset(seed, heroes)`).
 
 `Step` runs one step of play, in this order:
@@ -2685,8 +2685,9 @@ interface IDungeonEditorOptions {
 
 Add it with `sceneManager.AddScene(Scenes.EDITOR, new DungeonEditor(options))`, **after** loading the `editor` bundle (its components read icons in `OnInitialise`).
 It attaches `Canvas`, `BrushTool`, `Tools`, `Palette`, `Layers`, `SelectedBrush`, `Toolbar`, `CellInspector`, `Keyboard` and `Menu`, restores the localStorage save
-(through `OpenEditorSave`: a version 1 save is brought up to date, and one it can't open is reported in an alert and the editor starts empty), and keeps the
-editor/game toggle (Enter) correct by listening to `LEVEL_CREATED`. The editor's DOM overlay is visible only while the editor scene is shown. `OnDestroy` removes the
+(through `OpenEditorSave`: a version 1 save is brought up to date, and one it can't open is reported in an alert and the editor starts empty), saves the level
+again as the page goes (`pagehide`, or `visibilitychange` to hidden) through `SaveOnLeave`, and keeps the editor/game toggle (Enter) correct by listening to
+`LEVEL_CREATED`. The editor's DOM overlay is visible only while the editor scene is shown. `OnDestroy` removes the
 overlay and injected styles and resets the editor's shared stores.
 
 ## EditorAssets
@@ -2704,6 +2705,10 @@ EditorFontName(assets: Assets): string                 // the face of the editor
 `@logic-incubator/editor/SavedLevel`: `type EditorSave = LevelFile & { editorData: IEditorState; levelData: LevelDataState }`; `MakeEditorSave(editorData, levelData)`
 (stamped `version: LevelVersion`); `OpenEditorSave(file): { save } | { error }` - a save or a file opened in the editor, through `MigrateLevelFile`: brought up to date,
 or why it can't be opened; `SaveLevel(save)`, `LoadSavedLevel(): EditorSave | undefined` - the localStorage copy (key `dungeonLevel`) saved when Enter hands the level to the game.
+`LevelContent(save): string` - the level itself (brushes, quests, layers, without layers' `selected`/`visible`) to tell two saves apart by;
+`NeedsSaveOnLeave(now, stored, opened): boolean` - whether `now` differs from the `stored` save, or, when nothing openable is stored, from `opened` (the
+`LevelContent` the editor started with); `SaveOnLeave(now, opened): boolean` - saves `now` if that says so (an unreadable stored save counts as none), for the
+editor to call as the page goes.
 
 ## Map styling
 

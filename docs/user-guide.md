@@ -1960,7 +1960,7 @@ a cell can be solid, an NPC's and a pickup all at once (a tile layer still holds
 
 | Name | `data` | Effect |
 | --- | --- | --- |
-| `player-start` | - | Where the heroes start (required: a level without one throws "Player start position is not defined"); a party spreads onto the open floor nearest it. |
+| `player-start` | - | Where the heroes start; a party spreads onto the open floor nearest it. A level without one starts them in the middle of the map. |
 | `collision` | - | Marks a cell solid, in addition to whatever tiles there declare. |
 | `z-index` | number | The cell's **height** ([9.7](#97-heights)), on the height layer. |
 | `pickup` | a `PickupValue` | Turns whatever tile is on top at that cell into a pickup (it disappears when collected), for an item that isn't one by default. Edited with its popup - choose gold, health, a key, a weapon, an item or a light to carry. |
@@ -2759,7 +2759,7 @@ vertical **toolbar** of tools at the far right. Each palette tab ends in a **+**
 
 | Key | Action |
 | --- | --- |
-| `Enter` | Toggle **play**: saves the level (to localStorage) and runs it in the game; Enter again returns to the editor. |
+| `Enter` | Toggle **play**: saves the level (to localStorage) and runs it in the game; Enter again returns to the editor. The level is also saved as the page goes (tab or browser closed, reload) if it changed. |
 | `S` | Download the level as `dungeonLevel.txt` (JSON). |
 | `L` | Load a level file. |
 | `Ctrl+Z` | Undo. |
@@ -2879,7 +2879,9 @@ at a cell. See `in-dungeons-we-dwell/src/editor/Style0x7.ts` for a complete one.
 ### 10.5 Saving, exporting and shipping a level
 
 1. Edit, then press **Enter** to play it. The editor keeps your map in localStorage (`dungeonLevel`) - it survives page
-   reloads - and a dev build's game plays that save instead of the shipped level.
+   reloads - and a dev build's game plays that save instead of the shipped level. It saves on Enter, and again as the page goes
+   (the tab or browser closed, a reload, the tab hidden) if the level has changed: a visit that changes nothing leaves the save
+   alone, so the shipped level still plays for someone who never painted, and a save from a newer version isn't covered over.
 2. When it is right, press **S** to download `dungeonLevel.txt`.
 3. Save that JSON over `assets/level1/data/level.json`, run `npm run assets` (the manifest hash changes), commit.
 4. The production build plays the shipped file; it never contains the editor.

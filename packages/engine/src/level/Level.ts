@@ -591,6 +591,9 @@ export default class Level {
         file = MigrateLevelFile(file);
         this.Dispose();
 
+        // One `Level` is loaded again and again (each play from the editor, each restart), so a start rubbed out
+        // since the last load must go too, for the fallback below, rather than the heroes starting where it was.
+        this.playerStartPosition = undefined;
         this.tileLayers = [];
         this.collisionData = [];
         this.heightData = [];
