@@ -59,12 +59,16 @@ describe("ParseDialog", () => {
     });
 
     it("reads actions", () => {
-        const { script, errors } = ParseDialog("give rats\ncomplete smith\nfinish rats\nreward gold 50\nreward key 2 key_gold\nreward item potion\nset met\nunset met", check);
+        const { script, errors } = ParseDialog(
+            "give rats\ncomplete smith\nfinish rats\nnotify rats  The big one   hides by the barrels.\nreward gold 50\nreward key 2 key_gold\nreward item potion\nset met\nunset met",
+            check
+        );
         expect(errors).toEqual([]);
         expect(script.steps.map(step => (step.kind === "action" ? [step.name, step.data] : step.kind))).toEqual([
             ["give", "rats"],
             ["complete", "smith"],
             ["finish", "rats"],
+            ["notify", { id: "rats", text: "The big one hides by the barrels." }],
             ["reward", { value: { kind: "gold", amount: 50 }, sprite: null }],
             ["reward", { value: { kind: "key", id: 2 }, sprite: "key_gold" }],
             ["reward", { value: { kind: "item", sprite: "potion" }, sprite: null }],
@@ -75,7 +79,7 @@ describe("ParseDialog", () => {
 
     it("says what's wrong with a line, by its number, and leaves the line out", () => {
         const { script, errors } = ParseDialog(
-            ["give rat", "-> nowhere", "if rats asleep -> a", "reward gold lots", "a:", "a:", "end:", "> -> a", "if rats complete", "> Go -> a then"].join("\n"),
+            ["give rat", "-> nowhere", "if rats asleep -> a", "reward gold lots", "a:", "a:", "end:", "> -> a", "if rats complete", "> Go -> a then", "notify rats", "notify rat Hi"].join("\n"),
             check
         );
         expect(DescribeDialogErrors(errors)).toEqual([
@@ -87,7 +91,9 @@ describe("ParseDialog", () => {
             'Line 7: "end" can\'t be a part\'s name: "-> end" ends the talk.',
             "Line 8: A choice needs something for the player to say, like \"> Yes -> accept\".",
             "Line 9: \"if\" needs where to go, like \"if rats complete -> thanks\".",
-            'Line 10: Only "if ..." can come after where a choice goes, not "then".'
+            'Line 10: Only "if ..." can come after where a choice goes, not "then".',
+            'Line 11: "notify" needs a quest\'s id and what to tell the player, like "notify rats The big one hides by the barrels."',
+            'Line 12: There\'s no quest called "rat".'
         ]);
         expect(script.steps.map(step => step.kind)).toEqual(["goto", "end"]);
     });

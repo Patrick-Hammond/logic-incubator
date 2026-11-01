@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Vec2, Vec2Like } from "@logic-incubator/lib/math/Geometry";
 import { TileSize } from "../Constants";
-import { ALL_PLAYERS_DIED, DOOR_LOCKED, HERO_TELEPORTED, LEVEL_COMPLETED, LIGHT_SPELL_CAST, NPC_BUMPED, OBJECT_PUSHED, PICKUP_COLLECTED, QUEST_UPDATED } from "../Events";
+import { ALL_PLAYERS_DIED, DOOR_LOCKED, HERO_TELEPORTED, LEVEL_COMPLETED, LIGHT_SPELL_CAST, NPC_BUMPED, OBJECT_PUSHED, PICKUP_COLLECTED, QUEST_NOTED, QUEST_UPDATED } from "../Events";
 import type { IPlayerInput } from "../input/PlayerControl";
 import { IsHeightGap } from "../level/Depth";
 import { DoorOpens } from "../level/Doors";
@@ -622,6 +622,14 @@ describe("World's quests and talk", () => {
         ]);
         // It doesn't end the level.
         expect(world.Completed).toBe(false);
+    });
+
+    it("tells of a note a dialog gives a quest", () => {
+        const { world, events } = Setup(ROOM, 1, NoLock, [Mushrooms]);
+        world.Reset(SETUP, [undefined]);
+        world.quests.Notify("mushrooms", "Look under the stairs.");
+        expect(events.filter(e => e.event === QUEST_NOTED).map(e => e.args)).toEqual([["mushrooms", "Look under the stairs."]]);
+        expect(world.quests.Get("mushrooms")!.note).toBe("Look under the stairs.");
     });
 
     it("ends the level when a quest that ends it is complete - the hero who did it got there", () => {

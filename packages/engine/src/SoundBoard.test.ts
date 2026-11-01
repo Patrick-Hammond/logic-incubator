@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
     ALL_PLAYERS_DIED, BOSS_WOKE, DOOR_CLOSED, DOOR_LOCKED, DOOR_OPENED, MONSTER_HIT, MONSTER_KILLED, MONSTER_SPAWNED, NPC_SHOUTED, PICKUP_COLLECTED, PLAYER_DAMAGED,
-    PLAYER_DIED, QUEST_UPDATED, SHOT_FIRED, SHOT_STOPPED, SPAWNER_DESTROYED, TALK_LINE
+    PLAYER_DIED, QUEST_NOTED, QUEST_UPDATED, SHOT_FIRED, SHOT_STOPPED, SPAWNER_DESTROYED, TALK_LINE
 } from "./Events";
 import type { AssetMetadata } from "./level/AssetMetadata";
 import type { MonsterDef } from "./level/entities/MonsterRoster";
@@ -33,6 +33,7 @@ const Table: SoundTable = {
     questGiven: "quest_given",
     questProgress: "quest_progress",
     questDone: "quest_done",
+    questNote: "quest_note",
     talkLine: "dialog_blip",
     shout: "shout"
 };
@@ -131,6 +132,10 @@ describe("SoundBoard", () => {
         expect(Hear(QUEST_UPDATED, "rats", "active", 2, "active")).toEqual(["quest_progress"]);
         expect(Hear(QUEST_UPDATED, "rats", "complete", 5, "active")).toEqual(["quest_done"]);
         expect(Hear(QUEST_UPDATED, "rats", "finished", 5, "complete")).toEqual(["quest_done"]);
+    });
+
+    it("plays a quest's note", () => {
+        expect(Hear(QUEST_NOTED, "rats", "The big one hides by the barrels.")).toEqual(["quest_note"]);
     });
 
     it("plays a hero's own hurt and death, else the game's", () => {

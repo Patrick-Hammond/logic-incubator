@@ -79,3 +79,8 @@ export const NPC_SHOUTED = "npcShouted";
  * goal or was handed in (see `Quests`): where it is now, how far toward its target, and the state it was in before.
  */
 export const QUEST_UPDATED = "questUpdated";
+/**
+ * `(id: string, text: string)` - a dialog script gave one of the level's quests a note, a hint or a comment on how it's going
+ * (`notify`, see `QuestLog.Notify`). Only in a talk, so only in a Quest - never online.
+ */
+export const QUEST_NOTED = "questNoted";

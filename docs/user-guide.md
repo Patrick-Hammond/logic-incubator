@@ -1532,7 +1532,7 @@ DungeonMain (a scene)
  ├─ TileMapView       draws the level's tile layers, lit and banded by height
  ├─ Effects           particle effects over the world (`main.Effects.Play`)
  ├─ Hud               hearts, gold, equipped weapon, inventory - a row per hero for a party (built from the UI kit)
- ├─ QuestTracker      the quests under way, top-left, and a toast as each is given and met
+ ├─ QuestTracker      the quests under way, top-left, and a toast as each is given and met, and for each note on one
  ├─ DialogView        a talk with an NPC: what's said, their portrait and the player's choices
  ├─ overlay?          the game's own UI over everything: a pause menu, an end-of-level screen
  ├─ PlayerControl     one per hero: reads their keyboard or gamepad
@@ -2143,6 +2143,7 @@ All on `game.dispatcher`; the constants are in `@logic-incubator/engine/Events`:
 | `TALK_LINE` | - | The talk went on to its next line. |
 | `NPC_SHOUTED` | `(tileX, tileY)` | The NPC on that cell called out something new, in a speech bubble. |
 | `QUEST_UPDATED` | `(id, state, progress, was)` | One of the level's quests was given, moved on, met or handed in: its state now, how far it has got, and its state before. |
+| `QUEST_NOTED` | `(id, text)` | A talk gave one of the level's quests a note, a hint or a comment (`notify`, [9.10](#910-npcs-dialogs-and-quests)). Only in a Quest, as talks are. |
 
 `hero` is the hero's slot, from 0 - their place in what `heroes` returned; a lone hero is 0. On an online guest these come from the
 host's snapshots ([9.3.2](#932-playing-online)), a moment after they happened there (`QUEST_UPDATED` too; there are no talks online).
@@ -2162,7 +2163,7 @@ the whole table can be filled in before the files exist, and a name without a fi
 | A kind of monster's `MonsterDef.sounds` | `hit`, `death`, `spawn`, `wake` (as a boss) |
 | A hero's `HeroSlot.sounds` (or `PlayerSetup.sounds`) | `hurt`, `death` - a character's own voice |
 | A sprite's `assets-meta.json` entry | `sound`: a pickup's as it's picked up, a door's as it turns into that sprite (its open sprite's as it opens, its closed one's as it shuts), a pushable thing's as it's pushed |
-| The game's `sounds` (`SoundTable`) | `heroShot`, `monsterShot`, `shotWall`, `heroHurt`, `heroDeath`, `lightSpell`, `keysDropped`, `gameOver`, `levelComplete`, `monsterHit`, `monsterDeath`, `monsterSpawn`, `bossWake`, `bossDeath` (in place of the kind's own death), `spawnerHit`, `spawnerBreak`, `doorOpen`, `doorClose`, `doorLocked`, `teleport`, `push`, `pickup` (by kind: `gold`, `key`...), `questGiven`, `questProgress`, `questDone`, `talkStart`, `talkLine`, `shout`, `pause` |
+| The game's `sounds` (`SoundTable`) | `heroShot`, `monsterShot`, `shotWall`, `heroHurt`, `heroDeath`, `lightSpell`, `keysDropped`, `gameOver`, `levelComplete`, `monsterHit`, `monsterDeath`, `monsterSpawn`, `bossWake`, `bossDeath` (in place of the kind's own death), `spawnerHit`, `spawnerBreak`, `doorOpen`, `doorClose`, `doorLocked`, `teleport`, `push`, `pickup` (by kind: `gold`, `key`...), `questGiven`, `questProgress`, `questDone`, `questNote`, `talkStart`, `talkLine`, `shout`, `pause` |
 
 ```ts
 new DungeonMain({
@@ -2262,8 +2263,9 @@ level's quests are its own, under way from the start: "kill the final boss".
 A quest goes from `none` (not given) to `active` (under way) to `complete` (its goal met) to `finished` (handed in to an NPC).
 What's marked for a quest counts before it's given, so a quest given once its gold has all been found is complete at once. The
 quests start over each time the level does. While a quest is under way or complete, the **quest tracker** in the play area's
-top-left corner lists it - its name, how far it has got (2/5, or DONE) and its text - and a toast in the top-right says as each
-is given and met, and, as the level starts, which are under way from the start. Every change emits `QUEST_UPDATED`.
+top-left corner lists it - its name, how far it has got (2/5, or DONE), its text, and the last note a script gave it - and a toast
+in the top-right says as each is given and met, as a script gives one a note, and, as the level starts, which are under way from
+the start. Every change emits `QUEST_UPDATED`.
 
 **NPCs.** Paint the `dialog` brush over an NPC's tile - any sprite: a dwarf standing in a doorway. Its cell becomes solid, and
 walking into it starts a talk by the brush's **script**, typed in its popup - not at once: a speech bubble over the NPC counts up
@@ -2310,6 +2312,7 @@ MINER: Quiet as a tomb down there now.
 | `shout:` | Starts the part the NPC shouts from as a hero comes near - not part of the talk (see **Shouts** below). |
 | `-> part`, `end` | Goes there; ends the talk (as `-> end` does). `if CONDITION -> part` goes there only when the condition holds. |
 | `give QUEST`, `complete QUEST`, `finish QUEST` | Gives a quest; has its goal met, whatever it is; hands it in. |
+| `notify QUEST text` | Gives a quest a note - a hint, or a comment - shown to the player as a toast and kept under the quest in the tracker (see **Notes** below). |
 | `reward gold N`, `reward health N`, `reward key N [SPRITE]`, `reward item SPRITE` | Hands the hero something as if they'd picked it up (health in half-hearts; a key is shown as `SPRITE`). |
 | `set WORD`, `unset WORD` | Remembers a word for the rest of the level, or forgets it - for an NPC who remembers being met. |
 | `# ...` | A comment. Blank lines are skipped. |
@@ -2317,6 +2320,14 @@ MINER: Quiet as a tomb down there now.
 A condition is a quest and a state (`rats active`, `rats complete`) or a word that's been `set`; `not` before it turns it
 round. The editor reads a script as it's typed - a part that isn't there, a quest the level hasn't got, words it can't make out -
 and won't save it until it reads, naming the first line that doesn't. The engine leaves out a line it can't read, with a console warning.
+
+**Notes.** An NPC's script can give a quest a **note**: a hint, or a comment on how it's going, with `notify QUEST text`
+(`notify rats The big one hides by the barrels.` - [9.11](#hints-that-stay-notify) has one at work). It pops up as a toast
+headed with the quest's name in amber, up for longer the more there is to read (3 to 8 seconds), and stays in the tracker under
+the quest, in amber, until the next note on it takes its place - so a hint heard in a talk can be read again later. A note can be
+given whatever state the quest is in: one given before the quest itself is given shows in the tracker once it's under way. The
+notes start over with the quests, each time the level does, and each emits `QUEST_NOTED`. Like everything a talk does, notes are
+for a Quest.
 
 **Shouts.** A part called `shout` is what the NPC calls out when a hero comes near, in a speech bubble over them - "Help, help!"
 as the hero walks by. It isn't part of the talk (a talk never runs into it), so it goes after the talk:
@@ -2390,7 +2401,8 @@ can be; [Mistakes to avoid](#mistakes-to-avoid) at the end covers what trips a s
 - **A part ends at the next `name:` line.** The talk doesn't run on into the next part: reaching it ends the talk. Use
   `-> part` to go on somewhere else, and `end` (or `-> end`) to stop early.
 - **Actions happen silently**, as the talk passes them: `give`, `finish`, `reward` and `set` show nothing themselves, so
-  put a line after them. The quest tracker and the NEW QUEST and QUEST COMPLETE toasts show the player what changed.
+  put a line after them. The quest tracker and the NEW QUEST and QUEST COMPLETE toasts show the player what changed, and
+  `notify` puts a note of the script's own in the tracker and a toast.
 - **Choices go under the line before them.** The player picks one with the arrows and Space. A choice with `-> part` goes
   there; one without carries on with whatever comes after the menu - and when that's the next part, the talk ends.
 
@@ -2612,6 +2624,27 @@ MINER: Thanks! But the rats were running from something. Something big...
 
 `give` only gives a quest that hasn't been given, so a talk that runs it twice does no harm.
 
+#### Hints that stay (notify)
+
+What an NPC says is gone once the talk is over. `notify` keeps the gist: a note on the quest, shown as a toast and then
+under the quest in the tracker, where the player can read it again. Brog, from [A lost hoard](#a-lost-hoard-collect), can
+leave a hint as he gives the quest, and another each time the hero comes back without the gold:
+
+```
+accept:
+give hoard
+notify hoard Brog thinks the thieves ran east, down the long hall.
+BROG: Bless you. Try down this hall, east.
+
+waiting:
+notify hoard One sack is said to be by the old well.
+BROG: Any luck with my gold?
+```
+
+Each note takes the place of the one before, so the tracker shows the latest hint. A note can be a comment as well as a
+hint - `notify hoard Brog is counting on you.` - and any NPC can give one on any quest of the level, given or not: the smith
+who hears where the thieves went can `notify hoard`, and the note shows in the tracker once the hoard quest is under way.
+
 #### The level's own quest (co-op and online)
 
 There are no talks in co-op and online, so there a level's quests are its own: under way from the start, with no script.
@@ -2659,7 +2692,7 @@ calls out is a script that's all shout part: walking into them starts no talk, a
   hero can walk back to hand it in.
 - **A choice's `if` comes after its `->`.** `> Ask about the demon -> rumour if demon active` works. Without the `->`, the
   words are just part of what the choice says.
-- **A plain line can't start with an action word.** A line whose first word is `give`, `complete`, `finish`, `reward`,
+- **A plain line can't start with an action word.** A line whose first word is `give`, `complete`, `finish`, `notify`, `reward`,
   `set`, `unset`, `if` or `end` (in lower case) is read as that. Give it a speaker (`BROG: give it back!`).
 - **Put `shout:` after the talk.** A talk starts at the top, so a script that starts with its shout part has no talk.
 - **`#` starts a comment, anywhere on a line**, so a line can't say it: `GUARD: Room #3` says "Room".

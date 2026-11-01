@@ -34,8 +34,9 @@
  * - `-> name` goes there, and `-> end` (or `end`) ends the talk; `if CONDITION -> name` goes there only when it holds.
  * - A condition is a quest's id and a state - `rats active`, `rats complete` (see `QuestState`) - or a word a `set` has set; `not`
  *   before it turns it round.
- * - The rest are actions: `give QUEST`, `complete QUEST` (its goal met, whatever it was), `finish QUEST` (handed in), `reward gold N`,
- *   `reward health N` (half-hearts), `reward key N [SPRITE]`, `reward item SPRITE`, `set WORD` and `unset WORD`.
+ * - The rest are actions: `give QUEST`, `complete QUEST` (its goal met, whatever it was), `finish QUEST` (handed in), `notify QUEST text`
+ *   (a hint or a comment on the quest, shown to the player), `reward gold N`, `reward health N` (half-hearts), `reward key N [SPRITE]`,
+ *   `reward item SPRITE`, `set WORD` and `unset WORD`.
  * - `#` starts a comment; blank lines are skipped.
  * - A part called `shout` isn't part of the talk: it's what the NPC calls out when a hero comes near (see `Shouts`).
  *
@@ -142,6 +143,19 @@ RegisterDialogAction("complete", {
 RegisterDialogAction("finish", {
     Parse: (words, check) => QuestWord("finish", words, check),
     Run: (id, context) => void context.quests.Finish(id as string)
+});
+RegisterDialogAction("notify", {
+    Parse: (words, check) => {
+        if (words.length < 2) {
+            return { error: `"notify" needs a quest's id and what to tell the player, like "notify rats The big one hides by the barrels."` };
+        }
+        const quest = KnownQuest(words[0], check);
+        return "error" in quest ? quest : { data: { id: words[0], text: words.slice(1).join(" ") } };
+    },
+    Run: (data, context) => {
+        const note = data as { id: string; text: string };
+        context.quests.Notify(note.id, note.text);
+    }
 });
 RegisterDialogAction("reward", {
     Parse: words => {

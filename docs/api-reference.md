@@ -1296,6 +1296,7 @@ await relay.close();         // ends every connection and stops
 | `TALK_LINE` | `"talkLine"` | - (the talk went on to its next line; `TALK_STARTED` is its first) |
 | `NPC_SHOUTED` | `"npcShouted"` | `(tileX, tileY)` - the NPC on that cell called out something new (`ShoutView`) |
 | `QUEST_UPDATED` | `"questUpdated"` | `(id, state: QuestState, progress, was: QuestState)` - one of the level's quests was given, moved on, met or handed in |
+| `QUEST_NOTED` | `"questNoted"` | `(id, text: string)` - a talk gave one of the level's quests a note, a hint or a comment (`notify`, `QuestLog.Notify`); only in a Quest, never online |
 
 `hero` is always a hero's slot, from 0 - their place in `DungeonMainOptions.heroes`. On an online guest every one of these about play comes from
 the host's snapshots (see [Online play](#online-play)).
@@ -1709,8 +1710,8 @@ the dispatcher while the scene is shown (`ListenWhileShown` on each of `SoundEve
 type SoundTable = {   // each a sound by name (NamedSounds); one left out, or with no file, is silent
     heroShot?, monsterShot?, shotWall?, heroHurt?, heroDeath?, lightSpell?, keysDropped?, gameOver?, levelComplete?,
     monsterHit?, monsterDeath?, monsterSpawn?, bossWake?, bossDeath?, spawnerHit?, spawnerBreak?, doorOpen?, doorClose?,
-    doorLocked?, teleport?, push?, pickup?: Partial<Record<PickupKind, string>>, questGiven?, questProgress?, questDone?, talkStart?, talkLine?, shout?, pause?,
-    footstep?, ambience?, bossMusic?: string;   // these three DungeonMain plays itself, not for an event; give bossMusic the music volume
+    doorLocked?, teleport?, push?, pickup?: Partial<Record<PickupKind, string>>, questGiven?, questProgress?, questDone?, questNote?, talkStart?, talkLine?,
+    shout?, pause?, footstep?, ambience?, bossMusic?: string;   // these three DungeonMain plays itself, not for an event; give bossMusic the music volume
 };
 const SoundEvents: ReadonlyArray<string>;   // the events it plays for
 type HeroSounds = { hurt?: string; death?: string };   // one hero's (HeroSlot.sounds), by name
@@ -1732,7 +1733,7 @@ board.Heard(event: string, args: ReadonlyArray<unknown>): void
 | `OBJECT_PUSHED` | the `sound` of the sprite pushed (`AssetMetadata`), `push` |
 | `PICKUP_COLLECTED` | for each thing collected: its sprite's `sound`, then `pickup[kind]` |
 | `QUEST_UPDATED` | `questGiven` (now active, it wasn't), `questProgress` (active, it was), `questDone` (complete or finished, it wasn't) |
-| the rest | `LIGHT_SPELL_CAST` `lightSpell`, `KEYS_DROPPED` `keysDropped`, `ALL_PLAYERS_DIED` `gameOver`, `LEVEL_COMPLETED` `levelComplete`, `SPAWNER_HIT` `spawnerHit`, `SPAWNER_DESTROYED` `spawnerBreak`, `TALK_STARTED` `talkStart`, `TALK_LINE` `talkLine`, `NPC_SHOUTED` `shout`, `GAME_PAUSED` `pause` |
+| the rest | `LIGHT_SPELL_CAST` `lightSpell`, `KEYS_DROPPED` `keysDropped`, `ALL_PLAYERS_DIED` `gameOver`, `LEVEL_COMPLETED` `levelComplete`, `SPAWNER_HIT` `spawnerHit`, `SPAWNER_DESTROYED` `spawnerBreak`, `QUEST_NOTED` `questNote`, `TALK_STARTED` `talkStart`, `TALK_LINE` `talkLine`, `NPC_SHOUTED` `shout`, `GAME_PAUSED` `pause` |
 
 ---
 
@@ -2043,7 +2044,7 @@ world.Step(inputs: ReadonlyArray<HeroInput>, dt, seconds): void
 world.RemoveHero(index): void           // their player has left: Gone, out of play for good (keys dropped, and the level ends if no one's left standing)
 world.SetAway(index, away: boolean): void   // online, their player's connection has gone (true) or is back: out of play meanwhile, standing
                                         // where they were (the level ends if no one else is in play); never for a hero who is Gone
-world.quests: QuestLog                  // how the level's quests stand - started over by Reset; each change emits QUEST_UPDATED
+world.quests: QuestLog                  // how the level's quests stand - started over by Reset; each change emits QUEST_UPDATED, each note QUEST_NOTED
 world.flags: Set<string>                // the words the level's dialog scripts have set - cleared by Reset
 world.SetTalk(on: boolean): void        // whether walking into an NPC asks for a talk (NPC_BUMPED) - for one hero on one machine; off until turned on
 world.RecordQuest(happening: QuestHappening, hero = 0): void   // counts something that happened toward the quests (QuestLog.Record);
@@ -2160,7 +2161,7 @@ same seed on any machine (mulberry32); `NewSeed()` - a fresh 32-bit seed, differ
 | `HudHeroRow extends Container` | `view/HudHeroRow` | One hero's row when a party plays: PLAYER n or `SetName(name, own)`'s (and DOWN, the row dimmed, once they've fallen - LEFT once their player has gone, AWAY while their player's connection is gone) and their hearts, their weapon slot, gold and light spell bar, and a strip of the items they carry. `new HudHeroRow(theme, index, rowWidth, heartTextures?)`, `Render(hero: HudHero)` (redraws only what changed), `static Height(theme)`. Also exports `type HudHero` (what a row reads of a `Hero`), `SpellStatusText(spell)`, `FitScale(texture, box)` and `TextureOf(name)`, which `Hud` shares. |
 | `EntityRenderer` | `view/EntityRenderer` | `new EntityRenderer(camera, level)`; `Reset()` (call on `LEVEL_CREATED`), `Render(heroes: HeroView[], encounter, alpha = 1, seconds = 0)` (each hero where their view was last `Place`d - a fallen one faint, a ghost where they fell, and one who is away as faint; monsters and shots `alpha` of the way through their last step; each spawner as its tile, `Level.SpawnerTile`, or the roster's sprite, red while it shows a hit; each pushable thing as its tile, `Level.PushableTile`, lit along its foot and sliding for `SlideSeconds` of the frames' `seconds` after it's pushed). Draws a glow under the figures for each hero's torch and each glowing shot, and the mage-lights - a glow with a bright core - over them. |
 | `DialogView extends GameComponent` | `view/DialogView` | A talk with an NPC over the play area, in its own `UiLayer`: a `UiDialogue` across the bottom with the NPC's portrait, and once a line with choices has come out in full, a `UiMenu` of them above it. `new DialogView(events: DialogViewEvents)` with `{ next(), choose(index), end() }`, each told a frame after the key press that did it; `Open(line: DialogLine, portrait?: Texture)` (a talk's first line; the portrait drawn as big as the skin's frame takes, by whole pixels), `Say(line)`, `Close()`, `IsOpen`. Its scope (`"dialog"`) takes accept (`onAccept`: the box goes on) and cancel (`end`). `DungeonMain` drives it. |
-| `QuestTracker extends GameComponent` | `view/QuestTracker` | The quests under way and complete in the play area's top-left corner (name, `2/5` or DONE, then its `text`) over a shade, and a `UiToastHost` in the top-right: NEW QUEST as one is given, QUEST COMPLETE as one is met, and QUEST for each under way as a level begins. `Begin(log: QuestLog)` (a level started), `Render(log)` (call each frame; redrawn only when `log.Version` changes). Display-only (`input: false`). |
+| `QuestTracker extends GameComponent` | `view/QuestTracker` | The quests under way and complete in the play area's top-left corner (name, `2/5` or DONE, then its `text`, then its `note` wrapped to 280 UI pixels in the skin's `note` colour) over a shade, and a `UiToastHost` in the top-right: NEW QUEST as one is given, QUEST COMPLETE as one is met, the quest's name over the note's text as one is given a note (`QUEST_NOTED`; the skin's `note` toast kind, up `QuestNoteSeconds`), and QUEST for each under way as a level begins. A skin without a `note` colour or toast kind gets `text` and `good`. `Begin(log: QuestLog)` (a level started), `Render(log)` (call each frame; redrawn only when `log.Version` changes). Display-only (`input: false`). |
 | `ShoutView extends GameComponent` | `view/ShoutView` | What the NPCs shout (`story/Shouts`), in speech bubbles over them: the skin's `speech` tooltip pointing at each NPC's sprite (the part the atlas trimmed it to, so at the figure rather than the room over its head), in its own `UiLayer` (`input: false`), kept to the play area. `new ShoutView(level, camera)`; `Begin(talkers, context: DialogContext)` (a level started: one `Shouter` for each NPC whose script has a shout part; pass none for no shouting), `Render(seconds, hearers: ReadonlyArray<Vec2Like>)` (each frame: moves them on, with the centres of the heroes who can hear - a cell's NPC shouts while one is `InEarshot` and the cell `IsCellVisible`), `Wait(talker: Talker \| null, dots, seconds)` (before each `Render`: the NPC counting up to a talk, if any, and how far - drawn as that many dots in a bubble of its own, fading in over `ShoutFadeIn`; that NPC keeps quiet meanwhile), `Hush()` (a talk started: the shouts and the dots go). `DungeonMain` drives it, and doesn't `Render` it during a talk. |
 | `TilePlacement` | `view/helpers/TilePlacement` | Pure: `TileRect(view: CameraView, cell, z, size, offset): PlacedRect` - where `TileMapView` draws a tile `size` pixels big, `offset` up and left of a cell's corner, on a cell of height `z`, in the camera's root (that height's band's scale and origin). `CameraView = { centre, baseWidth, baseHeight, scale, zoom, currentZ }`, as the `Camera`'s getters give them. |
 | `GlowLayer extends Container` | `view/GlowLayer` | Glows added onto what's beneath them, from a pool of sprites: `Begin()`, `Add(x, y, look, pixelsPerTile)` per glow, `End()`. `CreateGlowTexture()` makes the soft white texture they're drawn with (the caller destroys it). |
@@ -2470,17 +2471,20 @@ IsQuestDef(value): boolean                // an id, a name, a goal of a kind the
 ReadQuests(value): QuestDef[]             // a level file's: the well-formed ones, the first of each id; anything else is none
 DefaultQuest(id): QuestDef
 
-type QuestStatus = { def: QuestDef; state: QuestState; progress: number; target: number };
+type QuestStatus = { def: QuestDef; state: QuestState; progress: number; target: number; note: string | null };   // note: the last notify, or null
 type QuestChange = (status, was: QuestState, index: number) => void;
+type QuestNote = (status, text: string, index: number) => void;
+QuestNoteSeconds(text): number            // how long a note's toast stays up: 3 s and 0.05 s a character, at most 8
 
-new QuestLog(changed?: QuestChange)
+new QuestLog(changed?: QuestChange, noted?: QuestNote)
 log.Quests: ReadonlyArray<Readonly<QuestStatus>>   // in the level's order
-log.Version: number                       // goes up with every change
-log.Reset(defs, level): void              // starts over: start ones active, the rest none, nothing counted (no change told)
+log.Version: number                       // goes up with every change and every note
+log.Reset(defs, level): void              // starts over: start ones active, the rest none, nothing counted, no notes (no change told)
 log.Get(id), log.Index(id), log.State(id) // State is "none" for an id the level hasn't got
 log.Give(id): boolean                     // none -> active, or straight to complete if its target is already met
 log.Complete(id): boolean                 // any but complete or finished -> complete
 log.Finish(id): boolean                   // any but finished -> finished
+log.Notify(id, text): boolean             // a dialog's notify: the quest's note, in place of the last, in any state; tells noted; false for no such quest
 log.Record(happening): void               // moves on each quest it counts for; one under way that reaches its target is complete
 log.Follow(index, state, progress): QuestState | null   // as an online guest's: set to the host's, no change told; returns what it was
 ```

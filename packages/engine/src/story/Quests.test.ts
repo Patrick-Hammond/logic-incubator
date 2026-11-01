@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import QuestLog, { IsQuestDef, QuestDef, QuestGoalKinds, QuestLevel, QuestState, ReadQuests, RegisterQuestGoal } from "./Quests";
+import QuestLog, { IsQuestDef, QuestDef, QuestGoalKinds, QuestLevel, QuestNoteSeconds, QuestState, ReadQuests, RegisterQuestGoal } from "./Quests";
 
 const level = (marked: { [key: string]: number } = {}): QuestLevel => ({ Marked: (kind, quest) => marked[kind + ":" + quest] || 0 });
 
@@ -126,10 +126,36 @@ describe("QuestLog", () => {
         expect(log.Version).toBeGreaterThan(version);
     });
 
+    it("keeps the last note a dialog gives a quest, in any state, and tells of each", () => {
+        const notes: Array<{ id: string; text: string; index: number }> = [];
+        const log = new QuestLog(undefined, (status, text, index) => notes.push({ id: status.def.id, text, index }));
+        log.Reset([rats, mushrooms], level());
+        expect(log.Get("mushrooms")!.note).toBeNull();
+        const version = log.Version;
+        expect(log.Notify("mushrooms", "Try the damp corners.")).toBe(true);
+        expect(log.Get("mushrooms")).toMatchObject({ state: "none", note: "Try the damp corners." });
+        expect(log.Version).toBeGreaterThan(version);
+        log.Give("mushrooms");
+        expect(log.Notify("mushrooms", "One more by the well.")).toBe(true);
+        expect(log.Get("mushrooms")!.note).toBe("One more by the well.");
+        expect(log.Notify("nothing", "Hello?")).toBe(false);
+        expect(notes).toEqual([
+            { id: "mushrooms", text: "Try the damp corners.", index: 1 },
+            { id: "mushrooms", text: "One more by the well.", index: 1 }
+        ]);
+    });
+
+    it("keeps a note up longer the more there is to read", () => {
+        expect(QuestNoteSeconds("Go east.")).toBeGreaterThanOrEqual(3);
+        expect(QuestNoteSeconds("x".repeat(60))).toBeGreaterThan(QuestNoteSeconds("Go east."));
+        expect(QuestNoteSeconds("x".repeat(500))).toBe(8);
+    });
+
     it("starts over with each reset", () => {
         const { log } = Log([mushrooms]);
         log.Give("mushrooms");
+        log.Notify("mushrooms", "By the well.");
         log.Reset([mushrooms], level());
-        expect(log.Get("mushrooms")).toMatchObject({ state: "none", progress: 0 });
+        expect(log.Get("mushrooms")).toMatchObject({ state: "none", progress: 0, note: null });
     });
 });

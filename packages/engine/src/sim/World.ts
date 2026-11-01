@@ -23,7 +23,7 @@ import { Vec2, Vec2Like } from "@logic-incubator/lib/math/Geometry";
 import { TileSize } from "../Constants";
 import type { PlayerSetup } from "../DungeonMain";
 import Encounter, { EncounterLevel, EncounterOptions, Monster } from "../Encounter";
-import { ALL_PLAYERS_DIED, DOOR_LOCKED, HERO_TELEPORTED, KEYS_DROPPED, LEVEL_COMPLETED, LIGHT_SPELL_CAST, NPC_BUMPED, OBJECT_PUSHED, PICKUP_COLLECTED, QUEST_UPDATED } from "../Events";
+import { ALL_PLAYERS_DIED, DOOR_LOCKED, HERO_TELEPORTED, KEYS_DROPPED, LEVEL_COMPLETED, LIGHT_SPELL_CAST, NPC_BUMPED, OBJECT_PUSHED, PICKUP_COLLECTED, QUEST_NOTED, QUEST_UPDATED } from "../Events";
 import type { IPlayerInput } from "../input/PlayerControl";
 import type { CollectedPickup } from "../level/Level";
 import { LightSpell } from "../level/entities/LightSpell";
@@ -175,7 +175,10 @@ export default class World {
 
     constructor(private level: WorldLevel, private options: EncounterOptions) {
         this.encounter = new Encounter(level, { ...options, killed: (monster, hero) => this.Killed(monster, hero) });
-        this.quests = new QuestLog((status, was) => this.QuestChanged(status, was));
+        this.quests = new QuestLog(
+            (status, was) => this.QuestChanged(status, was),
+            (status, text) => this.options.emit(QUEST_NOTED, status.def.id, text)
+        );
         this.collision = new TileCollision(level, (x, y) => this.IsLockedOut(x, y));
     }
 

@@ -33,7 +33,8 @@
 		"ink": "#120a1a",
 		"focus": "#feffe5",
 		"danger": "#e04848",
-		"good": "#6abf40"
+		"good": "#6abf40",
+		"note": "#d49733"
 	},
 	"buttons": {
 		"primary": {
@@ -324,7 +325,7 @@
 	},
 	"toasts": {
 		"default": {
-			"kinds": { "good": { "frame": { "frame": "panel_raised" }, "titleColour": "#6abf40" }, "bad": { "frame": { "frame": "panel_raised" }, "titleColour": "#e04848" } },
+			"kinds": { "good": { "frame": { "frame": "panel_raised" }, "titleColour": "#6abf40" }, "bad": { "frame": { "frame": "panel_raised" }, "titleColour": "#e04848" }, "note": { "frame": { "frame": "panel_raised" }, "titleColour": "#d49733" } },
 			"padding": { "left": 14, "top": 10, "right": 14, "bottom": 12 },
 			"width": 260,
 			"gap": 8,

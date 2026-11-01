@@ -5,7 +5,8 @@
  * (`LevelFile.levelData.quests`). One marked `start` is under way as the level starts - a level's own quest,
  * the kind there is in co-op and online, where there are no dialogs; the rest wait to be given by an NPC's
  * dialog (see `DialogScript`). What happens in play - a pickup collected, a monster killed - is `Record`ed in
- * the level's `QuestLog`, and moves on each quest it counts for. More kinds of goal can be added with
+ * the level's `QuestLog`, and moves on each quest it counts for. A dialog script can also give a quest a note - a
+ * hint, or a comment on how it's going (`notify`, see `QuestLog.Notify`). More kinds of goal can be added with
  * `RegisterQuestGoal`. Pure - no pixi - so it runs under the plain node test runner.
  */
 
@@ -176,20 +177,31 @@ export type QuestStatus = {
     progress: number;
     /** How far it has to go to be complete. */
     target: number;
+    /** The last note a dialog script gave it (`notify`) - a hint, or a comment - shown under it in the quest tracker; null for none yet. */
+    note: string | null;
 };
 
 /** What a quest log tells of each change: the quest as it is now, the state it was in before, and its index in the log. */
 export type QuestChange = (status: Readonly<QuestStatus>, was: QuestState, index: number) => void;
 
+/** What a quest log tells of each note given (`Notify`): the quest, the note, and its index in the log. */
+export type QuestNote = (status: Readonly<QuestStatus>, text: string, index: number) => void;
+
+/** How long a quest's note stays up as a toast, in seconds: longer for more to read. */
+export function QuestNoteSeconds(text: string): number {
+    return Math.min(8, 3 + text.length * 0.05);
+}
+
 /**
  * How a level's quests stand, in a run of it: started over with each run (`Reset`), moved on by what happens in play
- * (`Record`) and by dialogs (`Give`, `Complete`, `Finish`). Each change is told to `changed`.
+ * (`Record`) and by dialogs (`Give`, `Complete`, `Finish`). Each change is told to `changed`, and each note a
+ * dialog gives a quest (`Notify`) to `noted`.
  */
 export default class QuestLog {
     private quests: QuestStatus[] = [];
     private version = 0;
 
-    constructor(private readonly changed: QuestChange = () => undefined) {}
+    constructor(private readonly changed: QuestChange = () => undefined, private readonly noted: QuestNote = () => undefined) {}
 
     /** Every quest, in the level's order. */
     get Quests(): ReadonlyArray<Readonly<QuestStatus>> {
@@ -201,12 +213,12 @@ export default class QuestLog {
         return this.version;
     }
 
-    /** Starts over with these quests: the `start` ones under way, the rest not given, nothing counted yet. Tells of none of it. */
+    /** Starts over with these quests: the `start` ones under way, the rest not given, nothing counted yet, no notes. Tells of none of it. */
     Reset(defs: ReadonlyArray<QuestDef>, level: QuestLevel): void {
         this.quests = defs.map(def => {
             const type = QuestGoalFor(def.goal.kind);
             const target = type ? Math.max(1, type.Target(def.goal, def, level)) : 1;
-            return { def, state: def.start ? "active" : "none", progress: 0, target };
+            return { def, state: def.start ? "active" : "none", progress: 0, target, note: null };
         });
         this.version++;
     }
@@ -259,6 +271,23 @@ export default class QuestLog {
             return false;
         }
         this.Set(quest, "finished", quest.target);
+        return true;
+    }
+
+    /**
+     * Gives a quest a note - a hint, or a comment on how it's going (a dialog's `notify`) - in place of the one before. It's
+     * kept whatever state the quest is in, so a note given before the quest is given shows in the tracker once it's under way.
+     * Returns whether the level has the quest.
+     */
+    Notify(id: string, text: string): boolean {
+        const index = this.Index(id);
+        const quest = this.quests[index];
+        if (!quest) {
+            return false;
+        }
+        quest.note = text;
+        this.version++;
+        this.noted(quest, text, index);
         return true;
     }
 

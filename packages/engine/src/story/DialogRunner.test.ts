@@ -95,6 +95,12 @@ describe("DialogRunner", () => {
         expect(runner.Start()!.text).toBe("You again.");
     });
 
+    it("gives a quest a note as the talk passes it", () => {
+        const { runner, quests } = Talk("give rats\nnotify rats The big one hides by the barrels.\nA: Off you go.");
+        expect(runner.Start()!.text).toBe("Off you go.");
+        expect(quests.Get("rats")).toMatchObject({ state: "active", note: "The big one hides by the barrels." });
+    });
+
     it("shows choices that come after an action with the last line said", () => {
         const { runner } = Talk("A: Pick one.\nset asked\n> This -> end\n> That -> end");
         expect(runner.Start()).toEqual({ speaker: "A", text: "Pick one.", choices: [] });

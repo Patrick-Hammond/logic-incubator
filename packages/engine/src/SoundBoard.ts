@@ -11,8 +11,8 @@
 import type NamedSounds from "@logic-incubator/lib/assets/NamedSounds";
 import {
     ALL_PLAYERS_DIED, BOSS_WOKE, DOOR_CLOSED, DOOR_LOCKED, DOOR_OPENED, GAME_PAUSED, HERO_TELEPORTED, KEYS_DROPPED, LEVEL_COMPLETED, LIGHT_SPELL_CAST, MONSTER_HIT,
-    MONSTER_KILLED, MONSTER_SPAWNED, NPC_SHOUTED, OBJECT_PUSHED, PICKUP_COLLECTED, PLAYER_DAMAGED, PLAYER_DIED, QUEST_UPDATED, SHOT_FIRED, SHOT_STOPPED,
-    SPAWNER_DESTROYED, SPAWNER_HIT, TALK_LINE, TALK_STARTED
+    MONSTER_KILLED, MONSTER_SPAWNED, NPC_SHOUTED, OBJECT_PUSHED, PICKUP_COLLECTED, PLAYER_DAMAGED, PLAYER_DIED, QUEST_NOTED, QUEST_UPDATED, SHOT_FIRED,
+    SHOT_STOPPED, SPAWNER_DESTROYED, SPAWNER_HIT, TALK_LINE, TALK_STARTED
 } from "./Events";
 import type { AssetMetadata } from "./level/AssetMetadata";
 import type { MonsterDef, MonsterSounds, MonsterType } from "./level/entities/MonsterRoster";
@@ -66,6 +66,8 @@ export type SoundTable = {
     questProgress?: string;
     /** A quest's goal is met, or it's handed in. */
     questDone?: string;
+    /** A dialog script's note on a quest (`notify`) - a hint, or a comment. */
+    questNote?: string;
     talkStart?: string;
     /** Each line of a talk after its first. */
     talkLine?: string;
@@ -84,7 +86,7 @@ export type SoundTable = {
 export const SoundEvents: ReadonlyArray<string> = [
     SHOT_FIRED, SHOT_STOPPED, PLAYER_DAMAGED, PLAYER_DIED, LIGHT_SPELL_CAST, KEYS_DROPPED, ALL_PLAYERS_DIED, LEVEL_COMPLETED, MONSTER_HIT, MONSTER_KILLED,
     MONSTER_SPAWNED, BOSS_WOKE, SPAWNER_HIT, SPAWNER_DESTROYED, DOOR_OPENED, DOOR_CLOSED, DOOR_LOCKED, HERO_TELEPORTED, PICKUP_COLLECTED, QUEST_UPDATED,
-    TALK_STARTED, TALK_LINE, NPC_SHOUTED, GAME_PAUSED, OBJECT_PUSHED
+    QUEST_NOTED, TALK_STARTED, TALK_LINE, NPC_SHOUTED, GAME_PAUSED, OBJECT_PUSHED
 ];
 
 /** What one hero sounds like, by name (see `HeroSlot.sounds`) - a character's own voice. Either left out, the game's `SoundTable` has it. */
@@ -196,6 +198,9 @@ export default class SoundBoard {
                 }
                 break;
             }
+            case QUEST_NOTED:
+                this.Play(table.questNote);
+                break;
             case TALK_STARTED:
                 this.Play(table.talkStart);
                 break;
