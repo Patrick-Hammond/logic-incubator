@@ -26,7 +26,7 @@ vi.mock("pixi.js", async () => {
         UPDATE_PRIORITY: { UTILITY: -50 },
     };
 });
-vi.mock("screenfull", () => ({ isEnabled: true, request: vi.fn() }));
+vi.mock("screenfull", () => ({ isEnabled: true, request: vi.fn(() => Promise.resolve()) }));
 vi.mock("../io/Keyboard", () => ({ default: class { Destroy = () => calls.push("keyboard"); } }));
 vi.mock("../io/GamePad", () => ({ default: class { Destroy = () => calls.push("gamepad"); } }));
 vi.mock("./SceneManager", () => ({ default: class { Destroy = () => calls.push("scenes"); } }));
@@ -40,7 +40,7 @@ const page = { tagName: "HTML" };
 
 beforeEach(() => {
     calls.length = 0;
-    vi.mocked(ScreenFull.request).mockClear();
+    vi.mocked(ScreenFull.request).mockClear().mockImplementation(() => Promise.resolve());
     pixi.destroyArgs = [];
     win = { onresize: null };
     vi.stubGlobal("window", win);
@@ -72,6 +72,26 @@ describe("Game fullscreen", () => {
         game.interactionManager.emit("pointerdown");
         game.interactionManager.emit("pointerdown");
         expect(ScreenFull.request).toHaveBeenCalledTimes(1);
+    });
+
+    it("asks again on the next click if the browser refused, and doesn't let the refusal escape as an unhandled rejection", async () => {
+        const refused = Promise.reject(new Error("Fullscreen request denied"));
+        vi.mocked(ScreenFull.request).mockImplementationOnce(() => refused);
+        const game = makeGame(true);
+        game.interactionManager.emit("pointerdown");
+        await refused.catch(() => undefined);
+        game.interactionManager.emit("pointerdown");
+        expect(ScreenFull.request).toHaveBeenCalledTimes(2);
+    });
+
+    it("doesn't ask again after a refusal once destroyed", async () => {
+        const refused = Promise.reject(new Error("Fullscreen request denied"));
+        vi.mocked(ScreenFull.request).mockImplementationOnce(() => refused);
+        const game = makeGame(true);
+        game.interactionManager.emit("pointerdown");
+        game.destroy();
+        await refused.catch(() => undefined);
+        expect(fullscreenListeners(game)).toBe(0);
     });
 
     it("doesn't ask when the option is off", () => {
