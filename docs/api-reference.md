@@ -80,6 +80,7 @@ configuration files and plugin interface. For explanations, examples and workflo
 [DungeonEditor](#dungeoneditor) ·
 [EditorAssets](#editorassets) ·
 [SavedLevel](#savedlevel) ·
+[NamedLevels and LevelsDialog](#namedlevels-and-levelsdialog) ·
 [Map styling](#map-styling) ·
 [Stores](#stores) ·
 [EditorComponent](#editorcomponent) ·
@@ -873,10 +874,10 @@ Logs connect/disconnect details to the console.
 ```ts
 SaveTextFile(fileName: string, output: string): boolean            // triggers a download; false if the File API is missing
 LoadTextFile(file: File): Promise<string>
-SaveToLocalStorage(key: string, data: string): boolean
-LoadFromLocalStorage(key: string): string | null
+SaveToLocalStorage(key: string, data: string): boolean           // false if storage is missing, full (the quota) or blocked; never throws
+LoadFromLocalStorage(key: string): string | null                   // null if nothing's there, or storage is missing or blocked; never throws
 FileAPISupported(): boolean
-ShowOpenFileDialog(): Promise<FileList>                             // rejects if none chosen
+ShowOpenFileDialog(accept?: string): Promise<FileList>             // rejects if none chosen; accept as the input's own attribute (".json,.txt")
 ```
 
 `@logic-incubator/lib/io/Url`: `GetExtension(url): string` (with the dot), `RemoveExtension(url): string`,
@@ -963,6 +964,7 @@ Subscribe(callback: (prev: T, state: T) => void, context: any): () => void     /
 Dispatch(action: IAction<U>): void             // pushes undo if action.canUndo; notifies if the reducer returned a new object
 Load(state: T): void;   LoadJSON(json: string): void;   SerializeJSON(): string
 Undo(): void                                   // no-op if maxUndo is 0 or nothing to undo
+ClearUndo(): void                              // forgets every undo step - after loading something unrelated (another level), which undo mustn't step back into
 protected abstract DefaultState(): T
 protected abstract Reduce(state: T, action?: IAction<U>): T      // pure: return the same object for "no change"
 ```
@@ -2691,7 +2693,7 @@ Add it with `sceneManager.AddScene(Scenes.EDITOR, new DungeonEditor(options))`, 
 It attaches `Canvas`, `BrushTool`, `Tools`, `Palette`, `Layers`, `SelectedBrush`, `Toolbar`, `CellInspector`, `Keyboard` and `Menu`, restores the localStorage save
 (through `OpenEditorSave`: a version 1 save is brought up to date, and one it can't open is reported in an alert and the editor starts empty), saves the level
 again as the page goes (`pagehide`, or `visibilitychange` to hidden) through `SaveOnLeave`, and keeps the editor/game toggle (Enter) correct by listening to
-`LEVEL_CREATED`. The editor's DOM overlay is visible only while the editor scene is shown. `OnDestroy` removes the
+`LEVEL_CREATED`. `Menu` is the help line under the map, led by the level's name (`IEditorState.levelName`, or *Unnamed level*). The editor's DOM overlay is visible only while the editor scene is shown. `OnDestroy` removes the
 overlay and injected styles and resets the editor's shared stores.
 
 ## EditorAssets
@@ -2708,11 +2710,57 @@ EditorFontName(assets: Assets): string                 // the face of the editor
 
 `@logic-incubator/editor/SavedLevel`: `type EditorSave = LevelFile & { editorData: IEditorState; levelData: LevelDataState }`; `MakeEditorSave(editorData, levelData)`
 (stamped `version: LevelVersion`); `OpenEditorSave(file): { save } | { error }` - a save or a file opened in the editor, through `MigrateLevelFile`: brought up to date,
-or why it can't be opened; `SaveLevel(save)`, `LoadSavedLevel(): EditorSave | undefined` - the localStorage copy (key `dungeonLevel`) saved when Enter hands the level to the game.
+or why it can't be opened; `SaveLevel(save): boolean`, `LoadSavedLevel(): EditorSave | undefined` - the localStorage copy (key `dungeonLevel`) saved when Enter hands the level to the game
+(`SaveLevel` is false when the browser wouldn't keep it - storage full or blocked - and then Enter stays in the editor and says why, as the game would play an older level).
 `LevelContent(save): string` - the level itself (brushes, quests, layers, without layers' `selected`/`visible`) to tell two saves apart by;
 `NeedsSaveOnLeave(now, stored, opened): boolean` - whether `now` differs from the `stored` save, or, when nothing openable is stored, from `opened` (the
 `LevelContent` the editor started with); `SaveOnLeave(now, opened): boolean` - saves `now` if that says so (an unreadable stored save counts as none), for the
-editor to call as the page goes.
+editor to call as the page goes (false too when the storage is full).
+
+## NamedLevels and LevelsDialog
+
+`@logic-incubator/editor/NamedLevels` (pure, storage injected): the levels kept in the browser by name, beside the editor's own `dungeonLevel` (which only Enter,
+a reload and the page going write, and which the game plays). Each is its own key, `NamedLevelPrefix + name` (`"dungeonLevels/"`), holding
+`{ name, savedAt, level }` - `level` being exactly what a downloaded file holds.
+
+```ts
+type LevelStorage = { readonly length: number; key(i): string | null; getItem(key): string | null; setItem(key, value): void; removeItem(key): void };
+new NamedLevels(storage: LevelStorage | null)        // null: the browser gave none (private window, site data off) - nothing can be kept
+Available: boolean
+List(): NamedLevel[]                                 // { name, savedAt, size, unreadable? } - newest first, then by name; ones that can't be read last
+Has(name): boolean
+Read(name): { save } | { error }                     // through OpenEditorSave: brought up to date, or why not (missing, damaged, from a newer editor)
+FileText(name): string | null                        // the level as a file, to download it without opening it
+Save(name, save, now?): { ok: true; replaced } | { ok: false; error; full }   // full: the browser's quota; a level it would have replaced is left as it was
+Delete(name): void
+UsedSpace(): number                                  // everything the site keeps in local storage, in characters (keys and values)
+
+NamedLevelPrefix = "dungeonLevels/";   MaxLevelNameLength = 60;   StorageBudget = 5 MiB     // about what a browser allows a site, only for showing how full it is
+CleanLevelName(name)          // ends trimmed, runs of white space made one space, unprintable characters dropped - names are compared like this
+LevelNameProblem(name)        // "Give the level a name." / too long, or null
+LevelFileName(name)           // "The Sunken Crypt.json"; characters a file name can't have become "-"; "dungeonLevel.json" without a name
+LevelNameFromFile(fileName)   // "C:\levels\crypt.json" -> "crypt": the name for an opened file that doesn't carry one
+IsLevelFile(value)            // has editorData.layers and levelData.levelData arrays - checked before anything is made of a file
+IsStorageFull(error)          // QuotaExceededError / NS_ERROR_DOM_QUOTA_REACHED / code 22 or 1014
+HasUnsavedWork(now, kept, levels)   // the map has a brush or a quest, and is neither `kept` (its LevelContent when last saved, downloaded or opened) nor the level saved under its name
+DescribeSavedAt(savedAt, now?)      // "today 14:02", "yesterday 09:30", "5 Nov 14:02", "5 Nov 2025"
+DescribeSize(size)                  // "800 B", "312 KB", "1.2 MB"
+```
+
+`@logic-incubator/editor/LevelsDialog` (DOM, in the `FormDialog` look; key presses kept from the editor's shortcuts):
+
+```ts
+OpenSaveLevelDialog(levels, save): Promise<SavedLevelChoice | null>        // S: { name, save (as saved, levelName set), to: "browser" | "file" }
+OpenLoadLevelDialog(levels, editing, unsaved): Promise<OpenedLevel | null> // L: { name, save (brought up to date), from: "browser" | "file" }
+IsLevelsDialogOpen(): boolean
+```
+
+Save has the name box (the level's own name to start with) and the browser's levels under it - a click takes one's name, to save over it (the button then reads
+Replace) - each with Delete; **Download file** saves `LevelFileName(name)`. A save the browser refuses keeps the popup up with the reason. Load lists the levels with
+Load (or a double-click), Download and Delete, marks the one being edited (`editing`), and has **Load file…** (`.json` or `.txt`); a file that isn't a level, or one
+`OpenEditorSave` can't open, is reported in the popup. With `unsaved` work it asks before opening over it. Both show how much of the browser's storage is used. Neither
+opens while another of the editor's popups is up (they resolve with null). The editor's `Keyboard` view opens them on S and L, sets the level's name
+(`SET_LEVEL_NAME`) after a save, and loads an opened level into both stores with `levelDataStore.ClearUndo()`, so undo can't step back into the level it replaced.
 
 ## Map styling
 
@@ -2739,7 +2787,7 @@ Both extend lib's `Store`.
 
 `@logic-incubator/editor/stores/EditorStore` - `default class EditorStore` (UI state: tool, brush, layers, zoom, scene):
 `const enum EditorActions` (`BRUSH_MOVED`, `ROTATE_BRUSH`, `FLIP_BRUSH_H`, `FLIP_BRUSH_V`, `BRUSH_CHANGED`, `BRUSH_HOVERED`, `BRUSH_VISIBLE`, `BRUSH_NUDGE`,
-`DATA_BRUSH_INC`, `DATA_BRUSH_DEC` (+/-: step the height brush, or the teleport brush's portal id - no other value), `SET_DATA_BRUSH_VALUE`, `ZOOM_IN`, `ZOOM_OUT`, `MOUSE_BUTTON`, `CHANGE_SCENE`, `RESET`, `DUPLICATE_LAYER`,
+`DATA_BRUSH_INC`, `DATA_BRUSH_DEC` (+/-: step the height brush, or the teleport brush's portal id - no other value), `SET_DATA_BRUSH_VALUE`, `ZOOM_IN`, `ZOOM_OUT`, `MOUSE_BUTTON`, `CHANGE_SCENE`, `RESET` (also clears the level's name), `SET_LEVEL_NAME` (`data.name`), `DUPLICATE_LAYER`,
 `MOVE_PLAYER_LAYER_UP`, `MOVE_PLAYER_LAYER_DOWN` (see `PlayerLayerMoved`), `INSPECT_CELL` (`data.position`: opens the cell inspector there, or closes it given none), `REFRESH`, ...),
 `const enum EditorTool { BRUSH = "brush", ERASE = "erase", DATA_SELECT = "data-select", STAMP = "stamp", DROPPER = "dropper", FILL = "fill", MOVE = "move" }`,
 `const enum MouseButtonState { LEFT_DOWN, RIGHT_DOWN, UP, MIDDLE_DOWN }`, `IMPLICIT_LAYER_ID = -99999` (the always-present `attributes` data layer, holding every data brush but the heights, one of each name a cell),
@@ -2748,7 +2796,7 @@ the height layer (`HEIGHT_LAYER_ID` from `LevelFormat`, always present after "at
 `MaxEditableLayers = 16`, `EditableLayerCount(layers)` (the tile layers), `DefaultTileLayerKinds` (`["floor", "walls"]`), `WithDefaultLayers(layers)` (adds "attributes", the height layer after it, a floor and a walls layer, and the player layer - last, over every tile layer - if missing, gives a height layer read from a file the editor's `visible`/`selected`, and selects the floor if nothing is; the store applies it on every action and load), `NextTileLayerId(layers)`, `IsRemovableLayer(layers, layer)` (not a fixed layer, nor the last floor or walls layer), `ADD_LAYER` takes an optional `kind` (a new or duplicated layer goes last, or just before the player layer while that's last, so it's drawn under the figures), `ToolFitsLayer(tool, layer)` (data-select - the inspector's arrow - is only usable with a data layer selected, attributes or height - the store switches back to the brush when it isn't, and the toolbar hides its button), `PaintsWithBrush(tool)` (the brush, stamp and fill: the tools that show the brush on the cursor, and the ones `BRUSH_CHANGED` keeps - it switches any other tool to the brush), `type DataBrush = { name; colour; value; height? }` (`height`: one of the height layer's brushes), `type DataBrushIcons = { readonly [K in DataBrushName]?: string }`,
 `DataBrushIcon(icons, name)`, `RAISE_BRUSH = "height-raise"` and `LOWER_BRUSH = "height-lower"` (the height layer's raise and lower brushes: each cell a stroke covers goes up or down one, once; the editor's, never saved),
 `IsHeightBrushName(name)` (`Z_INDEX`, raise or lower), `DataBrushLabel(name)` ("height", "raise", "lower", or the name), `DataBrushEditorIcon(name)` (the editor's arrow icon for raise and lower),
-`ActiveAttributeType(state): string | null` (the data brush picked while "attributes" is selected - the type painted, erased and drawn in full; null for All, or on any other layer), `type LayerMemory = { tool; brush }`, `interface IEditorState` (its `inspectedCell` is the cell the inspector is open on, or null - never kept from a save, and closed by a reset, a scene change or a tile layer being selected; its `layerMemory`, keyed by layer id, is each layer's tool and brush from when another layer was selected, restored when it is selected again, except when the dropper picked the brush; a layer with none gets the empty brush and keeps the current tool; "attributes" always comes back on data-select, whatever its memory says, keeping just the brush, and the height layer with no memory starts on the brush with the height brush - except when the dropper picked a brush on it).
+`ActiveAttributeType(state): string | null` (the data brush picked while "attributes" is selected - the type painted, erased and drawn in full; null for All, or on any other layer), `type LayerMemory = { tool; brush }`, `interface IEditorState` (its `levelName` is the name the level was last saved or opened under - see [NamedLevels](#namedlevels-and-levelsdialog) - or "" for none, kept in every save and file, so a reload or a reopened file still knows it; a save from before names has none; its `inspectedCell` is the cell the inspector is open on, or null - never kept from a save, and closed by a reset, a scene change or a tile layer being selected; its `layerMemory`, keyed by layer id, is each layer's tool and brush from when another layer was selected, restored when it is selected again, except when the dropper picked the brush; a layer with none gets the empty brush and keeps the current tool; "attributes" always comes back on data-select, whatever its memory says, keeping just the brush, and the height layer with no memory starts on the brush with the height brush - except when the dropper picked a brush on it).
 
 `@logic-incubator/editor/stores/LevelDataStore` - `default class LevelDataStore` (the painted brushes): `type Layer = LevelLayer & { selected; visible }`,
 `type LevelDataState = { levelData: LevelData; quests: QuestDef[] }`, `const enum LevelDataActions` (`COPY`, `RESET`, `SET_QUESTS` - `data.quests`, the quest list's -,

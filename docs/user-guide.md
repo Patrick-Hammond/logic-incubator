@@ -1322,13 +1322,15 @@ joystick.Destroy();
 Small wrappers over `localStorage` and the File API (`@logic-incubator/lib/io/Storage`):
 
 ```ts
-SaveToLocalStorage("hiscore", JSON.stringify(score));
+SaveToLocalStorage("hiscore", JSON.stringify(score));      // false if it couldn't be kept (storage full or blocked) - it never throws
 const stored = LoadFromLocalStorage("hiscore");             // string | null
 
 SaveTextFile("level.json", text);                            // triggers a download
-const files = await ShowOpenFileDialog();                    // FileList
+const files = await ShowOpenFileDialog(".json,.txt");        // FileList; the argument (optional) narrows what the picker offers
 const content = await LoadTextFile(files[0]);
 ```
+
+A browser keeps about 5 MB of local storage per site, for everything the site stores; past that `SaveToLocalStorage` returns false.
 
 ---
 
@@ -2792,9 +2794,9 @@ vertical **toolbar** of tools at the far right. Each palette tab ends in a **+**
 
 | Key | Action |
 | --- | --- |
-| `Enter` | Toggle **play**: saves the level (to localStorage) and runs it in the game; Enter again returns to the editor. The level is also saved as the page goes (tab or browser closed, reload) if it changed. |
-| `S` | Download the level as `dungeonLevel.txt` (JSON). |
-| `L` | Load a level file. |
+| `Enter` | Toggle **play**: saves the level (to localStorage) and runs it in the game; Enter again returns to the editor. The level is also saved as the page goes (tab or browser closed, reload) if it changed. If the browser's storage is full it says so and stays in the editor ([10.5](#105-saving-exporting-and-shipping-a-level)). |
+| `S` | **Save**: name the level and keep it in this browser, or download it as a file ([10.5](#105-saving-exporting-and-shipping-a-level)). |
+| `L` | **Load**: a level kept in this browser, or a level file. |
 | `Ctrl+Z` | Undo. |
 | `Q` | The level's **quests**: a list with Edit and Remove for each, and Add quest. Each opens a popup: its name, what to do, its id, its goal (and how many, or which monster), and whether it's under way from the start and whether it ends the level ([9.10](#910-npcs-dialogs-and-quests)). Save keeps the lot as one undo step. |
 | `Ctrl+Q` | Clear the map (asks first). |
@@ -2915,9 +2917,24 @@ at a cell. See `in-dungeons-we-dwell/src/editor/Style0x7.ts` for a complete one.
    reloads - and a dev build's game plays that save instead of the shipped level. It saves on Enter, and again as the page goes
    (the tab or browser closed, a reload, the tab hidden) if the level has changed: a visit that changes nothing leaves the save
    alone, so the shipped level still plays for someone who never painted, and a save from a newer version isn't covered over.
-2. When it is right, press **S** to download `dungeonLevel.txt`.
-3. Save that JSON over `assets/level1/data/level.json`, run `npm run assets` (the manifest hash changes), commit.
-4. The production build plays the shipped file; it never contains the editor.
+2. To keep more than one level, press **S** and give it a name. **Save** keeps it in this browser under that name; the levels
+   already kept are listed under the name box - click one to take its name and save over it (the button then says **Replace**),
+   or **Delete** one you don't need. **Download file** saves it as `<name>.json` instead. The level goes by that name from then
+   on: it's shown at the start of the help line under the map, S offers it next time, and it's kept with the level, so a reload
+   or a downloaded file still knows it. A new map (`Ctrl+Q`, or a generated one) has no name until it's saved.
+3. Press **L** to load one: the levels kept in this browser, newest first, each with **Load** (or double-click it),
+   **Download** (to a file, without opening it) and **Delete**; the one you're editing is marked *open now*. **Load file…** opens a
+   level file - one you downloaded (`.json`, or an older `dungeonLevel.txt`), or a game's `level.json`; it takes the name saved in it,
+   or the file's name. If the map has changes that aren't saved anywhere, it asks before opening over them. Undo starts afresh
+   with the level opened. A level from the version before is brought up to date; one it can't open is reported in the popup.
+4. Named levels share the browser's storage with the level being played: about 5 MB for the site, and a big level takes a few
+   hundred KB (The Sunken Crypt is about 490 KB), so roughly ten fit. Both popups show how much is used. When it's full, Save says
+   so and keeps the popup open, and Enter says so and stays in the editor rather than play an older level - delete levels you don't
+   need, or download the level. A level kept in the browser is only in that browser, for that address (the dev server's
+   `localhost` port): download the ones that matter.
+5. When it is right, download it (S, **Download file**), save that JSON over `assets/level1/data/level.json`, run
+   `npm run assets` (the manifest hash changes), commit.
+6. The production build plays the shipped file; it never contains the editor.
 
 ### 10.6 The sprite editor
 

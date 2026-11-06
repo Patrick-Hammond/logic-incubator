@@ -447,6 +447,34 @@ describe("EditorStore currentScene", () => {
     });
 });
 
+describe("EditorStore level name", () => {
+    it("starts with none, is set by SET_LEVEL_NAME and kept through other actions", () => {
+        const store = new EditorStore();
+        expect(store.state.levelName).toBe("");
+        store.Dispatch({ type: EditorActions.SET_LEVEL_NAME, data: { name: "The Sunken Crypt" } });
+        store.Dispatch({ type: EditorActions.ZOOM_IN });
+        store.Dispatch({ type: EditorActions.SET_TOOL, data: { tool: EditorTool.FILL } });
+        expect(store.state.levelName).toBe("The Sunken Crypt");
+    });
+
+    it("is cleared by a reset - a new map has no name", () => {
+        const store = new EditorStore();
+        store.Dispatch({ type: EditorActions.SET_LEVEL_NAME, data: { name: "Crypt" } });
+        store.Dispatch({ type: EditorActions.RESET, data: { persistZoom: true } });
+        expect(store.state.levelName).toBe("");
+    });
+
+    it("is kept by a save, and a save from before levels had names has none", () => {
+        const store = new EditorStore();
+        store.Load({ ...store.state, levelName: "Crypt" });
+        expect(store.state.levelName).toBe("Crypt");
+        const old = { ...store.state };
+        delete old.levelName;
+        store.Load(old);
+        expect(store.state.levelName).toBe("");
+    });
+});
+
 describe("EditorStore mouseDownPosition", () => {
     function pressAt(store: EditorStore, x: number, y: number, mouseButtonState: MouseButtonState) {
         store.Dispatch({ type: EditorActions.BRUSH_MOVED, data: { position: { x, y } } });

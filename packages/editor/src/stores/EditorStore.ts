@@ -46,7 +46,9 @@ export const enum EditorActions {
     /** Opens the cell inspector on `position` (map coordinates), or closes it given none - see `IEditorState.inspectedCell`. */
     INSPECT_CELL,
     REFRESH,
-    RESET
+    RESET,
+    /** Names the level (`name`) - what Save offers and the help line shows; see `IEditorState.levelName`. */
+    SET_LEVEL_NAME
 }
 
 export const enum MouseButtonState {
@@ -372,6 +374,11 @@ export interface IEditorState {
     layerMemory: { [layerId: string]: LayerMemory };
     /** The cell the inspector is open on (see `CellInspector`), in map coordinates, or null while it's closed. Never kept from a save. */
     inspectedCell: Vec2Like | null;
+    /**
+     * The name the level was last saved or opened under (see NamedLevels.ts), or "" for one that has none yet: a new map, or one
+     * saved before levels had names. Saved with the level, so a reload, or a file opened again, still knows it. Cleared by RESET.
+     */
+    levelName: string;
 }
 
 export default class EditorStore extends Store<IEditorState, IActionData> {
@@ -418,7 +425,8 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
             currentScene: Scenes.EDITOR,
             tool: EditorTool.BRUSH,
             layerMemory: {},
-            inspectedCell: null
+            inspectedCell: null,
+            levelName: ""
         };
     }
 
@@ -449,7 +457,9 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
             // A save from before layers were remembered has none.
             layerMemory: (state && state.layerMemory) || {},
             // A cell of the map that was open - or of another one.
-            inspectedCell: null
+            inspectedCell: null,
+            // A save from before levels had names has none.
+            levelName: state && typeof state.levelName === "string" ? state.levelName : ""
         });
     }
 
@@ -480,7 +490,8 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
             currentScene: this.UpdateCurrentScene(state.currentScene, action),
             tool: this.UsableTool(switched.tool, layers),
             layerMemory: switched.layerMemory,
-            inspectedCell: this.UpdateInspectedCell(state.inspectedCell, action, layers)
+            inspectedCell: this.UpdateInspectedCell(state.inspectedCell, action, layers),
+            levelName: this.UpdateLevelName(state.levelName, action)
         };
         return newState as IEditorState;
     }
@@ -839,6 +850,17 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
                 return null;
             default:
                 return cell || null;
+        }
+    }
+
+    private UpdateLevelName(name: string, action: IAction<IActionData>): string {
+        switch (action.type) {
+            case EditorActions.SET_LEVEL_NAME:
+                return action.data.name || "";
+            case EditorActions.RESET:
+                return "";
+            default:
+                return name || "";
         }
     }
 

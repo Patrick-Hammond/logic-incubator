@@ -23,17 +23,30 @@ export function LoadTextFile(file: File): Promise<string> {
     });
 }
 
+/**
+ * Stores `data` under `key`. False when it couldn't be kept: no local storage, storage full (the browser's quota, about
+ * 5 MB a site) or blocked (site data turned off). Never throws.
+ */
 export function SaveToLocalStorage(key: string, data: string): boolean {
     if (typeof Storage !== "undefined") {
-        window.localStorage.setItem(key, data);
-        return true;
+        try {
+            window.localStorage.setItem(key, data);
+            return true;
+        } catch {
+            return false;
+        }
     }
     return false;
 }
 
+/** What's stored under `key`, or null if nothing is, or local storage is missing or blocked. Never throws. */
 export function LoadFromLocalStorage(key: string): string {
     if (typeof Storage !== "undefined") {
-        return window.localStorage.getItem(key);
+        try {
+            return window.localStorage.getItem(key);
+        } catch {
+            return null;
+        }
     }
     return null;
 }
@@ -42,11 +55,15 @@ export function FileAPISupported(): boolean {
     return ["File", "FileReader", "FileList", "Blob"].some(prop => window[prop] != null);
 }
 
-export function ShowOpenFileDialog(): Promise<FileList> {
+/** The browser's file picker. `accept` narrows what it offers, as the input's own attribute does (".json,.txt"). */
+export function ShowOpenFileDialog(accept?: string): Promise<FileList> {
     return new Promise((resolve, reject) => {
         if (FileAPISupported()) {
             const input = document.createElement("input");
             input.type = "file";
+            if (accept) {
+                input.accept = accept;
+            }
             input.addEventListener("change", e => {
                 if (input.files.length) {
                     resolve(input.files);

@@ -1,17 +1,24 @@
 import {Key} from "@logic-incubator/lib/io/Keyboard";
-import {LoadTextFile, SaveTextFile, ShowOpenFileDialog} from "@logic-incubator/lib/io/Storage";
 import { Scenes, TileSize } from "@logic-incubator/engine/Constants";
 import { GridBounds } from "../Layout";
 import EditorComponent from "../EditorComponent";
 import {GenerateMap, IMap, MapType} from "../maps/Generators";
 import {ApplyMapStyle, IStyler} from "../maps/Styler";
 import {GenerateZTest} from "../maps/ZTest";
+import { OpenLoadLevelDialog, OpenSaveLevelDialog } from "../LevelsDialog";
+import { HasUnsavedWork, NamedLevels } from "../NamedLevels";
 import { OpenQuestsDialog } from "../QuestsDialog";
-import {EditorSave, MakeEditorSave, OpenEditorSave, SaveLevel} from "../SavedLevel";
+import { EditorSave, LevelContent, MakeEditorSave, SaveLevel } from "../SavedLevel";
+import { BrowserStorage } from "../sprite/SpriteEditor";
 import {EditorActions, IEditorState, IsFixedLayer} from "../stores/EditorStore";
 import {LevelDataActions, LevelDataState} from "../stores/LevelDataStore";
 
 export default class Keyboard extends EditorComponent {
+    /** The levels kept in this browser by name - what Save (S) and Load (L) offer. */
+    private readonly levels = new NamedLevels(BrowserStorage(() => window.localStorage));
+    /** The level's `LevelContent` when it was last saved, downloaded or opened - so Load knows there's nothing to lose. None before the first. */
+    private kept: string | undefined;
+
     /** `mapStyle`: the game's tiles for the maps keys 1-8 generate - see `IDungeonEditorOptions`. */
     constructor(private readonly titleScene?: string, private readonly mapStyle?: IStyler) {
         super();
@@ -27,8 +34,13 @@ export default class Keyboard extends EditorComponent {
 
             if (e.keyCode === Key.Enter) {
                 const isEditor = this.editorStore.state.currentScene === Scenes.EDITOR;
-                if (isEditor) {
-                    SaveLevel(this.LevelFile());
+                // The game plays what's kept: if it can't be, the game would play an older level, so stay in the editor.
+                if (isEditor && !SaveLevel(this.LevelFile())) {
+                    alert(
+                        "The level can't be played: the browser's storage for this site is full, so it couldn't be kept for the game. " +
+                            "Delete levels you don't need (L), or download this one (S), and try again."
+                    );
+                    return;
                 }
 
                 const scene = isEditor ? Scenes.GAME : Scenes.EDITOR;
@@ -88,21 +100,13 @@ export default class Keyboard extends EditorComponent {
                         this.editorStore.Dispatch({ type: EditorActions.DATA_BRUSH_DEC });
                         break;
                     case Key.S:
-                        SaveTextFile("dungeonLevel.txt", JSON.stringify(this.LevelFile()));
+                        // Otherwise this same keypress types an "s" into the name box that just took focus.
+                        e.preventDefault();
+                        this.SaveLevelAs();
                         break;
                     case Key.L:
-                        ShowOpenFileDialog().then((fileList: FileList) => {
-                            LoadTextFile(fileList[0]).then((text: string) => {
-                                // Brought up to date if it's from the version before; anything else isn't opened, and the map stays as it was.
-                                const opened = OpenEditorSave(JSON.parse(text));
-                                if (opened.error) {
-                                    alert("This level can't be opened. " + opened.error);
-                                    return;
-                                }
-                                this.editorStore.Load(opened.save.editorData);
-                                this.levelDataStore.Load(opened.save.levelData);
-                            });
-                        });
+                        e.preventDefault();
+                        this.OpenLevel();
                         break;
                     case Key.Q:
                         if (ctrl) {
@@ -180,6 +184,35 @@ export default class Keyboard extends EditorComponent {
         OpenQuestsDialog(this.levelDataStore.state.quests).then(quests => {
             if (quests) {
                 this.levelDataStore.Dispatch({ type: LevelDataActions.SET_QUESTS, data: { quests }, canUndo: true });
+            }
+        });
+    }
+
+    /** S: the Save popup - the level named and kept in the browser, or downloaded as a file. Either way it goes by that name from then on. */
+    private SaveLevelAs(): void {
+        OpenSaveLevelDialog(this.levels, this.LevelFile()).then(saved => {
+            if (saved) {
+                this.kept = LevelContent(saved.save);
+                if (saved.name !== this.editorStore.state.levelName) {
+                    this.editorStore.Dispatch({ type: EditorActions.SET_LEVEL_NAME, data: { name: saved.name } });
+                }
+            }
+        });
+    }
+
+    /**
+     * L: the Load popup - a level kept in the browser, or a file, brought up to date if it's from the version before - opened in
+     * place of the editor's, asking first if that has work that isn't saved. Undo can't step back into the level it replaced.
+     */
+    private OpenLevel(): void {
+        const now = this.LevelFile();
+        OpenLoadLevelDialog(this.levels, now.editorData.levelName, HasUnsavedWork(now, this.kept, this.levels)).then(opened => {
+            if (opened) {
+                this.editorStore.Load({ ...opened.save.editorData, levelName: opened.name });
+                this.levelDataStore.Load(opened.save.levelData);
+                this.levelDataStore.ClearUndo();
+                // As the editor has it, with any layers an older level lacked added.
+                this.kept = LevelContent(this.LevelFile());
             }
         });
     }

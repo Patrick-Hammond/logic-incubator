@@ -72,6 +72,11 @@ export default abstract class Store<T extends object, U> {
         }
     }
 
+    /** Forgets every undo step - for when the state is replaced by something unrelated (another document loaded), which undoing must not step back out of. */
+    ClearUndo(): void {
+        this._undoStates = [];
+    }
+
     /** Over a copy, so a subscriber that unsubscribes (itself or another) mid-notification doesn't make the next one get skipped. */
     private Notify(): void {
         this.subscribers.slice().forEach(callback => callback(this._prevState, this._state));

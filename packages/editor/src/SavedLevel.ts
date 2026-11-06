@@ -30,8 +30,9 @@ export function OpenEditorSave(file: EditorSave): { save: EditorSave; error?: un
     }
 }
 
-export function SaveLevel(save: EditorSave): void {
-    SaveToLocalStorage(KEY, JSON.stringify(save));
+/** Keeps `save` as the editor's level in the browser. False if it couldn't be: the storage is full (the named levels share it, see NamedLevels.ts) or blocked. */
+export function SaveLevel(save: EditorSave): boolean {
+    return SaveToLocalStorage(KEY, JSON.stringify(save));
 }
 
 /** The editor's last save, or undefined if there isn't one. */
@@ -66,7 +67,7 @@ export function NeedsSaveOnLeave(now: EditorSave, stored: EditorSave | undefined
 /**
  * Saves `now` as `SaveLevel` does, if `NeedsSaveOnLeave` says so: for the editor to call as the page goes (a closed tab or
  * browser, a reload), so painting that was never played isn't lost. A stored save that can't be read counts as none. Returns
- * whether it saved.
+ * whether it saved: false when it wasn't needed, or the storage was full.
  */
 export function SaveOnLeave(now: EditorSave, opened: string): boolean {
     let needed: boolean;
@@ -75,8 +76,5 @@ export function SaveOnLeave(now: EditorSave, opened: string): boolean {
     } catch {
         needed = NeedsSaveOnLeave(now, undefined, opened);
     }
-    if (needed) {
-        SaveLevel(now);
-    }
-    return needed;
+    return needed && SaveLevel(now);
 }
