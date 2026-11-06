@@ -4,7 +4,8 @@ precision highp float;
 // blocky as the art round it. highp, because the pattern is laid out in the level's pixels, thousands across - on the first line,
 // where pixi looks for it to step it down on a GPU without highp.
 //
-// KIND, the kind drawn, is defined under that first line by OverlayLayer: one program per kind, each only its own kind's code.
+// KIND, the kind drawn, is defined under that first line by OverlayLayer (and UNLIT, for one multiplied into the floor): one
+// program per kind, each only its own kind's code.
 // A GPU runs every branch a group of pixels takes between them, and a software renderer every branch there is, so one program
 // for all seven would cost each pixel all seven.
 
@@ -281,8 +282,13 @@ void main(void)
     }
 #endif
 
-    // Lit as the floor under it is; what it mirrors was lit where it stands.
+    // Lit as the floor under it is; what it mirrors was lit where it stands. Multiplied into the floor (UNLIT), it isn't: the floor's
+    // lit already, and its colour darkens it as it is, shadows and all.
+#if UNLIT
+    vec4 result = vec4(colour * alpha, alpha);
+#else
     vec4 result = vec4(colour * vLight * alpha, alpha);
+#endif
     if (uReflect > 0.5 && reflectivity > 0.0 && mirror > 0.0)
     {
         float sway = wave * floor(sin(pixel.y * 0.8 + t * 2.5) * 1.5 + 0.5);

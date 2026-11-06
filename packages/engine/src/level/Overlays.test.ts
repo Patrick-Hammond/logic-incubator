@@ -10,6 +10,8 @@ import Overlays, {
     OverlayLayerIndex,
     OverlayLooks,
     OverlayAlpha,
+    OverlayBlendOf,
+    OverlayBlends,
     OverlayPlacement,
     OverlayReflectivity,
     OverlayTint,
@@ -70,6 +72,15 @@ describe("OverlayValue", () => {
         expect(SanitiseOverlayValue({ overlay: "water", seed: 1, alpha: NaN })).toEqual({ overlay: "water", seed: 1 });
         expect(OverlayAlpha({ overlay: "water", seed: 1 })).toBe(1);
         expect(OverlayAlpha({ overlay: "water", seed: 1, alpha: 0.25 })).toBe(0.25);
+    });
+
+    it("keeps a blend only where it's one the game knows other than normal", () => {
+        expect(OverlayBlends).toEqual(["normal", "add", "multiply", "screen"]);
+        expect(SanitiseOverlayValue({ overlay: "blood", seed: 1, blend: "multiply" })).toEqual({ overlay: "blood", seed: 1, blend: "multiply" });
+        expect(SanitiseOverlayValue({ overlay: "blood", seed: 1, blend: "normal" })).toEqual({ overlay: "blood", seed: 1 });
+        expect(SanitiseOverlayValue({ overlay: "blood", seed: 1, blend: "overlay" as never })).toEqual({ overlay: "blood", seed: 1 });
+        expect(OverlayBlendOf({ overlay: "blood", seed: 1 })).toBe("normal");
+        expect(OverlayBlendOf({ overlay: "blood", seed: 1, blend: "screen" })).toBe("screen");
     });
 
     it("drops a kind the game doesn't know", () => {
@@ -193,6 +204,13 @@ describe("Overlays", () => {
             // Still one patch: the alpha's a look, like the tint.
             expect(faded.At(1, 0).joins & OverlayJoin.W).toBe(OverlayJoin.W);
             expect(new Overlays([{ x: 0, y: 0, value: { overlay: "water", seed: 1, alpha: 0 } }]).AnyReflective).toBe(false);
+        });
+
+        it("knows each cell's blend by its place in OverlayBlends, a patch running on across blends", () => {
+            const blended = new Overlays([{ x: 0, y: 0, value: { overlay: "slime", seed: 1 } }, { x: 1, y: 0, value: { overlay: "slime", seed: 1, blend: "add" } }]);
+            expect(blended.At(0, 0).blend).toBe(OverlayBlends.indexOf("normal"));
+            expect(blended.At(1, 0).blend).toBe(OverlayBlends.indexOf("add"));
+            expect(blended.At(1, 0).joins & OverlayJoin.W).toBe(OverlayJoin.W);
         });
 
         it("shows what stands on a reflective cell, or just above one", () => {

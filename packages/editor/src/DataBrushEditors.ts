@@ -27,13 +27,17 @@ import { DefaultLightValue, IsLightValue, LightValue, MAX_BRIGHTNESS } from "@lo
 import { DataBrushName, DataBrushValue } from "@logic-incubator/engine/level/LevelFormat";
 import {
     DefaultOverlayValue,
+    IsOverlayBlend,
     IsOverlayKind,
     IsOverlayValue,
     MaxOverlaySeed,
+    OverlayAlpha,
+    OverlayBlend,
+    OverlayBlendOf,
+    OverlayBlends,
     OverlayKind,
     OverlayKinds,
     OverlayLooks,
-    OverlayAlpha,
     OverlayReflectivity,
     OverlayTint,
     SanitiseOverlayValue
@@ -215,6 +219,13 @@ const OVERLAY_LABELS: { [kind in OverlayKind]: string } = {
     shiny: "Shiny floor"
 };
 
+const OVERLAY_BLEND_LABELS: { [blend in OverlayBlend]: string } = {
+    normal: "Normal",
+    add: "Add",
+    multiply: "Multiply",
+    screen: "Screen"
+};
+
 /**
  * Each kind of overlay has its own colour and reflectivity fields, shown while it's the kind chosen, so choosing another kind
  * shows that kind's own look to start from rather than the last one's.
@@ -266,6 +277,13 @@ function OverlayFields(): FieldSpec[] {
         unit: "%",
         zeroLabel: "invisible",
         hint: "How solid it's drawn, its reflection too: 100% as its kind draws it, less to let the floor show through - a thin film of water, a faint stain."
+    });
+    fields.push({
+        type: "choice",
+        key: "blend",
+        label: "Blend",
+        options: OverlayBlends.map(blend => ({ value: blend, label: OVERLAY_BLEND_LABELS[blend] })),
+        hint: "How it's laid over the floor: Normal over it, Add adding its light (a glow), Multiply darkening the floor by its colour (a stain), Screen lightening it (a sheen)."
     });
     return fields;
 }
@@ -586,7 +604,7 @@ const EDITORS: { [name: string]: DataBrushEditor } = {
         fields: () => OverlayFields(),
         toForm: value => {
             const overlay = (IsOverlayValue(value) && SanitiseOverlayValue(value)) || DefaultOverlayValue();
-            const form: FormValues = { overlay: overlay.overlay, seed: overlay.seed, alpha: Math.round(OverlayAlpha(overlay) * 100) };
+            const form: FormValues = { overlay: overlay.overlay, seed: overlay.seed, alpha: Math.round(OverlayAlpha(overlay) * 100), blend: OverlayBlendOf(overlay) };
             // Every kind's fields start as its own look; the chosen kind's as this overlay's.
             OverlayKinds.forEach(kind => {
                 const own = kind === overlay.overlay;
@@ -604,7 +622,8 @@ const EDITORS: { [name: string]: DataBrushEditor } = {
                     seed: Number(form.seed),
                     tint: Number(form["tint_" + kind]),
                     reflectivity: Number(form["reflectivity_" + kind]) / 100,
-                    alpha: Number(form.alpha) / 100
+                    alpha: Number(form.alpha) / 100,
+                    blend: IsOverlayBlend(form.blend) ? form.blend : undefined
                 }) || DefaultOverlayValue()
             );
         }

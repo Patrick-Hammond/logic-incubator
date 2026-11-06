@@ -104,9 +104,18 @@ describe("the overlay editor", () => {
         expect(overlay.fromForm({ ...overlay.toForm(faint), alpha: 0 })).toEqual({ overlay: "blood", seed: 2, alpha: 0 });
     });
 
-    it("shows only the chosen kind's colour and reflectivity - a shiny floor's colour tinting its reflection - and the alpha for every kind", () => {
-        expect(visible(overlay.toForm({ overlay: "mud", seed: 1 }))).toEqual(["overlay", "seed", "tint_mud", "reflectivity_mud", "alpha"]);
-        expect(visible(overlay.toForm({ overlay: "shiny", seed: 1 }))).toEqual(["overlay", "seed", "reflectivity_shiny", "tint_shiny", "alpha"]);
+    it("round-trips its blend, starting as normal and saving it only where it isn't", () => {
+        expect(overlay.toForm({ overlay: "moss", seed: 1 })).toMatchObject({ blend: "normal" });
+        expect(overlay.fromForm(overlay.toForm({ overlay: "moss", seed: 1, blend: "screen" }))).toEqual({ overlay: "moss", seed: 1, blend: "screen" });
+        expect(overlay.fromForm({ ...overlay.toForm({ overlay: "moss", seed: 1 }), blend: "multiply" })).toEqual({ overlay: "moss", seed: 1, blend: "multiply" });
+        expect(overlay.fromForm({ ...overlay.toForm({ overlay: "moss", seed: 1, blend: "add" }), blend: "normal" })).toEqual({ overlay: "moss", seed: 1 });
+        const blend = overlay.fields(noImages).find(f => f.key === "blend");
+        expect(blend.type === "choice" && blend.options.map(o => o.value)).toEqual(["normal", "add", "multiply", "screen"]);
+    });
+
+    it("shows only the chosen kind's colour and reflectivity - a shiny floor's colour tinting its reflection - and the alpha and blend for every kind", () => {
+        expect(visible(overlay.toForm({ overlay: "mud", seed: 1 }))).toEqual(["overlay", "seed", "tint_mud", "reflectivity_mud", "alpha", "blend"]);
+        expect(visible(overlay.toForm({ overlay: "shiny", seed: 1 }))).toEqual(["overlay", "seed", "reflectivity_shiny", "tint_shiny", "alpha", "blend"]);
     });
 
     it("saves the kind chosen with that kind's own fields, whatever was left in another's", () => {

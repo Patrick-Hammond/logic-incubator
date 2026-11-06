@@ -32,11 +32,26 @@ export const OverlayLooks: { readonly [K in OverlayKind]: OverlayLook } = {
 };
 
 /**
+ * How an overlay is laid over the floor: `normal` over it; `add` adding its light; `multiply` darkening the floor by its colour,
+ * as a stain would; `screen` lightening it. Each is the GPU's own blending, so none costs more than another.
+ */
+export type OverlayBlend = "normal" | "add" | "multiply" | "screen";
+
+/** Every blend, in the order the editor offers them - and the number `OverlayLayer` knows each by (its place here). */
+export const OverlayBlends: ReadonlyArray<OverlayBlend> = ["normal", "add", "multiply", "screen"];
+
+/** Whether `blend` is one of `OverlayBlends`. */
+export function IsOverlayBlend(blend: unknown): blend is OverlayBlend {
+    return OverlayBlends.indexOf(blend as OverlayBlend) > -1;
+}
+
+/**
  * An `OVERLAY` brush's value: its kind (`overlay`), the seed its shape and pattern are made from - another seed, another look - and,
  * only where they aren't the kind's own (see `OverlayLooks`), its colour (`tint`, 0xRRGGBB) and how much it mirrors (`reflectivity`, 0 to 1).
  * `alpha`, from 0 to 1, fades the whole overlay, its reflection too, for the floor to show through - left out, 1: as its kind draws it.
+ * `blend` is how it's laid over the floor (see `OverlayBlend`) - left out, `normal`.
  */
-export type OverlayValue = { overlay: OverlayKind; seed: number; tint?: number; reflectivity?: number; alpha?: number };
+export type OverlayValue = { overlay: OverlayKind; seed: number; tint?: number; reflectivity?: number; alpha?: number; blend?: OverlayBlend };
 
 /** Highest seed the editor offers. */
 export const MaxOverlaySeed = 9999;
@@ -59,7 +74,7 @@ export function DefaultOverlayValue(): OverlayValue {
 /**
  * `value` as the game reads it - null for a kind it doesn't know, which draws nothing. The seed is a whole number from 0 to
  * `MaxOverlaySeed`, a tint a whole 0xRRGGBB and a reflectivity from 0 to 1; each is kept only where it's set and isn't the kind's own.
- * The alpha, from 0 to 1, is kept only where it's under 1.
+ * The alpha, from 0 to 1, is kept only where it's under 1, and the blend only where it's one the game knows other than `normal`.
  */
 export function SanitiseOverlayValue(value: OverlayValue): OverlayValue | null {
     if (!IsOverlayKind(value.overlay)) {
@@ -82,6 +97,9 @@ export function SanitiseOverlayValue(value: OverlayValue): OverlayValue | null {
     if (typeof value.alpha === "number" && isFinite(value.alpha) && value.alpha < 1) {
         out.alpha = Math.max(0, value.alpha);
     }
+    if (IsOverlayBlend(value.blend) && value.blend !== "normal") {
+        out.blend = value.blend;
+    }
     return out;
 }
 
@@ -98,6 +116,11 @@ export function OverlayReflectivity(value: OverlayValue): number {
 /** How solid `value` is drawn, from 0 to 1: its own alpha, or 1. */
 export function OverlayAlpha(value: OverlayValue): number {
     return value.alpha != null ? value.alpha : 1;
+}
+
+/** How `value` is laid over the floor: its own blend, or `normal`. */
+export function OverlayBlendOf(value: OverlayValue): OverlayBlend {
+    return IsOverlayBlend(value.blend) ? value.blend : "normal";
 }
 
 /** The bits of `OverlayCell.joins`: one for each of the eight cells round it, clockwise from the one above. */
@@ -134,6 +157,8 @@ export type OverlayCell = Vec2Like & {
     reflectivity: number;
     /** How solid it's drawn, its reflection too (see `OverlayAlpha`). */
     alpha: number;
+    /** Its blend's place in `OverlayBlends` (see `OverlayBlendOf`). */
+    blend: number;
     /**
      * Which of the eight cells round it are in the same patch - the same kind and seed, at the same height - as `OverlayJoin` bits.
      * The patch is edged where a bit is missing.
@@ -218,6 +243,7 @@ export default class Overlays {
                 tint: OverlayTint(value),
                 reflectivity: OverlayReflectivity(value),
                 alpha: OverlayAlpha(value),
+                blend: OverlayBlends.indexOf(OverlayBlendOf(value)),
                 joins: 0,
                 patternX: x + pattern.x,
                 patternY: y + pattern.y

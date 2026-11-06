@@ -137,6 +137,8 @@ describe("DescribeDataValue", () => {
         expect(DescribeOverlay({ overlay: "dirt", seed: 5, reflectivity: 0.25 })).toBe("dirt · seed 5 · mirrors 25%");
         expect(DescribeOverlay({ overlay: "water", seed: 3, alpha: 0.6 })).toBe("water · seed 3 · mirrors 55% · alpha 60%");
         expect(DescribeOverlay({ overlay: "dirt", seed: 5, alpha: 0.3 })).toBe("dirt · seed 5 · alpha 30%");
+        expect(DescribeOverlay({ overlay: "slime", seed: 2, alpha: 0.5, blend: "add" })).toBe("slime · seed 2 · mirrors 20% · alpha 50% · add");
+        expect(DescribeOverlay({ overlay: "moss", seed: 1, blend: "normal" })).toBe("moss · seed 1");
     });
 
     it("counts a spawner's monster types when it has several", () => {

@@ -1,5 +1,5 @@
-import { Buffer, Container, DRAW_MODES, Geometry, Program, Renderer, Shader, State, Texture, TYPES, UniformGroup } from "pixi.js";
-import { OverlayCell, OverlayKinds } from "../level/Overlays";
+import { BLEND_MODES, Buffer, Container, DRAW_MODES, Geometry, Program, Renderer, Shader, State, Texture, TYPES, UniformGroup } from "pixi.js";
+import { OverlayBlend, OverlayBlends, OverlayCell, OverlayKinds } from "../level/Overlays";
 import * as overlayFragmentSrc from "./overlay.frag";
 import * as overlayVertexSrc from "./overlay.vert";
 import type ReflectionCapture from "./ReflectionCapture";
@@ -14,14 +14,25 @@ const Unlit = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1];
 /** How long `uTime` runs before it starts again, in seconds: an hour, short enough that `sin()` keeps its precision. */
 const TimeWrap = 3600;
 
-/** `overlay.frag` for the kind at `kind` in `OverlayKinds`: `KIND` defined under its first line, its precision, where pixi looks for that. */
-function FragmentFor(kind: number): string {
+/** Each blend's own blending, premultiplied: what's drawn over the floor, added to it, multiplied into it, or screened over it. */
+const BlendModes: { [B in OverlayBlend]: BLEND_MODES } = {
+    normal: BLEND_MODES.NORMAL,
+    add: BLEND_MODES.ADD,
+    multiply: BLEND_MODES.MULTIPLY,
+    screen: BLEND_MODES.SCREEN
+};
+
+/**
+ * `overlay.frag` for the kind at `kind` in `OverlayKinds`: `KIND` defined under its first line, its precision, where pixi looks for that -
+ * and `UNLIT` for one multiplied into the floor, which is lit already, so its colour darkens it as it is.
+ */
+function FragmentFor(kind: number, unlit: boolean): string {
     const source = overlayFragmentSrc as unknown as string;
     const firstLine = source.indexOf("\n") + 1;
-    return source.slice(0, firstLine) + "#define KIND " + kind + "\n" + source.slice(firstLine);
+    return source.slice(0, firstLine) + "#define KIND " + kind + "\n#define UNLIT " + (unlit ? 1 : 0) + "\n" + source.slice(firstLine);
 }
 
-/** One kind's quads this frame, gathered as they're added and laid out kind by kind at `End`. */
+/** One kind's quads with one blend this frame, gathered as they're added and laid out run by run at `End`. */
 interface KindRun {
     data: Float32Array;
     quads: number;
@@ -35,14 +46,16 @@ interface KindRun {
  * them where their patch ends, lights them as the floor (each corner's light, as a tile's) and, over water, a shiny floor or
  * anything else that reflects, mirrors what `reflections` drew this frame. Its cells are laid out in its own pixels, a cell
  * `tileSize` across, so scale it as the tiles it lies on. Each kind is drawn by a program of its own (see `overlay.frag`), made
- * the first time it's needed: a draw call for each kind on screen.
+ * the first time it's needed, and laid over the floor with its blend's own GPU blending (`OverlayBlend`): a draw call for each
+ * kind and blend on screen.
  */
 export default class OverlayLayer extends Container {
     /** What reflective overlays mirror: drawn earlier in the frame (see `ReflectionCapture`), or null for nothing - in the editor. */
     reflections: ReflectionCapture | null = null;
-    /** Every kind's quads together, kind by kind - what's handed to the GPU. */
+    /** Every run's quads together, run by run - what's handed to the GPU. */
     private data = new Float32Array(FloatsPerQuad * 64);
-    private readonly runs: KindRun[] = OverlayKinds.map(() => ({ data: new Float32Array(FloatsPerQuad * 16), quads: 0, first: 0 }));
+    /** A run for each kind and blend, at `kind * OverlayBlends.length + blend`. */
+    private readonly runs: KindRun[] = [];
     private quads = 0;
     private reflective = 0;
     private readonly vertices: Buffer;
@@ -50,17 +63,23 @@ export default class OverlayLayer extends Container {
     private readonly geometry: Geometry;
     /** The uniforms, shared by every kind's program. */
     private readonly uniforms: UniformGroup;
-    /** Each kind's program, by its place in `OverlayKinds` - made when it's first drawn. */
+    /** Each kind's programs, lit and unlit (see `FragmentFor`), at `kind * 2 + unlit` - made when they're first drawn. */
     private readonly shaders: Shader[] = [];
-    /** Blended as anything 2D is, over what's under it - premultiplied. */
-    private readonly state = new State();
+    /** How each blend is blended (see `BlendModes`), by its place in `OverlayBlends`. */
+    private readonly states: State[] = OverlayBlends.map(blend => {
+        const state = new State();
+        state.blendMode = BlendModes[blend];
+        return state;
+    });
     /** How many quads `indices` has room for. */
     private indexedQuads = 0;
 
     constructor(private tileSize: number) {
         super();
         this.interactive = this.interactiveChildren = false;
-        this.state.blend = true;
+        for (let i = 0; i < OverlayKinds.length * OverlayBlends.length; i++) {
+            this.runs.push({ data: new Float32Array(FloatsPerQuad * 16), quads: 0, first: 0 });
+        }
         this.vertices = new Buffer(this.data, false, false);
         this.indices = new Buffer(new Uint16Array(0), true, true);
         // In bytes.
@@ -102,7 +121,7 @@ export default class OverlayLayer extends Container {
      * top-right, bottom-right, bottom-left, as `Lighting.CellCornerLight` gives them - or, for null, unlit.
      */
     Add(cell: OverlayCell, left: number, top: number, light: ArrayLike<number> | null): void {
-        const run = this.runs[cell.kind];
+        const run = this.runs[cell.kind * OverlayBlends.length + cell.blend];
         if (this.quads >= MaxQuads || !run || cell.alpha <= 0) {
             return;
         }
@@ -148,7 +167,7 @@ export default class OverlayLayer extends Container {
         }
     }
 
-    /** Hands the frame's cells to the GPU, kind by kind. */
+    /** Hands the frame's cells to the GPU, run by run. */
     End(): void {
         if (!this.quads) {
             return;
@@ -197,23 +216,25 @@ export default class OverlayLayer extends Container {
         uniforms.uTime = (performance.now() / 1000) % TimeWrap;
         uniforms.uAlpha = this.worldAlpha;
 
-        renderer.state.set(this.state);
-        this.runs.forEach((run, kind) => {
+        this.runs.forEach((run, index) => {
             if (!run.quads) {
                 return;
             }
-            const shader = this.ShaderFor(kind);
+            const blend = index % OverlayBlends.length;
+            const shader = this.ShaderFor(Math.floor(index / OverlayBlends.length), OverlayBlends[blend] === "multiply");
+            renderer.state.set(this.states[blend]);
             renderer.shader.bind(shader, false);
             renderer.geometry.bind(this.geometry, shader);
             renderer.geometry.draw(DRAW_MODES.TRIANGLES, run.quads * 6, run.first * 6);
         });
     }
 
-    private ShaderFor(kind: number): Shader {
-        if (!this.shaders[kind]) {
-            this.shaders[kind] = new Shader(Program.from(overlayVertexSrc as unknown as string, FragmentFor(kind)), this.uniforms);
+    private ShaderFor(kind: number, unlit: boolean): Shader {
+        const index = kind * 2 + (unlit ? 1 : 0);
+        if (!this.shaders[index]) {
+            this.shaders[index] = new Shader(Program.from(overlayVertexSrc as unknown as string, FragmentFor(kind, unlit)), this.uniforms);
         }
-        return this.shaders[kind];
+        return this.shaders[index];
     }
 
     destroy(options?: { children?: boolean; texture?: boolean; baseTexture?: boolean }): void {

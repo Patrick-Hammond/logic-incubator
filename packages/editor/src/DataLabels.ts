@@ -15,7 +15,7 @@ import { IsLocked } from "@logic-incubator/engine/level/entities/Keys";
 import { IsPickupValue, PickupValue } from "@logic-incubator/engine/level/entities/Pickups";
 import { IsSpawnerValue, SpawnerValue } from "@logic-incubator/engine/level/entities/Spawners";
 import { IsLightValue } from "@logic-incubator/engine/level/Lighting";
-import { IsOverlayValue, OverlayAlpha, OverlayReflectivity, OverlayTint, OverlayValue } from "@logic-incubator/engine/level/Overlays";
+import { IsOverlayValue, OverlayAlpha, OverlayBlendOf, OverlayReflectivity, OverlayTint, OverlayValue } from "@logic-incubator/engine/level/Overlays";
 import { Brush, DataBrushName, DataBrushValue } from "@logic-incubator/engine/level/LevelFormat";
 import Portals, { IsTeleportValue, TeleportValue } from "@logic-incubator/engine/level/Portals";
 import { ShoutPart } from "@logic-incubator/engine/story/DialogScript";
@@ -98,14 +98,16 @@ export function DescribeTeleport(value: TeleportValue): string {
 
 /**
  * An overlay in a few words, for the selected-brush card and the cell inspector: "water · seed 3 · mirrors 55%" - "mirrors" left out
- * for one that doesn't - and "alpha 60%" after for one that's faded.
+ * for one that doesn't - then "alpha 60%" for one that's faded and its blend, "screen", for one that isn't laid over the floor as normal.
  */
 export function DescribeOverlay(value: OverlayValue): string {
     const reflectivity = Math.round(OverlayReflectivity(value) * 100);
     const alpha = Math.round(OverlayAlpha(value) * 100);
+    const blend = OverlayBlendOf(value);
     return [value.overlay, `seed ${value.seed}`]
         .concat(reflectivity > 0 ? [`mirrors ${reflectivity}%`] : [])
         .concat(alpha < 100 ? [`alpha ${alpha}%`] : [])
+        .concat(blend !== "normal" ? [blend] : [])
         .join(" · ");
 }
 
