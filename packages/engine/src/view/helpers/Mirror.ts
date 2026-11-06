@@ -29,3 +29,14 @@ export function MirroredTurn(rotation: number, scaleX: number, scaleY: number): 
     const back = ((-rotation % turn) + turn) % turn;
     return { rotation: back, scaleX, scaleY: -scaleY };
 }
+
+/**
+ * Where a texture's reflection is placed so its feet meet the feet it's drawn with: the y to hand `tile()` for it upside down,
+ * given the `top` it's drawn at the right way up. `origHeight` is the texture's height before trimming, `trimY` how far down its
+ * art starts in that (0 if untrimmed) and `frameHeight` the height of the art itself. `tile()` puts the art `trimY` below the y it's
+ * given and turning it over keeps it in the same rows, so the reflection - mirrored about the texture's bottom edge,
+ * `top + origHeight` - starts `trimY` above where its art should start.
+ */
+export function MirroredTop(top: number, origHeight: number, trimY: number, frameHeight: number): number {
+    return top + 2 * origHeight - 2 * trimY - frameHeight;
+}

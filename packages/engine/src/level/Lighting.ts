@@ -186,21 +186,45 @@ const FLAME_POINTS = FlamePoints(16);
 const MOVING_FLAME_POINTS = FlamePoints(6);
 
 /**
+ * How many cells tall a wall's face can be, counting the cell a light hangs on: a torch high on a wall that tall
+ * still shines out from its foot - see `LightOrigin`.
+ */
+const WALL_FACE_CELLS = 3;
+
+/**
+ * The cells `LightOrigin` looks for open floor in around a light on a wall, as offsets, in order: below, east, west, further
+ * down the wall's face, then above.
+ */
+const WALL_LIGHT_SIDES: ReadonlyArray<ReadonlyArray<number>> = (() => {
+    const sides = [[0, 1], [1, 0], [-1, 0]];
+    for (let down = 2; down <= WALL_FACE_CELLS; down++) {
+        sides.push([0, down]);
+    }
+    sides.push([0, -1]);
+    return sides;
+})();
+
+/**
  * Where light leaves a light placed on cell `(x, y)`: the cell's centre. A light on a cell that blocks light,
- * such as a torch hung on a wall, shines from just past the edge of the first open side - south, east, west,
- * then north - so it lights the room it faces and not whatever is behind the wall. With no open side it stays
- * at the centre and lights only its own cell.
+ * such as a torch hung on a wall, shines from just past the edge of the wall's open side, so it lights the room
+ * it faces and not whatever is behind the wall. Walls face south in a top-down view, so that's tried first - the
+ * cell below, then east and west (a wall running north to south), then further down a wall's face for one more
+ * than a cell tall (up to `WALL_FACE_CELLS`, from the face's foot), and north last. Off the grid isn't open. With no
+ * open side it stays at the centre and lights only its own cell.
  */
 export function LightOrigin(blockers: LightBlockers, x: number, y: number): Vec2Like {
     const cx = Math.floor(x);
     const cy = Math.floor(y);
     if (IsOpaque(blockers, cx, cy)) {
-        const sides = [[0, 1], [1, 0], [-1, 0], [0, -1]];
-        for (let i = 0; i < sides.length; i++) {
-            const dx = sides[i][0];
-            const dy = sides[i][1];
-            if (!IsOpaque(blockers, cx + dx, cy + dy)) {
-                return { x: cx + 0.5 + dx * (0.5 + WALL_LIGHT_OFFSET), y: cy + 0.5 + dy * (0.5 + WALL_LIGHT_OFFSET) };
+        for (let i = 0; i < WALL_LIGHT_SIDES.length; i++) {
+            const dx = WALL_LIGHT_SIDES[i][0];
+            const dy = WALL_LIGHT_SIDES[i][1];
+            const ox = cx + dx;
+            const oy = cy + dy;
+            if (ox >= 0 && oy >= 0 && ox < blockers.width && oy < blockers.height && !IsOpaque(blockers, ox, oy)) {
+                // Just past the edge where the open cell meets the wall: its top, bottom, or - east or west - the side at this cell's middle.
+                const edgeY = dy > 0 ? cy + dy + WALL_LIGHT_OFFSET : dy < 0 ? cy - WALL_LIGHT_OFFSET : cy + 0.5;
+                return { x: cx + 0.5 + dx * (0.5 + WALL_LIGHT_OFFSET), y: edgeY };
             }
         }
     }
@@ -309,7 +333,44 @@ function AnyBlockerIn(blockers: LightBlockers, x0: number, y0: number, x1: numbe
  * `CastLight` for how.
  */
 export function BakeLightShape(light: LightSource, blockers: LightBlockers): LightShape {
-    return CastLight(LightOrigin(blockers, light.x, light.y), light.value, blockers, FLAME_POINTS);
+    const origin = LightOrigin(blockers, light.x, light.y);
+    const shape = CastLight(origin, light.value, blockers, FLAME_POINTS);
+    LightWallFace(shape, Math.floor(light.x), Math.floor(light.y), light.value.range, blockers);
+    return shape;
+}
+
+/**
+ * Lights the face of the wall a light hangs on, where `LightOrigin` moved it down to the face's foot from cell `(cx, cy)` -
+ * a torch high on a wall more than a cell tall. The rays can't reach the face, which the wall itself is in the way of,
+ * so the corners down it between the light's cell and the foot get its light straight, by `LightFalloff` alone: the
+ * light's own cell is lit across its bottom, as a torch on a wall a cell tall is, and the face below it all over.
+ */
+function LightWallFace(shape: LightShape, cx: number, cy: number, range: number, blockers: LightBlockers): void {
+    const footRow = Math.floor(shape.origin.y);
+    if (!IsOpaque(blockers, cx, cy) || footRow - cy < 2 || !(shape.rgb[0] + shape.rgb[1] + shape.rgb[2] > 0)) {
+        return;
+    }
+    const columns = blockers.width + 1;
+    const corners = Array.from(shape.corners);
+    const shares = Array.from(shape.shares);
+    for (let y = cy + 1; y < footRow; y++) {
+        for (let x = cx; x <= cx + 1; x++) {
+            const share = LightFalloff(Math.hypot(x - shape.origin.x, y - shape.origin.y), range);
+            if (share <= 0) {
+                continue;
+            }
+            const corner = y * columns + x;
+            const at = corners.indexOf(corner);
+            if (at < 0) {
+                corners.push(corner);
+                shares.push(share);
+            } else {
+                shares[at] = Math.max(shares[at], share);
+            }
+        }
+    }
+    shape.corners = new Uint32Array(corners);
+    shape.shares = new Float32Array(shares);
 }
 
 /**
@@ -490,7 +551,7 @@ export function AmbientLightGrid(width: number, height: number): LightGrid {
  * Bakes a set of static point lights onto the corners of a `width` x `height` grid, ready for
  * `CellCornerLight`/`SampleLight`: `BakeLights` then `ComposeLighting`, in one go.
  *
- * Each light sits at the centre of its cell (see `LightOrigin`). `brightness` (clamped to `[0, MAX_BRIGHTNESS]`)
+ * Each light sits at the centre of its cell, or past the edge of a wall it's on (see `LightOrigin`). `brightness` (clamped to `[0, MAX_BRIGHTNESS]`)
  * is its strength there and `range` how far it reaches in tiles; the two are independent, so a brighter torch
  * isn't forced to also cast further. `blockers`, the same size as the grid, casts shadows and shades corners
  * beside walls; leave it out and light passes everywhere.

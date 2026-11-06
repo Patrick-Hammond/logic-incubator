@@ -11,7 +11,7 @@ import GlowLayer, { CreateGlowTexture } from "./GlowLayer";
 import { ViewOrigin } from "./helpers/CameraWindow";
 import { EntitiesLayer, GlowsLayer, MirroredFiguresLayer, OrbsLayer, ProjectilesLayer, ReflectionsLayer } from "./helpers/FigureLayers";
 import { GlowFlameY, GlowLook, LookOfGlow } from "./helpers/Glow";
-import { MirroredLight, MirroredTurn } from "./helpers/Mirror";
+import { MirroredLight, MirroredTop, MirroredTurn } from "./helpers/Mirror";
 import OverlayLayer from "./OverlayLayer";
 import ReflectionCapture from "./ReflectionCapture";
 
@@ -73,7 +73,9 @@ export function AddMirrored(
     scratch: Float32Array,
     alpha = 1
 ): void {
-    into.tile(texture, left, top + texture.height, { cornerTints: MirroredLight(light, scratch), alpha });
+    const trimY = texture.trim ? texture.trim.y : 0;
+    const y = MirroredTop(top, texture.orig.height, trimY, texture.frame.height);
+    into.tile(texture, left, y, { cornerTints: MirroredLight(light, scratch), alpha });
     const turn = MirroredTurn(rotation, scaleX, scaleY);
     into.tileRotate(TileGD8Rotation(turn.rotation, turn.scaleX, turn.scaleY));
 }

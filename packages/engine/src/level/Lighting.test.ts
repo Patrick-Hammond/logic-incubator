@@ -299,6 +299,31 @@ describe("LightOrigin", () => {
         expect(east.y).toBeCloseTo(1.5);
     });
 
+    it("shines from the foot of a wall face more than a cell tall, not over its top", () => {
+        // A torch on the upper of two rows of wall, under a gap: it lights the room below, not the gap.
+        const tall = Blockers([".....", "#####", "#####", "....."]);
+        const origin = LightOrigin(tall, 2, 1);
+        expect(origin.x).toBeCloseTo(2.5);
+        expect(origin.y).toBeGreaterThan(3);
+        expect(origin.y).toBeLessThan(3.5);
+
+        const three = Blockers([".....", "#####", "#####", "#####", "....."]);
+        expect(LightOrigin(three, 2, 1).y).toBeGreaterThan(4);
+    });
+
+    it("tries east and west before further down, so a torch on a wall running north to south lights its own room", () => {
+        // A west wall over a bottom wall with nothing under it: two cells down is outside the room.
+        const corner = Blockers(["#...", "#...", "####", "...."]);
+        const origin = LightOrigin(corner, 0, 1);
+        expect(origin.x).toBeGreaterThan(1);
+        expect(origin.y).toBeCloseTo(1.5);
+    });
+
+    it("shines over the top of a wall taller than a wall face can be", () => {
+        const solid = Blockers([".....", "#####", "#####", "#####", "#####", "....."]);
+        expect(LightOrigin(solid, 2, 1).y).toBeLessThan(1);
+    });
+
     it("stays at the centre of a wall with no open side", () => {
         expect(LightOrigin(Blockers(["###", "###", "###"]), 1, 1)).toEqual({ x: 1.5, y: 1.5 });
     });
@@ -347,6 +372,19 @@ describe("Shadows", () => {
         const grid = BakeLighting([{ x: 5, y: 3, value: LAMP }], 10, 7, Blockers(rows));
         expect(Corner(grid, 5, 6)[0]).toBeGreaterThan(AMBIENT[0] + 0.2);
         Corner(grid, 5, 1).forEach((v, k) => expect(v).toBeCloseTo(AMBIENT[k]));
+    });
+
+    it("lights the floor under a torch high on a wall two cells tall, and the wall below the torch", () => {
+        const rows = ["..........", "##########", "##########", "..........", "..........", ".........."];
+        const lit = BakeLighting([{ x: 5, y: 1, value: LAMP }], 10, 6, Blockers(rows));
+        const unlit = BakeLighting([], 10, 6, Blockers(rows));
+        // The floor in front of the wall.
+        expect(Corner(lit, 5, 5)[0]).toBeGreaterThan(AMBIENT[0] + 0.2);
+        // The torch's own cell across its bottom, as on a wall a cell tall, but not its top or what's above the wall.
+        expect(Corner(lit, 5, 2)[0]).toBeGreaterThan(Corner(unlit, 5, 2)[0] + 0.2);
+        expect(Corner(lit, 6, 2)[0]).toBeGreaterThan(Corner(unlit, 6, 2)[0] + 0.2);
+        expect(Corner(lit, 5, 1)[0]).toBeCloseTo(Corner(unlit, 5, 1)[0]);
+        expect(Corner(lit, 5, 0)[0]).toBeCloseTo(Corner(unlit, 5, 0)[0]);
     });
 
     it("lights the edge of a ledge two steps up but not the top beyond it", () => {
