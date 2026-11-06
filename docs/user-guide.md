@@ -1956,8 +1956,8 @@ over them (above, "arches" is drawn over the heroes as they walk beneath). A lev
 ([9.10](#910-npcs-dialogs-and-quests)); a level without it has none. The engine reads only what `LevelFormat.ts` types; the
 editor saves more of its own state alongside.
 
-There are exactly eleven **data brushes**. The height (`z-index`) is painted on the **height** layer (`isHeight`, id -99997), at
-most one a cell and none where it's 0; the other ten on the one `attributes` data layer, which holds **one of each** on a cell -
+There are exactly twelve **data brushes**. The height (`z-index`) is painted on the **height** layer (`isHeight`, id -99997), at
+most one a cell and none where it's 0; the other eleven on the one `attributes` data layer, which holds **one of each** on a cell -
 a cell can be solid, an NPC's and a pickup all at once (a tile layer still holds one tile a cell):
 
 | Name | `data` | Effect |
@@ -1973,6 +1973,7 @@ a cell can be solid, an NPC's and a pickup all at once (a tile layer still holds
 | `light` | a `LightValue` | A point light on its cell, set in its popup - the same settings as a lit tile's (see `light` in [9.6](#96-assets-metajson-tile-behaviour-by-sprite-name)): a light anywhere, with or without a torch. Painted on a lit tile's cell (a torch), it takes the place of that tile's light rather than adding a second, so it retunes the torch. It goes out with the tile it's on - the lit one, or else the top one that isn't floor - so a light painted on a gem goes when the gem's picked up, and one on a spawner when it's destroyed. On bare floor it's a light on its own, always on. It adds no glow sprite (a torch tile has its own). A brush whose value is missing a field is left out. |
 | `teleport` | a `TeleportValue` | A portal - `{ portal, arrivalOnly? }`: a hero who walks onto it comes out of another portal with the same id ([9.5.1](#951-portals)). It isn't drawn - paint a rune, a pad or a hole there too. |
 | `pushable` | - | Lets a hero push the object it's painted over - a crate, a barrel, a statue ([9.5.2](#952-pushing-things)): the top tile on its cell that isn't floor, as a `spawner` brush picks one, solid over its sprite's footprint wherever it's pushed to. |
+| `overlay` | an `OverlayValue` | A **floor overlay** on its cell - `{ overlay, seed, tint?, reflectivity?, alpha? }`: dirt, mud, water, slime, blood, moss or a shiny floor, its shape and pattern made up from its seed as it's drawn, and mirroring the heroes, monsters and walls over it if it reflects ([9.5.3](#953-floor-overlays)). It's only a look: it doesn't change where anyone can walk. |
 
 Doors are **not** brushes: they are ordinary tiles that carry their behaviour in `assets-meta.json`. A light, a pickup or a
 spawner can be either: a tile that is one by default, or a brush over any other tile - a `light` or `spawner` brush on bare
@@ -2029,6 +2030,51 @@ heroes, monsters and shots alike.
 - **Couch co-op and online** push the same way. Online the host decides every push, its own hero's or a guest's - someone may be
   standing in the way that a guest can't see yet - and a guest moves the thing when the host's snapshot says so, a moment later.
   A guest that drops and comes back finds each thing where it was pushed to ([9.3.2](#932-playing-online)).
+
+#### 9.5.3 Floor overlays
+
+An `overlay` brush lays dirt, mud, water, slime, blood, moss or a **shiny floor** over its cell (`Overlays`, drawn by
+`OverlayLayer` with `overlay.frag`). Nothing of its look is stored but its kind and a **seed** - and its colour and how much it
+mirrors, where they aren't its kind's own, and its **alpha** (0 to 1), where it's faded: the shape of the patch, its edge and the pattern inside are made up from those as it's
+drawn, pixel by pixel on the level's own pixel grid, so they're as blocky as the art round them and the same on every machine.
+
+```jsonc
+{ "name": "overlay", "position": { "x": 12, "y": 7 }, "layerId": -99999, "data": { "overlay": "water", "seed": 3 }, ... }
+{ "name": "overlay", "position": { "x": 30, "y": 9 }, "layerId": -99999, "data": { "overlay": "shiny", "seed": 1, "tint": 16766720, "reflectivity": 0.5 }, ... }
+{ "name": "overlay", "position": { "x": 4, "y": 20 }, "layerId": -99999, "data": { "overlay": "blood", "seed": 7, "alpha": 0.4 }, ... }
+```
+
+| Kind | Looks like | Colour | Mirrors |
+| --- | --- | --- | --- |
+| `dirt` | Clumps in four tones, crumbs loose round them. | `0x86603b` | 0 |
+| `mud` | Dark and glistening, with a wet glint here and there. | `0x5a3d24` | 15% |
+| `water` | Shallow at the rim and deeper inside, a pale line where it laps at the floor, ripples drifting across. | `0x2f7fb0` | 55% |
+| `slime` | Slowly churning blotches, a bright lip, and bubbles that swell and pop. | `0x5cb83c` | 20% |
+| `blood` | Splashed, with gaps through it, and drops flung round it. | `0x7a0c0c` | 15% |
+| `moss` | Two greens, fuzzy at its edges. | `0x5f9136` | 0 |
+| `shiny` | Nothing of its own but a faint sheen in diagonal streaks - only the reflection. Its colour tints what it mirrors (gold, say). | `0xffffff` | 35% |
+
+- **Patches.** Cells side by side with the same kind and seed, at the same height, are one **patch**: it's edged only where it
+  ends, with a ragged shore that wanders well inside the painted cells in places, and rounded outer corners - so a pool painted
+  over six cells is one pool, not six squares. Another seed is another shape and pattern, and two patches with different seeds
+  side by side are edged apart. A patch doesn't run up or down a step ([9.7](#97-heights)): it's drawn in its cell's height band,
+  like the floor there. A brush whose kind the game doesn't know draws nothing, and a later brush on a cell takes the place of
+  an earlier one.
+- **Where it's drawn.** Just over the last floor layer under the player divider (`OverlayLayerIndex`; with no floor layer, over
+  the first layer), so it lies on the floor and under the walls, the props and everyone standing there, and it's lit as the
+  floor under it is: dark in the shadows, warm by a torch. It shows only where the floor does: not in a room the heroes
+  haven't found yet.
+- **Reflections.** An overlay that mirrors (its reflectivity above 0) shows the heroes, monsters, spawners and things pushed
+  about that stand on it, and a wall, a torch or a statue standing at its edge, upside down below where they stand - clipped to
+  the overlay's own shape, so a puddle mirrors only inside the puddle. Water, mud and slime make the reflection waver; a shiny
+  floor holds it still. The tiles that are mirrored are those on layers under the player divider that aren't floor layers and
+  whose sprites aren't floor (`Tile.reflects`), so arches and treetops over the heroes aren't. `reflectivity` 0 mirrors nothing.
+- **Alpha.** `alpha` fades the whole overlay, its reflection with it, so the floor shows through - a thin film of water, an old
+  stain. Left out it's 1, as its kind draws it; 0 draws nothing and mirrors nothing. Cells that differ only in alpha (or colour,
+  or reflectivity) are still one patch.
+- **Cost.** One draw call per kind on screen in each height band, and a pass drawing what's mirrored only while a reflective
+  overlay is on screen. A level without overlays costs nothing, and one without reflective overlays no reflection pass.
+- **Online**, the overlays come with the level, as everything painted does; they never change in play.
 
 ### 9.6 `assets-meta.json`: tile behaviour by sprite name
 
@@ -2838,7 +2884,7 @@ vertical **toolbar** of tools at the far right. Each palette tab ends in a **+**
   its data brush still picked, so `B` (or clicking the brush in the palette) paints with it again. The height layer opens on the
   Brush with the height brush the first time.
 - The one **attributes** layer is always present. Player start, collision, pickups, exits, NPCs' dialogs, bosses, spawners,
-  lights, portals and pushables are painted on it, one of each on a cell, and it also draws a read-only overlay of what the game *derives* from tiles' metadata
+  lights, portals, pushables and floor overlays are painted on it, one of each on a cell, and it also draws a read-only overlay of what the game *derives* from tiles' metadata
   (collision, door footprints, lights, spawners) so a cell's whole picture - hand-placed and intrinsic - is in one place. A painted
   spawner is a square on its own cell, with the footprint it makes solid outlined: the sprite it turns into a spawner, or the
   roster's spawner sprite. A painted pushable likewise outlines the sprite it makes pushable.
@@ -2867,7 +2913,7 @@ vertical **toolbar** of tools at the far right. Each palette tab ends in a **+**
   its ×, Esc, a click on the same cell or on an empty one, or by selecting a tile layer.
 - Painting a torch or a spawner **tile** is enough; its light or spawner values come from `assets-meta.json`. Use Edit on its
   row in the cell inspector to override them for one placement.
-- Or paint a **light** brush (the flame, last of the attribute types) anywhere: on bare floor for a light with no torch -
+- Or paint a **light** brush (the flame) anywhere: on bare floor for a light with no torch -
   a glowing rune, a shaft of daylight, a lift to a dark corner - or over a sprite to make it glow and go out with it when
   it's picked up or destroyed. Its popup (Edit, or `E`, with the brush picked) has brightness, tint, range and flicker; a new
   one starts as a torch. Painted over a torch, it replaces the torch's light: the overlay stops outlining the torch's, and the
@@ -2888,6 +2934,14 @@ vertical **toolbar** of tools at the far right. Each palette tab ends in a **+**
 - To make something **pushable**, paint the `pushable` brush (the last attribute type) over it - a crate, a barrel, a statue.
   It has no value and no popup. The overlay outlines the sprite it will push, over its whole footprint; a brush with no outline
   pushes nothing - it's on bare floor, or over something that can't be pushed ([9.5.2](#952-pushing-things)).
+- To lay dirt, water, slime or another **floor overlay**, pick the `overlay` brush (the blue square, last of the attribute types)
+  and paint the cells it covers - a new one is water, seed 1. Its popup (Edit, or `E`) picks the kind, the seed (0 to 9999),
+  that kind's colour and how much it mirrors, each starting as the kind's own (for a shiny floor the colour is what tints its
+  reflection), and its **Alpha**, 100% to start with: lower it to let the floor show through. Press `+` (or `.`) for the next seed while painting, `-` (or `,`) for the one before, so the next patch looks
+  different; Fill a patch with the brush to give it all the new seed, a quick way to re-roll one that doesn't sit right. The
+  map draws each overlay as the game will - its shape, colours and ripples, by the game's own shader - over the floor layer,
+  whichever layer is selected, unlit and with nothing in it mirrored; its squares on the attributes layer are faint, tagged with
+  the seed, so the overlay shows through them ([9.5.3](#953-floor-overlays)).
 
 ### 10.4 Generated maps and `IStyler`
 

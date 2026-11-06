@@ -15,6 +15,7 @@ import { IsLocked } from "@logic-incubator/engine/level/entities/Keys";
 import { IsPickupValue, PickupValue } from "@logic-incubator/engine/level/entities/Pickups";
 import { IsSpawnerValue, SpawnerValue } from "@logic-incubator/engine/level/entities/Spawners";
 import { IsLightValue } from "@logic-incubator/engine/level/Lighting";
+import { IsOverlayValue, OverlayAlpha, OverlayReflectivity, OverlayTint, OverlayValue } from "@logic-incubator/engine/level/Overlays";
 import { Brush, DataBrushName, DataBrushValue } from "@logic-incubator/engine/level/LevelFormat";
 import Portals, { IsTeleportValue, TeleportValue } from "@logic-incubator/engine/level/Portals";
 import { ShoutPart } from "@logic-incubator/engine/story/DialogScript";
@@ -42,7 +43,7 @@ export function PickupLabel(pickup: PickupValue): string {
  * The tag drawn over a data value on the map - a bare number for a height, the range of a light, how many
  * monster types a spawner draws from, a pickup's PickupLabel, a locked door's lock as L3 (an unlocked door,
  * which is every door by default, has none - it'd be noise on each), D for an NPC's dialog, B for a boss and
- * a portal's id as P3 (A3 if it's arrival only). A pickup or boss that counts for a quest has a Q after its tag.
+ * a portal's id as P3 (A3 if it's arrival only) and an overlay's seed. A pickup or boss that counts for a quest has a Q after its tag.
  * Empty for anything else.
  * Whatever each is is told apart by its shape, like everywhere else a Brush.data is read.
  */
@@ -71,6 +72,9 @@ export function MapLabel(value: DataBrushValue | null | undefined): string {
     if (IsTeleportValue(value)) {
         return (value.arrivalOnly ? "A" : "P") + value.portal;
     }
+    if (IsOverlayValue(value)) {
+        return String(value.seed);
+    }
     return "";
 }
 
@@ -90,6 +94,19 @@ export function UnpairedPortalCells(levelData: ReadonlyArray<Brush>): Set<string
 /** A portal in a few words, for the selected-brush card and the cell inspector: "portal 3", "portal 3 · arrival only". */
 export function DescribeTeleport(value: TeleportValue): string {
     return `portal ${value.portal}` + (value.arrivalOnly ? " · arrival only" : "");
+}
+
+/**
+ * An overlay in a few words, for the selected-brush card and the cell inspector: "water · seed 3 · mirrors 55%" - "mirrors" left out
+ * for one that doesn't - and "alpha 60%" after for one that's faded.
+ */
+export function DescribeOverlay(value: OverlayValue): string {
+    const reflectivity = Math.round(OverlayReflectivity(value) * 100);
+    const alpha = Math.round(OverlayAlpha(value) * 100);
+    return [value.overlay, `seed ${value.seed}`]
+        .concat(reflectivity > 0 ? [`mirrors ${reflectivity}%`] : [])
+        .concat(alpha < 100 ? [`alpha ${alpha}%`] : [])
+        .join(" · ");
 }
 
 /** A pickup in a few words, for the selected-brush card: "10 gold", "key 3", "weapon: weapon_axe" - and "· quest rats" if it counts for one. */
@@ -178,6 +195,9 @@ export function DescribeDataValue(value: DataBrushValue | null | undefined): { t
     }
     if (IsTeleportValue(value)) {
         return { text: DescribeTeleport(value) };
+    }
+    if (IsOverlayValue(value)) {
+        return { text: DescribeOverlay(value), colour: value.overlay === "shiny" ? undefined : OverlayTint(value) };
     }
     return { text: "" };
 }

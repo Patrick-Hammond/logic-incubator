@@ -12,3 +12,7 @@ export const EntitiesLayer = "entities";
 export const OrbsLayer = "orbs";
 /** Name of the layer (a plain `Container` of sprites, which unlike a tilemap can turn to any angle) shots are drawn into. The top of the figures' layers: `Effects` goes just above it. */
 export const ProjectilesLayer = "projectiles";
+/** Name of the layer (a `ReflectionCapture`) everything mirrored in a reflective overlay is drawn into, first in the camera's root - see `TileMapView`. */
+export const ReflectionsLayer = "reflections";
+/** Name of the layer (a `CompositeTilemap`, in the `ReflectionsLayer`) the figures' reflections are drawn into - see `EntityRenderer`. */
+export const MirroredFiguresLayer = "mirrored figures";

@@ -7,6 +7,7 @@ import { DefaultBossValue } from "@logic-incubator/engine/level/entities/Bosses"
 import { DefaultDialogValue } from "@logic-incubator/engine/story/Talk";
 import { DataBrushName } from "@logic-incubator/engine/level/LevelFormat";
 import { DefaultLightValue } from "@logic-incubator/engine/level/Lighting";
+import { DefaultOverlayValue, MaxOverlaySeed, OverlayLooks } from "@logic-incubator/engine/level/Overlays";
 import { DataBrushEditorFor } from "./DataBrushEditors";
 import { IsFieldVisible } from "./ui/dialog/FormDialog";
 
@@ -24,6 +25,7 @@ describe("DataBrushEditors", () => {
         expect(DataBrushEditorFor(DataBrushName.DIALOG)).toBeDefined();
         expect(DataBrushEditorFor(DataBrushName.BOSS)).toBeDefined();
         expect(DataBrushEditorFor(DataBrushName.TELEPORT)).toBeDefined();
+        expect(DataBrushEditorFor(DataBrushName.OVERLAY)).toBeDefined();
         expect(DataBrushEditorFor(DataBrushName.COLLISION)).toBeUndefined();
         expect(DataBrushEditorFor(DataBrushName.PLAYER_START)).toBeUndefined();
     });
@@ -50,7 +52,7 @@ describe("DataBrushEditors", () => {
     });
 
     it("gives every form field a value, so no control starts blank", () => {
-        [DataBrushName.SPAWNER, DataBrushName.LIGHT, DataBrushName.Z_INDEX, DataBrushName.PICKUP, "door", DataBrushName.DIALOG, DataBrushName.BOSS, DataBrushName.TELEPORT].forEach(name => {
+        [DataBrushName.SPAWNER, DataBrushName.LIGHT, DataBrushName.Z_INDEX, DataBrushName.PICKUP, "door", DataBrushName.DIALOG, DataBrushName.BOSS, DataBrushName.TELEPORT, DataBrushName.OVERLAY].forEach(name => {
             const editor = DataBrushEditorFor(name);
             const form = editor.toForm(0);
             editor.fields(noImages).forEach(field => expect(form, `${name}.${field.key}`).toHaveProperty(field.key));
@@ -75,6 +77,42 @@ describe("DataBrushEditors", () => {
         expect(light.fromForm(light.toForm(torch))).toEqual(torch);
         const height = DataBrushEditorFor(DataBrushName.Z_INDEX);
         expect(height.fromForm(height.toForm(-3))).toBe(-3);
+    });
+});
+
+describe("the overlay editor", () => {
+    const overlay = DataBrushEditorFor(DataBrushName.OVERLAY);
+    const visible = (form: ReturnType<typeof overlay.toForm>) =>
+        overlay.fields(noImages).filter(field => IsFieldVisible(field, form)).map(field => field.key);
+
+    it("starts anything that isn't an overlay yet as the brush's own water, seed 1", () => {
+        expect(overlay.fromForm(overlay.toForm(0))).toEqual(DefaultOverlayValue());
+    });
+
+    it("round-trips an overlay, saving a colour or reflectivity only where it isn't the kind's own", () => {
+        expect(overlay.fromForm(overlay.toForm({ overlay: "slime", seed: 42 }))).toEqual({ overlay: "slime", seed: 42 });
+        const tinted = { overlay: "water" as const, seed: 7, tint: 0x205020, reflectivity: 0.8 };
+        expect(overlay.fromForm(overlay.toForm(tinted))).toEqual(tinted);
+        expect(overlay.toForm(tinted)).toMatchObject({ reflectivity_water: 80, tint_mud: OverlayLooks.mud.tint, reflectivity_mud: 15, alpha: 100 });
+    });
+
+    it("round-trips its alpha as a percentage, saving it only where it fades the overlay", () => {
+        const faint = { overlay: "blood" as const, seed: 2, alpha: 0.4 };
+        expect(overlay.toForm(faint)).toMatchObject({ alpha: 40 });
+        expect(overlay.fromForm(overlay.toForm(faint))).toEqual(faint);
+        expect(overlay.fromForm({ ...overlay.toForm(faint), alpha: 100 })).toEqual({ overlay: "blood", seed: 2 });
+        expect(overlay.fromForm({ ...overlay.toForm(faint), alpha: 0 })).toEqual({ overlay: "blood", seed: 2, alpha: 0 });
+    });
+
+    it("shows only the chosen kind's colour and reflectivity - a shiny floor's colour tinting its reflection - and the alpha for every kind", () => {
+        expect(visible(overlay.toForm({ overlay: "mud", seed: 1 }))).toEqual(["overlay", "seed", "tint_mud", "reflectivity_mud", "alpha"]);
+        expect(visible(overlay.toForm({ overlay: "shiny", seed: 1 }))).toEqual(["overlay", "seed", "reflectivity_shiny", "tint_shiny", "alpha"]);
+    });
+
+    it("saves the kind chosen with that kind's own fields, whatever was left in another's", () => {
+        const form = { ...overlay.toForm({ overlay: "water", seed: 3, tint: 0x111111 }), overlay: "dirt" };
+        expect(overlay.fromForm(form)).toEqual({ overlay: "dirt", seed: 3 });
+        expect(overlay.fromForm({ ...form, seed: 123456, reflectivity_dirt: 30 })).toEqual({ overlay: "dirt", seed: MaxOverlaySeed, reflectivity: 0.3 });
     });
 });
 

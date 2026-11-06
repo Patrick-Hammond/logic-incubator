@@ -20,6 +20,7 @@ import {EffectiveLight, FindImplicitPlacements, FindLights, FindPushables, FindS
 import {Brush, DataBrushName, LevelFile, LevelLayer, MigrateLevelFile, TileLayerOrder} from "./LevelFormat";
 import {AmbientLightGrid, BakeLights, ComposeLighting, LightBake, LightBlockersFor, LightGrid, LightSource, OpenLightBlockers} from "./Lighting";
 import {FindMapBounds} from "./MapBounds";
+import Overlays, {FindOverlays, OverlayLayerIndex} from "./Overlays";
 import Portals, {IsTeleportValue, Portal} from "./Portals";
 import {FindRegions, Region, RegionIdsTouching} from "./Regions";
 import SceneLights, {MovingLight} from "./SceneLights";
@@ -38,6 +39,12 @@ export type Tile = Brush & {
     pushable?: boolean;
     /** Set once the tile has been taken out of the level (a torch picked up): what it made, its `loop` for one, is over. */
     gone?: boolean;
+    /**
+     * Set for a tile that shows, mirrored, in a reflective overlay it stands on or over (see `Overlays.ReflectsAt`) - one under the
+     * figures that isn't floor, on a layer that isn't a floor layer: a wall, a statue, a torch. A spawner's and a pushable thing's are
+     * mirrored with the figures (see `EntityRenderer`).
+     */
+    reflects?: boolean;
 };
 
 /** A tile whose `AssetMetadata` names a `loop` - a torch's crackle - with the sound, the centre of its cell, in tiles, and how far it's heard (see `AmbientSounds`). */
@@ -144,6 +151,10 @@ export default class Level {
     public quests: QuestDef[] = [];
     /** Every tile that makes a sound all the time (its `AssetMetadata.loop`) - see `AmbientSounds`. */
     public soundLoops: SoundLoop[] = [];
+    /** The overlays painted over the floor with the `OVERLAY` data brush, in normalised map coordinates (see `Overlays`). */
+    public overlays: Overlays = new Overlays();
+    /** Which of `tileLayers` the overlays are drawn just over - the floor (see `OverlayLayerIndex`); -1 for under every one. */
+    public overlayLayer = -1;
     /** Distinct painted `Z_INDEX` heights, ascending, always including the unpainted default (0). `TileMapView` builds one band per entry - sparse, so a stray tile at an extreme height doesn't force bands for every height in between. */
     public depths: number[] = [0];
 
@@ -687,6 +698,10 @@ export default class Level {
                     return;
                 }
                 tileOfBrush.set(brush, tile);
+                if (index < this.playerLayer && this.tileLayers[ index ].kind !== "floor") {
+                    const meta = AssetMetadataStore.inst.Get(brush.name);
+                    tile.reflects = !meta || meta.category !== "floor";
+                }
                 if(this.levelData[ index ][ posX ] == null) {
                     this.levelData[ index ][ posX ] = [];
                 }
@@ -898,6 +913,14 @@ export default class Level {
         this.portals.Unpaired().forEach(({x, y, value}) => console.warn(`The portal at ${x},${y} goes nowhere: no other portal has its id (${value.portal}).`));
 
         this.depths = Array.from(depths).sort((a, b) => a - b);
+
+        // After the heights, which split a patch where it runs up or down a step.
+        this.overlays = new Overlays(
+            FindOverlays(levelData, layerId => idMap[ layerId ] == null).map(({x, y, value}) => ({x: x - bounds.x1, y: y - bounds.y1, value})),
+            (x, y) => this.HeightAt(x, y),
+            {x: bounds.x1, y: bounds.y1}
+        );
+        this.overlayLayer = OverlayLayerIndex(this.tileLayers, this.playerLayer);
 
         this.lightBake = BakeLights(lights, lightBlockers);
         this.lightGrid = ComposeLighting(this.lightBake);

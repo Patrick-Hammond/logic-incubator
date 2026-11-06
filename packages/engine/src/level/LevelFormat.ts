@@ -14,6 +14,7 @@ import type { PickupValue } from "./entities/Pickups";
 import type { SpawnerValue } from "./entities/Spawners";
 import type { DoorLockValue } from "./Doors";
 import type { LightValue } from "./Lighting";
+import type { OverlayValue } from "./Overlays";
 import type { TeleportValue } from "./Portals";
 
 /**
@@ -53,6 +54,10 @@ import type { TeleportValue } from "./Portals";
  * `PUSHABLE`, painted over an object - a crate, a statue - lets a hero push it: it makes the top tile on its cell that isn't
  * floor the thing pushed, as `SPAWNER` picks its tile, solid over its sprite's footprint wherever it is, and a hero walking into
  * it moves it on a cell if there's room (see `Pushables`, `ImplicitData.FindPushables`). It has no value of its own.
+ *
+ * `OVERLAY` lays something over the floor of its cell - dirt, mud, water, slime, blood, moss or a shine - made up as it's drawn from
+ * its kind and seed (see `Overlays`). Cells of one kind and seed side by side are one patch. One that mirrors (water, a shiny floor)
+ * shows the heroes, monsters and walls standing over it upside down in it. It's drawn over the floor layers and under the rest.
  */
 export const enum DataBrushName {
     PLAYER_START = "player-start",
@@ -65,7 +70,8 @@ export const enum DataBrushName {
     SPAWNER = "spawner",
     LIGHT = "light",
     TELEPORT = "teleport",
-    PUSHABLE = "pushable"
+    PUSHABLE = "pushable",
+    OVERLAY = "overlay"
 }
 
 /**
@@ -83,8 +89,8 @@ export const LevelVersion = 2;
  */
 export const HEIGHT_LAYER_ID = -99997;
 
-/** A data brush's value - a number (`Z_INDEX`'s height), or a light's, spawner's, pickup's, door lock's, dialog's, boss's or portal's settings. */
-export type DataBrushValue = number | LightValue | SpawnerValue | PickupValue | DoorLockValue | DialogValue | BossValue | TeleportValue;
+/** A data brush's value - a number (`Z_INDEX`'s height), or a light's, spawner's, pickup's, door lock's, dialog's, boss's, portal's or overlay's settings. */
+export type DataBrushValue = number | LightValue | SpawnerValue | PickupValue | DoorLockValue | DialogValue | BossValue | TeleportValue | OverlayValue;
 
 /**
  * One placed tile or data brush. `position` is in map cells; `layerId` is its layer's `id`; `data` is null on a tile. A tile layer has

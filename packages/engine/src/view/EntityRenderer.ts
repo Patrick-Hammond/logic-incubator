@@ -17,7 +17,7 @@ import {GlowLook, LookOfGlow, LookOfOrbCore} from "./helpers/Glow";
 import {CentreTile} from "./helpers/PlayerMovement";
 import {HeroView} from "./HeroView";
 import {SpriteDrawPosition} from "./helpers/SpriteDrawOffset";
-import {EntitiesLayer, GlowsLayer, OrbsLayer, ProjectilesLayer, TileGD8Rotation} from "./TileMap";
+import {AddMirrored, EntitiesLayer, GlowsLayer, MirroredFiguresLayer, OrbsLayer, ProjectilesLayer, ReflectionsLayer, TileGD8Rotation} from "./TileMap";
 
 /** Monsters' animation frames per ticker frame - see `AnimationSpeed` for tiles'. */
 const MonsterAnimationSpeed = 0.15;
@@ -34,8 +34,11 @@ const FootInset = 2;
 /** Where a pushable thing is drawn, sliding to the cell it was last pushed onto: from where it was drawn as it was pushed, `seconds` ago. */
 type Slide = {fromX: number; fromY: number; toX: number; toY: number; seconds: number};
 
-/** One sprite to draw into the entities layer: `x`/`y` on screen (already offset by the view), `feet` its bottom edge in the world, which is what the draw order sorts by, `turn` how it's flipped and turned (see `TileGD8Rotation` - 0 for as it is), and `light` its four corners' light (see `Lighting.FootLight`). */
-type Drawable = {x: number; y: number; feet: number; texture: Texture; turn: GD8Symmetry; light: Float32Array; alpha: number};
+/**
+ * One sprite to draw into the entities layer: `x`/`y` on screen (already offset by the view), `feet` its bottom edge in the world, which is what the draw order sorts by, `turn` how it's flipped and turned (see `TileGD8Rotation` - 0 for as it is) - from `rotation`, `scaleX` and `scaleY`,
+ * which its reflection is turned from (see `AddMirrored`) - and `light` its four corners' light (see `Lighting.FootLight`).
+ */
+type Drawable = {x: number; y: number; feet: number; texture: Texture; turn: GD8Symmetry; rotation: number; scaleX: number; scaleY: number; light: Float32Array; alpha: number};
 
 /** Fills `out` with the light for a figure whose one-tile footprint has its top-left at `position` (world pixels): the floor's light just inside its feet, so it shades smoothly as it walks. */
 function FigureLight(grid: LightGrid, position: Vec2Like, out: Float32Array): Float32Array {
@@ -71,6 +74,10 @@ function MultiplyLight(light: Float32Array, tint: number): void {
 export default class EntityRenderer {
     private glows: GlowLayer | null = null;
     private entities: CompositeTilemap | null = null;
+    /** Where the figures are drawn upside down, for the reflective overlays to mirror - null in a level without any (see `TileMapView`). */
+    private mirrored: CompositeTilemap | null = null;
+    /** A figure's light upside down, for its reflection. */
+    private mirroredLight = new Float32Array(12);
     private orbs: GlowLayer | null = null;
     private projectiles: Container | null = null;
     private sprites: Sprite[] = [];
@@ -91,6 +98,8 @@ export default class EntityRenderer {
     Reset(): void {
         this.glows = this.camera.root.getChildByName(GlowsLayer) as GlowLayer;
         this.entities = this.camera.root.getChildByName(EntitiesLayer) as CompositeTilemap;
+        const reflections = this.camera.root.getChildByName(ReflectionsLayer) as Container | null;
+        this.mirrored = reflections ? (reflections.getChildByName(MirroredFiguresLayer) as CompositeTilemap) : null;
         this.orbs = this.camera.root.getChildByName(OrbsLayer) as GlowLayer;
         this.projectiles = this.camera.root.getChildByName(ProjectilesLayer) as Container;
         // The old projectiles layer took its sprites with it when it was destroyed.
@@ -129,6 +138,7 @@ export default class EntityRenderer {
                 this.entities.tileRotate(d.turn);
             }
         });
+        this.RenderReflections(origin);
 
         this.RenderProjectiles(encounter, origin, alpha);
         this.RenderGlows(heroes, encounter, origin, alpha);
@@ -164,6 +174,9 @@ export default class EntityRenderer {
                 feet,
                 texture,
                 turn: tile ? TileGD8Rotation(tile.rotation, tile.scale.x, tile.scale.y) : 0,
+                rotation: tile ? tile.rotation : 0,
+                scaleX: tile ? tile.scale.x : 1,
+                scaleY: tile ? tile.scale.y : 1,
                 light,
                 alpha: 1
             });
@@ -190,6 +203,9 @@ export default class EntityRenderer {
                 feet,
                 texture,
                 turn: TileGD8Rotation(tile.rotation, tile.scale.x, tile.scale.y),
+                rotation: tile.rotation,
+                scaleX: tile.scale.x,
+                scaleY: tile.scale.y,
                 light,
                 alpha: 1
             });
@@ -248,6 +264,9 @@ export default class EntityRenderer {
                 feet: position.y + TileSize,
                 texture,
                 turn: TileGD8Rotation(0, m.facingX, 1),
+                rotation: 0,
+                scaleX: m.facingX,
+                scaleY: 1,
                 light,
                 alpha: 1
             });
@@ -266,9 +285,31 @@ export default class EntityRenderer {
             feet: position.y + TileSize,
             texture,
             turn: TileGD8Rotation(0, hero.FacingX, 1),
+            rotation: 0,
+            scaleX: hero.FacingX,
+            scaleY: 1,
             light: FigureLight(this.level.lightGrid, position, this.NextLight()),
             // One who is away (online, their player's connection gone) is drawn as faint as the fallen: out of play.
             alpha: !hero.Alive || hero.Away ? FallenAlpha : invulnerable > 0 && Math.floor(invulnerable * BlinkRate) % 2 === 0 ? 0.25 : 1
+        });
+    }
+
+    /**
+     * Each figure standing on a reflective overlay, or just above one, drawn again upside down below its feet into the reflections
+     * (see `ReflectionCapture`) - in the same order, so one in front of another is in front in the water too.
+     */
+    private RenderReflections(origin: {x: number; y: number}): void {
+        const mirrored = this.mirrored;
+        if (!mirrored) {
+            return;
+        }
+        mirrored.clear();
+        const overlays = this.level.overlays;
+        this.drawables.forEach(d => {
+            const left = d.x + origin.x * TileSize;
+            if (overlays.ReflectsAt(left, left + d.texture.width, d.y + d.texture.height + origin.y * TileSize, TileSize)) {
+                AddMirrored(mirrored, d.texture, d.x, d.y, d.rotation, d.scaleX, d.scaleY, d.light, this.mirroredLight, d.alpha);
+            }
         });
     }
 

@@ -800,9 +800,9 @@ describe("the light data brush", () => {
     it("is one of the palette's data brushes, after the older attributes, starting as a torch", () => {
         const brushes = new EditorStore().state.dataBrushes;
         const attributes = brushes.filter(db => !db.height).map(db => db.name);
-        // Last but the teleport and the pushable, so the older types' pips keep their places.
-        expect(attributes.slice(-3)).toEqual([DataBrushName.LIGHT, DataBrushName.TELEPORT, DataBrushName.PUSHABLE]);
-        expect(attributes).toHaveLength(10);
+        // Last but the teleport, the pushable and the overlay, so the older types' pips keep their places.
+        expect(attributes.slice(-4)).toEqual([DataBrushName.LIGHT, DataBrushName.TELEPORT, DataBrushName.PUSHABLE, DataBrushName.OVERLAY]);
+        expect(attributes).toHaveLength(11);
         expect(brushes.find(db => db.name === DataBrushName.LIGHT).value).toEqual({ brightness: 1, tint: 0xffc780, range: 7, flicker: 0.15 });
     });
 
@@ -849,13 +849,39 @@ describe("the teleport data brush", () => {
 });
 
 describe("the pushable data brush", () => {
-    it("is the palette's last attribute type, with no value - and is added to a map saved before it existed", () => {
+    it("is the palette's last attribute type but the overlay, with no value - and is added to a map saved before it existed", () => {
         const store = new EditorStore();
         const attributes = store.state.dataBrushes.filter(db => !db.height);
-        expect(attributes[ attributes.length - 1 ].name).toBe(DataBrushName.PUSHABLE);
-        expect(attributes[ attributes.length - 1 ].value).toBe(0);
+        expect(attributes[ attributes.length - 2 ].name).toBe(DataBrushName.PUSHABLE);
+        expect(attributes[ attributes.length - 2 ].value).toBe(0);
         store.Load({ ...store.state, dataBrushes: store.state.dataBrushes.filter(db => db.name !== DataBrushName.PUSHABLE) });
         expect(store.state.dataBrushes.find(db => db.name === DataBrushName.PUSHABLE)).toBeDefined();
+    });
+});
+
+describe("the overlay data brush", () => {
+    it("is the palette's last attribute type, starting as water, seed 1 - and is added to a map saved before it existed", () => {
+        const store = new EditorStore();
+        const attributes = store.state.dataBrushes.filter(db => !db.height);
+        expect(attributes[ attributes.length - 1 ].name).toBe(DataBrushName.OVERLAY);
+        expect(attributes[ attributes.length - 1 ].value).toEqual({ overlay: "water", seed: 1 });
+        store.Load({ ...store.state, dataBrushes: store.state.dataBrushes.filter(db => db.name !== DataBrushName.OVERLAY) });
+        expect(store.state.dataBrushes.find(db => db.name === DataBrushName.OVERLAY)).toBeDefined();
+    });
+
+    it("steps its seed with + and -, keeping its kind and look, within 0 to 9999", () => {
+        const store = new EditorStore();
+        store.Dispatch({ type: EditorActions.SELECT_LAYER, data: { layer: implicitLayers(store)[0] } });
+        store.Dispatch({ type: EditorActions.BRUSH_CHANGED, data: { name: DataBrushName.OVERLAY } });
+        store.Dispatch({ type: EditorActions.SET_DATA_BRUSH_VALUE, data: { value: { overlay: "slime", seed: 0, tint: 0x00ff00 } } });
+        store.Dispatch({ type: EditorActions.DATA_BRUSH_DEC });
+        expect(store.state.currentBrush.data).toEqual({ overlay: "slime", seed: 0, tint: 0x00ff00 });
+        store.Dispatch({ type: EditorActions.DATA_BRUSH_INC });
+        expect(store.state.currentBrush.data).toEqual({ overlay: "slime", seed: 1, tint: 0x00ff00 });
+        expect(store.SelectedDataBrush.value).toEqual({ overlay: "slime", seed: 1, tint: 0x00ff00 });
+        store.Dispatch({ type: EditorActions.SET_DATA_BRUSH_VALUE, data: { value: { overlay: "dirt", seed: 9999 } } });
+        store.Dispatch({ type: EditorActions.DATA_BRUSH_INC });
+        expect(store.state.currentBrush.data).toEqual({ overlay: "dirt", seed: 9999 });
     });
 });
 

@@ -9,19 +9,24 @@ import Level from "../level/Level";
 import { Camera } from "./Camera";
 import GlowLayer, { CreateGlowTexture } from "./GlowLayer";
 import { ViewOrigin } from "./helpers/CameraWindow";
-import { EntitiesLayer, GlowsLayer, OrbsLayer, ProjectilesLayer } from "./helpers/FigureLayers";
+import { EntitiesLayer, GlowsLayer, MirroredFiguresLayer, OrbsLayer, ProjectilesLayer, ReflectionsLayer } from "./helpers/FigureLayers";
 import { GlowFlameY, GlowLook, LookOfGlow } from "./helpers/Glow";
+import { MirroredLight, MirroredTurn } from "./helpers/Mirror";
+import OverlayLayer from "./OverlayLayer";
+import ReflectionCapture from "./ReflectionCapture";
 
-export { EntitiesLayer, GlowsLayer, OrbsLayer, ProjectilesLayer };
+export { EntitiesLayer, GlowsLayer, MirroredFiguresLayer, OrbsLayer, ProjectilesLayer, ReflectionsLayer };
 
 /** Some of a band's tile layers, with the glows of the lit tiles among them drawn over them. */
 type BandPart = { root: Container; glows: GlowLayer };
 
 /**
  * One height's tiles, a layer per tile layer (`layers`, in the level's order), in two parts: those under the figures, and
- * those over them - null when the level has no tile layer over its player layer.
+ * those over them - null when the level has no tile layer over its player layer. `overlays` are its floor overlays, over its
+ * floor (see `Level.overlayLayer`) - null at a height without any - and `mirrored` what of it shows in a reflective overlay,
+ * upside down - null in a level without one.
  */
-type Band = { z: number; layers: CompositeTilemap[]; under: BandPart; over: BandPart | null };
+type Band = { z: number; layers: CompositeTilemap[]; under: BandPart; over: BandPart | null; overlays: OverlayLayer | null; mirrored: CompositeTilemap | null };
 
 /**
  * `CompositeTilemap.tile` has no rotation/flip parameter - it always
@@ -48,6 +53,29 @@ export function TileGD8Rotation(rotation: number, scaleX: number, scaleY: number
     }
 
     return groupD8.add(flip, rotate);
+}
+
+/**
+ * Draws `texture` into `into` mirrored for a reflection (see `ReflectionCapture`): upside down below where it's drawn the right way
+ * up at `left`, `top` - hanging from its bottom edge, its feet - turned and flipped as `rotation`, `scaleX` and `scaleY` say it is
+ * the right way up (see `TileGD8Rotation`), lit by `light` the right way up (four corners', as `tile()` takes them; `scratch` is
+ * filled with it upside down) and as solid as `alpha`.
+ */
+export function AddMirrored(
+    into: CompositeTilemap,
+    texture: Texture,
+    left: number,
+    top: number,
+    rotation: number,
+    scaleX: number,
+    scaleY: number,
+    light: ArrayLike<number>,
+    scratch: Float32Array,
+    alpha = 1
+): void {
+    into.tile(texture, left, top + texture.height, { cornerTints: MirroredLight(light, scratch), alpha });
+    const turn = MirroredTurn(rotation, scaleX, scaleY);
+    into.tileRotate(TileGD8Rotation(turn.rotation, turn.scaleX, turn.scaleY));
 }
 
 /** How far inside the edges of a standing tile its light is sampled, in tiles - two pixels, as for a figure (see `EntityRenderer`). */
@@ -77,6 +105,10 @@ const StandingFootInset = 2 / TileSize;
 export default class TileMapView extends GameComponent {
     private bands: Band[] = [];
     private glowsLayer: GlowLayer | null = null;
+    /** What reflective overlays mirror, drawn first each frame (see `ReflectionCapture`) - null in a level without any. */
+    private reflections: ReflectionCapture | null = null;
+    /** The figures' reflections, in `reflections` - drawn by `EntityRenderer`, scaled here as the figures are. */
+    private mirroredFigures: CompositeTilemap | null = null;
     private entitiesLayer: CompositeTilemap | null = null;
     private orbsLayer: GlowLayer | null = null;
     private projectilesLayer: Container | null = null;
@@ -88,6 +120,8 @@ export default class TileMapView extends GameComponent {
     private cornerLight = new Float32Array(12);
     /** Light for a tile taller than a cell, refilled per tile - see `StandingLight`. */
     private standingLight = new Float32Array(12);
+    /** A tile's light upside down, for its reflection - see `AddMirrored`. */
+    private mirroredLight = new Float32Array(12);
 
     constructor(private level: Level, private camera: Camera) {
         super();
@@ -116,6 +150,13 @@ export default class TileMapView extends GameComponent {
             });
         });
         this.bands = [];
+        if (this.reflections) {
+            this.camera.root.removeChild(this.reflections);
+            // Its tile maps go with it, the bands' reflections and the figures'.
+            this.reflections.destroy({ children: true });
+            this.reflections = null;
+            this.mirroredFigures = null;
+        }
 
         [this.glowsLayer, this.orbsLayer].forEach(layer => {
             if (layer) {
@@ -141,6 +182,15 @@ export default class TileMapView extends GameComponent {
 
         const playerLayer = this.level.playerLayer;
         const anyOver = playerLayer < this.level.tileLayers.length;
+        const overlays = this.level.overlays;
+        if (overlays.AnyReflective) {
+            // First, so what it mirrors is drawn before any overlay reads it.
+            this.reflections = new ReflectionCapture();
+            this.reflections.name = ReflectionsLayer;
+            this.camera.root.addChildAt(this.reflections, 0);
+        }
+        /** The heights with an overlay painted at them - the only bands that need an overlay layer. */
+        const overlaid = new Set<number>(overlays.All.map(cell => this.level.HeightAt(cell.x, cell.y)));
         for (const z of this.level.depths) {
             const under = this.BandPart("z-" + z);
             const over = anyOver ? this.BandPart("z-" + z + " over") : null;
@@ -156,8 +206,30 @@ export default class TileMapView extends GameComponent {
                 layers.push(tileLayer);
             });
 
+            let overlayLayer: OverlayLayer | null = null;
+            if (overlaid.has(z)) {
+                overlayLayer = new OverlayLayer(TileSize);
+                overlayLayer.name = "overlays";
+                overlayLayer.reflections = this.reflections;
+                // Just over the floor (always under the figures - see `OverlayLayerIndex`), or under every layer.
+                const floor = layers[this.level.overlayLayer];
+                under.root.addChildAt(overlayLayer, floor ? under.root.getChildIndex(floor) + 1 : 0);
+            }
+            let mirrored: CompositeTilemap | null = null;
+            if (this.reflections) {
+                mirrored = new CompositeTilemap();
+                mirrored.name = "z-" + z + " mirrored";
+                this.reflections.addChild(mirrored);
+            }
+
             this.camera.root.addChild(under.root);
-            this.bands.push({ z, layers, under, over });
+            this.bands.push({ z, layers, under, over, overlays: overlayLayer, mirrored });
+        }
+        if (this.reflections) {
+            // Over the bands' - a hero stands in front of the wall behind them, in the water as out of it.
+            this.mirroredFigures = new CompositeTilemap();
+            this.mirroredFigures.name = MirroredFiguresLayer;
+            this.reflections.addChild(this.mirroredFigures);
         }
 
         this.glowsLayer = new GlowLayer(this.glowTexture);
@@ -209,11 +281,14 @@ export default class TileMapView extends GameComponent {
         const boundH = this.level.boundRect.height;
         const playerLayer = this.level.playerLayer;
 
-        [this.glowsLayer, this.entitiesLayer, this.orbsLayer, this.projectilesLayer].forEach(layer => {
+        [this.glowsLayer, this.entitiesLayer, this.orbsLayer, this.projectilesLayer, this.mirroredFigures].forEach(layer => {
             if (layer) {
                 layer.scale.set(camScale * cameraZoom);
             }
         });
+        const overlays = this.level.overlays;
+        /** How many cells that mirror are on screen this frame - with none, nothing need be drawn mirrored. */
+        let reflective = 0;
 
         for (let i = 0, len = this.bands.length; i < len; i++) {
             const band = this.bands[i];
@@ -242,6 +317,20 @@ export default class TileMapView extends GameComponent {
             if (over) {
                 over.glows.Begin();
                 over.glows.scale.set(camScale * zScale);
+            }
+            const mirrored = band.mirrored;
+            if (mirrored) {
+                mirrored.clear();
+                mirrored.scale.set(camScale * zScale);
+            }
+            if (band.overlays) {
+                band.overlays.Begin();
+                if (visible) {
+                    band.overlays.scale.set(camScale * zScale);
+                    this.AddOverlays(band.overlays, z, originX, originY, winW, winH);
+                    reflective += band.overlays.ReflectiveCells;
+                }
+                band.overlays.End();
             }
 
             for (let l = 0, ll = band.layers.length; l < ll; l++) {
@@ -294,6 +383,13 @@ export default class TileMapView extends GameComponent {
                                     if (tile.rotation || tile.scale.x < 0 || tile.scale.y < 0) {
                                         layer.tileRotate(TileGD8Rotation(tile.rotation, tile.scale.x, tile.scale.y));
                                     }
+                                    if (mirrored && tile.reflects) {
+                                        const worldLeft = x * TileSize - tile.pixelOffset.x;
+                                        const worldTop = y * TileSize - tile.pixelOffset.y;
+                                        if (overlays.ReflectsAt(worldLeft, worldLeft + texture.width, worldTop + texture.height, TileSize)) {
+                                            AddMirrored(mirrored, texture, left, top, tile.rotation, tile.scale.x, tile.scale.y, light, this.mirroredLight);
+                                        }
+                                    }
                                 }
                                 if (tile.light !== undefined && tile.glows) {
                                     const lights = this.level.lights;
@@ -308,6 +404,31 @@ export default class TileMapView extends GameComponent {
             under.glows.End();
             if (over) {
                 over.glows.End();
+            }
+        }
+        if (this.reflections) {
+            this.reflections.active = reflective > 0;
+        }
+    }
+
+    /**
+     * Fills `layer` with the overlay cells at height `z` in the window from `originX`, `originY`, `winW` by `winH` cells - those the
+     * heroes can see (see `Level.IsCellVisible`), each lit as the floor is.
+     */
+    private AddOverlays(layer: OverlayLayer, z: number, originX: number, originY: number, winW: number, winH: number): void {
+        const overlays = this.level.overlays;
+        const heightData = this.level.heightData;
+        const boundW = this.level.boundRect.width;
+        const boundH = this.level.boundRect.height;
+        for (let x = Math.max(0, originX | 0), w = Math.min(boundW - 1, (originX + winW) | 0); x <= w; x++) {
+            const heightColumn = heightData[x];
+            for (let y = Math.max(0, originY | 0), h = Math.min(boundH - 1, (originY + winH) | 0); y <= h; y++) {
+                const cell = overlays.At(x, y);
+                if (!cell || ((heightColumn && heightColumn[y]) || 0) !== z || !this.level.IsCellVisible(x, y)) {
+                    continue;
+                }
+                CellCornerLight(this.level.lightGrid, x, y, this.cornerLight);
+                layer.Add(cell, (x - originX) * TileSize, (y - originY) * TileSize, this.cornerLight);
             }
         }
     }

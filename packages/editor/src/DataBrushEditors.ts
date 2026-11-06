@@ -25,6 +25,19 @@ import { DefaultPickupValue, IsPickupValue, PickupKind, PickupKinds, PickupValue
 import { DefaultSpawnerValue, IsSpawnerValue, SanitiseSpawnerValue } from "@logic-incubator/engine/level/entities/Spawners";
 import { DefaultLightValue, IsLightValue, LightValue, MAX_BRIGHTNESS } from "@logic-incubator/engine/level/Lighting";
 import { DataBrushName, DataBrushValue } from "@logic-incubator/engine/level/LevelFormat";
+import {
+    DefaultOverlayValue,
+    IsOverlayKind,
+    IsOverlayValue,
+    MaxOverlaySeed,
+    OverlayKind,
+    OverlayKinds,
+    OverlayLooks,
+    OverlayAlpha,
+    OverlayReflectivity,
+    OverlayTint,
+    SanitiseOverlayValue
+} from "@logic-incubator/engine/level/Overlays";
 import { DefaultTeleportValue, IsTeleportValue, MaxPortalId, SanitiseTeleportValue } from "@logic-incubator/engine/level/Portals";
 import { DescribeDialogErrors, ParseDialog } from "@logic-incubator/engine/story/DialogScript";
 import type { QuestDef } from "@logic-incubator/engine/story/Quests";
@@ -190,6 +203,71 @@ function PickupProblem(form: FormValues, images?: EditorImages): string | null {
     }
     // A blank item sprite is fine - it's the sprite the pickup is on - but one that's named has to exist.
     return form.kind === "item" && Name(form.itemSprite) ? SpriteProblem(Name(form.itemSprite), "the item's sprite", images) : null;
+}
+
+const OVERLAY_LABELS: { [kind in OverlayKind]: string } = {
+    dirt: "Dirt",
+    mud: "Mud",
+    water: "Water",
+    slime: "Slime",
+    blood: "Blood",
+    moss: "Moss",
+    shiny: "Shiny floor"
+};
+
+/**
+ * Each kind of overlay has its own colour and reflectivity fields, shown while it's the kind chosen, so choosing another kind
+ * shows that kind's own look to start from rather than the last one's.
+ */
+function OverlayFields(): FieldSpec[] {
+    const fields: FieldSpec[] = [
+        { type: "choice", key: "overlay", label: "Kind", options: OverlayKinds.map(kind => ({ value: kind, label: OVERLAY_LABELS[kind] })) },
+        {
+            type: "number",
+            key: "seed",
+            label: "Seed",
+            min: 0,
+            max: MaxOverlaySeed,
+            sliderMax: 99,
+            hint: "What its shape and pattern are made from: another seed, another look. Cells side by side with the same kind and seed are one patch. +/- changes it while painting; fill a patch to give it the new one."
+        }
+    ];
+    OverlayKinds.forEach(kind => {
+        const when = (form: FormValues) => form.overlay === kind;
+        if (kind !== "shiny") {
+            fields.push({ type: "colour", key: "tint_" + kind, label: "Colour", visibleWhen: when });
+        }
+        fields.push({
+            type: "number",
+            key: "reflectivity_" + kind,
+            label: kind === "shiny" ? "Reflectivity" : "Reflects",
+            min: 0,
+            max: 100,
+            sliderMax: 100,
+            unit: "%",
+            zeroLabel: "not at all",
+            hint:
+                kind === "shiny"
+                    ? `How clearly the floor mirrors the heroes, monsters and walls over it. ${Math.round(OverlayLooks.shiny.reflectivity * 100)}% to start with.`
+                    : `How much it mirrors the heroes, monsters and walls over it. ${OVERLAY_LABELS[kind]} starts at ${Math.round(OverlayLooks[kind].reflectivity * 100)}%.`,
+            visibleWhen: when
+        });
+        if (kind === "shiny") {
+            fields.push({ type: "colour", key: "tint_" + kind, label: "Reflection tint", hint: "White mirrors as it is; a colour tints what it mirrors - gold, say.", visibleWhen: when });
+        }
+    });
+    fields.push({
+        type: "number",
+        key: "alpha",
+        label: "Alpha",
+        min: 0,
+        max: 100,
+        sliderMax: 100,
+        unit: "%",
+        zeroLabel: "invisible",
+        hint: "How solid it's drawn, its reflection too: 100% as its kind draws it, less to let the floor show through - a thin film of water, a faint stain."
+    });
+    return fields;
 }
 
 const EDITORS: { [name: string]: DataBrushEditor } = {
@@ -500,6 +578,36 @@ const EDITORS: { [name: string]: DataBrushEditor } = {
             return { portal: portal.portal, arrivalOnly: !!portal.arrivalOnly };
         },
         fromForm: form => SanitiseTeleportValue({ portal: Number(form.portal), arrivalOnly: form.arrivalOnly === true })
+    },
+
+    [DataBrushName.OVERLAY]: {
+        title: "Floor overlay",
+        subtitle: "Dirt, water, slime and the rest over the floor, made up from its kind and seed. What reflects mirrors what stands over it.",
+        fields: () => OverlayFields(),
+        toForm: value => {
+            const overlay = (IsOverlayValue(value) && SanitiseOverlayValue(value)) || DefaultOverlayValue();
+            const form: FormValues = { overlay: overlay.overlay, seed: overlay.seed, alpha: Math.round(OverlayAlpha(overlay) * 100) };
+            // Every kind's fields start as its own look; the chosen kind's as this overlay's.
+            OverlayKinds.forEach(kind => {
+                const own = kind === overlay.overlay;
+                form["tint_" + kind] = own ? OverlayTint(overlay) : OverlayLooks[kind].tint;
+                form["reflectivity_" + kind] = Math.round((own ? OverlayReflectivity(overlay) : OverlayLooks[kind].reflectivity) * 100);
+            });
+            return form;
+        },
+        fromForm: form => {
+            const kind = IsOverlayKind(form.overlay) ? form.overlay : DefaultOverlayValue().overlay;
+            // Sanitised, so a tint or reflectivity left as the kind's own isn't saved: it follows the kind's.
+            return (
+                SanitiseOverlayValue({
+                    overlay: kind,
+                    seed: Number(form.seed),
+                    tint: Number(form["tint_" + kind]),
+                    reflectivity: Number(form["reflectivity_" + kind]) / 100,
+                    alpha: Number(form.alpha) / 100
+                }) || DefaultOverlayValue()
+            );
+        }
     }
 };
 

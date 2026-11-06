@@ -3,7 +3,9 @@ import { Key } from "@logic-incubator/lib/io/Keyboard";
 import AssetMetadataStore from "@logic-incubator/engine/level/AssetMetadata";
 import { FindImplicitPlacements, FindLights, FindPushables, FindSpawners } from "@logic-incubator/engine/level/ImplicitData";
 import MonsterRoster from "@logic-incubator/engine/level/entities/MonsterRoster";
-import { Brush, DataBrushName, HEIGHT_LAYER_ID, IsTileLayer } from "@logic-incubator/engine/level/LevelFormat";
+import { Brush, DataBrushName, HEIGHT_LAYER_ID, IsTileLayer, TileLayerOrder } from "@logic-incubator/engine/level/LevelFormat";
+import Overlays, { FindOverlays, OverlayLayerIndex } from "@logic-incubator/engine/level/Overlays";
+import OverlayLayer from "@logic-incubator/engine/view/OverlayLayer";
 import AssetFactory from "@logic-incubator/lib/loading/AssetFactory";
 import { MapLabel, UnpairedPortalCells } from "../DataLabels";
 import { DataBrushEditorFor } from "../DataBrushEditors";
@@ -26,6 +28,8 @@ const HEIGHT_ALPHA = 0.55;
 const HEIGHT_UNDERLAY_ALPHA = 0.3;
 /** The line along a step no hero can take - a height difference of more than one. */
 const BLOCKED_STEP_COLOUR = 0xff3b3b;
+/** How solid an overlay brush's square is on the map - faint, so the overlay it paints shows through it. */
+const OVERLAY_SQUARE_ALPHA = 0.3;
 
 export default class Canvas extends EditorComponent {
     private grid: Graphics = new Graphics();
@@ -40,6 +44,8 @@ export default class Canvas extends EditorComponent {
     private heightGraphics = new Graphics();
     /** The pips standing for the attribute types other than the active one, on the selected data layer (see `ActiveAttributeType`). */
     private pipGraphics = new Graphics();
+    /** The floor overlays as the game draws them, unlit and without reflections, over the floor layer (see `DrawOverlays`). */
+    private overlays = new OverlayLayer(TileSize);
 
     protected OnInitialise(): void {
         this.layerContainers = new ObjectPool<Container>(
@@ -141,6 +147,7 @@ export default class Canvas extends EditorComponent {
             layerDict[selected.id].addChild(this.pipGraphics);
         }
 
+        this.DrawOverlays(levelData, layerDict);
         this.textPool.RestoreAll();
         this.DrawImplicitLayer(levelData);
         this.DrawHeights(levelData, heightContainer);
@@ -194,6 +201,9 @@ export default class Canvas extends EditorComponent {
                         }
                         sprite.addChild(text);
                     }
+                    if (brush.name === DataBrushName.OVERLAY) {
+                        sprite.alpha = OVERLAY_SQUARE_ALPHA;
+                    }
                     layerDict[brush.layerId].addChild(sprite);
                 }
             }
@@ -203,6 +213,39 @@ export default class Canvas extends EditorComponent {
             this.pipGraphics.parent.addChild(this.pipGraphics);
         }
 
+    }
+
+    /**
+     * The floor overlays (see `Overlays`), drawn by the game's own shader so the patch shows as it will in play - its shape, its
+     * colours, its ripples - over the floor layer as there (see `OverlayLayerIndex`), whichever layer is selected. Unlit, as the
+     * tiles are here, and with nothing to mirror. Only the cells on the grid are drawn.
+     */
+    private DrawOverlays(levelData: Brush[], layerDict: { [id: number]: Container }): void {
+        const state = this.editorStore.state;
+        const dataLayers = new Set<number>(state.layers.filter(layer => layer.isData && !IsHeightLayer(layer)).map(layer => layer.id));
+        const placements = FindOverlays(levelData, layerId => dataLayers.has(layerId));
+        const overlays = this.overlays;
+        overlays.Begin();
+        if (placements.length) {
+            const heights = HeightMap(levelData);
+            const cells = new Overlays(placements, (x, y) => heights.get(x + "," + y) || 0);
+            const scaledTileSize = TileSize * state.viewScale;
+            cells.All.forEach(cell => {
+                const posX = (cell.x - state.viewOffset.x) * scaledTileSize + GridBounds.x;
+                const posY = (cell.y - state.viewOffset.y) * scaledTileSize + GridBounds.y;
+                if (GridBounds.contains(posX, posY)) {
+                    overlays.Add(cell, (cell.x - state.viewOffset.x) * TileSize, (cell.y - state.viewOffset.y) * TileSize, null);
+                }
+            });
+        }
+        overlays.End();
+        overlays.position.set(GridBounds.x, GridBounds.y);
+        overlays.scale.set(state.viewScale);
+
+        const order = TileLayerOrder(state.layers);
+        const floor = order.tileLayers[OverlayLayerIndex(order.tileLayers, order.playerLayer)];
+        const over = floor && layerDict[floor.id];
+        this.levelContainer.addChildAt(overlays, over ? this.levelContainer.getChildIndex(over) + 1 : 0);
     }
 
     /**

@@ -3,6 +3,7 @@ import AssetFactory from "@logic-incubator/lib/loading/AssetFactory";
 import AssetMetadataStore from "@logic-incubator/engine/level/AssetMetadata";
 import { AnimationSpeed } from "@logic-incubator/engine/Constants";
 import { DataBrushName, DataBrushValue } from "@logic-incubator/engine/level/LevelFormat";
+import { IsOverlayValue } from "@logic-incubator/engine/level/Overlays";
 import { IsTeleportValue } from "@logic-incubator/engine/level/Portals";
 import { DescribeDataValue } from "../DataLabels";
 import { OpenDataBrushDialog } from "../DataBrushDialog";
@@ -184,7 +185,7 @@ export default class SelectedBrush extends EditorComponent {
             return { text: `${value} · +/- to adjust` };
         }
         const about = DescribeDataValue(value);
-        return IsTeleportValue(value) ? { text: `${about.text} · +/- to change` } : about;
+        return IsTeleportValue(value) || IsOverlayValue(value) ? { ...about, text: `${about.text} · +/- to change` } : about;
     }
 
     private Animate(delta: number): void {
