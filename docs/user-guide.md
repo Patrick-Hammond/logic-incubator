@@ -1660,10 +1660,11 @@ and so is a monster, from its `MonsterDef`'s `idle` and `run` ([9.4](#94-monster
 than a crawl (`IsMoving`, by its velocity): so a hero who lets go coasts a few pixels still running, then stands, and one
 walking into a wall stands there, as does one who has fallen or whose player's connection has gone. A hero's animation starts
 from its first frame each time they change pose (a monster's keeps its own count, offset so a crowd doesn't step in lockstep).
-During a talk every hero stands. Online, every machine draws every hero this way - a guest's copies of the others move as the
-host says, and run when the host has them running. A character with a single loop gives it as both. The poses are `idle` and
-`run` for now; an attack or a death will be a pose of its own, with an animation for it that a character without one is drawn
-`idle` in place of.
+Each pose plays at its own pace (`PoseRates`): standing still at half the speed of running, so the two read apart even where the
+art barely differs - the heroes' idle bob and run hop look much alike. During a talk every hero stands. Online, every machine
+draws every hero this way - a guest's copies of the others move as the host says, and run when the host has them running. A
+character with a single loop gives it as both. The poses are `idle` and `run` for now; an attack or a death will be a pose of
+its own, with an animation for it that a character without one is drawn `idle` in place of.
 
 A hero picks up a pickup as soon as **any part of their sprite overlaps it**, as both are drawn - or they stand on its cell.
 Only the art counts, not the see-through edges of a frame (the atlas build's trim says where the art is; a sprite without it

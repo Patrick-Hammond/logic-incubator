@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { AllAnimations, AnimationFor, CharacterAnimations, IsMoving, LoopFrame, PoseClock, PoseOf } from "./CharacterAnimations";
+import { AllAnimations, AnimationFor, CharacterAnimations, IsMoving, LoopFrame, PoseClock, PoseOf, PoseRates, Poses } from "./CharacterAnimations";
 
 const Knight: CharacterAnimations = { idle: "knight_idle_anim", run: "knight_run_anim" };
 const Slime: CharacterAnimations = { idle: "slime_anim", run: "slime_anim" };
@@ -25,6 +25,12 @@ describe("CharacterAnimations", () => {
     it("lists each of a character's animations once, idle first", () => {
         expect(AllAnimations(Knight)).toEqual(["knight_idle_anim", "knight_run_anim"]);
         expect(AllAnimations(Slime)).toEqual(["slime_anim"]);
+    });
+
+    it("plays every pose at a rate of its own - standing still slower than running", () => {
+        Poses.forEach(pose => expect(PoseRates[pose], pose).toBeGreaterThan(0));
+        expect(PoseRates.idle).toBeLessThan(PoseRates.run);
+        expect(PoseRates.run).toBe(1);
     });
 
     it("loops through a pose's frames, none for an animation with none", () => {

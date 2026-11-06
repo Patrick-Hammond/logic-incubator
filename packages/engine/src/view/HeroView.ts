@@ -3,7 +3,7 @@ import {Vec2, Vec2Like} from "@logic-incubator/lib/math/Geometry";
 import { TileSize } from "../Constants";
 import {Between} from "../FixedStep";
 import {CarriedLightScale} from "../level/entities/CarriedLight";
-import {AnimationFor, CharacterAnimations, LoopFrame, Pose, PoseClock, PoseOf} from "../level/entities/CharacterAnimations";
+import {AnimationFor, CharacterAnimations, LoopFrame, Pose, PoseClock, PoseOf, PoseRates} from "../level/entities/CharacterAnimations";
 import {LightSpellScale} from "../level/entities/LightSpell";
 import {MovingLight} from "../level/SceneLights";
 import Hero from "../sim/Hero";
@@ -15,7 +15,7 @@ const OrbHeight = 1;
 /** How far their mage-light bobs up and down, in tiles, and how fast, in radians a second. */
 const OrbBob = 0.06;
 const OrbBobRate = 2.4;
-/** A hero's animation frames per 60th of a second. */
+/** A hero's animation frames per 60th of a second, running - each pose plays at its share of it (`PoseRates`). */
 export const HeroAnimationSpeed = 0.1;
 
 /**
@@ -63,14 +63,15 @@ export class HeroView {
 
     /**
      * The frame they're drawn with now: of their pose's animation (their idle one, should the sprite sheet not have that), as far
-     * into it as they've been in that pose - `Texture.EMPTY` if the sheet has neither.
+     * into it as they've been in that pose, at the pose's rate - `Texture.EMPTY` if the sheet has neither.
      */
     get Texture(): Texture {
-        let frames = this.frames.Get(AnimationFor(this.animations, this.clock.Pose));
+        const pose = this.clock.Pose;
+        let frames = this.frames.Get(AnimationFor(this.animations, pose));
         if (!frames.length) {
             frames = this.frames.Get(this.animations.idle);
         }
-        return frames.length ? frames[LoopFrame(frames.length, this.clock.Time, HeroAnimationSpeed)] : Texture.EMPTY;
+        return frames.length ? frames[LoopFrame(frames.length, this.clock.Time, HeroAnimationSpeed * PoseRates[pose])] : Texture.EMPTY;
     }
 
     /** The light they carry, where they're drawn (see `Level.UpdateLights`) - null without one, or once they've fallen. */

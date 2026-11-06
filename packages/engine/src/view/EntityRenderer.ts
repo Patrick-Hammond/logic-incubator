@@ -4,7 +4,7 @@ import {Vec2Like} from "@logic-incubator/lib/math/Geometry";
 import { TileSize } from "../Constants";
 import type {EncounterView} from "../Encounter";
 import {Between} from "../FixedStep";
-import {AnimationFor, LoopFrame, PoseOf} from "../level/entities/CharacterAnimations";
+import {AnimationFor, LoopFrame, PoseOf, PoseRates} from "../level/entities/CharacterAnimations";
 import MonsterRoster from "../level/entities/MonsterRoster";
 import {Projectile} from "../level/entities/Projectiles";
 import {Pushable, SlideEase, SlideSeconds} from "../level/entities/Pushables";
@@ -20,7 +20,7 @@ import {HeroView} from "./HeroView";
 import {SpriteDrawPosition} from "./helpers/SpriteDrawOffset";
 import {AddMirrored, EntitiesLayer, GlowsLayer, MirroredFiguresLayer, OrbsLayer, ProjectilesLayer, ReflectionsLayer, TileGD8Rotation} from "./TileMap";
 
-/** Monsters' animation frames per ticker frame - see `AnimationSpeed` for tiles'. */
+/** Monsters' animation frames per ticker frame, running - each pose plays at its share of it (`PoseRates`). See `AnimationSpeed` for tiles'. */
 const MonsterAnimationSpeed = 0.15;
 /** Multiplied into a monster's or spawner's light while it shows a hit - a tint can only darken, so red it is. */
 const HitTint = 0xff4040;
@@ -249,12 +249,13 @@ export default class EntityRenderer {
             if (!this.level.IsCellVisible(tile.x, tile.y)) {
                 return;
             }
-            // Idle while it stands, running while it moves (see `CharacterAnimations`).
-            const frames = this.Frames(AnimationFor(m.def, PoseOf(m)));
+            // Idle while it stands, running while it moves (see `CharacterAnimations`), each at its own pace.
+            const pose = PoseOf(m);
+            const frames = this.Frames(AnimationFor(m.def, pose));
             if (!frames.length) {
                 return;
             }
-            const texture = frames[LoopFrame(frames.length, m.animTime, MonsterAnimationSpeed)];
+            const texture = frames[LoopFrame(frames.length, m.animTime, MonsterAnimationSpeed * PoseRates[pose])];
             const light = FigureLight(this.level.lightGrid, position, this.NextLight());
             if (m.hitFlash > 0) {
                 MultiplyLight(light, HitTint);

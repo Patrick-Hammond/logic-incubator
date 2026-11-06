@@ -1,9 +1,10 @@
 /**
  * Which animation a character - a hero or a monster - is drawn with: the pose it's in (`PoseOf`), that pose's
- * animation from the character's own (`AnimationFor`), and the frame of it to show (`LoopFrame`, `PoseClock`).
- * Two poses so far, `idle` and `run`. Another - attack, die - is a name added to `Pose` and to `Poses`, an
- * optional animation for it in `CharacterAnimations` (a character without one is drawn `idle` in its place),
- * and whatever puts a character in it in `PoseOf`. Pure - no pixi - so it runs under the plain node test runner.
+ * animation from the character's own (`AnimationFor`), how fast it plays (`PoseRates`), and the frame of it to
+ * show (`LoopFrame`, `PoseClock`). Two poses so far, `idle` and `run`. Another - attack, die - is a name added
+ * to `Pose`, `Poses` and `PoseRates`, an optional animation for it in `CharacterAnimations` (a character without
+ * one is drawn `idle` in its place), and whatever puts a character in it in `PoseOf`. Pure - no pixi - so it runs
+ * under the plain node test runner.
  */
 
 /** What a character is doing, as far as how it's drawn goes. */
@@ -11,6 +12,13 @@ export type Pose = "idle" | "run";
 
 /** Every pose. */
 export const Poses: ReadonlyArray<Pose> = ["idle", "run"];
+
+/**
+ * How fast each pose's animation plays, as a share of the character's own frame rate. Standing still breathes at half
+ * the pace of running, so the two read apart even where the art barely differs (as the 0x72 heroes' idle bob and run
+ * hop do).
+ */
+export const PoseRates: Readonly<Record<Pose, number>> = { idle: 0.5, run: 1 };
 
 /** A character's animations, each by its bare name in the sprite sheet: one for each pose. A character with a single loop gives it for both. */
 export type CharacterAnimations = {
