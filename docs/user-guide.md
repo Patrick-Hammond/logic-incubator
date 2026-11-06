@@ -1542,7 +1542,7 @@ DungeonMain (a scene)
  │   ├─ Hero          one per hero: their state (PlayerState: moving, shooting, taking hits)
  │   ├─ Encounter     spawners, monsters (bosses among them), projectiles
  │   └─ QuestLog      how the level's quests stand
- ├─ HeroView          one per hero: how they're drawn, and the lights they carry
+ ├─ HeroView          one per hero: how they're drawn (idle or running), and the lights they carry
  ├─ EntityRenderer    draws the heroes, monsters, spawners, shots and the things pushed about
  └─ Level             the loaded level: tiles, collision, doors, lights, regions, spawners, pickups, exits, NPCs, bosses, portals,
                       things to push, quests
@@ -1602,15 +1602,15 @@ export function Dungeon(): () => void {
 | Option | Meaning |
 | --- | --- |
 | `player` | `PlayerSetup`: the heroes' look, hit points, hearts and weapons ([9.3](#93-the-player)). |
-| `heroes?` | `() => HeroSlot[] \| undefined`. Who plays: one slot per hero, called on every start/restart. Each slot gives that hero's `input` device, `sprite`, `lightSpell`, `name` and `sounds`. Leave it out (or return `undefined` or `[]`) for one hero on the keyboard or the first gamepad. See [9.3.1](#931-playing-together). |
+| `heroes?` | `() => HeroSlot[] \| undefined`. Who plays: one slot per hero, called on every start/restart. Each slot gives that hero's `input` device, `animations`, `lightSpell`, `name` and `sounds`. Leave it out (or return `undefined` or `[]`) for one hero on the keyboard or the first gamepad. See [9.3.1](#931-playing-together). |
 | `level` | `() => LevelFile \| undefined`. Called on every start/restart. In a dev build return the editor's latest save first (`editor.savedLevel() \|\| shipped`). |
 | `levelBundle?` | `() => string \| undefined`. The asset bundle the level plays in. Loaded (with its dependencies) *before* the level is built; the previous one is released after. |
 | `sounds?` | `SoundTable`. What play sounds like, where the thing it happens to doesn't name a sound of its own: each a sound by name, skipped while the build has no file for it ([9.8](#98-events-and-hooks)). Its `footstep`, `ambience` and `bossMusic` the scene plays itself. |
 | `music?` | `() => SoundId \| undefined`. The track the level plays to, on a loop - usually one in the level's bundle, and `lazy`, so it loads as it starts. Called on every start/restart: the same track carries on through a restart and into a next level that asks for it, a different one takes over. It plays only while the dungeon is showing, so it stops behind the editor or the title. While a boss is awake, `sounds.bossMusic` plays in its place, and the level's track comes back from the top once the boss falls. Leave it out (or return `undefined`) for silence. |
 | `overlay?` | `(main: DungeonMain) => GameComponent`. Called once; what it returns is attached above the HUD and kept with the scene. It gets the scene so it can `Pause()`, `Resume()` and `Restart()` it, and listens to `ALL_PLAYERS_DIED`, `LEVEL_COMPLETED` and the other events. This is how a game adds a pause menu and an end-of-level screen without the engine knowing what they look like. |
 | `manualRestart?` | `boolean`. The end of a level - everyone down, or a hero out - holds everything still until `main.Restart()` is called, instead of starting over by itself 1.5 s later - for a game whose `overlay` offers a choice (try again, quit). |
-| `playerSprite?` | `() => string \| undefined`. Only without `heroes`. Called on every start/restart; the animation it returns is what the lone hero is drawn with, in place of `player.sprite`. Return `undefined` for the default. This is how a character select screen's pick reaches the game: keep the chosen character in your boot code (listen for the event your screen emits) and return their run animation. With `heroes`, each slot's `sprite` does this. |
-| `playerLightSpell?` | `() => LightSpell \| null \| undefined`. Only without `heroes`. Called with `playerSprite`: the light spell the chosen character has ([9.6.2](#962-lights-in-play)) - `null` for none, `undefined` to keep `player.lightSpell`. How a game gives the spell to only some characters. |
+| `playerAnimations?` | `() => CharacterAnimations \| undefined`. Only without `heroes`. Called on every start/restart; the animations it returns (`{ idle, run }`) are what the lone hero is drawn with, in place of `player.animations`. Return `undefined` for the default. This is how a character select screen's pick reaches the game: keep the chosen character in your boot code (listen for the event your screen emits) and return their animations. With `heroes`, each slot's `animations` does this. |
+| `playerLightSpell?` | `() => LightSpell \| null \| undefined`. Only without `heroes`. Called with `playerAnimations`: the light spell the chosen character has ([9.6.2](#962-lights-in-play)) - `null` for none, `undefined` to keep `player.lightSpell`. How a game gives the spell to only some characters. |
 
 The engine uses a fixed coordinate system from `@logic-incubator/engine/Constants`: a 1280x720 canvas, 16 px tiles, a
 320 px HUD column on the right (`PlayWidth` = 960 px of play area). Use these constants for your `Game` size.
@@ -1621,7 +1621,7 @@ The engine uses a fixed coordinate system from `@logic-incubator/engine/Constant
 import type { PlayerSetup } from "@logic-incubator/engine/DungeonMain";
 
 export const PlayerSetup: PlayerSetup = {
-    sprite: "wizzard_m_run_anim",                       // an animation, by bare name
+    animations: { idle: "wizzard_m_idle_anim", run: "wizzard_m_run_anim" },   // animations, by bare name: standing, and moving
     hitPoints: 6,                                       // in half-hearts: three hearts
     hearts: { full: "ui_heart_full", half: "ui_heart_half", empty: "ui_heart_empty" },   // sprite names for the HUD
     weapons: [                                          // the first is equipped at the start; a weapon picked up lasts until the level starts over
@@ -1652,11 +1652,23 @@ gamepad's Y button, calls up the light spell, if the hero has one and it's ready
 who has strayed far from the rest of the party to the nearest of them ([9.3.1](#931-playing-together)).
 
 `PlayerSetup` is every hero's: a party shares its hit points, hearts and weapons, and each hero's `HeroSlot` can give them
-their own animation, light spell and voice (`sounds`: their `hurt` and `death`, by name - see [9.8](#98-events-and-hooks)).
+their own animations, light spell and voice (`sounds`: their `hurt` and `death`, by name - see [9.8](#98-events-and-hooks)).
+
+**Idle and running.** A hero is drawn with their `idle` animation while they stand and their `run` animation while they move,
+and so is a monster, from its `MonsterDef`'s `idle` and `run` ([9.4](#94-monsters)): both are `CharacterAnimations`
+(`level/entities/CharacterAnimations`), one animation for each **pose**. A character counts as moving while it's going faster
+than a crawl (`IsMoving`, by its velocity): so a hero who lets go coasts a few pixels still running, then stands, and one
+walking into a wall stands there, as does one who has fallen or whose player's connection has gone. A hero's animation starts
+from its first frame each time they change pose (a monster's keeps its own count, offset so a crowd doesn't step in lockstep).
+During a talk every hero stands. Online, every machine draws every hero this way - a guest's copies of the others move as the
+host says, and run when the host has them running. A character with a single loop gives it as both. The poses are `idle` and
+`run` for now; an attack or a death will be a pose of its own, with an animation for it that a character without one is drawn
+`idle` in place of.
 
 A hero picks up a pickup as soon as **any part of their sprite overlaps it**, as both are drawn - or they stand on its cell.
 Only the art counts, not the see-through edges of a frame (the atlas build's trim says where the art is; a sprite without it
-counts whole), and a `pickup` brush on an empty cell is its whole cell. So nobody has to line up with an item exactly: a hero
+counts whole - over every frame of both a hero's animations, so what they reach doesn't change as they set off or stop), and a
+`pickup` brush on an empty cell is its whole cell. So nobody has to line up with an item exactly: a hero
 walking just under a sack takes it with the top of their head, and one brushing past a potion takes it with their side.
 Whatever else lies on that cell comes too. Nothing is picked up off a ledge too high or low to step to ([9.7](#97-heights));
 in a party the first hero, by slot, to reach it gets it.
@@ -1676,7 +1688,7 @@ new DungeonMain({
     level: () => game.assets.Data("level1.level"),
     heroes: () => party.map((member): HeroSlot => ({
         input: member.pad === undefined ? { keyboard: true } : { pad: member.pad },   // each player their own device
-        sprite: member.character.run,
+        animations: { idle: member.character.idle, run: member.character.run },
         lightSpell: member.character.lightSpell || null,                               // null: this character has none
         sounds: { hurt: "hero_hurt_" + member.character.voice, death: "hero_death_" + member.character.voice },
     })),
@@ -1892,7 +1904,7 @@ export const Monsters: IMonsterRoster<MonsterType> = {
 MonsterRoster.inst.Load(Monsters);
 ```
 
-`MonsterDef` fields: `idle`/`run` (animation names), `hitPoints`, `speed` (a multiple of the player's), `contactDamage`
+`MonsterDef` fields: `idle`/`run` (animation names: standing still, and moving - its `CharacterAnimations`, drawn as a hero's are, see [9.3](#93-the-player)), `hitPoints`, `speed` (a multiple of the player's), `contactDamage`
 (half-hearts per touch; 0 = harmless), `contactCooldown` (seconds), optional `ranged` (a `Weapon` the monster shoots at the
 nearest hero within `range` tiles, from where the heroes can see it), `behaviour` - a factory called once per monster spawned, so a behaviour can
 keep its own state - and optional `sounds` (`hit`, `death`, `spawn`, `wake`: see [9.8](#98-events-and-hooks)).

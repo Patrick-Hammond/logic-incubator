@@ -6,6 +6,7 @@
  */
 
 import type { IMonsterBehaviour } from "./Behaviours";
+import type { CharacterAnimations } from "./CharacterAnimations";
 import type { Weapon } from "./Projectiles";
 
 export type MonsterType = string;
@@ -21,8 +22,8 @@ export type MonsterSounds = {
     wake?: string;
 };
 
-/** Everything the engine needs to run one kind of monster - the game's side of the deal. */
-export interface MonsterDef {
+/** Everything the engine needs to run one kind of monster - the game's side of the deal. Its animations are a character's (see `CharacterAnimations`). */
+export interface MonsterDef extends CharacterAnimations {
     /** Animation shown standing still - also its picture in the editor's spawner dialog. */
     idle: string;
     /** Animation shown while moving. Same as `idle` for a monster with a single loop. */

@@ -236,6 +236,21 @@ describe("an online run", () => {
         });
     });
 
+    it("shows on every machine who's running and who's standing - a guest's own hero, and the others as the host has them", async () => {
+        await run.Open(2);
+        await run.BeginAll();
+        // The host's hero and the first guest's walk; the second guest's stands.
+        await run.Frames(24, hero => (hero === 2 ? undefined : Input(1)));
+        [run.host, ...run.guests].forEach(machine => {
+            expect(machine.world.Heroes.map(hero => hero.Moving)).toEqual([true, true, false]);
+        });
+        // Long enough for every copy, drawn a little behind, to have stopped too.
+        await run.Frames(60, () => undefined);
+        [run.host, ...run.guests].forEach(machine => {
+            expect(machine.world.Heroes.map(hero => hero.Moving)).toEqual([false, false, false]);
+        });
+    });
+
     it("does on each guest what happened on the host: pickups, doors", async () => {
         await run.Open(1);
         await run.BeginAll();

@@ -56,6 +56,7 @@ configuration files and plugin interface. For explanations, examples and workflo
 [Depth](#depth) ·
 [Doors, regions and other level helpers](#doors-regions-and-other-level-helpers) ·
 [Monsters](#monsters) ·
+[Character animations](#character-animations) ·
 [Behaviours](#behaviours) ·
 [Spawners](#spawners) ·
 [Projectiles](#projectiles) ·
@@ -1311,7 +1312,7 @@ the host's snapshots (see [Online play](#online-play)).
 
 ```ts
 type PlayerSetup = {
-    sprite: string;                                       // animation name
+    animations: CharacterAnimations;                      // { idle, run }: animation names, standing and moving (see Character animations)
     hitPoints: number;                                    // half-hearts
     hearts?: { full: string; half: string; empty: string };// sprite names; without them the HUD draws the UI skin's hearts
     weapons: WeaponDef[];                                 // the first is equipped; fired while a fire direction is held; copied for each level start
@@ -1321,7 +1322,7 @@ type PlayerSetup = {
 
 type HeroSlot = {
     input?: InputDevice | null;                           // what they're played with (default DefaultInput: the keyboard, or the first gamepad without it); null: played on another machine
-    sprite?: string;                                      // the animation they're drawn with, in place of player.sprite
+    animations?: CharacterAnimations;                     // what they're drawn with - a character's own - in place of player.animations
     lightSpell?: LightSpell | null;                       // null for none; left out, player.lightSpell
     name?: string;                                        // what heads their row in the HUD; left out, "PLAYER n"
     sounds?: HeroSounds;                                  // their own hurt and death (a character's voice); left out, player.sounds
@@ -1336,7 +1337,7 @@ type DungeonMainOptions = {
     sounds?: SoundTable;                                  // what play sounds like where the thing it happens to names no sound of its own (see SoundBoard); the scene plays footstep, ambience and bossMusic itself
     seed?: () => number | undefined;                      // what the level's random numbers start from, asked on every start and restart; undefined: a new one
     net?: () => NetPlay | undefined;                      // online: the run this machine plays in (CreateNetPlay), asked on every start and restart; undefined: offline
-    playerSprite?: () => string | undefined;              // a lone hero's animation, in place of player.sprite (only without heroes)
+    playerAnimations?: () => CharacterAnimations | undefined;   // a lone hero's animations, in place of player.animations (only without heroes)
     playerLightSpell?: () => LightSpell | null | undefined;  // a lone hero's light spell: null for none, undefined to keep player.lightSpell (only without heroes)
     overlay?: (main: DungeonMain) => GameComponent;       // drawn over the HUD and kept with the scene: a pause menu, an end-of-level screen
     manualRestart?: boolean;                              // the end of a level waits for Restart() instead of starting over by itself (default false)
@@ -1373,9 +1374,10 @@ returns is attached above the HUD (shown, hidden and destroyed with the scene). 
 end screen (YOU DIED or LEVEL CLEARED).
 
 `heroes` is asked for each time a level starts (on `LEVEL_CREATED`): one `HeroSlot` per hero, so its length is the party's size. Each hero gets a
-`PlayerControl` for their `input`, and a `HeroView` drawn with their `sprite`. Without `heroes` (or when it returns `undefined` or an empty array)
-there is one hero, played with `DefaultInput`: `playerSprite` and `playerLightSpell` are asked for at the same moment, for the animation they're drawn
-with (`player.sprite` when it returns `undefined`) and their light spell (`null` for none, `undefined` to keep `player.lightSpell`). A game's character
+`PlayerControl` for their `input`, and a `HeroView` drawn with their `animations` - and is measured for what they reach (`Hero.SetFigure`) over every
+frame of all of them (`AllAnimations`), so it's the same whatever their pose. Without `heroes` (or when it returns `undefined` or an empty array)
+there is one hero, played with `DefaultInput`: `playerAnimations` and `playerLightSpell` are asked for at the same moment, for the animations they're drawn
+with (`player.animations` when it returns `undefined`) and their light spell (`null` for none, `undefined` to keep `player.lightSpell`). A game's character
 select hands its picks to the scene through these.
 
 A hero whose `input` is `null` is played on another machine, in an online run: no `PlayerControl` is made for them, so here they get no input, and the
@@ -1397,7 +1399,8 @@ A party spread over machines isn't held together.
 Play runs in fixed steps of `StepSeconds` (1/60 s - see [Fixed step and seeded random](#fixed-step-and-seeded-random)), as many each
 display frame as its time calls for, and none after a step that ends the level. A step reads every hero's controls (`PlayerControl.Get`, in slot
 order) and hands them to `World.Step`, which moves the heroes, opens doors, updates what's seen, collects pickups, fires and runs the `Encounter`. Then,
-once a frame, it places each hero for drawing between their last two steps (`HeroView.Place(alpha)`), calls `Level.UpdateLights` with the seconds
+once a frame, it places each hero for drawing between their last two steps (`HeroView.Place(alpha)`) and moves their animation on
+(`HeroView.Animate(frames, held)`, `held` while play holds still for a talk, so every hero stands), calls `Level.UpdateLights` with the seconds
 played so far and the lights that move - each hero's carried torch (`HeroView.Light`) and mage-light while it's lit (`HeroView.SpellLight`), and every
 live shot with a `light`, keyed by the shot, all where they're drawn - and moves the camera: `SetZ` for the height under the first living hero,
 `UpdateZoom`, `ZoomForParty` and `Follow` the centre of the box round the living heroes played here, where they're drawn (all of those, once they're down; after the
@@ -1412,7 +1415,7 @@ the `World`, binds asset metadata (`BindAssetMetadata`) and listens for `LEVEL_C
 restart (1.5 s after the level ends, or when told to with `manualRestart`) call `Reload`: prepare the assets (`LevelAssets.Prepare` - refresh dev metadata,
 then `UseLevelBundle(levelBundle())`), then `Level.LoadLevel(level())`, `LevelMusic.Play(music(), bossMusic)` and `AmbientSounds.Begin(sounds.ambience, level.soundLoops)` unless the scene was destroyed meanwhile - so after `LEVEL_COMPLETED` a game moves
 on by having `level` (and `levelBundle`, and `music`) return the next one. The music and loops play only while the scene is shown (a `WhileShown`), so they stop behind the editor or the title; `BOSS_WOKE` and a boss's `MONSTER_KILLED` switch the music to the boss's track and back (`LevelMusic.BossWoke` / `BossFell`). Each frame it updates the loops with the centres of the standing heroes played on this machine, and plays `sounds.footstep` when one of them takes a step (`Footsteps`). On `LEVEL_CREATED` it resets the world for the slots `heroes` gives and keeps one
-`HeroView` per slot from level to level. `OnDestroy` destroys the hero views, disposes the level and releases the level bundle (when `levelBundle` was given).
+`HeroView` per slot from level to level. `OnDestroy` drops the hero views, disposes the level and releases the level bundle (when `levelBundle` was given).
 
 ---
 
@@ -1918,7 +1921,7 @@ Pure helpers behind `Level`; exported for tests and tooling.
 ```ts
 type MonsterType = string;
 
-interface MonsterDef {
+interface MonsterDef extends CharacterAnimations {
     idle: string;               // animation standing still (also its picture in the editor's spawner dialog)
     run: string;                // animation while moving (same as idle for a single loop)
     hitPoints: number;
@@ -1942,6 +1945,39 @@ interface IMonsterRoster<T extends MonsterType = MonsterType> {
 
 `default class MonsterRoster` - singleton (`inst`, `Destroy()`): `Load(roster)`, `Types`, `DefaultPool`, `SpawnerSprite`, `Has(value): value is MonsterType`,
 `Def(type)`, `IdleAnimation(type)`. Load it before the editor or any level is created.
+
+## Character animations
+
+`@logic-incubator/engine/level/entities/CharacterAnimations` (pure) - which animation a character, a hero or a monster, is drawn with: one for
+each **pose**.
+
+```ts
+type Pose = "idle" | "run";
+const Poses: ReadonlyArray<Pose>;                         // every pose
+type CharacterAnimations = { idle: string; run: string }; // animation names, by pose; a character with a single loop gives it for both
+type PoseFacts = { moving: boolean };                     // what PoseOf goes by
+
+const MovingSpeed = 0.1;
+IsMoving(velocity: { x; y }): boolean                     // |x| + |y| over MovingSpeed: moving, as far as the animation goes
+PoseOf(facts: PoseFacts): Pose                            // "run" while moving, else "idle"
+AnimationFor(animations, pose): string                    // the pose's animation - the idle one for a pose it has none for
+AllAnimations(animations): string[]                       // each of its animations once, idle first (what a hero's figure is measured over)
+LoopFrame(count, time, speed): number                     // the frame of a count-frame loop to show time into it, speed frames per unit of time; 0 for none
+
+class PoseClock {                                         // a character's pose and how long it's been in it
+    Pose: Pose; Time: number;
+    Update(pose, elapsed): void                           // elapsed on, in pose now - from 0 if that's a change, so a new pose's animation starts at its first frame
+    Reset(): void                                         // idle, from 0
+}
+```
+
+A hero is moving while they're in play and going faster than a crawl (`Hero.Moving`); a monster while its velocity is (`Monster.moving`, set
+each step, and sent to online guests in its snapshot). Velocity rather than distance, so a character walking into a wall (that axis of its velocity
+stopped by `ResolveMove`) stands, and an online guest's copy of another hero, placed where the host's snapshots have them, runs as the host's does.
+`HeroView` keeps a `PoseClock` (a hero's animation restarts with each new pose); `EntityRenderer` draws a monster's pose at its own `animTime`.
+
+Adding a pose - an attack, a death - is a name in `Pose` and `Poses`, an optional animation for it in `CharacterAnimations` (so a character without
+one falls back to `idle`), whatever puts a character in it in `PoseFacts` and `PoseOf`, and, for a monster, that sent to guests in its snapshot.
 
 ## Behaviours
 
@@ -2068,8 +2104,8 @@ Constants `MaxMonsters = 150`, `HitFlashTime = 0.15`, `ToughnessPerHero = 0.5`; 
 x1 for one hero, x1.5 for two, x2.5 for four - more bows for the same crowd, without more monsters than `MaxMonsters`. `EncounterLevel` and
 `EncounterPlayer` are the narrow interfaces it needs of `Level` and of a hero (`Hero`); `EncounterPlayer.Index` is the hero's slot, named in
 `PLAYER_DAMAGED` and `PLAYER_DIED`. `EncounterView` is what's drawn of it - `{ monsters: MonsterLook[]; projectiles; spawners; spawnerFlash: { has } }`,
-read-only, with `MonsterLook` the parts of a `Monster` that `EntityRenderer` reads (`previous`, `position`, `def`, `moving`, `animTime`, `hitFlash`,
-`facingX`).
+read-only, with `MonsterLook` the parts of a `Monster` that `EntityRenderer` reads (`previous`, `position`, `def`, `moving` - `IsMoving(velocity)` as of
+its last step, which picks its `run` or `idle` animation -, `animTime`, `hitFlash`, `facingX`).
 
 **Closed doors.** A monster can't enter a closed door (`Level.IsDoorClosed`). The flow field treats those cells as blocked, so a monster behind one has no path to a hero (`DistanceAt` is `UNREACHABLE`: chasers hold still, wanderers keep wandering, and a spawner with an `activationRange` stays inactive); and the monsters' collider treats them as solid, so one steered at a door by a wander heading or another monster's push is stopped too. The field is recomputed when `Level.doorVersion` changes, not just when a hero changes cell. Spawn cells are never closed-door cells. A monster a door shuts on (its box overlaps a closed-door cell) is walked out of it, whichever side it's nearer, using a collider that doesn't count the door's cells as solid - it can neither be trapped in the door nor slip through to the heroes. The heroes are unaffected - standing in a door is what opens it, and while one does the monsters can come through.
 
@@ -2164,10 +2200,12 @@ new Hero(index: number, setup: Pick<PlayerSetup, "hitPoints" | "weapons">)
 hero.Index                    // their slot, from 0
 hero.State: Readonly<PlayerState>
 hero.Alive, Position, Centre, Tile, FacingX, Health, Gold, Inventory, Keys, EquippedWeapon, Spell
+hero.Moving: boolean                          // in play (Alive, not Away or Gone) and IsMoving(velocity) as of their last step - drawn running,
+                                              // not idle; on an online guest, by the velocity in the host's snapshot for the others
 hero.Figure: RectangleLike                    // what their sprite draws, in pixels, where they stand (FigureBox) - what they pick things up with
 hero.SetFigure(size: SpriteSize | undefined): void   // their frames' size and where the art is in them - a whole tile until told, and for
                                               // undefined; DungeonMain sets it as each level starts (World.Reset makes the heroes anew)
-                                              // from every frame of the animation they're drawn with (ArtBounds)
+                                              // from every frame of every animation they're drawn with (AllAnimations, ArtBounds)
 hero.HasKeyFor(lockId): boolean
 hero.Reset(startTile, lightSpell?): void      // a fresh PlayerState there
 hero.WarpTo(position): void                   // there at once (a top-left, in pixels) - nothing drawn between - their mage-light with them
@@ -2217,11 +2255,12 @@ same seed on any machine (mulberry32); `NewSeed()` - a fresh 32-bit seed, differ
 | --- | --- | --- |
 | `Camera extends GameComponent` | `view/Camera` | `ViewRect`, `Scale`, `ScaledTileSize`, `Zoom`, `BaseViewWidth/Height`, `CurrentZ`, `EffectiveZoom` (the height zoom times `PartyZoom` - what the views scale by), `PartyZoom` (1, or less while a party is spread out); `Move(x, y)`, `CenterOn(x, y)`, `Follow(pixelX, pixelY, amount)`, `SetZ(z)`, `UpdateZoom(dt)`, `ZoomForParty(target, frames)` (eases `PartyZoom` towards `target` - from `PartyFrame.PartyZoom` - over `frames` 60ths of a second). Emits `CAMERA_MOVED`. `new Camera(cameraControl?)`. |
 | `TileMapView extends GameComponent` | `view/TileMap` | `new TileMapView(level, camera)`. Builds the tile layers, lit and banded by height, plus, in drawing order, the `GlowsLayer` (`"glows"`), `EntitiesLayer` (`"entities"`), `OrbsLayer` (`"orbs"`) and `ProjectilesLayer` (`"projectiles"`) (names from `view/helpers/FigureLayers`, re-exported here, as are `ReflectionsLayer` (`"reflections"`) and `MirroredFiguresLayer` (`"mirrored figures"`)); `TileGD8Rotation(rotation, scaleX, scaleY)`; `AddMirrored(into, texture, left, top, rotation, scaleX, scaleY, light, scratch, alpha = 1)` (adds a tile to a tilemap upside down below its foot, its light turned over with it - `view/helpers/Mirror`; a trimmed atlas frame is placed by `MirroredTop`, so its reflection meets its feet). A height band with floor overlays gets an `OverlayLayer` just over its `level.overlayLayer`, filled each frame with the cells in view and visible (`IsCellVisible`), each lit by its corners; a level with a reflective one gets a `ReflectionCapture` (`"reflections"`) first in the camera's root, holding each band's mirrored tiles (`Tile.reflects`, where `overlays.ReflectsAt` their foot) and, last, the mirrored figures, and drawn only while a reflective cell is on screen. Those four go where the level's player layer is (`level.playerLayer`): each height band's tile layers before it are drawn under them, and those after it - in a part of the band of their own (`"z-<n> over"`), with their own glows - over them, every band's lowest z first again. Each tile is drawn with its cell's corner light (`CellCornerLight`); a tile taller than a cell (a door, a statue) stands up, so like a figure it takes `FootLight` along its foot. A tile a spawner is drawn as (`Tile.spawner`), or that's pushed about (`Tile.pushable`), is left to `EntityRenderer`. A tile that gives off light gets a glow over its flame in its own band (`view/helpers/Glow`), at its light's strength that frame. Emits `LEVEL_CREATED`. |
-| `HeroView` | `view/HeroView` | How one hero looks. `new HeroView(hero: Hero, animation)`; `Hero` (the hero it draws), `DrawPosition` (where they're drawn this frame, between their last two steps), `Texture`; `Reset(hero)` (point it at a new level's hero - `DungeonMain` keeps one view per slot from level to level), `SetSprite(animation)` (draw them with another animation; a no-op for the one already in use), `Place(alpha, offset?)` (places them, and their mage-light, for drawing `alpha` of the way through their last step, `offset` pixels from there - an online guest's correction being drawn away; call each frame after the steps), `Destroy()`. Their lights, as `MovingLight`s for `Level.UpdateLights` (null when they have none, and always once they've fallen), where they're drawn: `Light` (a torch they picked up, at their centre, dimming as it burns out) and `SpellLight` (their mage-light while it's lit, over the floor just behind them); `OrbPosition` is where the mage-light is drawn, floating and bobbing. |
+| `HeroView` | `view/HeroView` | How one hero looks. `new HeroView(hero: Hero, animations: CharacterAnimations)`; `Hero` (the hero it draws), `DrawPosition` (where they're drawn this frame, between their last two steps), `Pose` (as of the last `Animate`), `Texture` (the frame to draw: their pose's animation - their idle one if the sprite sheet hasn't got that - at `HeroAnimationSpeed`, 0.1 frames a 60th of a second, from when they took up the pose; `Texture.EMPTY`, and not drawn, if the sheet has neither); `Reset(hero)` (point it at a new level's hero, standing - `DungeonMain` keeps one view per slot from level to level), `SetAnimations(animations)` (draw them with these from now on), `Place(alpha, offset?)` (places them, and their mage-light, for drawing `alpha` of the way through their last step, `offset` pixels from there - an online guest's correction being drawn away; call each frame after the steps), `Animate(frames, held = false)` (moves their animation on `frames` 60ths of a second, in the pose they're in now - `run` while `Hero.Moving`, else `idle`, and `idle` while `held`; a new pose starts from its first frame; call each frame with `Place`). It owns no pixi objects, so there's nothing to destroy. Their lights, as `MovingLight`s for `Level.UpdateLights` (null when they have none, and always once they've fallen), where they're drawn: `Light` (a torch they picked up, at their centre, dimming as it burns out) and `SpellLight` (their mage-light while it's lit, over the floor just behind them); `OrbPosition` is where the mage-light is drawn, floating and bobbing. |
 | `Effects extends GameComponent` | `view/Effects` | `new Effects(camera)`; `Play(art, config, x, y): Emitter \| undefined` starts a particle effect at a position in world pixels (`art`: a sprite or animation name, `config`: an `EmitterConfig` or `OldEmitterConfig`; `undefined` after a one-off warning when `art` isn't loaded). Its layer sits in the camera root just above the shots (`ProjectilesLayer`) - so under any tile layers drawn over the figures -, placed every frame like the entities layer (`view/helpers/EffectsPlacement`), and goes back there on `LEVEL_CREATED` (on top of everything, if there's no shots layer), which also drops the level's effects. Emitters update from `Tick` (only while shown); a finished one (not emitting, no particles) is destroyed, a continuous one runs until `emit = false`. `DungeonMain` attaches it - use `main.Effects`. |
 | `Hud extends GameComponent` | `view/Hud` | `new Hud(setup.hearts?)`; `RenderHeroes(heroes)` (every hero, in slot order, the fallen included: one gets the lone hero's panel, as `Render`; a party gets a `HudHeroRow` each, spread down the panel, and the team's keys at the bottom - every key any of them carries); `Render(health, gold, weaponIcon, inventory, keys, spell?)` (the lone hero's panel: hearts, gold, weapon, inventory, keys and `spell`, their `LightSpellState`, shown under the keys as a bar - the skin's `mp` bar, if it has one - and READY, LIT or RECHARGING with the seconds left; null or left out hides it). `SetNames(names: { name; own }[])` heads each row (in slot order) with `name` in place of PLAYER n, in the skin's `focus` colour for `own` - the players at this machine - and `muted` for the rest; rows made later take them too. Built from the UI kit (a `UiPanel`, a `UiIconRow` of hearts, `UiItemSlot`s and `UiInventoryGrid`s, `UiText`) in the skin of the loaded `ui` bundle - the game must load it first. Hearts are the game's own pictures when `setup.hearts` gives them (enlarged 3x, 2x in a party's rows), else the skin's. The keys panel shows each key's sprite and its id. Warns once per missing sprite. |
 | `HudHeroRow extends Container` | `view/HudHeroRow` | One hero's row when a party plays: PLAYER n or `SetName(name, own)`'s (and DOWN, the row dimmed, once they've fallen - LEFT once their player has gone, AWAY while their player's connection is gone) and their hearts, their weapon slot, gold and light spell bar, and a strip of the items they carry. `new HudHeroRow(theme, index, rowWidth, heartTextures?)`, `Render(hero: HudHero)` (redraws only what changed), `static Height(theme)`. Also exports `type HudHero` (what a row reads of a `Hero`), `SpellStatusText(spell)`, `FitScale(texture, box)` and `TextureOf(name)`, which `Hud` shares. |
-| `EntityRenderer` | `view/EntityRenderer` | `new EntityRenderer(camera, level)`; `Reset()` (call on `LEVEL_CREATED`), `Render(heroes: HeroView[], encounter, alpha = 1, seconds = 0)` (each hero where their view was last `Place`d - a fallen one faint, a ghost where they fell, and one who is away as faint; monsters and shots `alpha` of the way through their last step; each spawner as its tile, `Level.SpawnerTile`, or the roster's sprite, red while it shows a hit; each pushable thing as its tile, `Level.PushableTile`, lit along its foot and sliding for `SlideSeconds` of the frames' `seconds` after it's pushed). Draws a glow under the figures for each hero's torch and each glowing shot, and the mage-lights - a glow with a bright core - over them. Each figure standing on or just above a reflective floor overlay (`overlays.ReflectsAt`) is drawn again upside down, as it's lit and as faint, into the `MirroredFiguresLayer` that `TileMapView` made (`AddMirrored`). |
+| `EntityRenderer` | `view/EntityRenderer` | `new EntityRenderer(camera, level)`; `Reset()` (call on `LEVEL_CREATED`), `Render(heroes: HeroView[], encounter, alpha = 1, seconds = 0)` (each hero where their view was last `Place`d - a fallen one faint, a ghost where they fell, and one who is away as faint; monsters and shots `alpha` of the way through their last step, a monster with its `run` animation while it's `moving` and its `idle` one otherwise (`AnimationFor(def, PoseOf(m))`), at `MonsterAnimationSpeed` (0.15 frames a 60th of a second) of its `animTime`; each spawner as its tile, `Level.SpawnerTile`, or the roster's sprite, red while it shows a hit; each pushable thing as its tile, `Level.PushableTile`, lit along its foot and sliding for `SlideSeconds` of the frames' `seconds` after it's pushed). Draws a glow under the figures for each hero's torch and each glowing shot, and the mage-lights - a glow with a bright core - over them. Each figure standing on or just above a reflective floor overlay (`overlays.ReflectsAt`) is drawn again upside down, as it's lit and as faint, into the `MirroredFiguresLayer` that `TileMapView` made (`AddMirrored`). |
+| `AnimationFrames` | `view/helpers/AnimationFrames` | Every frame of sprites and animations by bare name, made the first time each is asked for and kept: `Get(name): Texture[]` (in order; one for a sprite, none - after `AssetFactory.WarnMissing`'s one-off warning - for a name the sheet hasn't got). What `EntityRenderer` and each `HeroView` draw from. |
 | `OverlayLayer extends Container` | `view/OverlayLayer` | Floor overlays: `new OverlayLayer(tileSize)`; `Begin()`, `Add(cell: OverlayCell, left, top, light: ArrayLike<number> \| null)` per cell (its top-left in the layer's pixels, a cell `tileSize` across; `light` the four corners' RGB, top-left, top-right, bottom-right, bottom-left, as `CellCornerLight` gives them, or null for unlit; a cell with no alpha is left out), `End()`; `ReflectiveCells` (this frame's that mirror), `reflections: ReflectionCapture \| null` (what they mirror; null mirrors nothing). A quad per cell drawn by `overlay.vert`/`overlay.frag`, with a program for each kind (the fragment shader built with `KIND` defined, so each is only its own kind's code, and `UNLIT` for one multiplied into the floor, whose colour isn't lit again), made the first time it's drawn; the quads go to the GPU in a run for each kind and blend, a draw call each, with the blend's own GPU blending (`BLEND_MODES` `NORMAL`, `ADD`, `MULTIPLY`, `SCREEN`). Up to 16383 cells a layer. Premultiplied, times each cell's `alpha` and the layer's `worldAlpha`. `TileMapView` and the editor's `Canvas` make them. |
 | `ReflectionCapture extends Container` | `view/ReflectionCapture` | What reflective overlays mirror: its children - the mirrored tiles and figures - drawn not to the screen but into `Texture` (a `RenderTexture` the screen's size, made when it's first drawn), which each `OverlayLayer` samples where it mirrors. `active` (set each frame by whoever draws the overlays) decides whether it's drawn; while it's off an overlay reads nothing from it. Put it in the scene before the overlays and laid out as what it mirrors (it adds no transform). It puts back whatever was being drawn to after (the screen, or a filter's texture). |
 | `Mirror` | `view/helpers/Mirror` | Pure: `MirroredLight(light, out)` (a tile's corner light turned upside down with it: top and bottom swapped), `MirroredTurn(rotation, scaleX, scaleY)` (the rotation and scale that draw it upside down: rotation reversed, `scaleY` negated), `MirroredTop(top, origHeight, trimY, frameHeight)` (the y to hand `tile()` for the upside-down copy of a texture drawn at `top`: mirrored about its untrimmed bottom edge, `top + origHeight`, allowing for the trim `tile()` adds, so a trimmed figure's reflection starts at its feet). |

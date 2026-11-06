@@ -246,6 +246,35 @@ describe("World", () => {
         expect(world.Heroes[1].Position).toEqual(before[1]);
     });
 
+    it("counts a hero as moving while they walk - not standing, walking into a wall, come to a stop, fallen or away", () => {
+        const { world } = Setup(ROOM, 2);
+        const [hero, other] = world.Heroes;
+        expect(hero.Moving).toBe(false);
+        world.Step([Input(1, 0)], 1, FRAME);
+        expect(hero.Moving).toBe(true);
+        expect(other.Moving).toBe(false);
+        // Let go of, they coast a little way, then stand.
+        world.Step([], 1, FRAME);
+        expect(hero.Moving).toBe(true);
+        for (let i = 0; i < 30; i++) {
+            world.Step([], 1, FRAME);
+        }
+        expect(hero.Moving).toBe(false);
+        // Up against the wall, still walking into it.
+        for (let i = 0; i < 30; i++) {
+            world.Step([Input(0, -1)], 1, FRAME);
+        }
+        expect(hero.Moving).toBe(false);
+
+        world.Step([Input(1, 0)], 1, FRAME);
+        world.SetAway(0, true);
+        expect(hero.Moving).toBe(false);
+        world.SetAway(0, false);
+        expect(hero.Moving).toBe(true);
+        hero.Writable.health.hitPoints = 0;
+        expect(hero.Moving).toBe(false);
+    });
+
     it("gives a pickup to the first hero there, by slot", () => {
         const { level, world } = Setup(ROOM, 2);
         Put(world, 0, { x: 6, y: 2 });

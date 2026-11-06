@@ -13,6 +13,7 @@ import AssetMetadataStore from "./level/AssetMetadata";
 import { AssetMetadataBinding, BindAssetMetadata } from "./level/AssetMetadataBinding";
 import LevelAssets from "./level/LevelAssets";
 import LevelMusic from "./level/LevelMusic";
+import {AllAnimations, CharacterAnimations} from "./level/entities/CharacterAnimations";
 import MonsterRoster from "./level/entities/MonsterRoster";
 import {LightSpell} from "./level/entities/LightSpell";
 import {ArtBounds, SpriteSize, WeaponDef} from "./level/entities/Projectiles";
@@ -38,8 +39,8 @@ import TileMapView from "./view/TileMap";
 
 /** The game's side of the heroes: how they look, how tough they are, what they shoot, and how the HUD shows it - every hero's, unless a `HeroSlot` says otherwise. */
 export type PlayerSetup = {
-    /** Animation the hero is drawn with. */
-    sprite: string;
+    /** What the hero is drawn with: their idle animation while they stand, their run while they move (see `CharacterAnimations`). */
+    animations: CharacterAnimations;
     /** In half-hearts - see `Hud`. */
     hitPoints: number;
     /** Sprite names for a full, half and empty heart; without them the HUD draws the UI skin's hearts. */
@@ -59,8 +60,8 @@ export type HeroSlot = {
      * machine, in an online run: nothing here moves them, and this screen's camera leaves them out (see `heroes`).
      */
     input?: InputDevice | null;
-    /** The animation they're drawn with - `PlayerSetup.sprite` without it. */
-    sprite?: string;
+    /** Their animations - a character's own - in place of `PlayerSetup.animations`. */
+    animations?: CharacterAnimations;
     /** Their light spell: null for none, `PlayerSetup.lightSpell` when left out. */
     lightSpell?: LightSpell | null;
     /** What they sound like when hurt and when they fall - a character's own voice. `PlayerSetup.sounds` when left out. */
@@ -74,7 +75,7 @@ export type DungeonMainOptions = {
     /**
      * Who plays - one slot per hero, in order (the first is hero 0) - asked for each time a level starts,
      * like `level`. Undefined, or without it, there's one hero, played with the keyboard or the first
-     * gamepad, drawn and lit as `playerSprite` and `playerLightSpell` say. The camera keeps to the heroes
+     * gamepad, drawn and lit as `playerAnimations` and `playerLightSpell` say. The camera keeps to the heroes
      * played on this machine (all of them, when none is), and a party all on this screen is held to what
      * fits on it.
      */
@@ -118,12 +119,12 @@ export type DungeonMainOptions = {
      */
     sounds?: SoundTable;
     /**
-     * The animation to draw a lone hero with (see `heroes`), asked for each time a level starts, like `level`:
-     * when it returns one it is used in place of `player.sprite` - how a game lets the player pick a character.
+     * The animations to draw a lone hero with (see `heroes`), asked for each time a level starts, like `level`:
+     * when it returns some they're used in place of `player.animations` - how a game lets the player pick a character.
      */
-    playerSprite?: () => string | undefined;
+    playerAnimations?: () => CharacterAnimations | undefined;
     /**
-     * The light spell a lone hero has (see `heroes`), asked each time a level starts, like `playerSprite`: null
+     * The light spell a lone hero has (see `heroes`), asked each time a level starts, like `playerAnimations`: null
      * for none, a spell to use in place of `player.lightSpell`, or undefined to keep that - how a game gives
      * only some characters the spell.
      */
@@ -352,7 +353,6 @@ export class DungeonMain extends GameComponent {
     }
 
     protected OnDestroy(): void {
-        this.views.forEach(view => view.Destroy());
         this.views = [];
         this.controls = [];
         this.local = [];
@@ -398,17 +398,18 @@ export class DungeonMain extends GameComponent {
         const allHere = this.local.every(here => here);
         this.world.SetLeash(slots.length > 1 && allHere ? PartySpan(this.BaseView()) : null);
         this.controls = slots.map(slot => (slot.input === null ? null : new PlayerControl(slot.input || DefaultInput)));
-        // Views are kept from level to level, so a hero's animation isn't remade on every restart.
-        this.views.splice(slots.length).forEach(view => view.Destroy());
+        // Views are kept from level to level, so a hero's animations aren't looked up again on every restart.
+        this.views.length = Math.min(this.views.length, slots.length);
         this.world.Heroes.forEach((hero, i) => {
-            const sprite = slots[i].sprite || setup.sprite;
-            hero.SetFigure(ArtOf(sprite));
+            const animations = slots[i].animations || setup.animations;
+            // Whatever pose they're in, so what they can reach doesn't change as they set off - nor between an online guest and its host.
+            hero.SetFigure(ArtOf(AllAnimations(animations)));
             const view = this.views[i];
             if (view) {
-                view.SetSprite(sprite);
+                view.SetAnimations(animations);
                 view.Reset(hero);
             } else {
-                this.views.push(new HeroView(hero, sprite));
+                this.views.push(new HeroView(hero, animations));
             }
         });
         this.hud.SetNames(slots.map((slot, i) => ({ name: slot.name || "PLAYER " + (i + 1), own: !allHere && this.local[i] })));
@@ -509,7 +510,12 @@ export class DungeonMain extends GameComponent {
             this.CountToTalk(seconds);
         }
         const alpha = this.fixedStep.Alpha;
-        this.views.forEach((view, i) => view.Place(alpha, net && net.DrawOffset(i)));
+        // A talk holds play still, and every hero stands meanwhile.
+        const held = !this.Running;
+        this.views.forEach((view, i) => {
+            view.Place(alpha, net && net.DrawOffset(i));
+            view.Animate(frames, held);
+        });
         const entities = (net && net.Entities) || this.world.encounter;
 
         // Before the camera moves, since moving it draws the tiles.
@@ -651,14 +657,14 @@ export class DungeonMain extends GameComponent {
         this.game.dispatcher.emit(TALK_ENDED);
     }
 
-    /** Who plays this level: `heroes`' slots, or one hero from `playerSprite` and `playerLightSpell`. */
+    /** Who plays this level: `heroes`' slots, or one hero from `playerAnimations` and `playerLightSpell`. */
     private Slots(): ReadonlyArray<HeroSlot> {
         const slots = this.options.heroes && this.options.heroes();
         if (slots && slots.length) {
             return slots;
         }
         const spell = this.options.playerLightSpell && this.options.playerLightSpell();
-        return [{ sprite: this.options.playerSprite && this.options.playerSprite(), lightSpell: spell }];
+        return [{ animations: this.options.playerAnimations && this.options.playerAnimations(), lightSpell: spell }];
     }
 
     /**
@@ -758,7 +764,13 @@ function SizeOf(name: string): {width: number; height: number} | undefined {
     return AssetFactory.inst.Has(name) ? AssetFactory.inst.CreateTexture(name) : undefined;
 }
 
-/** A sprite's frame size and where its art is, over every frame of an animation (`ArtBounds`) - what a hero picks things up with. Undefined if there's no such thing. */
-function ArtOf(name: string): SpriteSize | undefined {
-    return AssetFactory.inst.Has(name) ? ArtBounds(AssetFactory.inst.CreateTextures(name)) : undefined;
+/** Sprites' frame size and where their art is, over every frame of every one of `names` the sheet has (`ArtBounds`) - what a hero picks things up with. Undefined if it has none of them. */
+function ArtOf(names: ReadonlyArray<string>): SpriteSize | undefined {
+    const frames: SpriteSize[] = [];
+    names.forEach(name => {
+        if (AssetFactory.inst.Has(name)) {
+            frames.push(...AssetFactory.inst.CreateTextures(name));
+        }
+    });
+    return ArtBounds(frames);
 }

@@ -1,10 +1,10 @@
 import {Container, GD8Symmetry, Sprite, Texture} from "pixi.js";
 import {CompositeTilemap} from "@logic-incubator/lib/tilemap";
-import AssetFactory from "@logic-incubator/lib/loading/AssetFactory";
 import {Vec2Like} from "@logic-incubator/lib/math/Geometry";
 import { TileSize } from "../Constants";
 import type {EncounterView} from "../Encounter";
 import {Between} from "../FixedStep";
+import {AnimationFor, LoopFrame, PoseOf} from "../level/entities/CharacterAnimations";
 import MonsterRoster from "../level/entities/MonsterRoster";
 import {Projectile} from "../level/entities/Projectiles";
 import {Pushable, SlideEase, SlideSeconds} from "../level/entities/Pushables";
@@ -12,6 +12,7 @@ import Level from "../level/Level";
 import {FootLight, LightGrid, LightToTint, SampleLight} from "../level/Lighting";
 import {Camera} from "./Camera";
 import GlowLayer from "./GlowLayer";
+import AnimationFrames from "./helpers/AnimationFrames";
 import {ViewOrigin} from "./helpers/CameraWindow";
 import {GlowLook, LookOfGlow, LookOfOrbCore} from "./helpers/Glow";
 import {CentreTile} from "./helpers/PlayerMovement";
@@ -81,7 +82,7 @@ export default class EntityRenderer {
     private orbs: GlowLayer | null = null;
     private projectiles: Container | null = null;
     private sprites: Sprite[] = [];
-    private frames = new Map<string, Texture[]>();
+    private frames = new AnimationFrames();
     private drawables: Drawable[] = [];
     /** Corner-light arrays reused frame to frame, one per drawable slot, so lighting 150 monsters doesn't allocate every frame. */
     private lights: Float32Array[] = [];
@@ -248,11 +249,12 @@ export default class EntityRenderer {
             if (!this.level.IsCellVisible(tile.x, tile.y)) {
                 return;
             }
-            const frames = this.Frames(m.moving ? m.def.run : m.def.idle);
+            // Idle while it stands, running while it moves (see `CharacterAnimations`).
+            const frames = this.Frames(AnimationFor(m.def, PoseOf(m)));
             if (!frames.length) {
                 return;
             }
-            const texture = frames[Math.floor(m.animTime * MonsterAnimationSpeed) % frames.length];
+            const texture = frames[LoopFrame(frames.length, m.animTime, MonsterAnimationSpeed)];
             const light = FigureLight(this.level.lightGrid, position, this.NextLight());
             if (m.hitFlash > 0) {
                 MultiplyLight(light, HitTint);
@@ -275,6 +277,9 @@ export default class EntityRenderer {
 
     private AddHero(view: HeroView, origin: {x: number; y: number}): void {
         const texture = view.Texture;
+        if (texture === Texture.EMPTY) {
+            return;
+        }
         const position = view.DrawPosition;
         const draw = SpriteDrawPosition(position, origin, texture);
         const hero = view.Hero;
@@ -404,16 +409,6 @@ export default class EntityRenderer {
 
     /** Every frame of a sprite or animation, cached - none (after a one-off warning) if the sprite sheet hasn't got it. */
     private Frames(name: string): Texture[] {
-        let frames = this.frames.get(name);
-        if (!frames) {
-            if (AssetFactory.inst.Has(name)) {
-                frames = AssetFactory.inst.CreateTextures(name);
-            } else {
-                AssetFactory.inst.WarnMissing(name);
-                frames = [];
-            }
-            this.frames.set(name, frames);
-        }
-        return frames;
+        return this.frames.Get(name);
     }
 }

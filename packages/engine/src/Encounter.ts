@@ -13,6 +13,7 @@ import { BOSS_WOKE, MONSTER_HIT, MONSTER_KILLED, MONSTER_SPAWNED, PLAYER_DAMAGED
 import { IsHeightGap } from "./level/Depth";
 import type { Boss } from "./level/entities/Bosses";
 import { IMonsterBehaviour, Separation, Toward } from "./level/entities/Behaviours";
+import { IsMoving } from "./level/entities/CharacterAnimations";
 import FlowField, { UNREACHABLE } from "./level/entities/FlowField";
 import { Health, IsDead } from "./level/entities/Health";
 import MonsterRoster, { MonsterDef, MonsterType } from "./level/entities/MonsterRoster";
@@ -96,6 +97,7 @@ export type Monster = {
     /** Size of its idle frame - see `SpriteBox`. */
     size: { width: number; height: number };
     facingX: number;
+    /** Moving this step (see `IsMoving`) - drawn running, not idle. */
     moving: boolean;
     /** Frames it's been animating - offset at random so a crowd doesn't step in lockstep. */
     animTime: number;
@@ -399,7 +401,7 @@ export default class Encounter implements EncounterView {
             if (faceX !== 0) {
                 m.facingX = faceX < 0 ? -1 : 1;
             }
-            m.moving = Math.abs(m.velocity.x) + Math.abs(m.velocity.y) > 0.1;
+            m.moving = IsMoving(m.velocity);
             m.animTime += dt;
             m.contactCooldown = Math.max(0, m.contactCooldown - seconds);
             m.rangedCooldown = Math.max(0, m.rangedCooldown - seconds);

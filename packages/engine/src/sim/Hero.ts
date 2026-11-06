@@ -11,6 +11,7 @@ import type { PlayerSetup } from "../DungeonMain";
 import type { EncounterPlayer } from "../Encounter";
 import type { IPlayerInput } from "../input/PlayerControl";
 import type { CollectedPickup } from "../level/Level";
+import { IsMoving } from "../level/entities/CharacterAnimations";
 import { Gold } from "../level/entities/Gold";
 import { Health, IsDead } from "../level/entities/Health";
 import { Inventory } from "../level/entities/Inventory";
@@ -89,6 +90,15 @@ export default class Hero implements EncounterPlayer {
 
     get FacingX(): number {
         return this.state.facingX;
+    }
+
+    /**
+     * Whether they're moving, as far as how they're drawn goes (see `IsMoving`): going at more than a crawl as of their last step, and in
+     * play - one fallen, away or gone stands. By their velocity, not by how far they went, so it's the same on an online guest, whose
+     * copies of the others are placed where the host's snapshots have them (see `ApplyHeroSnapshot`).
+     */
+    get Moving(): boolean {
+        return this.Alive && !this.away && !this.gone && IsMoving(this.state.velocity);
     }
 
     get Health(): Health {
