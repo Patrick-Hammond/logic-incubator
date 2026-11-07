@@ -35,23 +35,29 @@ describe("Footsteps", () => {
         expect(taken).toEqual([0, 2, 0, 2, 0, 2]);
     });
 
-    it("steps as often on a floor that slows the hero, their stride as much shorter", () => {
+    it("steps as much less often as a floor slows the hero - 0.4 as fast, 0.4 as many steps", () => {
         const steps = new Footsteps(10);
-        let taken = 0;
-        // A third of the pace, a third of the way: as many steps as walking 45 pixels at full pace.
-        for (let i = 0; i <= 45; i++) {
-            taken += steps.Update([{ x: i / 3, y: 0, pace: 1 / 3 }]).length;
-        }
-        expect(taken).toBe(5);
+        const count = (speed: number): number => {
+            steps.Reset();
+            let taken = 0;
+            for (let frame = 0; frame <= 250; frame++) {
+                taken += steps.Update([{ x: frame * speed, y: 0 }]).length;
+            }
+            return taken;
+        };
+        // 250 pixels at full speed, 100 on water: the first at 5 pixels, then every 10.
+        expect(count(1)).toBe(25);
+        expect(count(0.4)).toBe(10);
     });
 
     it("takes one step a frame at most, however far it went", () => {
         const steps = new Footsteps(10);
-        steps.Update([{ x: 0, y: 0, pace: 0.1 }]);
-        // Nine pixels at a tenth of the pace is nine strides, but one step - the next half a stride on.
-        expect(steps.Update([{ x: 9, y: 0, pace: 0.1 }])).toEqual([0]);
-        expect(steps.Update([{ x: 9.4, y: 0, pace: 0.1 }])).toEqual([]);
-        expect(steps.Update([{ x: 9.6, y: 0, pace: 0.1 }])).toEqual([0]);
+        steps.Update([{ x: 0, y: 0 }]);
+        // Setting off at half a stride, 4.5 more is all but a step; 9 more in one frame is almost two, but makes one - the next half a stride on.
+        expect(steps.Update([{ x: 4.5, y: 0 }])).toEqual([]);
+        expect(steps.Update([{ x: 13.5, y: 0 }])).toEqual([0]);
+        expect(steps.Update([{ x: 18.4, y: 0 }])).toEqual([]);
+        expect(steps.Update([{ x: 18.6, y: 0 }])).toEqual([0]);
     });
 
     it("doesn't count a jump - a warp, a restart - as walking", () => {

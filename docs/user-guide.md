@@ -2147,8 +2147,8 @@ same on every machine, and different in every patch.
 - Cells that differ only in speed, slipperiness, colour, reflectivity, alpha or blend are still one patch.
 - **Cost.** One draw call per kind on screen in each height band, and a pass drawing what's mirrored only while a reflective
   overlay is on screen. A level without overlays costs nothing, and one without reflective overlays no reflection pass.
-- **Footsteps.** A hero's steps on an overlay sound as its kind does (`SoundTable.footsteps`), and keep time with their legs
-  however slowly the floor lets them go ([9.8](#98-events-and-hooks)).
+- **Footsteps.** A hero's steps on an overlay sound as its kind does (`SoundTable.footsteps`), and come as much less often as the
+  floor slows them - on water (0.4) at 0.4 of the rate ([9.8](#98-events-and-hooks)).
 - **Online**, the overlays come with the level, as everything painted does; they never change in play. A guest moves its own hero
   over them exactly as the host does, slides and all, so they cost no corrections.
 
@@ -2301,7 +2301,7 @@ Three in the table aren't for an event, and the scene plays them itself:
 
 - `footstep` - each step a hero played on this machine takes on bare floor, one every 48 pixels walked, about five a second at full speed (`Footsteps`). Give it takes, as it plays a lot.
   On a floor overlay it's `footsteps`' sound for its kind (`footsteps: { mud: "footstep_mud", ... }`), with takes of its own, and `footstep` for a kind
-  left out or with no file yet. Where an overlay slows the heroes their stride is as much shorter, so their steps keep time with their legs.
+  left out or with no file yet. Steps go by distance, so where an overlay slows the heroes their steps come as much less often: 0.4 as often on water.
 - `ambience` - the level's sound under its music, on a loop everywhere while the dungeon is showing. A bare name, so a level's bundle can have
   its own, and global's is heard in every level without one.
 - `bossMusic` - in place of the level's `music` while a boss is awake, until the last one awake falls. A game's own volume settings

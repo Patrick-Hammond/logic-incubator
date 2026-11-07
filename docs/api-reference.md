@@ -1778,11 +1778,10 @@ ambient.Update(hearers: ReadonlyArray<Vec2Like>, seconds);                      
 A loop starts once it would be heard, and stays playing (at 0, when no one is near) until the level or the visit ends. A sound with no file is
 silent until the next `Begin`, as a level's bundle may have it; one that is still starting when it's no longer wanted is stopped as it arrives.
 
-`@logic-incubator/engine/Footsteps` (pure) - when the heroes' feet land. `new Footsteps(stride = DefaultStride)` (48 pixels, about five steps a second at a hero's full speed); `type Walker = Vec2Like & { pace?: number }`;
-`Update(walkers: ReadonlyArray<Walker | null>): ReadonlyArray<number>` - once a frame, each hero's position by slot (null for one not walking), and the slots of
-those who took a step, in slot order (the same array each call): one each `stride` times `pace` walked (`pace` how fast their legs carry them, as a share of a walk on bare floor -
-`DungeonMain` gives the floor's `Footing.speed`, or their own speed while they skid in faster than that - 1 left out, so a hero slowed by mud steps as
-often as ever, in time with their legs; at most one a frame), the first at half of one, so a hero who sets off is heard at once.
+`@logic-incubator/engine/Footsteps` (pure) - when the heroes' feet land. `new Footsteps(stride = DefaultStride)` (48 pixels, about five steps a second at a hero's full speed);
+`Update(walkers: ReadonlyArray<Vec2Like | null>): ReadonlyArray<number>` - once a frame, each hero's position by slot (null for one not walking), and the slots of
+those who took a step, in slot order (the same array each call): one each `stride` walked (by distance, so a hero a floor slows to 0.4 of their speed
+steps 0.4 as often; at most one a frame), the first at half of one, so a hero who sets off is heard at once.
 Standing still, or a jump of more than a stride (a warp, a restart), starts that hero afresh. `Reset()` forgets everyone's walking.
 
 `@logic-incubator/engine/SoundBoard` (pure) - what play sounds like. `DungeonMain` makes one over `NamedSounds(game.assets)` and plays it from

@@ -7,7 +7,7 @@ import AmbientSounds from "./AmbientSounds";
 import { TileSize } from "./Constants";
 import {ALL_PLAYERS_DIED, BOSS_WOKE, GAME_PAUSED, GAME_RESUMED, LEVEL_COMPLETED, LEVEL_CREATED, MONSTER_KILLED, NPC_BUMPED, TALK_ENDED, TALK_LINE, TALK_STARTED} from "./Events";
 import FixedStep, {StepSeconds} from "./FixedStep";
-import Footsteps, { Walker } from "./Footsteps";
+import Footsteps from "./Footsteps";
 import PlayerControl, {DefaultInput, InputDevice} from "./input/PlayerControl";
 import AssetMetadataStore from "./level/AssetMetadata";
 import { AssetMetadataBinding, BindAssetMetadata } from "./level/AssetMetadataBinding";
@@ -34,7 +34,6 @@ import Effects from "./view/Effects";
 import EntityRenderer from "./view/EntityRenderer";
 import {HeroView} from "./view/HeroView";
 import {PartyBounds, PartySpan, PartyZoom} from "./view/helpers/PartyFrame";
-import {TopVelocity} from "./view/helpers/PlayerMovement";
 import Hud from "./view/Hud";
 import QuestTracker from "./view/QuestTracker";
 import ShoutView from "./view/ShoutView";
@@ -186,7 +185,7 @@ export class DungeonMain extends GameComponent {
     private footsteps = new Footsteps();
     /** `hearers` in tiles, and by slot where the heroes who walk here are (see `Walkers`) - gathered into the same arrays each frame. */
     private readonly tileHearers: Vec2Like[] = [];
-    private readonly walkers: Array<Walker | null> = [];
+    private readonly walkers: Array<Vec2Like | null> = [];
     /** By slot, what each hero sounds like - from the slots the level started with. */
     private heroSounds: Array<HeroSounds | undefined> = [];
     /** Seconds until the next start after the level ended - 0 while it's being played. */
@@ -580,23 +579,12 @@ export class DungeonMain extends GameComponent {
 
     /**
      * By slot: the centres of the heroes played here who are still standing, and null for the rest - whose feet are heard (see
-     * `Footsteps`). Each one's pace is the speed the floor under them lets them walk at, or how fast they're going while they skid
-     * in faster than that - so their steps keep time with their legs.
+     * `Footsteps`: a step every so far walked, so a floor that slows them spaces their steps out as much).
      */
-    private Walkers(): ReadonlyArray<Walker | null> {
+    private Walkers(): ReadonlyArray<Vec2Like | null> {
         const walkers = this.walkers;
         walkers.length = 0;
-        this.world.Heroes.forEach((hero, i) => {
-            if (this.local[i] && hero.Alive && !hero.Gone) {
-                const tile = hero.Tile;
-                const centre = hero.Centre;
-                const velocity = hero.State.velocity;
-                const going = Math.sqrt(velocity.x * velocity.x + velocity.y * velocity.y) / TopVelocity;
-                walkers.push({ x: centre.x, y: centre.y, pace: Math.max(this.level.FootingAt(tile.x, tile.y).speed, going) });
-            } else {
-                walkers.push(null);
-            }
-        });
+        this.world.Heroes.forEach((hero, i) => walkers.push(this.local[i] && hero.Alive && !hero.Gone ? hero.Centre : null));
         return walkers;
     }
 
