@@ -7,7 +7,7 @@ import AmbientSounds from "./AmbientSounds";
 import { TileSize } from "./Constants";
 import {ALL_PLAYERS_DIED, BOSS_WOKE, GAME_PAUSED, GAME_RESUMED, LEVEL_COMPLETED, LEVEL_CREATED, MONSTER_KILLED, NPC_BUMPED, TALK_ENDED, TALK_LINE, TALK_STARTED} from "./Events";
 import FixedStep, {StepSeconds} from "./FixedStep";
-import Footsteps from "./Footsteps";
+import Footsteps, { Walker } from "./Footsteps";
 import PlayerControl, {DefaultInput, InputDevice} from "./input/PlayerControl";
 import AssetMetadataStore from "./level/AssetMetadata";
 import { AssetMetadataBinding, BindAssetMetadata } from "./level/AssetMetadataBinding";
@@ -185,7 +185,9 @@ export class DungeonMain extends GameComponent {
     private footsteps = new Footsteps();
     /** `hearers` in tiles, and by slot where the heroes who walk here are (see `Walkers`) - gathered into the same arrays each frame. */
     private readonly tileHearers: Vec2Like[] = [];
-    private readonly walkers: Array<Vec2Like | null> = [];
+    private readonly walkers: Array<Walker | null> = [];
+    /** By slot: whether the hero's player was pushing them along - a direction held - in the last step of play (see `Footsteps`). */
+    private pushing: boolean[] = [];
     /** By slot, what each hero sounds like - from the slots the level started with. */
     private heroSounds: Array<HeroSounds | undefined> = [];
     /** Seconds until the next start after the level ended - 0 while it's being played. */
@@ -432,6 +434,7 @@ export class DungeonMain extends GameComponent {
         this.lastFollowed = null;
         this.fixedStep.Reset();
         this.footsteps.Reset();
+        this.pushing = [];
         this.restartIn = 0;
         this.restarting = false;
         this.waitingForRestart = false;
@@ -513,6 +516,7 @@ export class DungeonMain extends GameComponent {
         for (let i = 0; i < steps && this.Running; i++) {
             // Paused (online), the heroes played here stand still.
             const inputs = this.controls.map(control => (control && !this.paused ? control.Get() : undefined));
+            inputs.forEach((input, slot) => (this.pushing[slot] = !!input && (input.direction.x !== 0 || input.direction.y !== 0)));
             if (net) {
                 net.Step(inputs);
             } else {
@@ -578,13 +582,21 @@ export class DungeonMain extends GameComponent {
     }
 
     /**
-     * By slot: the centres of the heroes played here who are still standing, and null for the rest - whose feet are heard (see
-     * `Footsteps`: a step every so far walked, so a floor that slows them spaces their steps out as much).
+     * By slot: the centres of the heroes played here who are still standing, and whether their players are pushing them along, and
+     * null for the rest - whose feet are heard (see `Footsteps`: a step as a push starts, then one every so far walked, so a floor
+     * that slows them spaces their steps out as much).
      */
-    private Walkers(): ReadonlyArray<Vec2Like | null> {
+    private Walkers(): ReadonlyArray<Walker | null> {
         const walkers = this.walkers;
         walkers.length = 0;
-        this.world.Heroes.forEach((hero, i) => walkers.push(this.local[i] && hero.Alive && !hero.Gone ? hero.Centre : null));
+        this.world.Heroes.forEach((hero, i) => {
+            if (this.local[i] && hero.Alive && !hero.Gone) {
+                const centre = hero.Centre;
+                walkers.push({ x: centre.x, y: centre.y, pushing: !!this.pushing[i] });
+            } else {
+                walkers.push(null);
+            }
+        });
         return walkers;
     }
 
