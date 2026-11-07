@@ -86,7 +86,7 @@ export function IsPickupValue(value: unknown): value is PickupValue {
 export function DefaultPickupValue(kind: PickupKind = "gold"): PickupValue {
     switch (kind) {
         case "health":
-            return { kind, amount: 2 };
+            return { kind, amount: 25 };
         case "key":
             return { kind, id: 1 };
         case "weapon":

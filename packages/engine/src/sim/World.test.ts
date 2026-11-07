@@ -735,7 +735,8 @@ describe("World's quests and talk", () => {
         Put(world, 1, { x: 7, y: 2 });
         world.Step([Input(), Input()], 1, FRAME);
         expect(world.Heroes.map(hero => hero.Experience.level)).toEqual([3, 3]);
-        expect(world.Heroes.map(hero => hero.Health.max)).toEqual([10, 10]);
+        // Two levels, at 10 more hit points each.
+        expect(world.Heroes.map(hero => hero.Health.max)).toEqual([SETUP.hitPoints + 20, SETUP.hitPoints + 20]);
         expect(events.filter(e => e.event === HERO_LEVELLED_UP).map(e => e.args)).toEqual([[0, 2], [0, 3], [1, 2], [1, 3]]);
     });
 

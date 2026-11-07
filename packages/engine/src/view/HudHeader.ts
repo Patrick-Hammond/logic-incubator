@@ -62,7 +62,7 @@ type BarRow = {
 
 /**
  * The top of a hero's part of the HUD: their portrait - their idle animation, enlarged in a frame and cut off below -
- * with their name and level, their gold in the top-right, and two bars: hit points ("5 / 6") and experience toward
+ * with their name and level, their gold in the top-right, and two bars: hit points ("85 / 100") and experience toward
  * the next level ("120 / 200", or "LV 3" when compact). `hearts` is the game's own full heart (see
  * `PlayerSetup.hearts`) for the hit points' icon - the skin's otherwise. Redrawn only where something changed.
  */

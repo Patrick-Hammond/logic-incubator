@@ -434,7 +434,7 @@ const EDITORS: { [name: string]: DataBrushEditor } = {
             return {
                 kind: pickup.kind,
                 goldAmount: pickup.kind === "gold" ? pickup.amount : 1,
-                healthAmount: pickup.kind === "health" ? pickup.amount : 2,
+                healthAmount: pickup.kind === "health" ? pickup.amount : 25,
                 keyId: pickup.kind === "key" ? pickup.id : 1,
                 weaponIcon: weapon.icon,
                 shotSprite: shot.sprite,

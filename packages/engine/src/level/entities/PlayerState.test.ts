@@ -45,19 +45,19 @@ describe("PlayerState", () => {
     });
 
     it("goes up levels with experience, each adding to their most hit points and to what they have", () => {
-        const state = CreatePlayerState({ hitPoints: 6, weapons: [BOW] }, { x: 0, y: 0 });
+        const state = CreatePlayerState({ hitPoints: 100, weapons: [BOW] }, { x: 0, y: 0 });
         expect(state.experience).toEqual({ level: 1, xp: 0, next: 100 });
-        state.health.hitPoints = 3;
+        state.health.hitPoints = 30;
         expect(GainExperience(state, DefaultExperienceRules, 120)).toBe(1);
         expect(state.experience).toEqual({ level: 2, xp: 20, next: 200 });
-        expect(state.health).toMatchObject({ hitPoints: 5, max: 8 });
+        expect(state.health).toMatchObject({ hitPoints: 40, max: 110 });
     });
 
     it("doesn't bring a hero who is down back up by a level", () => {
-        const state = CreatePlayerState({ hitPoints: 6, weapons: [BOW] }, { x: 0, y: 0 });
+        const state = CreatePlayerState({ hitPoints: 100, weapons: [BOW] }, { x: 0, y: 0 });
         state.health.hitPoints = 0;
         GainExperience(state, DefaultExperienceRules, 100);
-        expect(state.health).toMatchObject({ hitPoints: 0, max: 8 });
+        expect(state.health).toMatchObject({ hitPoints: 0, max: 110 });
     });
 
     it("earns experience as the setup says", () => {

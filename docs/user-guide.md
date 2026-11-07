@@ -1623,7 +1623,7 @@ import type { PlayerSetup } from "@logic-incubator/engine/DungeonMain";
 export const PlayerSetup: PlayerSetup = {
     animations: { idle: "wizzard_m_idle_anim", run: "wizzard_m_run_anim" },   // animations, by bare name: standing, and moving
     character: "Warlock",                               // who the animations are: heads the HUD before anyone is picked
-    hitPoints: 6,                                       // the HUD's red bar: 6 / 6
+    hitPoints: 100,                                     // the HUD's red bar: 100 / 100 - monster damage and healing are in the same hit points
     hearts: { full: "ui_heart_full", half: "ui_heart_half", empty: "ui_heart_empty" },   // the full one is the icon by the HUD's hit point bar
     // experience: { perQuest: 50 },                    // optional: change how experience is earned (see 9.3.3)
     weapons: [                                          // only the first is carried - one at a time; a weapon picked up replaces it until the level starts over
@@ -1895,12 +1895,12 @@ panels. For one hero it has, from the top:
   its text and its last note; the rest under way with an empty box and their count (2/3); those done ticked - as many as fit,
   then "+N MORE".
 
-A party gets a compact panel per hero instead - portrait, name, gold, the hit point bar with "5 / 6", the XP bar with "LV n",
+A party gets a compact panel per hero instead - portrait, name, gold, the hit point bar with "85 / 100", the XP bar with "LV n",
 and a row of slots: their spell or weapon, then their items - then the team's keys and the journal in the room that's left.
 
 **Experience.** A hero earns experience points (XP) for each monster their shot kills - 10 for each of its hit points - and
 every hero in the party earns 100 for each quest completed, its goal met or handed in. The first level needs 100 points, the
-next 200, then 300 and so on; what's over carries on toward the next. Each level adds 2 to a hero's most hit points, and to
+next 200, then 300 and so on; what's over carries on toward the next. Each level adds 10 to a hero's most hit points, and to
 what they have (so it heals a little too), and emits `HERO_LEVELLED_UP(hero, level)`, which plays the `levelUp` sound. Like
 gold, experience is a run's: every hero starts each level, and each start over, at level 1. Change the numbers with
 `PlayerSetup.experience`, which takes any of the rules (`level/entities/Experience`):
@@ -1910,7 +1910,7 @@ experience: {
     perMonsterHitPoint: 10,   // XP for a monster killed, for each of its hit points - to the hero whose shot killed it
     perQuest: 100,            // XP for a quest completed - to every hero
     perLevel: 100,            // XP the first level needs; each level after needs this many more
-    hitPointsPerLevel: 2,     // most hit points each level adds
+    hitPointsPerLevel: 10,    // most hit points each level adds
 },
 ```
 
@@ -1929,13 +1929,13 @@ const Types = ["goblin", "ogre", "shaman"] as const;
 type MonsterType = (typeof Types)[number];
 
 const Defs: { readonly [K in MonsterType]: MonsterDef } = {
-    goblin: { idle: "goblin_idle_anim", run: "goblin_run_anim", hitPoints: 1, speed: 0.6, contactDamage: 1, contactCooldown: 1,
+    goblin: { idle: "goblin_idle_anim", run: "goblin_run_anim", hitPoints: 1, speed: 0.6, contactDamage: 8, contactCooldown: 1,
               behaviour: () => new Chase() },
-    ogre:   { idle: "ogre_idle_anim", run: "ogre_run_anim", hitPoints: 16, speed: 0.3, contactDamage: 2, contactCooldown: 1.2,
+    ogre:   { idle: "ogre_idle_anim", run: "ogre_run_anim", hitPoints: 16, speed: 0.3, contactDamage: 20, contactCooldown: 1.2,
               behaviour: () => new Wander({ aggroRange: 4 }) },
-    shaman: { idle: "shaman_idle_anim", run: "shaman_run_anim", hitPoints: 3, speed: 0.4, contactDamage: 1, contactCooldown: 1,
+    shaman: { idle: "shaman_idle_anim", run: "shaman_run_anim", hitPoints: 3, speed: 0.4, contactDamage: 8, contactCooldown: 1,
               behaviour: () => new KeepDistance({ range: 5 }),
-              ranged: { sprite: "flask_green", speed: 2, damage: 1, cooldown: 2.5, range: 8,
+              ranged: { sprite: "flask_green", speed: 2, damage: 10, cooldown: 2.5, range: 8,
                         light: { brightness: 0.8, tint: 0x7dff70, range: 4, flicker: 0.1 } } },   // its flask glows green
 };
 
@@ -2641,7 +2641,7 @@ MIRA: Have you seen the smith yet?
 
 answer:
 finish letter
-reward health 4
+reward health 40
 MIRA: He said yes? Oh, thank you! Here, let me see to those cuts.
 
 after:
@@ -2659,7 +2659,7 @@ complete letter
 SMITH: A letter? From Mira? ...Tell her yes. A thousand times yes.
 ```
 
-`reward health 4` heals 4 hit points (health never goes past the maximum).
+`reward health 40` heals 40 hit points (health never goes past the maximum).
 
 #### Imp hunt (kill any monster of a type, choose a reward)
 
@@ -2703,7 +2703,7 @@ HUNTER: Spend it wisely.
 
 heal:
 finish imps
-reward health 6
+reward health 100
 HUNTER: Hold still... there.
 
 after:

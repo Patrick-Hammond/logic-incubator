@@ -21,7 +21,7 @@ export const DefaultExperienceRules: Readonly<ExperienceRules> = {
     perMonsterHitPoint: 10,
     perQuest: 100,
     perLevel: 100,
-    hitPointsPerLevel: 2
+    hitPointsPerLevel: 10
 };
 
 /** Where a hero has got to: their level, from 1, their points toward the next, and how many the next needs. */
