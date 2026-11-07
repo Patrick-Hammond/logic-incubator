@@ -17,12 +17,52 @@ describe("Footsteps", () => {
         expect(Walk(steps, 45, 1)).toBe(5);
     });
 
-    it("hears nothing from a hero standing still, and starts afresh when they set off", () => {
+    it("hears nothing from a hero standing still", () => {
         const steps = new Footsteps(10);
         for (let i = 0; i < 100; i++) {
             expect(steps.Update([{ x: 0, y: 0 }])).toEqual([]);
         }
-        expect(Walk(steps, 5, 1)).toBe(1);
+    });
+
+    it("steps the moment their player pushes them off, however short the walk - each time", () => {
+        const steps = new Footsteps(10);
+        let x = 0;
+        steps.Update([{ x, y: 0 }]);
+        for (let tap = 0; tap < 3; tap++) {
+            // Pushed for two frames, two pixels; then let go, sliding a pixel to a stop and standing a while.
+            expect(steps.Update([{ x: (x += 1), y: 0, pushing: true }])).toEqual([0]);
+            expect(steps.Update([{ x: (x += 1), y: 0, pushing: true }])).toEqual([]);
+            expect(steps.Update([{ x: (x += 1), y: 0 }])).toEqual([]);
+            for (let i = 0; i < 10; i++) {
+                expect(steps.Update([{ x, y: 0 }])).toEqual([]);
+            }
+        }
+    });
+
+    it("steps next a whole stride after the push, while it's held", () => {
+        const steps = new Footsteps(10);
+        const taken: number[] = [];
+        for (let i = 0; i <= 25; i++) {
+            if (steps.Update([{ x: i, y: 0, pushing: true }]).length) {
+                taken.push(i);
+            }
+        }
+        expect(taken).toEqual([0, 10, 20]);
+    });
+
+    it("steps once for a push against a wall, and no more while it's held", () => {
+        const steps = new Footsteps(10);
+        expect(steps.Update([{ x: 0, y: 0, pushing: true }])).toEqual([0]);
+        for (let i = 0; i < 100; i++) {
+            expect(steps.Update([{ x: 0, y: 0, pushing: true }])).toEqual([]);
+        }
+    });
+
+    it("hears a push from one who wasn't walking - fallen, say - when they're back", () => {
+        const steps = new Footsteps(10);
+        steps.Update([{ x: 0, y: 0, pushing: true }]);
+        steps.Update([null]);
+        expect(steps.Update([{ x: 0, y: 0, pushing: true }])).toEqual([0]);
     });
 
     it("says whose steps they were, and none for one who isn't walking", () => {

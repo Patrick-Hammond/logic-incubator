@@ -1778,11 +1778,12 @@ ambient.Update(hearers: ReadonlyArray<Vec2Like>, seconds);                      
 A loop starts once it would be heard, and stays playing (at 0, when no one is near) until the level or the visit ends. A sound with no file is
 silent until the next `Begin`, as a level's bundle may have it; one that is still starting when it's no longer wanted is stopped as it arrives.
 
-`@logic-incubator/engine/Footsteps` (pure) - when the heroes' feet land. `new Footsteps(stride = DefaultStride)` (48 pixels, about five steps a second at a hero's full speed);
-`Update(walkers: ReadonlyArray<Vec2Like | null>): ReadonlyArray<number>` - once a frame, each hero's position by slot (null for one not walking), and the slots of
-those who took a step, in slot order (the same array each call): one each `stride` walked (by distance, so a hero a floor slows to 0.4 of their speed
-steps 0.4 as often; at most one a frame), the first at half of one, so a hero who sets off is heard at once.
-Standing still, or a jump of more than a stride (a warp, a restart), starts that hero afresh. `Reset()` forgets everyone's walking.
+`@logic-incubator/engine/Footsteps` (pure) - when the heroes' feet land. `new Footsteps(stride = DefaultStride)` (48 pixels, about five steps a second at a hero's full speed); `type Walker = Vec2Like & { pushing?: boolean }`;
+`Update(walkers: ReadonlyArray<Walker | null>): ReadonlyArray<number>` - once a frame, each hero's position by slot (null for one not walking) and whether their
+player is pushing them along (a direction held, as of the last step of play - `DungeonMain` keeps it from the inputs), and the slots of those who took a step,
+in slot order (the same array each call): one the moment a push starts, however short the walk, then one each `stride` walked (by distance, so a hero a
+floor slows to 0.4 of their speed steps 0.4 as often; at most one a frame) - without a push, the first at half of one.
+A jump of more than a stride (a warp, a restart) starts that hero afresh, at half a stride. `Reset()` forgets everyone's walking.
 
 `@logic-incubator/engine/SoundBoard` (pure) - what play sounds like. `DungeonMain` makes one over `NamedSounds(game.assets)` and plays it from
 the dispatcher while the scene is shown (`ListenWhileShown` on each of `SoundEvents`); an online guest hears the host's events as its own.

@@ -2299,7 +2299,7 @@ const Orc: MonsterDef = { ...Bruiser, sounds: { death: "big_death" } };
 
 Three in the table aren't for an event, and the scene plays them itself:
 
-- `footstep` - each step a hero played on this machine takes on bare floor, one every 48 pixels walked, about five a second at full speed (`Footsteps`). Give it takes, as it plays a lot.
+- `footstep` - each step a hero played on this machine takes on bare floor: one the moment their player pushes them off, however briefly, then one every 48 pixels walked, about five a second at full speed (`Footsteps`). Give it takes, as it plays a lot.
   On a floor overlay it's `footsteps`' sound for its kind (`footsteps: { mud: "footstep_mud", ... }`), with takes of its own, and `footstep` for a kind
   left out or with no file yet. Steps go by distance, so where an overlay slows the heroes their steps come as much less often: 0.4 as often on water.
 - `ambience` - the level's sound under its music, on a loop everywhere while the dungeon is showing. A bare name, so a level's bundle can have
