@@ -41,10 +41,10 @@ export const OverlayFootings: { readonly [K in OverlayKind]: Footing } = {
     dirt: { speed: 0.95, slipperiness: 1 },
     mud: { speed: 0.3, slipperiness: 0.1 },
     water: { speed: 0.4, slipperiness: 0.5 },
-    slime: { speed: 0.1, slipperiness: 3 },
-    blood: { speed: 0.95, slipperiness: 1.5 },
+    slime: { speed: 0.1, slipperiness: 6},
+    blood: { speed: 0.95, slipperiness: 2 },
     moss: { speed: 0.9, slipperiness: 0.9 },
-    shiny: { speed: 1, slipperiness: 1.3 }
+    shiny: { speed: 1, slipperiness: 3 }
 };
 
 /** The slowest and fastest an overlay can make the heroes go, as a multiple of their pace on bare floor (`Footing.speed`). */
