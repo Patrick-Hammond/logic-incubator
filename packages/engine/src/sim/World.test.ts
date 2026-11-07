@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Vec2, Vec2Like } from "@logic-incubator/lib/math/Geometry";
 import { TileSize } from "../Constants";
-import { ALL_PLAYERS_DIED, DOOR_LOCKED, HERO_TELEPORTED, LEVEL_COMPLETED, LIGHT_SPELL_CAST, NPC_BUMPED, OBJECT_PUSHED, PICKUP_COLLECTED, QUEST_NOTED, QUEST_UPDATED } from "../Events";
+import { ALL_PLAYERS_DIED, DOOR_LOCKED, HERO_LEVELLED_UP, HERO_TELEPORTED, LEVEL_COMPLETED, LIGHT_SPELL_CAST, NPC_BUMPED, OBJECT_PUSHED, PICKUP_COLLECTED, QUEST_NOTED, QUEST_UPDATED } from "../Events";
 import type { IPlayerInput } from "../input/PlayerControl";
 import { IsHeightGap } from "../level/Depth";
 import { DoorOpens } from "../level/Doors";
@@ -682,6 +682,32 @@ describe("World's quests and talk", () => {
         expect(king.dead).toBe(true);
         expect(world.quests.State("king")).toBe("complete");
         expect(world.Completed).toBe(true);
+    });
+
+    it("gives the hero whose shot kills a monster experience for it, by its hit points", () => {
+        const { world } = Setup(ROOM, 2, NoLock, []);
+        Put(world, 0, { x: 2, y: 2 });
+        Put(world, 1, { x: 2, y: 3 });
+        const walker = { ...WalkerAt(4, 2), hitPoints: 1 };
+        world.encounter.monsters.push(walker);
+        for (let i = 0; i < 30 && !walker.dead; i++) {
+            world.Step([Input(0, 0, { firing: true }), Input()], 1, FRAME);
+        }
+        expect(walker.dead).toBe(true);
+        // A walker has 2 hit points, at 10 points each.
+        expect(world.Heroes[0].Experience).toMatchObject({ level: 1, xp: 20 });
+        expect(world.Heroes[1].Experience).toMatchObject({ level: 1, xp: 0 });
+    });
+
+    it("gives every hero experience for a quest completed, and tells of each level it takes one up", () => {
+        const { level, world, events } = Setup(ROOM, 2, NoLock, [Mushrooms]);
+        level.pickups.push({ ...Spot(7, 2), value: { kind: "item", quest: "mushrooms" }, sprite: null });
+        world.Reset({ ...SETUP, experience: { perQuest: 300 } }, [undefined, undefined]);
+        Put(world, 1, { x: 7, y: 2 });
+        world.Step([Input(), Input()], 1, FRAME);
+        expect(world.Heroes.map(hero => hero.Experience.level)).toEqual([3, 3]);
+        expect(world.Heroes.map(hero => hero.Health.max)).toEqual([10, 10]);
+        expect(events.filter(e => e.event === HERO_LEVELLED_UP).map(e => e.args)).toEqual([[0, 2], [0, 3], [1, 2], [1, 3]]);
     });
 
     it("starts the quests over, and forgets what dialogs set, with each Reset", () => {

@@ -14,6 +14,7 @@ import { AssetMetadataBinding, BindAssetMetadata } from "./level/AssetMetadataBi
 import LevelAssets from "./level/LevelAssets";
 import LevelMusic from "./level/LevelMusic";
 import {AllAnimations, CharacterAnimations} from "./level/entities/CharacterAnimations";
+import type {ExperienceRules} from "./level/entities/Experience";
 import MonsterRoster from "./level/entities/MonsterRoster";
 import {LightSpell} from "./level/entities/LightSpell";
 import {ArtBounds, SpriteSize, WeaponDef} from "./level/entities/Projectiles";
@@ -41,10 +42,14 @@ import TileMapView from "./view/TileMap";
 export type PlayerSetup = {
     /** What the hero is drawn with: their idle animation while they stand, their run while they move (see `CharacterAnimations`). */
     animations: CharacterAnimations;
-    /** In half-hearts - see `Hud`. */
+    /** Hit points - the HUD's red bar (see `Hud`). */
     hitPoints: number;
-    /** Sprite names for a full, half and empty heart; without them the HUD draws the UI skin's hearts. */
+    /** Sprite names for a full, half and empty heart - the full one is the icon by the HUD's hit point bar; without them it's the UI skin's heart. */
     hearts?: {full: string; half: string; empty: string};
+    /** How heroes earn experience and what it brings - see `ExperienceRules`; what's left out is as `DefaultExperienceRules` has it. */
+    experience?: Partial<ExperienceRules>;
+    /** Who `animations` are, as the HUD names them - the hero played before anyone is picked (see `HeroSlot.character`). */
+    character?: string;
     /** Starting loadout - the first is equipped. Fired while a fire direction is held (see `PlayerControl`). */
     weapons: WeaponDef[];
     /** A light they can call up with the cast control (see `PlayerControl`) - a mage-light that floats beside them. Leave out for a hero who can't. */
@@ -66,8 +71,10 @@ export type HeroSlot = {
     lightSpell?: LightSpell | null;
     /** What they sound like when hurt and when they fall - a character's own voice. `PlayerSetup.sounds` when left out. */
     sounds?: HeroSounds;
-    /** What their row in the HUD is headed - "PLAYER n" when left out. */
+    /** Their player's name, online: what heads their part of the HUD, in place of `character`. */
     name?: string;
+    /** The character they play, as the HUD names them - what heads their part of it without a `name`, "PLAYER n" without either. Left out, `PlayerSetup.character` for a hero drawn with the setup's own animations. */
+    character?: string;
 };
 
 export type DungeonMainOptions = {
@@ -393,6 +400,7 @@ export class DungeonMain extends GameComponent {
         const world = this.world;
         this.shouts.Begin(talk ? this.level.talkers : [], { quests: world.quests, flags: world.flags, Reward: () => undefined });
         this.tracker.Begin(this.world.quests);
+        this.hud.BeginQuests();
         this.local = slots.map(slot => slot.input !== null);
         // A party sharing one screen is held to what fits on it; one spread over machines isn't.
         const allHere = this.local.every(here => here);
@@ -412,7 +420,13 @@ export class DungeonMain extends GameComponent {
                 this.views.push(new HeroView(hero, animations));
             }
         });
-        this.hud.SetNames(slots.map((slot, i) => ({ name: slot.name || "PLAYER " + (i + 1), own: !allHere && this.local[i] })));
+        this.hud.SetHeroes(slots.map((slot, i) => ({
+            name: slot.name,
+            // The setup's character is who its own animations are.
+            character: slot.character || (slot.animations ? undefined : setup.character),
+            portrait: (slot.animations || setup.animations).idle,
+            own: !allHere && this.local[i]
+        })));
         this.renderer.Reset();
         this.lastFollowed = null;
         this.fixedStep.Reset();
@@ -478,6 +492,7 @@ export class DungeonMain extends GameComponent {
             if (net) {
                 net.Frame(frames);
                 this.hud.RenderHeroes(this.world.Heroes);
+                this.hud.RenderQuests(this.world.quests);
             }
             return;
         }
@@ -527,7 +542,7 @@ export class DungeonMain extends GameComponent {
         if (this.world.Heroes.length) {
             this.hud.RenderHeroes(this.world.Heroes);
         }
-        this.tracker.Render(this.world.quests);
+        this.hud.RenderQuests(this.world.quests);
         const hearers = this.Hearers();
         // A talk holds the NPCs' shouts where they are, hushed.
         if (!this.talk) {

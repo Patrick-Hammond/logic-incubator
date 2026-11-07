@@ -787,6 +787,16 @@
 			"bottom": 2
 		}
 	},
+	"panel_dark": {
+		"width": 96,
+		"height": 96,
+		"insets": {
+			"left": 24,
+			"top": 24,
+			"right": 24,
+			"bottom": 24
+		}
+	},
 	"panel_plain": {
 		"width": 96,
 		"height": 96,

@@ -14,9 +14,10 @@ import type { CollectedPickup } from "../Level";
 import { BoxCentre, MoveCollider, ResolveMove } from "../../view/helpers/PlayerMovement";
 import { CarriedLight, CreateCarriedLight, TickCarriedLight } from "./CarriedLight";
 import { AddGold, CreateGold, Gold } from "./Gold";
-import { CreateHealth, DamageHealth, Health, HealHealth, TickHealth } from "./Health";
+import { CreateHealth, DamageHealth, Health, HealHealth, IsDead, TickHealth } from "./Health";
 import { AddItem, CreateInventory, Inventory } from "./Inventory";
 import { AddKey, CreateKeyRing, KeyRing } from "./Keys";
+import { AddPoints, CreateExperience, Experience, ExperienceRules, ExperienceRulesOf } from "./Experience";
 import { CastLightSpell, CreateLightSpellState, LightSpell, LightSpellState, TickLightSpell } from "./LightSpell";
 import { WeaponDef } from "./Projectiles";
 
@@ -36,7 +37,12 @@ export type PlayerState = {
     gold: Gold;
     inventory: Inventory;
     keys: KeyRing;
-    /** Their loadout, the first equipped at the start - a copy of the setup's, so a weapon picked up is gone again when the level starts over. */
+    /** Their level and the points toward the next - see `GainExperience`. */
+    experience: Experience;
+    /**
+     * The weapon they carry - one at a time: the setup's first, until one picked up takes its place (see `ApplyPickup`).
+     * A list, with `equippedIndex` always 0, as the online snapshots have it.
+     */
     weapons: WeaponDef[];
     equippedIndex: number;
     fireCooldown: number;
@@ -54,8 +60,8 @@ export type PlayerState = {
     orbTime: number;
 };
 
-/** A hero as a level starts: on tile `start`, facing right, at full health, with the setup's loadout, `lightSpell` if any, and nothing collected. */
-export function CreatePlayerState(setup: Pick<PlayerSetup, "hitPoints" | "weapons">, start: Vec2Like, lightSpell?: LightSpell): PlayerState {
+/** A hero as a level starts: on tile `start`, facing right, at full health and level 1, with the setup's first weapon, `lightSpell` if any, and nothing collected. */
+export function CreatePlayerState(setup: Pick<PlayerSetup, "hitPoints" | "weapons" | "experience">, start: Vec2Like, lightSpell?: LightSpell): PlayerState {
     const x = start.x * TileSize;
     const y = start.y * TileSize;
     return {
@@ -67,7 +73,8 @@ export function CreatePlayerState(setup: Pick<PlayerSetup, "hitPoints" | "weapon
         gold: CreateGold(),
         inventory: CreateInventory(),
         keys: CreateKeyRing(),
-        weapons: setup.weapons.slice(),
+        experience: CreateExperience(ExperienceRulesOf(setup.experience)),
+        weapons: setup.weapons.slice(0, 1),
         equippedIndex: 0,
         fireCooldown: 0,
         shot: null,
@@ -116,9 +123,26 @@ export function EquippedWeapon(state: PlayerState): WeaponDef {
 }
 
 /**
+ * Adds experience points (see `Experience`); each level they go up adds `rules.hitPointsPerLevel` to their most hit
+ * points, and to what they have unless they're down. Returns how many levels they went up.
+ */
+export function GainExperience(state: PlayerState, rules: ExperienceRules, points: number): number {
+    const levels = AddPoints(state.experience, rules, points);
+    const more = levels * rules.hitPointsPerLevel;
+    if (more > 0) {
+        const down = IsDead(state.health);
+        state.health.max += more;
+        if (!down) {
+            state.health.hitPoints += more;
+        }
+    }
+    return levels;
+}
+
+/**
  * Gold adds to the count; health restores hit points, up to the maximum; a key joins the ones carried
- * (shown as the tile it was); a weapon is added to the loadout and equipped immediately; an item goes to
- * the first free inventory slot (dropped if it's full) - as its own sprite, or as the tile it was; a light
+ * (shown as the tile it was); a weapon takes the place of the one they carry; an item joins its stack in
+ * the inventory, or the first free slot (dropped if there's neither) - as its own sprite, or as the tile it was; a light
  * is carried from then on, in place of any they had.
  */
 export function ApplyPickup(state: PlayerState, pickup: CollectedPickup): void {
@@ -134,8 +158,8 @@ export function ApplyPickup(state: PlayerState, pickup: CollectedPickup): void {
             AddKey(state.keys, value.id, pickup.sprite);
             break;
         case "weapon":
-            state.weapons.push(value.weapon);
-            state.equippedIndex = state.weapons.length - 1;
+            state.weapons = [value.weapon];
+            state.equippedIndex = 0;
             break;
         case "item": {
             const sprite = value.sprite || pickup.sprite;

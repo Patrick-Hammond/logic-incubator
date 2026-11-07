@@ -17,7 +17,8 @@ import { Health, IsDead } from "../level/entities/Health";
 import { Inventory } from "../level/entities/Inventory";
 import { CanOpen, HeldKey, KeyRing } from "../level/entities/Keys";
 import { LightSpell, LightSpellState } from "../level/entities/LightSpell";
-import { ApplyPickup, CreatePlayerState, DamagePlayer, EquippedWeapon, PlayerState, StepPlayer, TakePlayerShot } from "../level/entities/PlayerState";
+import { Experience, ExperienceRules } from "../level/entities/Experience";
+import { ApplyPickup, CreatePlayerState, DamagePlayer, EquippedWeapon, GainExperience, PlayerState, StepPlayer, TakePlayerShot } from "../level/entities/PlayerState";
 import { FigureBox, SpriteSize, WeaponDef } from "../level/entities/Projectiles";
 import { BoxCentre, CentreTile, MoveCollider } from "../view/helpers/PlayerMovement";
 
@@ -31,7 +32,7 @@ export default class Hero implements EncounterPlayer {
     private figure: SpriteSize = { width: TileSize, height: TileSize };
 
     /** `Index` is their slot, from 0; `setup` is what every hero starts a level with. */
-    constructor(readonly Index: number, private setup: Pick<PlayerSetup, "hitPoints" | "weapons">) {
+    constructor(readonly Index: number, private setup: Pick<PlayerSetup, "hitPoints" | "weapons" | "experience">) {
         this.state = CreatePlayerState(setup, { x: 0, y: 0 });
     }
 
@@ -122,6 +123,16 @@ export default class Hero implements EncounterPlayer {
         return EquippedWeapon(this.state);
     }
 
+    /** Their level and points toward the next (see `Experience`). */
+    get Experience(): Experience {
+        return this.state.experience;
+    }
+
+    /** Adds experience points - see `GainExperience`. Returns how many levels they went up. */
+    GainExperience(rules: ExperienceRules, points: number): number {
+        return GainExperience(this.state, rules, points);
+    }
+
     /** Their light spell: lit, recharging or ready - null for a hero without one. */
     get Spell(): LightSpellState | null {
         return this.state.spell;
@@ -132,7 +143,7 @@ export default class Hero implements EncounterPlayer {
         return CanOpen(this.state.keys, lockId);
     }
 
-    /** Back to the start of a level, on tile `start`: full health, the setup's weapons, `lightSpell` if any, nothing collected. */
+    /** Back to the start of a level, on tile `start`: full health, level 1, the setup's weapon, `lightSpell` if any, nothing collected. */
     Reset(start: Vec2Like, lightSpell?: LightSpell): void {
         this.state = CreatePlayerState(this.setup, start, lightSpell);
         this.gone = false;

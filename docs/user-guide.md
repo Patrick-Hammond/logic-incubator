@@ -1533,8 +1533,8 @@ DungeonMain (a scene)
  ├─ Camera            follows the heroes; handles height zoom, and zooms out to fit a party
  ├─ TileMapView       draws the level's tile layers, lit and banded by height
  ├─ Effects           particle effects over the world (`main.Effects.Play`)
- ├─ Hud               hearts, gold, equipped weapon, inventory - a row per hero for a party (built from the UI kit)
- ├─ QuestTracker      the quests under way, top-left, and a toast as each is given and met, and for each note on one
+ ├─ Hud               portrait, hit points, XP, gold, spell or weapon, inventory, keys, quest journal - a compact row per hero for a party (built from the UI kit)
+ ├─ QuestTracker      a toast, top-right, as each quest is given and met, and for each note on one
  ├─ DialogView        a talk with an NPC: what's said, their portrait and the player's choices
  ├─ overlay?          the game's own UI over everything: a pause menu, an end-of-level screen
  ├─ PlayerControl     one per hero: reads their keyboard or gamepad
@@ -1601,7 +1601,7 @@ export function Dungeon(): () => void {
 
 | Option | Meaning |
 | --- | --- |
-| `player` | `PlayerSetup`: the heroes' look, hit points, hearts and weapons ([9.3](#93-the-player)). |
+| `player` | `PlayerSetup`: the heroes' look, hit points, weapon, light spell and experience rules ([9.3](#93-the-player)). |
 | `heroes?` | `() => HeroSlot[] \| undefined`. Who plays: one slot per hero, called on every start/restart. Each slot gives that hero's `input` device, `animations`, `lightSpell`, `name` and `sounds`. Leave it out (or return `undefined` or `[]`) for one hero on the keyboard or the first gamepad. See [9.3.1](#931-playing-together). |
 | `level` | `() => LevelFile \| undefined`. Called on every start/restart. In a dev build return the editor's latest save first (`editor.savedLevel() \|\| shipped`). |
 | `levelBundle?` | `() => string \| undefined`. The asset bundle the level plays in. Loaded (with its dependencies) *before* the level is built; the previous one is released after. |
@@ -1622,16 +1622,19 @@ import type { PlayerSetup } from "@logic-incubator/engine/DungeonMain";
 
 export const PlayerSetup: PlayerSetup = {
     animations: { idle: "wizzard_m_idle_anim", run: "wizzard_m_run_anim" },   // animations, by bare name: standing, and moving
-    hitPoints: 6,                                       // in half-hearts: three hearts
-    hearts: { full: "ui_heart_full", half: "ui_heart_half", empty: "ui_heart_empty" },   // sprite names for the HUD
-    weapons: [                                          // the first is equipped at the start; a weapon picked up lasts until the level starts over
+    character: "Warlock",                               // who the animations are: heads the HUD before anyone is picked
+    hitPoints: 6,                                       // the HUD's red bar: 6 / 6
+    hearts: { full: "ui_heart_full", half: "ui_heart_half", empty: "ui_heart_empty" },   // the full one is the icon by the HUD's hit point bar
+    // experience: { perQuest: 50 },                    // optional: change how experience is earned (see 9.3.3)
+    weapons: [                                          // only the first is carried - one at a time; a weapon picked up replaces it until the level starts over
         {
             icon: "weapon_bow",                         // shown in the HUD's weapon slot
+            // name: "Old Faithful",                    // what the HUD calls it; left out, the icon's name: BOW
             shot: {
                 sprite: "weapon_arrow",
                 spriteAngle: -Math.PI / 2,              // which way the art points (0 = right); the sprite is turned to face its flight
                 speed: 6,                               // pixels per 60th of a second
-                damage: 1,                              // half-hearts for a monster, hit points for a spawner
+                damage: 1,                              // hit points off a monster or a spawner
                 cooldown: 0.2,                          // seconds between shots
                 range: 12,                              // tiles flown before fizzling
                 // light: { brightness: 1, tint: 0xff8a3d, range: 5, flicker: 0.2 },   // a shot that glows as it flies
@@ -1651,8 +1654,8 @@ stick, always left or right in the direction last faced (Tutankham-style); the r
 gamepad's Y button, calls up the light spell, if the hero has one and it's ready. K, or a gamepad's X button, warps a hero
 who has strayed far from the rest of the party to the nearest of them ([9.3.1](#931-playing-together)).
 
-`PlayerSetup` is every hero's: a party shares its hit points, hearts and weapons, and each hero's `HeroSlot` can give them
-their own animations, light spell and voice (`sounds`: their `hurt` and `death`, by name - see [9.8](#98-events-and-hooks)).
+`PlayerSetup` is every hero's: a party shares its hit points, weapon and experience rules, and each hero's `HeroSlot` can give them
+their own animations, light spell, `character` name (what heads their part of the HUD) and voice (`sounds`: their `hurt` and `death`, by name - see [9.8](#98-events-and-hooks)).
 
 **Idle and running.** A hero is drawn with their `idle` animation while they stand and their `run` animation while they move,
 and so is a monster, from its `MonsterDef`'s `idle` and `run` ([9.4](#94-monsters)): both are `CharacterAnimations`
@@ -1710,15 +1713,16 @@ What changes with more than one hero:
 - **Monsters go for the nearest hero.** They follow the walk to whichever is nearest, and spawners wake for whichever comes
   near. Monsters and spawners are tougher for a bigger party - half as many hit points again for each hero past the first
   (`PartyToughness`) - rather than more numerous.
-- **Falling.** A hero whose hearts run out drops the keys they carried where they fell (`PLAYER_DIED(hero)`) and stays on as a
+- **Falling.** A hero whose hit points run out drops the keys they carried where they fell (`PLAYER_DIED(hero)`) and stays on as a
   ghost; the rest play on. When every hero is down, `ALL_PLAYERS_DIED` ends the level.
 - **Portals.** A hero who walks onto a portal ([9.5.1](#951-portals)) comes out of its partner - and on a shared screen the rest
   of the party comes too, onto the open floor around them, so no one is left off it.
 - **Getting out.** The first hero to step onto an `exit` cell ([9.5](#95-the-level-file)) ends the level for everyone
   (`LEVEL_COMPLETED(hero)`); every hero, fallen or not, starts the next one on their feet. To move on to another level, have
   `level` (and `levelBundle`) return it once you hear `LEVEL_COMPLETED`.
-- **The HUD** shows a row per hero - PLAYER n (or the `HeroSlot`'s `name`), hearts, weapon, gold, light spell and items, dimmed with
-  DOWN once they fall (LEFT once an online player has gone) - and the team's keys at the bottom.
+- **The HUD** shows a compact row per hero - their portrait, their name (the `HeroSlot`'s `name`, else its `character`, else
+  PLAYER n), gold, hit points, XP and level, and a row of slots: their light spell or weapon, then their items - dimmed with
+  DOWN once they fall (LEFT once an online player has gone), then the team's keys and the quest journal ([9.3.3](#933-the-hud-and-experience)).
 - **Events** about one hero name them by slot, from 0: their place in what `heroes` returned.
 
 There is no friendly fire and no bumping into each other. Everyone starts on the level's `player-start` cell or the open floor
@@ -1820,7 +1824,7 @@ gives the host a `HostSession` and each guest a `GuestSession`, and `DungeonMain
 - **Guests send inputs.** Each step a guest sends its hero's input - numbered, the last six in each message (`InputsSent`), so a few lost
   messages in a row cost nothing - and the host plays them as they come, in order. A hero whose next input hasn't arrived stands still; once more than four are
   waiting, the host plays two a step to catch up.
-- **The host sends snapshots**, 20 a second (every third step), to everyone: every hero (position, hearts, gold, weapon, light spell,
+- **The host sends snapshots**, 20 a second (every third step), to everyone: every hero (position, hit points, gold, level and XP, weapon, light spell,
   torch, the last input it played), every monster and shot, which doors are open, and what happened since the last one - pickups, kills,
   hits, shots fired, keys dropped, the level's end. A guest emits those as the engine's own events on its dispatcher, so
   sounds and an overlay work the same on every machine. About 150 bytes each for two players, about 3 KB a second.
@@ -1872,6 +1876,46 @@ gives the host a `HostSession` and each guest a `GuestSession`, and `DungeonMain
 
 Play messages (`engine/net/PlayMessages`) are bytes, kinds 16 to 22, alongside the lobby's; `NetVersion` covers both.
 
+#### 9.3.3 The HUD and experience
+
+The HUD (`view/Hud`) fills the 320 px column right of the play area, built from the [UI kit](#14-the-ui-kit) on the skin's dark
+panels. For one hero it has, from the top:
+
+- **The hero** (`HudHeader`): their portrait - their idle animation, enlarged and cut off at the frame's bottom - their name
+  (the `HeroSlot`'s `name` online, else its `character`, else `PlayerSetup.character`, else PLAYER 1), LEVEL n, their gold, and
+  two bars: hit points (red, "48 / 60") and experience toward the next level (green, "120 / 200").
+- **Active spell** for a hero with a light spell: five slots, the mage-light in the first (its `icon`, or a glowing orb in its
+  light's tint) with the seconds it has left while lit, shaded while it recharges; the other four wait for spells to come.
+  A hero without one gets **Equipped weapon** instead: its icon, its name (`WeaponDef.name`, or the icon's sprite name made
+  readable - `weapon_red_gem_sword` is RED GEM SWORD) and DAMAGE n. A hero carries **one weapon** at a time: picking one up
+  replaces it, until the level starts over.
+- **Inventory**: five slots, "2 / 5" at the right. Picking up another of an item adds to its stack (up to 99), the count in
+  the slot's corner; a sixth kind of item, with every slot taken, is left where it lies. The keys carried sit under it.
+- **Quest journal**: a book, and the quests given so far - the one being followed (the last given or moved on) with a "!",
+  its text and its last note; the rest under way with an empty box and their count (2/3); those done ticked - as many as fit,
+  then "+N MORE".
+
+A party gets a compact panel per hero instead - portrait, name, gold, the hit point bar with "5 / 6", the XP bar with "LV n",
+and a row of slots: their spell or weapon, then their items - then the team's keys and the journal in the room that's left.
+
+**Experience.** A hero earns experience points (XP) for each monster their shot kills - 10 for each of its hit points - and
+every hero in the party earns 100 for each quest completed, its goal met or handed in. The first level needs 100 points, the
+next 200, then 300 and so on; what's over carries on toward the next. Each level adds 2 to a hero's most hit points, and to
+what they have (so it heals a little too), and emits `HERO_LEVELLED_UP(hero, level)`, which plays the `levelUp` sound. Like
+gold, experience is a run's: every hero starts each level, and each start over, at level 1. Change the numbers with
+`PlayerSetup.experience`, which takes any of the rules (`level/entities/Experience`):
+
+```ts
+experience: {
+    perMonsterHitPoint: 10,   // XP for a monster killed, for each of its hit points - to the hero whose shot killed it
+    perQuest: 100,            // XP for a quest completed - to every hero
+    perLevel: 100,            // XP the first level needs; each level after needs this many more
+    hitPointsPerLevel: 2,     // most hit points each level adds
+},
+```
+
+Online, every machine's HUD shows every hero's level and XP from the host's snapshots.
+
 
 ### 9.4 Monsters
 
@@ -1906,7 +1950,7 @@ MonsterRoster.inst.Load(Monsters);
 ```
 
 `MonsterDef` fields: `idle`/`run` (animation names: standing still, and moving - its `CharacterAnimations`, drawn as a hero's are, see [9.3](#93-the-player)), `hitPoints`, `speed` (a multiple of the player's), `contactDamage`
-(half-hearts per touch; 0 = harmless), `contactCooldown` (seconds), optional `ranged` (a `Weapon` the monster shoots at the
+(hit points per touch; 0 = harmless), `contactCooldown` (seconds), optional `ranged` (a `Weapon` the monster shoots at the
 nearest hero within `range` tiles, from where the heroes can see it), `behaviour` - a factory called once per monster spawned, so a behaviour can
 keep its own state - and optional `sounds` (`hit`, `death`, `spawn`, `wake`: see [9.8](#98-events-and-hooks)).
 
@@ -2124,7 +2168,7 @@ a deleted one is removed - with a warning if it had anything in it); you only fi
 | `spawner` | Produces `monsters` (a pool, picked at random) every `interval` s, at most `maxAlive` at once, `total` in all (0 = unlimited), only while a hero is within `activationRange` tiles' walk (0 = always). `hitPoints` is the damage to destroy it (0 = indestructible). Its sprite's footprint is solid until destroyed, when the tile goes too. The `spawner` data brush ([9.5](#95-the-level-file)) makes any other sprite one. |
 | `sound` | What the sprite sounds like, by name ([5.9](#59-sound)): a pickup's as it's picked up, a door's as the door turns into it. Left out, the game's `sounds` has it ([9.8](#98-events-and-hooks)). One that isn't a string is dropped with a console warning. |
 | `loop` | A sound the tile makes all the time, by name - a torch's crackle: heard on a loop near it, the louder the closer a hero is, and not at all from `loopRange` tiles away (4 if left out). However many tiles make it, it's one loop, as loud as the nearest; it stops when the tile goes (a torch picked up). A `loop` that isn't a string, or a `loopRange` that isn't a number above 0, is dropped with a console warning. |
-| `pickup` | What a hero who touches it gets ([9.3](#93-the-player)): `gold` or `health` (an `amount`; health is in half-hearts and never goes past the maximum), a `key` (an `id`), a `weapon`, an inventory `item` (its `sprite`, or - left out - the tile's own), or a `light` to carry (a `light` value, and the `seconds` it burns for - 0 or left out for the rest of the level; see [9.6.2](#962-lights-in-play)). Any kind can have a `quest`: the id of the quest it counts for when it's picked up ([9.10](#910-npcs-dialogs-and-quests)). The tile then disappears, and if it gave off light its light goes with it. A malformed one is dropped with a console warning naming the sprite. |
+| `pickup` | What a hero who touches it gets ([9.3](#93-the-player)): `gold` or `health` (an `amount`; health is in hit points and never goes past the maximum), a `key` (an `id`), a `weapon`, an inventory `item` (its `sprite`, or - left out - the tile's own), or a `light` to carry (a `light` value, and the `seconds` it burns for - 0 or left out for the rest of the level; see [9.6.2](#962-lights-in-play)). Any kind can have a `quest`: the id of the quest it counts for when it's picked up ([9.10](#910-npcs-dialogs-and-quests)). The tile then disappears, and if it gave off light its light goes with it. A malformed one is dropped with a console warning naming the sprite. |
 
 A **specific placement** can override its light, spawner, pickup or door lock (the editor's data-select tool edits them per placement);
 `assets-meta` is the default for the sprite. Metadata is per bundle: a level's bundle can have its own
@@ -2140,7 +2184,7 @@ with or without keys - so a level with no keys behaves exactly as it always did.
 *Door lock* popup: tick **Locked** and give it a **Key id** (0 or more; kept in the tile's `data` as `{ "lock": n }`). The
 door then opens only if a hero carries a **key with the same id** (a `key` pickup, `{ "kind": "key", "id": n }`); without
 it the door is a wall. There is no master key. Keys are the team's: one carried by any living hero opens its door for
-everyone. The HUD's *Keys* panel shows them (each one's sprite and its id). Keys aren't used up, and a second key with an id
+everyone. The HUD shows them under the inventory - the team's, in a party (each one's sprite and its id). Keys aren't used up, and a second key with an id
 already held adds nothing. A hero who falls drops the keys they carried where they fell, for the others to pick up; the
 level starting over takes them all away. A door's `door.id` in `assets-meta.json` is only what pairs its closed and open
 sprites - it is not its lock.
@@ -2160,8 +2204,8 @@ that bake:
 - **The mage-light.** A hero with a `lightSpell` (`PlayerSetup.lightSpell`, or per character through `HeroSlot.lightSpell` or `playerLightSpell`)
   calls it up with L or a gamepad's Y: a ball of light floats just behind their shoulder and lights the floor around them for
   its `seconds`, dimming at the end like a torch, then needs `recharge` seconds before it can be called up again. The HUD
-  shows it under the keys (in a party, in each hero's row): a bar that empties as it burns and fills as it recharges, and
-  READY, LIT or RECHARGING with the seconds left.
+  shows it in its ACTIVE SPELL row (in a party, the first slot of each hero's row): its `icon`, or a glowing orb in its light's
+  tint, with the seconds left while it's lit, and shaded from the top while it recharges, the shade shrinking as it comes back.
 
 Lights that move are cast from fewer points across their flame, and only again once they've moved an eighth of a tile, so a
 handful of them costs little. Each gets a soft glow: a carried torch and a shot under the figures, the mage-light over them
@@ -2229,7 +2273,7 @@ the whole table can be filled in before the files exist, and a name without a fi
 | A kind of monster's `MonsterDef.sounds` | `hit`, `death`, `spawn`, `wake` (as a boss) |
 | A hero's `HeroSlot.sounds` (or `PlayerSetup.sounds`) | `hurt`, `death` - a character's own voice |
 | A sprite's `assets-meta.json` entry | `sound`: a pickup's as it's picked up, a door's as it turns into that sprite (its open sprite's as it opens, its closed one's as it shuts), a pushable thing's as it's pushed |
-| The game's `sounds` (`SoundTable`) | `heroShot`, `monsterShot`, `shotWall`, `heroHurt`, `heroDeath`, `lightSpell`, `keysDropped`, `gameOver`, `levelComplete`, `monsterHit`, `monsterDeath`, `monsterSpawn`, `bossWake`, `bossDeath` (in place of the kind's own death), `spawnerHit`, `spawnerBreak`, `doorOpen`, `doorClose`, `doorLocked`, `teleport`, `push`, `pickup` (by kind: `gold`, `key`...), `questGiven`, `questProgress`, `questDone`, `questNote`, `talkStart`, `talkLine`, `shout`, `pause` |
+| The game's `sounds` (`SoundTable`) | `heroShot`, `monsterShot`, `shotWall`, `heroHurt`, `heroDeath`, `lightSpell`, `keysDropped`, `gameOver`, `levelComplete`, `monsterHit`, `monsterDeath`, `monsterSpawn`, `bossWake`, `bossDeath` (in place of the kind's own death), `spawnerHit`, `spawnerBreak`, `doorOpen`, `doorClose`, `doorLocked`, `teleport`, `push`, `levelUp`, `pickup` (by kind: `gold`, `key`...), `questGiven`, `questProgress`, `questDone`, `questNote`, `talkStart`, `talkLine`, `shout`, `pause` |
 
 ```ts
 new DungeonMain({
@@ -2328,8 +2372,9 @@ level's quests are its own, under way from the start: "kill the final boss".
 
 A quest goes from `none` (not given) to `active` (under way) to `complete` (its goal met) to `finished` (handed in to an NPC).
 What's marked for a quest counts before it's given, so a quest given once its gold has all been found is complete at once. The
-quests start over each time the level does. While a quest is under way or complete, the **quest tracker** in the play area's
-top-left corner lists it - its name, how far it has got (2/5, or DONE), its text, and the last note a script gave it - and a toast
+quests start over each time the level does. Once a quest is given, the HUD's **quest journal** lists it
+([9.3.3](#933-the-hud-and-experience)): the one being followed - the last given or moved on - first, with a "!", its text and the last note a
+script gave it; the rest under way with an empty box and how far they've got (2/5); those done ticked. A toast
 in the top-right says as each is given and met, as a script gives one a note, and, as the level starts, which are under way from
 the start. Every change emits `QUEST_UPDATED`.
 
@@ -2379,7 +2424,7 @@ MINER: Quiet as a tomb down there now.
 | `-> part`, `end` | Goes there; ends the talk (as `-> end` does). `if CONDITION -> part` goes there only when the condition holds. |
 | `give QUEST`, `complete QUEST`, `finish QUEST` | Gives a quest; has its goal met, whatever it is; hands it in. |
 | `notify QUEST text` | Gives a quest a note - a hint, or a comment - shown to the player as a toast and kept under the quest in the tracker (see **Notes** below). |
-| `reward gold N`, `reward health N`, `reward key N [SPRITE]`, `reward item SPRITE` | Hands the hero something as if they'd picked it up (health in half-hearts; a key is shown as `SPRITE`). |
+| `reward gold N`, `reward health N`, `reward key N [SPRITE]`, `reward item SPRITE` | Hands the hero something as if they'd picked it up (health in hit points; a key is shown as `SPRITE`). |
 | `set WORD`, `unset WORD` | Remembers a word for the rest of the level, or forgets it - for an NPC who remembers being met. |
 | `# ...` | A comment. Blank lines are skipped. |
 
@@ -2598,7 +2643,7 @@ complete letter
 SMITH: A letter? From Mira? ...Tell her yes. A thousand times yes.
 ```
 
-`reward health 4` heals two hearts (health is in half-hearts, and never goes past the maximum).
+`reward health 4` heals 4 hit points (health never goes past the maximum).
 
 #### Imp hunt (kill any monster of a type, choose a reward)
 
@@ -3351,7 +3396,7 @@ heard as soon as it's there; a name with no file is silent ([5.9](#59-sound)). A
 The art is the **Tiny Dungeons UI pack** (`packages/ui/design/Tiny Dungeons - UI Pack`). It is drawn for a 480x270 screen, so `node packages/ui/tools/import-pack.mjs` enlarges every piece
 2x with nearest-neighbour scaling (each pixel a 2x2 block, never smoothed; `--scale=N` for another size) as it builds the bundle's sprites and `data/frames.json`: it copies the pieces, finds each stretchable frame's nine-slice insets from the art (the longest run of identical columns and rows is what stretches), and
 derives the looks the pack doesn't draw - hover and disabled states, a focused field, a selected slot, the vertical slider track, top-edge tabs, green and amber bar fills, hearts, radio
-rings and a speech bubble's points. It also turns the pack's slate greys violet to match the game's first UI - each keeps its lightness and takes hue 245 (`--hue=<0-359>`, or `--hue=none` for the pack's
+rings, a speech bubble's points, and the `dark` panel (the plain panel with a near-black inside, which the dungeon's HUD is drawn on). It also turns the pack's slate greys violet to match the game's first UI - each keeps its lightness and takes hue 245 (`--hue=<0-359>`, or `--hue=none` for the pack's
 own) - and makes the window's title plate taller so its title has room round it. To change the art, edit the pack's files and import again, then run `npm run assets` in the game so the atlas is rebuilt. `packages/ui/art/` also has an Aseprite template of the
 whole atlas (`slice-sheet.mjs` writes it back) for drawing over everything at once - after which the pack shouldn't be imported again, as that rewrites the sprites.
 

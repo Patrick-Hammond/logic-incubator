@@ -44,9 +44,15 @@ export type HeroSnapshot = {
     vy: number;
     facingX: number;
     hitPoints: number;
+    /** Their most hit points - each level they go up adds to it. */
+    maxHitPoints: number;
     /** Seconds before a hit can land again. */
     invulnerable: number;
     gold: number;
+    /** Their level, their experience points toward the next, and how many it needs. */
+    level: number;
+    xp: number;
+    next: number;
     /** Which of their weapons they hold. */
     equipped: number;
     /** Seconds before they can fire again. */
@@ -124,6 +130,8 @@ export type NetEvent =
     | { e: "spawner-hit"; index: number }
     /** Hero `hero` cast their light spell (`LIGHT_SPELL_CAST`). */
     | { e: "cast"; hero: number }
+    /** Hero `hero` went up to `level` (`HERO_LEVELLED_UP`). */
+    | { e: "levelled"; hero: number; level: number }
     /** Hero `hero` walked into the door on this cell, which no one has the key for (`DOOR_LOCKED`). */
     | { e: "locked"; hero: number; x: number; y: number }
     /**
@@ -185,6 +193,7 @@ export function IsFleetingEvent(event: NetEvent): boolean {
         event.e === "spawned" ||
         event.e === "spawner-hit" ||
         event.e === "cast" ||
+        event.e === "levelled" ||
         event.e === "locked" ||
         event.e === "teleported"
     );
@@ -192,7 +201,7 @@ export function IsFleetingEvent(event: NetEvent): boolean {
 
 const EventKinds = [
     "pickup", "keys", "spawner", "killed", "damaged", "died", "all-died", "completed", "shot", "quest", "fired", "stopped", "hit", "spawned", "woke", "spawner-hit", "cast", "locked",
-    "teleported", "pushed"
+    "teleported", "pushed", "levelled"
 ];
 
 const HeroGone = 1;
@@ -321,7 +330,8 @@ function WriteSnapshot(writer: ByteWriter, snapshot: Snapshot): void {
         const flags = (hero.gone ? HeroGone : 0) | (hero.away ? HeroAway : 0) | (hero.facingX < 0 ? HeroFacingLeft : 0) | (hero.spellLit !== null ? HeroSpellLit : 0) | (hero.carried !== null ? HeroCarrying : 0);
         // Exactly: a guest moves its own hero on from here, and must land where the host's steps will.
         writer.U8(flags).F64(hero.x).F64(hero.y).F64(hero.vx).F64(hero.vy);
-        writer.U16(Math.max(0, Math.round(hero.hitPoints))).F32(hero.invulnerable).U32(Math.max(0, Math.round(hero.gold)));
+        writer.U16(Math.max(0, Math.round(hero.hitPoints))).U16(Math.max(0, Math.round(hero.maxHitPoints))).F32(hero.invulnerable).U32(Math.max(0, Math.round(hero.gold)));
+        writer.U16(Math.max(0, Math.round(hero.level))).U32(Math.max(0, Math.round(hero.xp))).U32(Math.max(0, Math.round(hero.next)));
         // Timers a guest's own steps run on from here, exactly too - when they can next fire, or cast.
         writer.U8(hero.equipped).F64(hero.fireCooldown).F64(hero.spellLit !== null ? hero.spellLit : hero.spellRecharging);
         if (hero.carried !== null) {
@@ -409,6 +419,9 @@ function WriteEvents(writer: ByteWriter, events: ReadonlyArray<NetEvent>): void 
             case "cast":
                 writer.U8(event.hero);
                 break;
+            case "levelled":
+                writer.U8(event.hero).U16(event.level);
+                break;
             case "pushed":
                 writer.U8(event.hero).U16(event.index).U16(event.x).U16(event.y);
                 break;
@@ -429,8 +442,12 @@ function ReadSnapshot(reader: ByteReader): Snapshot {
         const vx = reader.F64();
         const vy = reader.F64();
         const hitPoints = reader.U16();
+        const maxHitPoints = reader.U16();
         const invulnerable = reader.F32();
         const gold = reader.U32();
+        const level = reader.U16();
+        const xp = reader.U32();
+        const next = reader.U32();
         const equipped = reader.U8();
         const fireCooldown = reader.F64();
         const spell = reader.F64();
@@ -444,7 +461,7 @@ function ReadSnapshot(reader: ByteReader): Snapshot {
             away: (flags & HeroAway) !== 0,
             x, y, vx, vy,
             facingX: (flags & HeroFacingLeft) !== 0 ? -1 : 1,
-            hitPoints, invulnerable, gold, equipped, fireCooldown,
+            hitPoints, maxHitPoints, invulnerable, gold, level, xp, next, equipped, fireCooldown,
             spellLit: lit ? spell : null,
             spellRecharging: lit ? 0 : spell,
             carried, orbX, orbY, orbTime,
@@ -546,6 +563,8 @@ function ReadEvent(reader: ByteReader): NetEvent {
             return { e: kind, type: reader.U8() };
         case "cast":
             return { e: kind, hero: reader.U8() };
+        case "levelled":
+            return { e: kind, hero: reader.U8(), level: reader.U16() };
         case "pushed":
             return { e: kind, hero: reader.U8(), index: reader.U16(), x: reader.U16(), y: reader.U16() };
         default:

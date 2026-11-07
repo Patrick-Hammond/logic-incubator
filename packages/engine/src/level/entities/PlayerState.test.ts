@@ -4,7 +4,8 @@ import { TileSize } from "../../Constants";
 import type { IPlayerInput } from "../../input/PlayerControl";
 import { MoveCollider } from "../../view/helpers/PlayerMovement";
 import { LightSpell } from "./LightSpell";
-import { ApplyPickup, CreatePlayerState, EquippedWeapon, StepPlayer, TakePlayerShot } from "./PlayerState";
+import { DefaultExperienceRules } from "./Experience";
+import { ApplyPickup, CreatePlayerState, EquippedWeapon, GainExperience, StepPlayer, TakePlayerShot } from "./PlayerState";
 import { WeaponDef } from "./Projectiles";
 
 const FRAME = 1 / 60;
@@ -33,6 +34,35 @@ describe("PlayerState", () => {
         expect(state.health.hitPoints).toBe(6);
         expect(EquippedWeapon(state)).toBe(BOW);
         expect(state.spell).toBeNull();
+    });
+
+    it("carries one weapon: one picked up takes the place of the one held", () => {
+        const state = CreatePlayerState({ hitPoints: 6, weapons: [BOW, STAFF] }, { x: 0, y: 0 });
+        expect(state.weapons).toEqual([BOW]);
+        ApplyPickup(state, { value: { kind: "weapon", weapon: STAFF }, sprite: null });
+        expect(state.weapons).toEqual([STAFF]);
+        expect(EquippedWeapon(state)).toBe(STAFF);
+    });
+
+    it("goes up levels with experience, each adding to their most hit points and to what they have", () => {
+        const state = CreatePlayerState({ hitPoints: 6, weapons: [BOW] }, { x: 0, y: 0 });
+        expect(state.experience).toEqual({ level: 1, xp: 0, next: 100 });
+        state.health.hitPoints = 3;
+        expect(GainExperience(state, DefaultExperienceRules, 120)).toBe(1);
+        expect(state.experience).toEqual({ level: 2, xp: 20, next: 200 });
+        expect(state.health).toMatchObject({ hitPoints: 5, max: 8 });
+    });
+
+    it("doesn't bring a hero who is down back up by a level", () => {
+        const state = CreatePlayerState({ hitPoints: 6, weapons: [BOW] }, { x: 0, y: 0 });
+        state.health.hitPoints = 0;
+        GainExperience(state, DefaultExperienceRules, 100);
+        expect(state.health).toMatchObject({ hitPoints: 0, max: 8 });
+    });
+
+    it("earns experience as the setup says", () => {
+        const state = CreatePlayerState({ hitPoints: 6, weapons: [BOW], experience: { perLevel: 50 } }, { x: 0, y: 0 });
+        expect(state.experience.next).toBe(50);
     });
 
     it("keeps a weapon picked up to itself, so the next level start has the setup's loadout again", () => {

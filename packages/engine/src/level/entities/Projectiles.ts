@@ -38,6 +38,8 @@ export type Weapon = ShotSetup & {
 export type WeaponDef = {
     icon: string;
     shot: Weapon;
+    /** What the HUD calls it - left out, its icon's sprite name made readable (see `WeaponName`). */
+    name?: string;
 };
 
 export type Projectile = {

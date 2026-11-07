@@ -126,6 +126,8 @@ PutStates("btn_icon", Pressable(Trim(Read("hud/hud_icon_button_background.png"))
 
 // Panels, the window's title plate (the dialogue's name plate is the same art) and the separators.
 Put("panel_plain", Read("components/component_9slices_panel.png"), "auto");
+// The plain panel with a dark inside - the near-black blue of a dungeon's dark - which the pack doesn't draw: the HUD's sections, so the art in them stands out.
+Put("panel_dark", Recolour(Read("components/component_9slices_panel.png"), { [BLUE]: "#17142c", [DEEP]: "#100d20" }), "auto");
 Put("panel_carved", Read("components/component_9slices_panel_carved.png"), "auto");
 Put("panel_carved_light", Read("components/component_9slices_panel_carved_light.png"), "auto");
 Put("panel_raised", Read("components/component_9slices_panel_elevation_dark.png"), "auto");

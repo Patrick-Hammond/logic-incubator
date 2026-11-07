@@ -1,252 +1,112 @@
-import {BitmapText, Container, Sprite, Texture} from "pixi.js";
-import AssetFactory from "@logic-incubator/lib/loading/AssetFactory";
+import {Container, Texture} from "pixi.js";
 import UiTheme from "@logic-incubator/ui/UiTheme";
-import UiIconRow from "@logic-incubator/ui/widgets/UiIconRow";
-import UiItemSlot from "@logic-incubator/ui/widgets/UiItemSlot";
-import UiProgressBar from "@logic-incubator/ui/widgets/UiProgressBar";
-import {CreateText} from "@logic-incubator/ui/widgets/UiText";
+import {SlotItem} from "@logic-incubator/ui/widgets/UiItemSlot";
 import {InventorySize} from "../level/entities/Inventory";
-import {LightSpellState, LightSpellStatusOf} from "../level/entities/LightSpell";
+import {LightSpellStatusOf} from "../level/entities/LightSpell";
 import type Hero from "../sim/Hero";
+import {TextureOf} from "./HudArt";
+import HudHeader, {HudHeroInfo} from "./HudHeader";
+import {HudPanel} from "./HudSection";
+import HudSlotRow from "./HudSlotRow";
 
-/** What a HUD row shows of a hero - `Hero` has it all. */
-export type HudHero = Pick<Hero, "Alive" | "Gone" | "Away" | "Health" | "Gold" | "EquippedWeapon" | "Inventory" | "Spell">;
+/** What the HUD shows of a hero - `Hero` has it all. */
+export type HudHero = Pick<Hero, "Alive" | "Gone" | "Away" | "Health" | "Gold" | "Experience" | "EquippedWeapon" | "Inventory" | "Spell">;
 
-/** The hearts' pictures, if the game has its own (see `PlayerSetup.hearts`). */
-export type HeartTextures = {full: Texture; half: Texture; empty: Texture};
-
-const HalfHeartsPerHeart = 2;
-/** A row's hearts are smaller than the lone hero's panel's - drawn this many times as big. */
-const HeartScale = 2;
-const HeartGap = 4;
-const GoldIcon = "coin_anim";
-/** The coin and each item are shown at the largest whole-number size that fits these boxes. */
-const GoldBox = 28;
-const ItemBox = 24;
-const ItemGap = 4;
-/** The skin's bar the light spell is shown with - see `Hud`. */
-const SpellBar = "mp";
-const SpellBarWidth = 110;
-const Gap = 10;
+/** A row's portrait, and how many times as big the hero is drawn in it. */
+const Portrait = 52;
+const PortraitScale = 3;
+/** Room round a row's contents, inside its panel, and between its header and its slots. */
+const Inset = 16;
+const SlotsGap = 8;
+const SlotSize = 36;
 /** How solid the row of a hero who is down, away or gone is drawn. */
 const FallenAlpha = 0.4;
 
-/** What a light spell's state reads as: READY, or LIT / RECHARGING and the seconds left. */
-export function SpellStatusText(spell: LightSpellState): string {
-    const status = LightSpellStatusOf(spell);
-    const seconds = Math.ceil(status.seconds);
-    const words = {ready: "READY", lit: "LIT", recharging: "RECHARGING"};
-    return words[status.state] + (seconds > 0 ? " " + seconds : "");
-}
-
-/** The largest whole-number scale that fits a picture into a `box`-sized square - a fraction for one bigger than it. */
-export function FitScale(texture: Texture, box: number): number {
-    const longest = Math.max(texture.width, texture.height);
-    return longest > box ? 1 / Math.ceil(longest / box) : Math.max(1, Math.floor(box / longest));
-}
-
-/** The picture for a sprite name, or null (with a warning, once per name) if the sprite sheet hasn't it. */
-export function TextureOf(name: string | null): Texture | null {
-    if (!name) {
-        return null;
-    }
-    if (!AssetFactory.inst.Has(name)) {
-        AssetFactory.inst.WarnMissing(name);
-        return null;
-    }
-    return AssetFactory.inst.CreateTexture(name);
-}
+/** The icon the HUD shows a light spell as - its own sprite if it names one, else `orb` (see `OrbTexture`). */
+export type SpellIcon = (hero: HudHero) => Texture | null;
 
 /**
- * One hero's row in the HUD panel when a party plays (see `Hud.RenderHeroes`): who they are and their hearts, their
- * weapon, gold and light spell, and the items they carry - dimmed once they've fallen. `rowWidth` is the room it has.
- * Redrawn only where something changed.
+ * One hero's row when a party plays (see `Hud.RenderHeroes`), on a panel of its own: their portrait, name, gold, hit
+ * points and experience (a compact `HudHeader`), and under them a row of slots - their light spell (for a hero who has one) or their weapon,
+ * then the items they carry. Dimmed, with DOWN, AWAY or LEFT after their name, once they've fallen or their player has
+ * gone. `width` is the room it has. Redrawn only where something changed.
  */
 export default class HudHeroRow extends Container {
-    private heading: BitmapText;
-    private hearts: UiIconRow | null = null;
-    private weapon: UiItemSlot;
-    private goldIcon: Sprite;
-    private goldText: BitmapText;
-    private spellBar: UiProgressBar | null = null;
-    private spellText: BitmapText;
-    private items: Sprite[] = [];
-    private shown = {hearts: "", gold: -1, weapon: "", items: "", spell: "", status: ""};
-    /** Who they are, as the heading says. */
-    private playerName: string;
+    private readonly header: HudHeader;
+    private readonly slots: HudSlotRow;
+    private info: HudHeroInfo;
+    private shownStatus = "";
 
-    constructor(private theme: UiTheme, index: number, private rowWidth: number, private heartTextures: HeartTextures | undefined) {
+    constructor(theme: UiTheme, index: number, width: number, private readonly spellIcon: SpellIcon, hearts?: Texture) {
         super();
-        this.playerName = "PLAYER " + (index + 1);
-        this.heading = CreateText(theme, this.playerName, {colour: "muted"});
-        this.addChild(this.heading);
-
-        const top = Math.ceil(this.heading.textHeight) + Gap;
-        this.weapon = new UiItemSlot(theme, "default");
-        this.weapon.position.set(0, top);
-        this.addChild(this.weapon);
-
-        const besideWeapon = this.weapon.SlotSize + Gap;
-        this.goldIcon = new Sprite(Texture.EMPTY);
-        this.goldIcon.anchor.set(0.5);
-        this.goldIcon.position.set(besideWeapon + GoldBox / 2, top + GoldBox / 2);
-        this.goldText = CreateText(theme, "0", {colour: "text"});
-        this.goldText.position.set(besideWeapon + GoldBox + 6, Math.round(top + (GoldBox - this.goldText.textHeight) / 2));
-        this.addChild(this.goldIcon, this.goldText);
-
-        const spellY = top + GoldBox + 4;
-        let spellX = besideWeapon;
-        if (theme.skin.bars[SpellBar]) {
-            this.spellBar = new UiProgressBar(theme, SpellBar, SpellBarWidth, 1);
-            this.spellBar.position.set(spellX, spellY);
-            this.addChild(this.spellBar);
-            spellX += SpellBarWidth + 8;
-        }
-        this.spellText = CreateText(theme, "", {colour: "text"});
-        this.spellText.position.set(spellX, spellY);
-        this.addChild(this.spellText);
-        this.ShowSpell(false);
-
-        const itemsY = top + this.weapon.SlotSize + 6;
-        for (let i = 0; i < InventorySize; i++) {
-            const item = new Sprite(Texture.EMPTY);
-            item.anchor.set(0.5);
-            item.position.set(i * (ItemBox + ItemGap) + ItemBox / 2, itemsY + ItemBox / 2);
-            item.visible = false;
-            this.items.push(item);
-            this.addChild(item);
-        }
+        const inner = width - Inset * 2;
+        const panel = HudPanel(theme, width, HudHeroRow.Height());
+        this.header = new HudHeader(theme, {width: inner, portrait: Portrait, portraitScale: PortraitScale, compact: true}, hearts);
+        this.header.position.set(Inset, Inset);
+        this.slots = new HudSlotRow(theme, InventorySize + 1, SlotSize, inner);
+        this.slots.position.set(Inset, Inset + Portrait + SlotsGap);
+        this.slots.Select(0);
+        this.addChild(panel, this.header, this.slots);
+        this.info = {name: "PLAYER " + (index + 1), portrait: null, own: false};
+        this.header.SetHero(this.info);
     }
 
-    /** How tall a row is, laid out as the constructor does - what `Hud` spaces them by at the least. */
-    static Height(theme: UiTheme): number {
-        const heading = CreateText(theme, "PLAYER 1", {colour: "muted"});
-        const slot = new UiItemSlot(theme, "default");
-        const height = Math.ceil(heading.textHeight) + Gap + slot.SlotSize + 6 + ItemBox;
-        heading.destroy();
-        slot.destroy();
-        return height;
+    /** How tall a row is. */
+    static Height(): number {
+        return Inset + Portrait + SlotsGap + SlotSize + Inset - 4;
+    }
+
+    /** Who the row is for - see `Hud.SetHeroes`. */
+    SetHero(info: HudHeroInfo): void {
+        this.info = info;
+        this.ShowHero();
+    }
+
+    Animate(seconds: number): void {
+        this.header.Animate(seconds);
     }
 
     Render(hero: HudHero): void {
-        this.RenderHearts(hero);
-        this.RenderGold(hero.Gold.amount);
-        this.RenderWeapon(hero.EquippedWeapon.icon);
-        this.RenderItems(hero.Inventory.slots);
-        this.RenderSpell(hero.Spell);
+        this.header.Render(hero.Health, hero.Gold.amount, hero.Experience);
+        const items: Array<SlotItem | null> = [];
+        const keys: string[] = [];
+        const spell = hero.Spell;
+        if (spell) {
+            const status = LightSpellStatusOf(spell);
+            const icon = this.spellIcon(hero);
+            const seconds = status.seconds > 0 ? String(Math.ceil(status.seconds)) : "";
+            items.push(icon ? {texture: icon, label: seconds} : null);
+            keys.push(status.state + seconds);
+            this.slots.SetShade(0, status.state === "recharging" ? 1 - status.fill : 0);
+        } else {
+            const icon = TextureOf(hero.EquippedWeapon.icon);
+            items.push(icon ? {texture: icon} : null);
+            keys.push(hero.EquippedWeapon.icon);
+        }
+        // Packed from the left, after the spell or weapon.
+        hero.Inventory.slots.forEach(slot => {
+            const texture = slot && TextureOf(slot.sprite);
+            if (slot && texture) {
+                items.push({texture, count: slot.count});
+                keys.push(slot.sprite + "x" + slot.count);
+            }
+        });
+        this.slots.SetItems(items, keys);
         // Online, a player who has left, or whose connection has gone for now, says more than how their hero is.
         const status = hero.Gone ? "LEFT" : hero.Away ? "AWAY" : hero.Alive ? "" : "DOWN";
-        if (status !== this.shown.status) {
-            this.shown.status = status;
+        if (status !== this.shownStatus) {
+            this.shownStatus = status;
             this.alpha = status ? FallenAlpha : 1;
-            this.RenderHeading();
+            this.ShowHero();
         }
-    }
-
-    /** Heads the row with `name` in place of "PLAYER n" - in the skin's `focus` colour for `own`, the player at this machine, among others who aren't. */
-    SetName(name: string, own: boolean): void {
-        this.playerName = name;
-        this.heading.tint = this.theme.Colour(own ? "focus" : "muted");
-        this.RenderHeading();
     }
 
     destroy(options?: {children?: boolean; texture?: boolean; baseTexture?: boolean}): void {
         super.destroy({children: true, ...options});
     }
 
-    private RenderHearts(hero: HudHero): void {
-        const health = hero.Health;
-        const signature = health.hitPoints + "/" + health.max;
-        if (signature === this.shown.hearts) {
-            return;
-        }
-        this.shown.hearts = signature;
-        const count = Math.ceil(health.max / HalfHeartsPerHeart);
-        if (!this.hearts || this.hearts.Count !== count) {
-            if (this.hearts) {
-                this.hearts.destroy();
-            }
-            const options = this.heartTextures ? {textures: this.heartTextures, scale: HeartScale, gap: HeartGap} : {};
-            this.hearts = new UiIconRow(this.theme, "hearts", count, options);
-            this.hearts.position.set(Math.round(this.rowWidth - this.hearts.RowWidth), 0);
-            this.addChild(this.hearts);
-        }
-        this.hearts.SetValue(health.hitPoints, count * HalfHeartsPerHeart);
-    }
-
-    private RenderGold(amount: number): void {
-        if (amount === this.shown.gold) {
-            return;
-        }
-        this.shown.gold = amount;
-        this.goldText.text = String(amount);
-        const texture = TextureOf(GoldIcon);
-        this.goldIcon.visible = !!texture;
-        if (texture) {
-            this.goldIcon.texture = texture;
-            this.goldIcon.scale.set(FitScale(texture, GoldBox));
-        }
-    }
-
-    private RenderWeapon(icon: string): void {
-        if (icon === this.shown.weapon) {
-            return;
-        }
-        this.shown.weapon = icon;
-        const texture = TextureOf(icon);
-        this.weapon.SetItem(texture ? {texture} : null);
-    }
-
-    private RenderItems(slots: ReadonlyArray<string | null>): void {
-        const signature = slots.join("|");
-        if (signature === this.shown.items) {
-            return;
-        }
-        this.shown.items = signature;
-        // Packed from the left, gaps in the inventory left out - there's no room for empty slots here.
-        const textures = slots.map(name => TextureOf(name)).filter(texture => !!texture);
-        this.items.forEach((item, i) => {
-            const texture = textures[i];
-            item.visible = !!texture;
-            if (texture) {
-                item.texture = texture;
-                item.scale.set(FitScale(texture, ItemBox));
-            }
-        });
-    }
-
-    private RenderSpell(spell: LightSpellState | null): void {
-        if (!spell) {
-            if (this.shown.spell) {
-                this.shown.spell = "";
-                this.ShowSpell(false);
-            }
-            return;
-        }
-        const text = SpellStatusText(spell);
-        const fill = LightSpellStatusOf(spell).fill;
-        const signature = text + "|" + Math.round(fill * 200);
-        if (signature === this.shown.spell) {
-            return;
-        }
-        if (!this.shown.spell) {
-            this.ShowSpell(true);
-        }
-        this.shown.spell = signature;
-        this.spellText.text = text;
-        if (this.spellBar) {
-            this.spellBar.Value = fill;
-        }
-    }
-
-    private RenderHeading(): void {
-        this.heading.text = this.playerName + (this.shown.status ? "  " + this.shown.status : "");
-    }
-
-    private ShowSpell(visible: boolean): void {
-        this.spellText.visible = visible;
-        if (this.spellBar) {
-            this.spellBar.visible = visible;
-        }
+    private ShowHero(): void {
+        const status = this.shownStatus ? "  " + this.shownStatus : "";
+        this.header.SetHero({...this.info, name: this.info.name + status});
     }
 }

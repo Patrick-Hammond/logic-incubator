@@ -56,6 +56,8 @@ export const KEYS_DROPPED = "keysDropped";
  * the one on the second (see `Portals`). On a shared screen the rest of the party came too, around them, and this is the only one said.
  */
 export const HERO_TELEPORTED = "heroTeleported";
+/** `(hero: number, level: number)` - a hero's experience took them up to `level` (see `Experience`). */
+export const HERO_LEVELLED_UP = "heroLevelledUp";
 /**
  * `(hero: number, tileX: number, tileY: number)` - a hero walked into an NPC (a `DIALOG` brush's cell) in a game where they can
  * talk (`World.SetTalk`: one hero, on one machine). `DungeonMain` starts the talk.

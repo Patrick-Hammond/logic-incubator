@@ -10,7 +10,7 @@
 
 import type NamedSounds from "@logic-incubator/lib/assets/NamedSounds";
 import {
-    ALL_PLAYERS_DIED, BOSS_WOKE, DOOR_CLOSED, DOOR_LOCKED, DOOR_OPENED, GAME_PAUSED, HERO_TELEPORTED, KEYS_DROPPED, LEVEL_COMPLETED, LIGHT_SPELL_CAST, MONSTER_HIT,
+    ALL_PLAYERS_DIED, BOSS_WOKE, DOOR_CLOSED, DOOR_LOCKED, DOOR_OPENED, GAME_PAUSED, HERO_LEVELLED_UP, HERO_TELEPORTED, KEYS_DROPPED, LEVEL_COMPLETED, LIGHT_SPELL_CAST, MONSTER_HIT,
     MONSTER_KILLED, MONSTER_SPAWNED, NPC_SHOUTED, OBJECT_PUSHED, PICKUP_COLLECTED, PLAYER_DAMAGED, PLAYER_DIED, QUEST_NOTED, QUEST_UPDATED, SHOT_FIRED,
     SHOT_STOPPED, SPAWNER_DESTROYED, SPAWNER_HIT, TALK_LINE, TALK_STARTED
 } from "./Events";
@@ -34,6 +34,8 @@ export type SoundTable = {
     heroDeath?: string;
     /** A hero cast their light spell. */
     lightSpell?: string;
+    /** A hero went up a level (see `Experience`). */
+    levelUp?: string;
     /** A fallen hero dropped their keys. */
     keysDropped?: string;
     /** Every hero is down. */
@@ -84,7 +86,7 @@ export type SoundTable = {
 
 /** The events a `SoundBoard` plays sounds for. */
 export const SoundEvents: ReadonlyArray<string> = [
-    SHOT_FIRED, SHOT_STOPPED, PLAYER_DAMAGED, PLAYER_DIED, LIGHT_SPELL_CAST, KEYS_DROPPED, ALL_PLAYERS_DIED, LEVEL_COMPLETED, MONSTER_HIT, MONSTER_KILLED,
+    SHOT_FIRED, SHOT_STOPPED, PLAYER_DAMAGED, PLAYER_DIED, LIGHT_SPELL_CAST, HERO_LEVELLED_UP, KEYS_DROPPED, ALL_PLAYERS_DIED, LEVEL_COMPLETED, MONSTER_HIT, MONSTER_KILLED,
     MONSTER_SPAWNED, BOSS_WOKE, SPAWNER_HIT, SPAWNER_DESTROYED, DOOR_OPENED, DOOR_CLOSED, DOOR_LOCKED, HERO_TELEPORTED, PICKUP_COLLECTED, QUEST_UPDATED,
     QUEST_NOTED, TALK_STARTED, TALK_LINE, NPC_SHOUTED, GAME_PAUSED, OBJECT_PUSHED
 ];
@@ -131,6 +133,9 @@ export default class SoundBoard {
                 break;
             case LIGHT_SPELL_CAST:
                 this.Play(table.lightSpell);
+                break;
+            case HERO_LEVELLED_UP:
+                this.Play(table.levelUp);
                 break;
             case KEYS_DROPPED:
                 this.Play(table.keysDropped);

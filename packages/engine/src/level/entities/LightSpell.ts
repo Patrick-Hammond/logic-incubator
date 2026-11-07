@@ -13,6 +13,8 @@ export type LightSpell = {
     seconds: number;
     /** Seconds after it goes out before it can be called up again. */
     recharge: number;
+    /** A sprite name the HUD shows it as - left out, a glowing orb in its light's tint. */
+    icon?: string;
 };
 
 /** A hero's light spell in play: lit, recharging, or ready to cast. */

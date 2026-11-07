@@ -151,6 +151,7 @@
 	},
 	"panels": {
 		"plain": { "frame": { "frame": "panel_plain" }, "padding": { "left": 24, "top": 24, "right": 24, "bottom": 24 } },
+		"dark": { "frame": { "frame": "panel_dark" }, "padding": { "left": 16, "top": 16, "right": 16, "bottom": 16 } },
 		"ornate": { "frame": { "frame": "panel_plain" }, "padding": { "left": 24, "top": 40, "right": 24, "bottom": 24 }, "borderTop": "separator_light", "borderOffset": 20 },
 		"carved": { "frame": { "frame": "panel_carved" }, "padding": { "left": 6, "top": 8, "right": 6, "bottom": 6 } },
 		"carved_light": { "frame": { "frame": "panel_carved_light" }, "padding": { "left": 6, "top": 8, "right": 6, "bottom": 6 } },

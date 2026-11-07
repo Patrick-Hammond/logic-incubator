@@ -24,8 +24,12 @@ export function HeroSnapshotOf(hero: Hero, ack: number): HeroSnapshot {
         vy: state.velocity.y,
         facingX: state.facingX,
         hitPoints: state.health.hitPoints,
+        maxHitPoints: state.health.max,
         invulnerable: state.health.invulnerable,
         gold: state.gold.amount,
+        level: state.experience.level,
+        xp: state.experience.xp,
+        next: state.experience.next,
         equipped: state.equippedIndex,
         fireCooldown: state.fireCooldown,
         spellLit: lit ? lit.left : null,
@@ -52,8 +56,12 @@ export function ApplyHeroSnapshot(hero: Hero, snapshot: HeroSnapshot): void {
     state.velocity.Set(snapshot.vx, snapshot.vy);
     state.facingX = snapshot.facingX;
     state.health.hitPoints = snapshot.hitPoints;
+    state.health.max = snapshot.maxHitPoints;
     state.health.invulnerable = snapshot.invulnerable;
     state.gold.amount = snapshot.gold;
+    state.experience.level = snapshot.level;
+    state.experience.xp = snapshot.xp;
+    state.experience.next = snapshot.next;
     if (snapshot.equipped < state.weapons.length) {
         state.equippedIndex = snapshot.equipped;
     }

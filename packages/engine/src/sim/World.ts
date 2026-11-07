@@ -23,9 +23,10 @@ import { Vec2, Vec2Like } from "@logic-incubator/lib/math/Geometry";
 import { TileSize } from "../Constants";
 import type { PlayerSetup } from "../DungeonMain";
 import Encounter, { EncounterLevel, EncounterOptions, Monster } from "../Encounter";
-import { ALL_PLAYERS_DIED, DOOR_LOCKED, HERO_TELEPORTED, KEYS_DROPPED, LEVEL_COMPLETED, LIGHT_SPELL_CAST, NPC_BUMPED, OBJECT_PUSHED, PICKUP_COLLECTED, QUEST_NOTED, QUEST_UPDATED } from "../Events";
+import { ALL_PLAYERS_DIED, DOOR_LOCKED, HERO_LEVELLED_UP, HERO_TELEPORTED, KEYS_DROPPED, LEVEL_COMPLETED, LIGHT_SPELL_CAST, NPC_BUMPED, OBJECT_PUSHED, PICKUP_COLLECTED, QUEST_NOTED, QUEST_UPDATED } from "../Events";
 import type { IPlayerInput } from "../input/PlayerControl";
 import type { CollectedPickup } from "../level/Level";
+import { ExperienceRules, ExperienceRulesOf, MonsterPoints } from "../level/entities/Experience";
 import { LightSpell } from "../level/entities/LightSpell";
 import { PickupCellsReached, PickupSpot, PickupValue } from "../level/entities/Pickups";
 import { BoxOnCell, Pushable, PushDelay, PushTarget } from "../level/entities/Pushables";
@@ -172,6 +173,8 @@ export default class World {
     private questEnd = -1;
     /** The slot of the hero whose doing is being recorded - who gets the credit for a quest it completes. */
     private doer = 0;
+    /** How the heroes earn experience - the setup's, as of the last `Reset`. */
+    private experience: ExperienceRules = ExperienceRulesOf();
 
     constructor(private level: WorldLevel, private options: EncounterOptions) {
         this.encounter = new Encounter(level, { ...options, killed: (monster, hero) => this.Killed(monster, hero) });
@@ -218,7 +221,8 @@ export default class World {
      * start. The encounter starts over too, its random numbers from `seed`, and as tough as the party's size
      * calls for (see `Encounter.Reset`).
      */
-    Reset(setup: Pick<PlayerSetup, "hitPoints" | "weapons">, lightSpells: ReadonlyArray<LightSpell | undefined>, seed?: number): void {
+    Reset(setup: Pick<PlayerSetup, "hitPoints" | "weapons" | "experience">, lightSpells: ReadonlyArray<LightSpell | undefined>, seed?: number): void {
+        this.experience = ExperienceRulesOf(setup.experience);
         const start = this.level.playerStartPosition;
         if (!start) {
             throw new Error("Player start position is not defined. Define it in the level data.");
@@ -392,8 +396,12 @@ export default class World {
         party.forEach((hero, i) => hero.WarpTo({ x: cells[i + 1].x * TileSize, y: cells[i + 1].y * TileSize }));
     }
 
-    /** A monster died - `hero`'s shot killed it: the quests count it. */
+    /** A monster died - `hero`'s shot killed it: they earn its experience, and the quests count it. */
     private Killed(monster: Monster, hero: number): void {
+        const killer = this.heroes[hero];
+        if (killer) {
+            this.Reward(killer, MonsterPoints(this.experience, monster.def.hitPoints));
+        }
         this.RecordQuest({ kind: "kill", quest: monster.quest, monster: monster.type }, Math.max(0, hero));
     }
 
@@ -402,6 +410,19 @@ export default class World {
             this.questEnd = this.doer;
         }
         this.options.emit(QUEST_UPDATED, status.def.id, status.state, status.progress, was);
+        // A quest is the party's: done - its goal met, or handed in straight from under way - it's every hero's experience.
+        const done = status.state === "complete" || status.state === "finished";
+        if (done && (was === "none" || was === "active")) {
+            this.heroes.forEach(hero => !hero.Gone && this.Reward(hero, this.experience.perQuest));
+        }
+    }
+
+    /** Gives a hero experience points, telling of each level it takes them up. */
+    private Reward(hero: Hero, points: number): void {
+        const levels = hero.GainExperience(this.experience, points);
+        for (let i = levels - 1; i >= 0; i--) {
+            this.options.emit(HERO_LEVELLED_UP, hero.Index, hero.Experience.level - i);
+        }
     }
 
     /** Ends the level if a quest that `ends` it has had its goal met since the last look - as a way out does - and returns whether it has. */

@@ -31,17 +31,18 @@ export default class UiItemSlot extends UiControl {
     private selected = false;
     private hasPlaceholder = false;
 
-    constructor(private readonly theme: UiTheme, variant: string) {
+    /** `size` is the slot's width and height - the skin's `size` when left out; the frame stretches to it, as a nine-slice. */
+    constructor(private readonly theme: UiTheme, variant: string, size?: number) {
         super();
         const skin = theme.skin.slots && theme.skin.slots[variant];
         if (!skin) {
             throw new Error(`The "${theme.skin.name}" skin has no slot "${variant}".`);
         }
-        this.skin = skin;
+        this.skin = size ? { ...skin, size } : skin;
         this.badge = CreateText(theme, "", { font: skin.countFont, colour: skin.countColour });
         this.placeholder.visible = false;
         this.addChild(this.placeholder, this.icon, this.badge);
-        this.SetHitSize(skin.size, skin.size);
+        this.SetHitSize(this.skin.size, this.skin.size);
         this.Redraw();
     }
 
