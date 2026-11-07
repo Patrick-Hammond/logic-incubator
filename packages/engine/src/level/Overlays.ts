@@ -41,7 +41,7 @@ export const OverlayFootings: { readonly [K in OverlayKind]: Footing } = {
     dirt: { speed: 0.95, slipperiness: 1 },
     mud: { speed: 0.3, slipperiness: 0.1 },
     water: { speed: 0.4, slipperiness: 0.5 },
-    slime: { speed: 0.1, slipperiness: 6},
+    slime: { speed: 0.1, slipperiness: 6 },
     blood: { speed: 0.95, slipperiness: 2 },
     moss: { speed: 0.9, slipperiness: 0.9 },
     shiny: { speed: 1, slipperiness: 3 }
@@ -51,7 +51,7 @@ export const OverlayFootings: { readonly [K in OverlayKind]: Footing } = {
 export const MinOverlaySpeed = 0.05;
 export const MaxOverlaySpeed = 1.5;
 /** The most slippery an overlay can be, as a multiple of how long bare floor takes to stop them (`Footing.slipperiness`); 0 stops them dead. */
-export const MaxOverlaySlipperiness = 5;
+export const MaxOverlaySlipperiness = 10;
 
 /**
  * How an overlay is laid over the floor: `normal` over it; `add` adding its light; `multiply` darkening the floor by its colour,

@@ -1645,8 +1645,8 @@ const OverlayKinds: ReadonlyArray<OverlayKind>;        // in that order - the ed
 type OverlayLook = { tint: number; reflectivity: number };
 const OverlayLooks: { [K in OverlayKind]: OverlayLook };   // each kind's own colour (0xRRGGBB) and how much it mirrors (0 to 1)
 const OverlayFootings: { [K in OverlayKind]: Footing };    // each kind's own speed and slipperiness (see PlayerMovement's Footing):
-    // dirt 0.95 / 1, mud 0.3 / 0.1, water 0.4 / 0.5, slime 0.1 / 3, blood 0.95 / 1.5, moss 0.9 / 0.9, shiny 1 / 1.3
-const MinOverlaySpeed = 0.05;  const MaxOverlaySpeed = 1.5;  const MaxOverlaySlipperiness = 5;   // slipperiness from 0, which stops them dead
+    // dirt 0.95 / 1, mud 0.3 / 0.1, water 0.4 / 0.5, slime 0.1 / 6, blood 0.95 / 2, moss 0.9 / 0.9, shiny 1 / 3
+const MinOverlaySpeed = 0.05;  const MaxOverlaySpeed = 1.5;  const MaxOverlaySlipperiness = 10;   // slipperiness from 0, which stops them dead
 type OverlayBlend = "normal" | "add" | "multiply" | "screen";   // how it's laid over the floor - the GPU's own blending
 const OverlayBlends: ReadonlyArray<OverlayBlend>;                // in that order - the editor's, and OverlayLayer's number for each
 IsOverlayBlend(blend): blend is OverlayBlend

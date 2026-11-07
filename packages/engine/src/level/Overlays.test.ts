@@ -64,10 +64,10 @@ describe("OverlayValue", () => {
             dirt: { speed: 0.95, slipperiness: 1 },
             mud: { speed: 0.3, slipperiness: 0.1 },
             water: { speed: 0.4, slipperiness: 0.5 },
-            slime: { speed: 0.1, slipperiness: 3 },
-            blood: { speed: 0.95, slipperiness: 1.5 },
+            slime: { speed: 0.1, slipperiness: 6 },
+            blood: { speed: 0.95, slipperiness: 2 },
             moss: { speed: 0.9, slipperiness: 0.9 },
-            shiny: { speed: 1, slipperiness: 1.3 }
+            shiny: { speed: 1, slipperiness: 3 }
         });
         expect(Object.keys(OverlayFootings).sort()).toEqual(OverlayKinds.slice().sort());
     });
@@ -84,7 +84,7 @@ describe("OverlayValue", () => {
         expect(SanitiseOverlayValue({ overlay: "mud", speed: 9 })).toEqual({ overlay: "mud", speed: MaxOverlaySpeed });
         expect(SanitiseOverlayValue({ overlay: "mud", speed: NaN })).toEqual({ overlay: "mud" });
         expect(SanitiseOverlayValue({ overlay: "slime", slipperiness: 1 })).toEqual({ overlay: "slime", slipperiness: 1 });
-        expect(SanitiseOverlayValue({ overlay: "slime", slipperiness: 3 })).toEqual({ overlay: "slime" });
+        expect(SanitiseOverlayValue({ overlay: "slime", slipperiness: 6 })).toEqual({ overlay: "slime" });
         expect(SanitiseOverlayValue({ overlay: "slime", slipperiness: -1 })).toEqual({ overlay: "slime", slipperiness: 0 });
         expect(SanitiseOverlayValue({ overlay: "slime", slipperiness: 99 })).toEqual({ overlay: "slime", slipperiness: MaxOverlaySlipperiness });
         expect(SanitiseOverlayValue({ overlay: "slime", slipperiness: 1.234 })).toEqual({ overlay: "slime", slipperiness: 1.23 });
@@ -95,7 +95,7 @@ describe("OverlayValue", () => {
         expect(OverlaySpeed({ overlay: "water", speed: 1.2 })).toBe(1.2);
         expect(OverlaySlipperiness({ overlay: "water" })).toBe(0.5);
         expect(OverlaySlipperiness({ overlay: "water", slipperiness: 0 })).toBe(0);
-        expect(OverlayFootingOf({ overlay: "shiny", speed: 0.5 })).toEqual({ speed: 0.5, slipperiness: 1.3 });
+        expect(OverlayFootingOf({ overlay: "shiny", speed: 0.5 })).toEqual({ speed: 0.5, slipperiness: 3 });
     });
 
     it("is sanitised: tint and reflectivity only where they differ from the kind's", () => {
@@ -215,7 +215,7 @@ describe("Overlays", () => {
     it("says how a cell is walked on: its overlay's speed and slipperiness, or bare floor's where there's none", () => {
         const overlays = new Overlays([water(0, 0), { x: 1, y: 0, value: { overlay: "slime", speed: 0.5 } }]);
         expect(overlays.FootingAt(0, 0)).toEqual({ speed: 0.4, slipperiness: 0.5 });
-        expect(overlays.FootingAt(1, 0)).toEqual({ speed: 0.5, slipperiness: 3 });
+        expect(overlays.FootingAt(1, 0)).toEqual({ speed: 0.5, slipperiness: 6 });
         expect(overlays.FootingAt(2, 0)).toEqual({ speed: 1, slipperiness: 1 });
         expect(new Overlays().FootingAt(0, 0)).toBe(BareFloor);
     });

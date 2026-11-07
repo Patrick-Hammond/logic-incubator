@@ -125,8 +125,8 @@ describe("DescribeDataValue", () => {
         expect(DescribeDataValue({ portal: 4 })).toEqual({ text: "portal 4" });
         expect(DescribeDataValue({ portal: 4, arrivalOnly: true })).toEqual({ text: "portal 4 · arrival only" });
         expect(DescribeDataValue({ monsters: ["big_demon"], interval: 4, maxAlive: 2, total: 0, activationRange: 10, hitPoints: 10 })).toEqual({ text: "big demon · every 4s · max 2" });
-        expect(DescribeDataValue({ overlay: "slime", tint: 0x00ff00 })).toEqual({ text: "slime · speed ×0.1 · slipperiness ×3 · mirrors 20%", colour: 0x00ff00 });
-        expect(DescribeDataValue({ overlay: "shiny" })).toEqual({ text: "shiny · speed ×1 · slipperiness ×1.3 · mirrors 35%" });
+        expect(DescribeDataValue({ overlay: "slime", tint: 0x00ff00 })).toEqual({ text: "slime · speed ×0.1 · slipperiness ×6 · mirrors 20%", colour: 0x00ff00 });
+        expect(DescribeDataValue({ overlay: "shiny" })).toEqual({ text: "shiny · speed ×1 · slipperiness ×3 · mirrors 35%" });
     });
 
     it("has nothing to say about no value", () => {
@@ -139,7 +139,7 @@ describe("DescribeDataValue", () => {
         expect(DescribeOverlay({ overlay: "dirt", reflectivity: 0.25 })).toBe("dirt · speed ×0.95 · slipperiness ×1 · mirrors 25%");
         expect(DescribeOverlay({ overlay: "water", alpha: 0.6 })).toBe("water · speed ×0.4 · slipperiness ×0.5 · mirrors 55% · alpha 60%");
         expect(DescribeOverlay({ overlay: "mud", speed: 0.5, slipperiness: 2, alpha: 0.3 })).toBe("mud · speed ×0.5 · slipperiness ×2 · mirrors 15% · alpha 30%");
-        expect(DescribeOverlay({ overlay: "slime", alpha: 0.5, blend: "add" })).toBe("slime · speed ×0.1 · slipperiness ×3 · mirrors 20% · alpha 50% · add");
+        expect(DescribeOverlay({ overlay: "slime", alpha: 0.5, blend: "add" })).toBe("slime · speed ×0.1 · slipperiness ×6 · mirrors 20% · alpha 50% · add");
         expect(DescribeOverlay({ overlay: "moss", blend: "normal" })).toBe("moss · speed ×0.9 · slipperiness ×0.9");
     });
 

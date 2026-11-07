@@ -2108,16 +2108,16 @@ same on every machine, and different in every patch.
 | `dirt` | Clumps in four tones, crumbs loose round them. | `0x86603b` | 0 | 0.95 | 1 |
 | `mud` | Dark and glistening, with a wet glint here and there. | `0x5a3d24` | 15% | 0.3 | 0.1 |
 | `water` | Shallow at the rim and deeper inside, a pale line where it laps at the floor, ripples drifting across. | `0x2f7fb0` | 55% | 0.4 | 0.5 |
-| `slime` | Slowly churning blotches, a bright lip, and bubbles that swell and pop. | `0x5cb83c` | 20% | 0.1 | 3 |
-| `blood` | Splashed, with gaps through it, and drops flung round it. | `0x7a0c0c` | 15% | 0.95 | 1.5 |
+| `slime` | Slowly churning blotches, a bright lip, and bubbles that swell and pop. | `0x5cb83c` | 20% | 0.1 | 6 |
+| `blood` | Splashed, with gaps through it, and drops flung round it. | `0x7a0c0c` | 15% | 0.95 | 2 |
 | `moss` | Two greens, fuzzy at its edges. | `0x5f9136` | 0 | 0.9 | 0.9 |
-| `shiny` | Nothing of its own but a faint sheen in diagonal streaks - only the reflection. Its colour tints what it mirrors (gold, say). | `0xffffff` | 35% | 1 | 1.3 |
+| `shiny` | Nothing of its own but a faint sheen in diagonal streaks - only the reflection. Its colour tints what it mirrors (gold, say). | `0xffffff` | 35% | 1 | 3 |
 
 - **Walking on it.** A hero walks at the overlay's **speed** times their pace on bare floor while their centre is over it - mud at
   0.3 is a trudge, slime at 0.1 all but holds them - from 0.05 up to 1.5 (faster than bare floor). Its **slipperiness** is how long
-  they take to slow down there, as a multiple of bare floor's, from 0, which stops them dead, to 5: letting go they slide on that
+  they take to slow down there, as a multiple of bare floor's, from 0, which stops them dead, to 10: letting go they slide on that
   many times as long, turning round takes as much longer, and a hero who comes onto it faster than it lets them walk keeps their
-  speed that long too - so one who runs onto slime (0.1, 3) skids a few tiles into it before they're stuck, and one who runs into
+  speed that long too - so one who runs onto slime (0.1, 6) skids several tiles into it before they're stuck, and one who runs into
   mud (0.3, 0.1) stops short at its edge (`AxisVelocity`). Setting off and speeding up are as quick on any floor. Each is the kind's
   own (table) unless the brush sets it. It goes for a faded overlay (alpha 0) too - an invisible slick is a trap. Monsters walk over
   overlays as over bare floor.
@@ -3015,7 +3015,7 @@ vertical **toolbar** of tools at the far right. Each palette tab ends in a **+**
   pushes nothing - it's on bare floor, or over something that can't be pushed ([9.5.2](#952-pushing-things)).
 - To lay dirt, water, slime or another **floor overlay**, pick the `overlay` brush (the blue square, last of the attribute types)
   and paint the cells it covers - a new one is water, as water is. Its popup (Edit, or `E`) picks the kind, then that kind's
-  **Speed** (0.05 to 1.5 times the heroes' pace on bare floor) and **Slipperiness** (0, stopping dead, to 5 times as long as bare
+  **Speed** (0.05 to 1.5 times the heroes' pace on bare floor) and **Slipperiness** (0, stopping dead, to 10 times as long as bare
   floor takes to stop them), colour and how much it mirrors, each starting as the kind's own (for a shiny floor the colour is what
   tints its reflection), its **Alpha**, 100% to start with: lower it to let the floor show through, and its **Blend**: Normal, Add,
   Multiply or Screen. Fill a patch with the brush to give it all the new settings. The map draws each overlay as the game will - its
