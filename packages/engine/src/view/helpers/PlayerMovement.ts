@@ -26,6 +26,36 @@ export interface MoveCollider {
 /** Per-frame velocity damping (raised to dt each frame). */
 export const MoveDamping = 0.8;
 
+/** The velocity a full push holds a hero at on bare floor - where adding the push each step and damping by `MoveDamping` settles. */
+export const TopVelocity = 1 / (1 - MoveDamping);
+
+/**
+ * How the floor under someone changes how they move (see `Overlays.FootingAt`): `speed` multiplies how fast they go, and
+ * `slipperiness` how long they take to slow down - when they let go, turn round, or come onto a slower floor at speed - each 1
+ * on bare floor. 0.3 is a third of the speed; 3 takes three times as long to slow, so they slide on; 0 stops them dead.
+ */
+export type Footing = { speed: number; slipperiness: number };
+
+/** Bare floor: as fast as ever, stopping as quickly as ever. */
+export const BareFloor: Footing = { speed: 1, slipperiness: 1 };
+
+/**
+ * One axis of a hero's velocity (what `ResolveMove` moves them by) after a step of `dt` frames on `footing`, pushed `push` that way
+ * (the input, -1 to 1) from `velocity`: it closes on what the push holds them at on that floor - `push` times its `speed` times
+ * `TopVelocity` - a share `MoveDamping` of the gap left each frame while they're speeding up, as on bare floor, and stretched by the
+ * floor's `slipperiness` while they're slowing down: letting go, turning round, or onto a slower floor at speed. So a hero who
+ * runs onto slime skids on into it, and one who runs into mud stops short. On bare floor, at a frame a step, it's exactly the
+ * old way: the push added, then damped by `MoveDamping`.
+ */
+export function AxisVelocity(velocity: number, push: number, footing: Footing, dt: number): number {
+    const target = push * footing.speed * TopVelocity;
+    // Going faster than the push holds them at, or the other way.
+    const slowing = velocity * (velocity - target) > 0;
+    const slipperiness = footing.slipperiness;
+    const keep = !slowing ? Math.pow(MoveDamping, dt) : slipperiness > 0 ? Math.pow(MoveDamping, dt / slipperiness) : 0;
+    return target + (velocity - target) * keep;
+}
+
 /** The tile under a one-tile box's centre, given its top-left in pixels - the cell the player (or a monster) counts as standing on. */
 export function CentreTile(position: Vec2Like): Vec2Like {
     const half = (TileSize - 1) * 0.5;
@@ -69,7 +99,9 @@ export function BoxCentre(position: Vec2Like): Vec2Like {
  * axis is skipped for the frame so the two can't fight (and vice-versa is not
  * needed because X is last).
  *
- * Monsters move the same way, with their own `speed` in place of the player's.
+ * Monsters move the same way, with their own `speed` in place of the player's. `damping` is the share of the velocity kept
+ * after the move - left out, `MoveDamping` raised to `dt`; a hero's velocity is worked out for the floor they're on before the
+ * move instead (see `AxisVelocity`), so theirs is 1.
  */
 export function ResolveMove(
     position: Vec2Like,
@@ -77,6 +109,7 @@ export function ResolveMove(
     dt: number,
     collider: MoveCollider,
     speed: number = PlayerSpeed,
+    damping: number = Math.pow(MoveDamping, dt),
 ): void {
     const deltaX = UpperLimit(velocity.x * dt * speed, TileSize - 1);
     const deltaY = UpperLimit(velocity.y * dt * speed, TileSize - 1);
@@ -133,7 +166,6 @@ export function ResolveMove(
 
     // Raised to dt, not multiplied by it: the same at 60fps (dt 1), but a slow frame (dt past
     // 1.25) no longer stops velocity decaying at all and lets it grow without bound.
-    const damping = Math.pow(MoveDamping, dt);
     velocity.x *= damping;
     velocity.y *= damping;
 

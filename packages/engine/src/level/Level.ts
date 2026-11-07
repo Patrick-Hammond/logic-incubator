@@ -24,6 +24,7 @@ import Overlays, {FindOverlays, OverlayLayerIndex} from "./Overlays";
 import Portals, {IsTeleportValue, Portal} from "./Portals";
 import {FindRegions, Region, RegionIdsTouching} from "./Regions";
 import SceneLights, {MovingLight} from "./SceneLights";
+import type {Footing} from "../view/helpers/PlayerMovement";
 
 export type Tile = Brush & {
     texture: Texture;
@@ -213,6 +214,11 @@ export default class Level {
      */
     PortalJump(from: Vec2Like, to: Vec2Like): Vec2Like | null {
         return this.portals.Jump(from, to, (x, y) => !this.IsSolid(x, y));
+    }
+
+    /** How a hero moves on the cell: as its floor overlay lets them, or as on bare floor (see `Overlays.FootingAt`). */
+    FootingAt(tileX: number, tileY: number): Footing {
+        return this.overlays.FootingAt(tileX, tileY);
     }
 
     /** The NPC on the cell (a `DIALOG` brush), if there is one. */

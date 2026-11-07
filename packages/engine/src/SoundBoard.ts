@@ -19,6 +19,7 @@ import type { MonsterDef, MonsterSounds, MonsterType } from "./level/entities/Mo
 import type { PickupKind } from "./level/entities/Pickups";
 import type { ShotSetup } from "./level/entities/Projectiles";
 import type { CollectedPickup } from "./level/Level";
+import type { OverlayKind } from "./level/Overlays";
 import type { QuestState } from "./story/Quests";
 
 /** The game's sounds for what happens in play, each by name (see `NamedSounds`) - for whatever doesn't name its own. One left out is silent. */
@@ -76,8 +77,10 @@ export type SoundTable = {
     /** An NPC calls out something new. */
     shout?: string;
     pause?: string;
-    /** Each step a hero takes (see `Footsteps`) - played by `DungeonMain`, not for an event. */
+    /** Each step a hero takes (see `Footsteps`) - played by `DungeonMain`, not for an event. Give it takes (`_1` to `_4`), as it plays a lot. */
     footstep?: string;
+    /** A step on a floor overlay, by its kind (see `Overlays`) - in place of `footstep`, which is heard for a kind left out or with no file yet. */
+    footsteps?: Partial<Record<OverlayKind, string>>;
     /** The level's sound, under its music, on a loop everywhere - a level's bundle can have its own (see `AmbientSounds`). */
     ambience?: string;
     /** In place of the level's music while a boss is awake (see `DungeonMainOptions.music`); give it the music volume, as the game does its own tracks. */

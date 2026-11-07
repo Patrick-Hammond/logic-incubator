@@ -14,7 +14,7 @@ import { WeaponDef } from "../level/entities/Projectiles";
 import type { QuestDef } from "../story/Quests";
 import { SeededRandom } from "../Random";
 import World from "../sim/World";
-import { NetTestLevel } from "./__fixtures__/NetTestLevel";
+import { NetTestLevel, Slick } from "./__fixtures__/NetTestLevel";
 import GuestSession from "./GuestSession";
 import HostSession, { AwayAfterMs, HoldAwayMs, WaitForGuestsMs } from "./HostSession";
 import type { LobbySeat } from "./NetMessages";
@@ -554,6 +554,32 @@ describe("an online run", () => {
             expect(guest.world.Heroes[i + 1].Position.x).toBe(run.host.world.Heroes[i + 1].Position.x);
             expect(guest.world.Heroes[i + 1].Position.y).toBe(run.host.world.Heroes[i + 1].Position.y);
             expect(session.Prediction.Corrections).toBe(0);
+        });
+    });
+
+    it("over a slow line, walks a guest's hero over a slippery floor overlay as the host does - sliding on as far, uncorrected", async () => {
+        const random = SeededRandom(11);
+        run.map = [
+            "####################",
+            "#S...~~~~~~~~~.....#",
+            "#....~~~~~~~~~.....#",
+            "#....~~~~~~~~~.....#",
+            "####################"
+        ];
+        await run.Open(2, () => ({ delayMs: 150, jitterMs: 30, lossChance: 0.02, random }));
+        await run.BeginAll();
+        // Each guest's hero dashes onto the slime and lets go, again and again, sliding a long way each time.
+        const walk = (hero: number, frame: number) => (frame % 90 < 30 ? Input(Math.floor(frame / 90 + hero) % 2 ? -1 : 1, Math.sin(frame / 30 + hero)) : undefined);
+        await run.Frames(720, walk);
+        await run.Frames(240, () => undefined);
+        expect(Slick.overlay).toBe("slime");
+        run.guests.forEach((guest, i) => {
+            const mine = guest.world.Heroes[i + 1];
+            const theirs = run.host.world.Heroes[i + 1];
+            expect(guest.level.FootingAt(mine.Tile.x, mine.Tile.y)).toEqual(run.host.level.FootingAt(theirs.Tile.x, theirs.Tile.y));
+            expect(mine.Position.x).toBe(theirs.Position.x);
+            expect(mine.Position.y).toBe(theirs.Position.y);
+            expect((guest.session as GuestSession).Prediction.Corrections).toBe(0);
         });
     });
 

@@ -2,7 +2,7 @@
  * A level for the online tests, from an ASCII map: `#` solid, `D` the cells of
  * one door, `S` the start, `E` a way out, `$` a gold pickup, `k` the key to the
  * door when it's locked, `@` a spawner's (solid) cell, a digit a portal with
- * that id, `P` a one-cell crate a hero can push - the gold marked for the quest `gold`, if `quests` has one. Its doors open by the
+ * that id, `P` a one-cell crate a hero can push, `~` a slippery floor (`Slick`) - the gold marked for the quest `gold`, if `quests` has one. Its doors open by the
  * same rule as `Level`'s (`DoorOpens`) and can be set from a snapshot; pickups
  * are taken and dropped as `Level` does them. Two copies of the same map are
  * the host's level and a guest's.
@@ -16,6 +16,7 @@ import { NoLock } from "../../level/entities/Keys";
 import { PickupArea, PickupSpot, PickupValue } from "../../level/entities/Pickups";
 import { CanMove, Pushable } from "../../level/entities/Pushables";
 import { DefaultSpawnerValue, Spawner } from "../../level/entities/Spawners";
+import Overlays, { OverlayPlacement, OverlayValue } from "../../level/Overlays";
 import Portals, { Portal } from "../../level/Portals";
 import type { QuestDef } from "../../story/Quests";
 import type { NetLevel } from "../NetPlay";
@@ -25,6 +26,9 @@ type Door = { cells: Vec2Like[]; isOpen: boolean; lockId: number };
 
 export type NetTestLevel = Omit<NetLevel, "pickups"> & { door: Door; pickups: Pickup[]; visibleFrom: Vec2Like[] };
 
+/** The overlay on a `~` cell: slime, three times as slippery as bare floor, at a little over half the pace - quick enough to slide a long way. */
+export const Slick: OverlayValue = { overlay: "slime", speed: 0.6 };
+
 export function NetTestLevel(rows: string[], lockId = NoLock, monsters: string[] = ["walker"], quests: QuestDef[] = []): NetTestLevel {
     const collisionData: boolean[][] = [];
     const door: Door = { cells: [], isOpen: false, lockId };
@@ -33,9 +37,13 @@ export function NetTestLevel(rows: string[], lockId = NoLock, monsters: string[]
     const spawners: Spawner[] = [];
     const portals: Portal[] = [];
     const pushables: Pushable[] = [];
+    const overlays: OverlayPlacement[] = [];
     let start: Vec2Like | undefined;
     rows.forEach((row, y) => row.split("").forEach((c, x) => {
         (collisionData[x] = collisionData[x] || [])[y] = c === "#" || c === "@" || c === "P";
+        if (c === "~") {
+            overlays.push({ x, y, value: Slick });
+        }
         if (c === "P") {
             pushables.push({ x, y, cells: [{ x, y }], sprite: "crate" });
         }
@@ -60,6 +68,7 @@ export function NetTestLevel(rows: string[], lockId = NoLock, monsters: string[]
     const isSolid = (x: number, y: number) => x < 0 || y < 0 || x >= width || y >= height || collisionData[x][y];
     const isDoor = (x: number, y: number) => door.cells.some(c => c.x === x && c.y === y);
     const portalSet = new Portals(portals);
+    const footing = new Overlays(overlays);
     let doorVersion = 0;
     const doors = door.cells.length ? [door] : [];
     const level: NetTestLevel = {
@@ -87,6 +96,7 @@ export function NetTestLevel(rows: string[], lockId = NoLock, monsters: string[]
         IsFloor: (x, y) => !isSolid(x, y) && !isDoor(x, y),
         IsExit: (x, y) => exits.some(e => e.x === x && e.y === y),
         PortalJump: (from, to) => portalSet.Jump(from, to, (x, y) => !isSolid(x, y)),
+        FootingAt: (x, y) => footing.FootingAt(x, y),
         IsTalker: () => false,
         Marked: (kind, quest) => (kind === "collect" ? pickups.filter(p => p.value.quest === quest).length : 0),
         IsDoorLocked: (x, y, canOpen) => isDoor(x, y) && !door.isOpen && !canOpen(door.lockId),

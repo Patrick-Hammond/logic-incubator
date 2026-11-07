@@ -27,8 +27,8 @@ const JumpDistance = 2 * TileSize;
 /** A difference smaller than this, in pixels, isn't counted as a correction. */
 const Unnoticed = 0.5;
 
-/** What a step needs of the level, besides the collider: the portals (see `TakePortal`). */
-export type PredictionLevel = Pick<WorldLevel, "PortalJump">;
+/** What a step needs of the level, besides the collider: the portals (see `TakePortal`), and the floor's footing (see `Footing`). */
+export type PredictionLevel = Pick<WorldLevel, "PortalJump" | "FootingAt">;
 
 export default class Prediction {
     /** How far from where they are the hero is drawn, in pixels: what's left of the last corrections, shrinking each frame. */
@@ -84,7 +84,7 @@ export default class Prediction {
     /**
      * One step of `hero` with `input`, numbered and kept - the numbered input is what to send. A fallen hero doesn't
      * move, but their inputs still go, so the host's count of them keeps up. `others` are the heroes they could warp
-     * to, as drawn; `collider` the world's; `level` has the portals.
+     * to, as drawn; `collider` the world's; `level` has the portals and what each cell's floor is like to walk on.
      */
     Step(hero: Hero, input: IPlayerInput, others: ReadonlyArray<Hero>, collider: MoveCollider, level: PredictionLevel): IPlayerInput {
         const numbered = QuantiseInput(input, ++this.seq);
@@ -140,13 +140,16 @@ export default class Prediction {
     }
 }
 
-/** One step, as `World.Step` takes it: a warp to the party if asked for and allowed, then the move, then through a portal walked onto - returned, if one was. */
+/**
+ * One step, as `World.Step` takes it: a warp to the party if asked for and allowed, then the move, on the floor they start it on, then
+ * through a portal walked onto - returned, if one was.
+ */
 function Move(hero: Hero, input: IPlayerInput, others: ReadonlyArray<Hero>, collider: MoveCollider, level: PredictionLevel): PortalTrip | null {
     const to = input.warping ? WarpTarget(hero, others) : null;
     if (to) {
         hero.WarpTo(to.Position);
     }
     const from = hero.Tile;
-    hero.Step(input, 1, StepSeconds, collider);
+    hero.Step(input, 1, StepSeconds, collider, level.FootingAt(from.x, from.y));
     return TakePortal(hero, from, level);
 }

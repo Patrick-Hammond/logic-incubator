@@ -13,13 +13,15 @@ import type { MonsterDef } from "../level/entities/MonsterRoster";
 import { PickupArea, PickupSpot, PickupValue } from "../level/entities/Pickups";
 import { WeaponDef } from "../level/entities/Projectiles";
 import { CanMove, Pushable, PushDelay } from "../level/entities/Pushables";
+import Overlays, { OverlayPlacement } from "../level/Overlays";
 import Portals, { Portal } from "../level/Portals";
 import type { QuestDef } from "../story/Quests";
 import World, { StartCells, WarpDistance, WorldLevel } from "./World";
 
 /**
  * Whole steps of play for a party on ASCII maps (`#` solid, `D` the cells of one door, `S` the start, `E` a way out, `N` an NPC,
- * a digit a portal with that id, `a` an arrival-only portal 1, `P` a one-cell crate a hero can push), with the real heroes, collision
+ * a digit a portal with that id, `a` an arrival-only portal 1, `P` a one-cell crate a hero can push, `m` mud and `~` slime - floor overlays,
+ * walked on as their kinds are), with the real heroes, collision
  * and encounter - only the level is a stand-in, its doors following the same rule as `Level`'s (`DoorOpens`), and what can be
  * pushed where too (`CanMove`).
  */
@@ -45,9 +47,13 @@ function Level(rows: string[], lockId = NoLock, quests: QuestDef[] = []): TestLe
     const npcs: Vec2Like[] = [];
     const portals: Portal[] = [];
     const pushables: Pushable[] = [];
+    const overlays: OverlayPlacement[] = [];
     let start: Vec2Like | undefined;
     rows.forEach((row, y) => row.split("").forEach((c, x) => {
         (collisionData[x] = collisionData[x] || [])[y] = c === "#" || c === "N" || c === "P";
+        if (c === "m" || c === "~") {
+            overlays.push({ x, y, value: { overlay: c === "m" ? "mud" : "slime" } });
+        }
         if (c === "N") {
             npcs.push({ x, y });
         }
@@ -72,6 +78,7 @@ function Level(rows: string[], lockId = NoLock, quests: QuestDef[] = []): TestLe
     const isSolid = (x: number, y: number) => x < 0 || y < 0 || x >= width || y >= height || collisionData[x][y];
     const isDoor = (x: number, y: number) => door.cells.some(c => c.x === x && c.y === y);
     const portalSet = new Portals(portals);
+    const footing = new Overlays(overlays);
     let doorVersion = 0;
     const level: TestLevel = {
         door,
@@ -94,6 +101,7 @@ function Level(rows: string[], lockId = NoLock, quests: QuestDef[] = []): TestLe
         IsFloor: (x, y) => !isSolid(x, y) && !isDoor(x, y),
         IsExit: (x, y) => exits.some(e => e.x === x && e.y === y),
         PortalJump: (from, to) => portalSet.Jump(from, to, (x, y) => !isSolid(x, y)),
+        FootingAt: (x, y) => footing.FootingAt(x, y),
         IsTalker: (x, y) => npcs.some(n => n.x === x && n.y === y),
         Marked: (kind, quest) => (kind === "collect" ? level.pickups.filter(p => p.value.quest === quest).length : 0),
         IsDoorLocked: (x, y, canOpen) => isDoor(x, y) && !door.isOpen && !canOpen(door.lockId),
@@ -244,6 +252,27 @@ describe("World", () => {
         world.Step([Input(1, 0)], 1, FRAME);
         expect(world.Heroes[0].Position.x).toBeGreaterThan(before[0].x);
         expect(world.Heroes[1].Position).toEqual(before[1]);
+    });
+
+    it("walks each hero at the pace of the floor overlay they're on - mud slowing them, slime letting them slide on", () => {
+        const walk = (row: string, steps: number, coast: number) => {
+            const { world } = Setup(["############", row, "############"], 1);
+            for (let i = 0; i < steps; i++) {
+                world.Step([Input(1, 0)], 1, FRAME);
+            }
+            const x = world.Heroes[0].Position.x;
+            for (let i = 0; i < coast; i++) {
+                world.Step([], 1, FRAME);
+            }
+            return { x, slid: world.Heroes[0].Position.x - x };
+        };
+        const bare = walk("#S.........#", 40, 0);
+        const mud = walk("#Smmmmmmmmm#", 40, 0);
+        // A few steps on bare floor - off the start - then mud, at 0.3 of the pace.
+        expect(mud.x).toBeLessThan(bare.x * 0.5);
+        expect(mud.x).toBeGreaterThan(bare.x * 0.3);
+        // On to the slime from bare floor, then let go: a long slide, if a slow one.
+        expect(walk("#S~~~~~~~~~#", 12, 120).slid).toBeGreaterThan(walk("#S.........#", 12, 120).slid * 0.1 * 2.5);
     });
 
     it("counts a hero as moving while they walk - not standing, walking into a wall, come to a stop, fallen or away", () => {

@@ -6,9 +6,9 @@ attribute vec2 aPattern;
 attribute vec2 aCell;
 // This corner's light, as a tile's (see Lighting.CellCornerLight).
 attribute vec3 aLight;
-// Alpha (how solid it's drawn, its reflection too), seed, reflectivity and joins (OverlayJoin bits). Not its kind: the fragment
+// Alpha (how solid it's drawn, its reflection too), reflectivity and joins (OverlayJoin bits). Not its kind: the fragment
 // shader is built for one kind (see OverlayLayer).
-attribute vec4 aLook;
+attribute vec3 aLook;
 attribute vec3 aTint;
 
 uniform mat3 projectionMatrix;
@@ -20,7 +20,7 @@ varying vec2 vPattern;
 varying vec2 vCell;
 varying vec2 vScreen;
 varying vec3 vLight;
-varying vec4 vLook;
+varying vec3 vLook;
 varying vec3 vTint;
 
 void main(void)

@@ -7,7 +7,7 @@ import { DefaultBossValue } from "@logic-incubator/engine/level/entities/Bosses"
 import { DefaultDialogValue } from "@logic-incubator/engine/story/Talk";
 import { DataBrushName } from "@logic-incubator/engine/level/LevelFormat";
 import { DefaultLightValue } from "@logic-incubator/engine/level/Lighting";
-import { DefaultOverlayValue, MaxOverlaySeed, OverlayLooks } from "@logic-incubator/engine/level/Overlays";
+import { DefaultOverlayValue, MaxOverlaySpeed, OverlayFootings, OverlayLooks } from "@logic-incubator/engine/level/Overlays";
 import { DataBrushEditorFor } from "./DataBrushEditors";
 import { IsFieldVisible } from "./ui/dialog/FormDialog";
 
@@ -85,43 +85,55 @@ describe("the overlay editor", () => {
     const visible = (form: ReturnType<typeof overlay.toForm>) =>
         overlay.fields(noImages).filter(field => IsFieldVisible(field, form)).map(field => field.key);
 
-    it("starts anything that isn't an overlay yet as the brush's own water, seed 1", () => {
+    it("starts anything that isn't an overlay yet as the brush's own water", () => {
         expect(overlay.fromForm(overlay.toForm(0))).toEqual(DefaultOverlayValue());
     });
 
-    it("round-trips an overlay, saving a colour or reflectivity only where it isn't the kind's own", () => {
-        expect(overlay.fromForm(overlay.toForm({ overlay: "slime", seed: 42 }))).toEqual({ overlay: "slime", seed: 42 });
-        const tinted = { overlay: "water" as const, seed: 7, tint: 0x205020, reflectivity: 0.8 };
+    it("round-trips an overlay, saving a speed, slipperiness, colour or reflectivity only where it isn't the kind's own", () => {
+        expect(overlay.fromForm(overlay.toForm({ overlay: "slime" }))).toEqual({ overlay: "slime" });
+        const tinted = { overlay: "water" as const, speed: 0.75, slipperiness: 2.5, tint: 0x205020, reflectivity: 0.8 };
         expect(overlay.fromForm(overlay.toForm(tinted))).toEqual(tinted);
         expect(overlay.toForm(tinted)).toMatchObject({ reflectivity_water: 80, tint_mud: OverlayLooks.mud.tint, reflectivity_mud: 15, alpha: 100 });
+        expect(overlay.toForm(tinted)).toMatchObject({ speed_water: 0.75, slipperiness_water: 2.5, speed_mud: 0.3, slipperiness_mud: 0.1 });
+    });
+
+    it("starts each kind's speed and slipperiness as the kind's own, and lets the slipperiness go to 0 - stopping dead", () => {
+        const form = overlay.toForm({ overlay: "water" });
+        Object.keys(OverlayFootings).forEach(kind => {
+            expect(form["speed_" + kind]).toBe(OverlayFootings[kind as keyof typeof OverlayFootings].speed);
+            expect(form["slipperiness_" + kind]).toBe(OverlayFootings[kind as keyof typeof OverlayFootings].slipperiness);
+        });
+        expect(overlay.fromForm({ ...form, slipperiness_water: 0 })).toEqual({ overlay: "water", slipperiness: 0 });
+        const speed = overlay.fields(noImages).find(f => f.key === "speed_water");
+        expect(speed.type === "number" && [speed.min, speed.max]).toEqual([0.05, 1.5]);
     });
 
     it("round-trips its alpha as a percentage, saving it only where it fades the overlay", () => {
-        const faint = { overlay: "blood" as const, seed: 2, alpha: 0.4 };
+        const faint = { overlay: "blood" as const, alpha: 0.4 };
         expect(overlay.toForm(faint)).toMatchObject({ alpha: 40 });
         expect(overlay.fromForm(overlay.toForm(faint))).toEqual(faint);
-        expect(overlay.fromForm({ ...overlay.toForm(faint), alpha: 100 })).toEqual({ overlay: "blood", seed: 2 });
-        expect(overlay.fromForm({ ...overlay.toForm(faint), alpha: 0 })).toEqual({ overlay: "blood", seed: 2, alpha: 0 });
+        expect(overlay.fromForm({ ...overlay.toForm(faint), alpha: 100 })).toEqual({ overlay: "blood" });
+        expect(overlay.fromForm({ ...overlay.toForm(faint), alpha: 0 })).toEqual({ overlay: "blood", alpha: 0 });
     });
 
     it("round-trips its blend, starting as normal and saving it only where it isn't", () => {
-        expect(overlay.toForm({ overlay: "moss", seed: 1 })).toMatchObject({ blend: "normal" });
-        expect(overlay.fromForm(overlay.toForm({ overlay: "moss", seed: 1, blend: "screen" }))).toEqual({ overlay: "moss", seed: 1, blend: "screen" });
-        expect(overlay.fromForm({ ...overlay.toForm({ overlay: "moss", seed: 1 }), blend: "multiply" })).toEqual({ overlay: "moss", seed: 1, blend: "multiply" });
-        expect(overlay.fromForm({ ...overlay.toForm({ overlay: "moss", seed: 1, blend: "add" }), blend: "normal" })).toEqual({ overlay: "moss", seed: 1 });
+        expect(overlay.toForm({ overlay: "moss" })).toMatchObject({ blend: "normal" });
+        expect(overlay.fromForm(overlay.toForm({ overlay: "moss", blend: "screen" }))).toEqual({ overlay: "moss", blend: "screen" });
+        expect(overlay.fromForm({ ...overlay.toForm({ overlay: "moss" }), blend: "multiply" })).toEqual({ overlay: "moss", blend: "multiply" });
+        expect(overlay.fromForm({ ...overlay.toForm({ overlay: "moss", blend: "add" }), blend: "normal" })).toEqual({ overlay: "moss" });
         const blend = overlay.fields(noImages).find(f => f.key === "blend");
         expect(blend.type === "choice" && blend.options.map(o => o.value)).toEqual(["normal", "add", "multiply", "screen"]);
     });
 
-    it("shows only the chosen kind's colour and reflectivity - a shiny floor's colour tinting its reflection - and the alpha and blend for every kind", () => {
-        expect(visible(overlay.toForm({ overlay: "mud", seed: 1 }))).toEqual(["overlay", "seed", "tint_mud", "reflectivity_mud", "alpha", "blend"]);
-        expect(visible(overlay.toForm({ overlay: "shiny", seed: 1 }))).toEqual(["overlay", "seed", "reflectivity_shiny", "tint_shiny", "alpha", "blend"]);
+    it("shows only the chosen kind's speed, slipperiness, colour and reflectivity - a shiny floor's colour tinting its reflection - and the alpha and blend for every kind", () => {
+        expect(visible(overlay.toForm({ overlay: "mud" }))).toEqual(["overlay", "speed_mud", "slipperiness_mud", "tint_mud", "reflectivity_mud", "alpha", "blend"]);
+        expect(visible(overlay.toForm({ overlay: "shiny" }))).toEqual(["overlay", "speed_shiny", "slipperiness_shiny", "reflectivity_shiny", "tint_shiny", "alpha", "blend"]);
     });
 
     it("saves the kind chosen with that kind's own fields, whatever was left in another's", () => {
-        const form = { ...overlay.toForm({ overlay: "water", seed: 3, tint: 0x111111 }), overlay: "dirt" };
-        expect(overlay.fromForm(form)).toEqual({ overlay: "dirt", seed: 3 });
-        expect(overlay.fromForm({ ...form, seed: 123456, reflectivity_dirt: 30 })).toEqual({ overlay: "dirt", seed: MaxOverlaySeed, reflectivity: 0.3 });
+        const form = { ...overlay.toForm({ overlay: "water", speed: 1, tint: 0x111111 }), overlay: "dirt" };
+        expect(overlay.fromForm(form)).toEqual({ overlay: "dirt" });
+        expect(overlay.fromForm({ ...form, speed_dirt: 99, reflectivity_dirt: 30 })).toEqual({ overlay: "dirt", speed: MaxOverlaySpeed, reflectivity: 0.3 });
     });
 });
 

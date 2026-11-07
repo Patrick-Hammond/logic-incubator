@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import Level from "../../level/Level";
 import TileCollision from "../../level/TileCollision";
-import { CentreTile, MoveCollider, ResolveMove } from "./PlayerMovement";
+import { AxisVelocity, CentreTile, MoveCollider, MoveDamping, ResolveMove, TopVelocity } from "./PlayerMovement";
 
 /**
  * Frame-by-frame simulations of the real movement loop:
@@ -319,5 +319,64 @@ describe("driving into a ONE-tile DOORWAY in a vertical wall - the mirror head-s
     it("does NOT drop through / slip when only running along the wall (single key)", () => {
         const t = simulate({ collider: c, start: { x: 5 * TILE, y: 60 * TILE }, keys: { up: true }, frames: 300 });
         expect(t.some(f => f.x > 10 * TILE)).toBe(false); // stays in the corridor, never enters the wall column
+    });
+});
+
+describe("AxisVelocity", () => {
+    const bare = { speed: 1, slipperiness: 1 };
+
+    it("on bare floor, is the push added and then damped, as it always was", () => {
+        let now = 0;
+        // What was left of it after the last step's damping.
+        let left = 0;
+        [1, 1, 1, 0, 0, -1, -1, 0.5, 0, 1].forEach(push => {
+            now = AxisVelocity(now, push, bare, 1);
+            const old = left + push;
+            left = old * MoveDamping;
+            expect(now).toBeCloseTo(old, 10);
+        });
+    });
+
+    it("settles at the floor's speed times bare floor's top velocity, pushed", () => {
+        let v = 0;
+        for (let i = 0; i < 200; i++) {
+            v = AxisVelocity(v, 1, { speed: 0.3, slipperiness: 1 }, 1);
+        }
+        expect(v).toBeCloseTo(0.3 * TopVelocity, 10);
+        expect(TopVelocity).toBeCloseTo(5, 10);
+    });
+
+    it("speeds up as quickly on any floor, and slows the slipperiness times as slowly", () => {
+        expect(AxisVelocity(0, 1, { speed: 1, slipperiness: 3 }, 1)).toBeCloseTo(AxisVelocity(0, 1, bare, 1), 12);
+        // Let go of at 4: a share kept MoveDamping^(1 / slipperiness).
+        expect(AxisVelocity(4, 0, { speed: 1, slipperiness: 3 }, 1)).toBeCloseTo(4 * Math.pow(MoveDamping, 1 / 3), 12);
+        expect(AxisVelocity(4, 0, { speed: 1, slipperiness: 0.5 }, 1)).toBeCloseTo(4 * MoveDamping * MoveDamping, 12);
+        expect(AxisVelocity(4, -1, { speed: 1, slipperiness: 0 }, 1)).toBe(-TopVelocity);
+    });
+
+    it("carries a hero onto a slower floor at speed, slowing to its pace as its slipperiness lets them", () => {
+        const slime = { speed: 0.1, slipperiness: 3 };
+        const target = 0.1 * TopVelocity;
+        expect(AxisVelocity(5, 1, slime, 1)).toBeCloseTo(target + (5 - target) * Math.pow(MoveDamping, 1 / 3), 12);
+        expect(AxisVelocity(5, 1, { speed: 0.3, slipperiness: 0.1 }, 1)).toBeLessThan(2);
+    });
+});
+
+describe("ResolveMove's damping", () => {
+    const open: MoveCollider = { TestX: () => null, TestY: () => null, GapAlignX: () => null, GapAlignY: () => null, IsHeightBlocked: () => false };
+
+    it("keeps the share it's given of the velocity, after the move", () => {
+        const position = { x: 0, y: 0 };
+        const velocity = { x: 2, y: -2 };
+        ResolveMove(position, velocity, 1, open, 1, 1);
+        expect(position).toEqual({ x: 2, y: -2 });
+        expect(velocity).toEqual({ x: 2, y: -2 });
+    });
+
+    it("damps by MoveDamping without one", () => {
+        const velocity = { x: 2, y: -2 };
+        ResolveMove({ x: 0, y: 0 }, velocity, 1, open, 1);
+        expect(velocity.x).toBeCloseTo(2 * MoveDamping, 12);
+        expect(velocity.y).toBeCloseTo(-2 * MoveDamping, 12);
     });
 });

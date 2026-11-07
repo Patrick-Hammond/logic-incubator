@@ -1605,7 +1605,7 @@ export function Dungeon(): () => void {
 | `heroes?` | `() => HeroSlot[] \| undefined`. Who plays: one slot per hero, called on every start/restart. Each slot gives that hero's `input` device, `animations`, `lightSpell`, `name` and `sounds`. Leave it out (or return `undefined` or `[]`) for one hero on the keyboard or the first gamepad. See [9.3.1](#931-playing-together). |
 | `level` | `() => LevelFile \| undefined`. Called on every start/restart. In a dev build return the editor's latest save first (`editor.savedLevel() \|\| shipped`). |
 | `levelBundle?` | `() => string \| undefined`. The asset bundle the level plays in. Loaded (with its dependencies) *before* the level is built; the previous one is released after. |
-| `sounds?` | `SoundTable`. What play sounds like, where the thing it happens to doesn't name a sound of its own: each a sound by name, skipped while the build has no file for it ([9.8](#98-events-and-hooks)). Its `footstep`, `ambience` and `bossMusic` the scene plays itself. |
+| `sounds?` | `SoundTable`. What play sounds like, where the thing it happens to doesn't name a sound of its own: each a sound by name, skipped while the build has no file for it ([9.8](#98-events-and-hooks)). Its `footstep` (and `footsteps`, by floor overlay), `ambience` and `bossMusic` the scene plays itself. |
 | `music?` | `() => SoundId \| undefined`. The track the level plays to, on a loop - usually one in the level's bundle, and `lazy`, so it loads as it starts. Called on every start/restart: the same track carries on through a restart and into a next level that asks for it, a different one takes over. It plays only while the dungeon is showing, so it stops behind the editor or the title. While a boss is awake, `sounds.bossMusic` plays in its place, and the level's track comes back from the top once the boss falls. Leave it out (or return `undefined`) for silence. |
 | `overlay?` | `(main: DungeonMain) => GameComponent`. Called once; what it returns is attached above the HUD and kept with the scene. It gets the scene so it can `Pause()`, `Resume()` and `Restart()` it, and listens to `ALL_PLAYERS_DIED`, `LEVEL_COMPLETED` and the other events. This is how a game adds a pause menu and an end-of-level screen without the engine knowing what they look like. |
 | `manualRestart?` | `boolean`. The end of a level - everyone down, or a hero out - holds everything still until `main.Restart()` is called, instead of starting over by itself 1.5 s later - for a game whose `overlay` offers a choice (try again, quit). |
@@ -2030,7 +2030,7 @@ a cell can be solid, an NPC's and a pickup all at once (a tile layer still holds
 | `light` | a `LightValue` | A point light on its cell, set in its popup - the same settings as a lit tile's (see `light` in [9.6](#96-assets-metajson-tile-behaviour-by-sprite-name)): a light anywhere, with or without a torch. Painted on a lit tile's cell (a torch), it takes the place of that tile's light rather than adding a second, so it retunes the torch. It goes out with the tile it's on - the lit one, or else the top one that isn't floor - so a light painted on a gem goes when the gem's picked up, and one on a spawner when it's destroyed. On bare floor it's a light on its own, always on. It adds no glow sprite (a torch tile has its own). A brush whose value is missing a field is left out. |
 | `teleport` | a `TeleportValue` | A portal - `{ portal, arrivalOnly? }`: a hero who walks onto it comes out of another portal with the same id ([9.5.1](#951-portals)). It isn't drawn - paint a rune, a pad or a hole there too. |
 | `pushable` | - | Lets a hero push the object it's painted over - a crate, a barrel, a statue ([9.5.2](#952-pushing-things)): the top tile on its cell that isn't floor, as a `spawner` brush picks one, solid over its sprite's footprint wherever it's pushed to. |
-| `overlay` | an `OverlayValue` | A **floor overlay** on its cell - `{ overlay, seed, tint?, reflectivity?, alpha?, blend? }`: dirt, mud, water, slime, blood, moss or a shiny floor, its shape and pattern made up from its seed as it's drawn, and mirroring the heroes, monsters and walls over it if it reflects ([9.5.3](#953-floor-overlays)). It's only a look: it doesn't change where anyone can walk. |
+| `overlay` | an `OverlayValue` | A **floor overlay** on its cell - `{ overlay, speed?, slipperiness?, tint?, reflectivity?, alpha?, blend? }`: dirt, mud, water, slime, blood, moss or a shiny floor, its shape and pattern made up as it's drawn, mirroring the heroes, monsters and walls over it if it reflects, and slowing the heroes or letting them slide as its kind does ([9.5.3](#953-floor-overlays)). It doesn't change where anyone can walk, only how. |
 
 Doors are **not** brushes: they are ordinary tiles that carry their behaviour in `assets-meta.json`. A light, a pickup or a
 spawner can be either: a tile that is one by default, or a brush over any other tile - a `light` or `spawner` brush on bare
@@ -2091,32 +2091,43 @@ heroes, monsters and shots alike.
 #### 9.5.3 Floor overlays
 
 An `overlay` brush lays dirt, mud, water, slime, blood, moss or a **shiny floor** over its cell (`Overlays`, drawn by
-`OverlayLayer` with `overlay.frag`). Nothing of its look is stored but its kind and a **seed** - and its colour and how much it
-mirrors, where they aren't its kind's own, its **alpha** (0 to 1), where it's faded, and its **blend**, where it isn't laid over the floor as normal: the shape of the patch, its edge and the pattern inside are made up from those as it's
-drawn, pixel by pixel on the level's own pixel grid, so they're as blocky as the art round them and the same on every machine.
+`OverlayLayer` with `overlay.frag`). Nothing of it is stored but its kind - and, where they aren't its kind's own, how the heroes
+move over it (its **speed** and **slipperiness**), its colour and how much it mirrors, its **alpha** (0 to 1), where it's faded,
+and its **blend**, where it isn't laid over the floor as normal: the shape of the patch, its edge and the pattern inside are made up
+as it's drawn, pixel by pixel from where each one is on the level's own pixel grid, so they're as blocky as the art round them, the
+same on every machine, and different in every patch.
 
 ```jsonc
-{ "name": "overlay", "position": { "x": 12, "y": 7 }, "layerId": -99999, "data": { "overlay": "water", "seed": 3 }, ... }
-{ "name": "overlay", "position": { "x": 30, "y": 9 }, "layerId": -99999, "data": { "overlay": "shiny", "seed": 1, "tint": 16766720, "reflectivity": 0.5 }, ... }
-{ "name": "overlay", "position": { "x": 4, "y": 20 }, "layerId": -99999, "data": { "overlay": "blood", "seed": 7, "alpha": 0.4, "blend": "multiply" }, ... }
+{ "name": "overlay", "position": { "x": 12, "y": 7 }, "layerId": -99999, "data": { "overlay": "water" }, ... }
+{ "name": "overlay", "position": { "x": 30, "y": 9 }, "layerId": -99999, "data": { "overlay": "shiny", "slipperiness": 4, "tint": 16766720, "reflectivity": 0.5 }, ... }
+{ "name": "overlay", "position": { "x": 4, "y": 20 }, "layerId": -99999, "data": { "overlay": "blood", "speed": 0.8, "alpha": 0.4, "blend": "multiply" }, ... }
 ```
 
-| Kind | Looks like | Colour | Mirrors |
-| --- | --- | --- | --- |
-| `dirt` | Clumps in four tones, crumbs loose round them. | `0x86603b` | 0 |
-| `mud` | Dark and glistening, with a wet glint here and there. | `0x5a3d24` | 15% |
-| `water` | Shallow at the rim and deeper inside, a pale line where it laps at the floor, ripples drifting across. | `0x2f7fb0` | 55% |
-| `slime` | Slowly churning blotches, a bright lip, and bubbles that swell and pop. | `0x5cb83c` | 20% |
-| `blood` | Splashed, with gaps through it, and drops flung round it. | `0x7a0c0c` | 15% |
-| `moss` | Two greens, fuzzy at its edges. | `0x5f9136` | 0 |
-| `shiny` | Nothing of its own but a faint sheen in diagonal streaks - only the reflection. Its colour tints what it mirrors (gold, say). | `0xffffff` | 35% |
+| Kind | Looks like | Colour | Mirrors | Speed | Slipperiness |
+| --- | --- | --- | --- | --- | --- |
+| `dirt` | Clumps in four tones, crumbs loose round them. | `0x86603b` | 0 | 0.95 | 1 |
+| `mud` | Dark and glistening, with a wet glint here and there. | `0x5a3d24` | 15% | 0.3 | 0.1 |
+| `water` | Shallow at the rim and deeper inside, a pale line where it laps at the floor, ripples drifting across. | `0x2f7fb0` | 55% | 0.4 | 0.5 |
+| `slime` | Slowly churning blotches, a bright lip, and bubbles that swell and pop. | `0x5cb83c` | 20% | 0.1 | 3 |
+| `blood` | Splashed, with gaps through it, and drops flung round it. | `0x7a0c0c` | 15% | 0.95 | 1.5 |
+| `moss` | Two greens, fuzzy at its edges. | `0x5f9136` | 0 | 0.9 | 0.9 |
+| `shiny` | Nothing of its own but a faint sheen in diagonal streaks - only the reflection. Its colour tints what it mirrors (gold, say). | `0xffffff` | 35% | 1 | 1.3 |
 
-- **Patches.** Cells side by side with the same kind and seed, at the same height, are one **patch**: it's edged only where it
-  ends, with a ragged shore that wanders well inside the painted cells in places, and rounded outer corners - so a pool painted
-  over six cells is one pool, not six squares. Another seed is another shape and pattern, and two patches with different seeds
-  side by side are edged apart. A patch doesn't run up or down a step ([9.7](#97-heights)): it's drawn in its cell's height band,
-  like the floor there. A brush whose kind the game doesn't know draws nothing, and a later brush on a cell takes the place of
-  an earlier one.
+- **Walking on it.** A hero walks at the overlay's **speed** times their pace on bare floor while their centre is over it - mud at
+  0.3 is a trudge, slime at 0.1 all but holds them - from 0.05 up to 1.5 (faster than bare floor). Its **slipperiness** is how long
+  they take to slow down there, as a multiple of bare floor's, from 0, which stops them dead, to 5: letting go they slide on that
+  many times as long, turning round takes as much longer, and a hero who comes onto it faster than it lets them walk keeps their
+  speed that long too - so one who runs onto slime (0.1, 3) skids a few tiles into it before they're stuck, and one who runs into
+  mud (0.3, 0.1) stops short at its edge (`AxisVelocity`). Setting off and speeding up are as quick on any floor. Each is the kind's
+  own (table) unless the brush sets it. It goes for a faded overlay (alpha 0) too - an invisible slick is a trap. Monsters walk over
+  overlays as over bare floor.
+- **Patches.** Cells side by side of the same kind, at the same height, are one **patch**: it's edged only where it ends, with a
+  ragged shore that wanders well inside the painted cells in places, and rounded outer corners - so a pool painted over six cells
+  is one pool, not six squares. Two patches of one kind painted side by side join into one; to keep them apart, leave a cell between.
+  A patch doesn't run up or down a step ([9.7](#97-heights)): it's drawn in its cell's height band, like the floor there. A brush
+  whose kind the game doesn't know draws nothing, and a later brush on a cell takes the place of an earlier one.
+- **Older levels.** Overlays painted before they set the heroes' pace each have a `seed`, which is let go: they walk as their kind,
+  and those painted with the seed every brush started with (1) look as they did.
 - **Where it's drawn.** Just over the last floor layer under the player divider (`OverlayLayerIndex`; with no floor layer, over
   the first layer), so it lies on the floor and under the walls, the props and everyone standing there, and it's lit as the
   floor under it is: dark in the shadows, warm by a torch. It shows only where the floor does: not in a room the heroes
@@ -2133,10 +2144,13 @@ drawn, pixel by pixel on the level's own pixel grid, so they're as blocky as the
   darkening the floor by its colour, like a stain soaked in (its own colour isn't lit again, as the floor under it is lit
   already); `screen` lightening the floor, like a sheen. It goes for all it draws, its reflection too. Each is the GPU's own
   blending, so no blend costs more than another; it's another draw call for each kind and blend on screen.
-- Cells that differ only in colour, reflectivity, alpha or blend are still one patch.
+- Cells that differ only in speed, slipperiness, colour, reflectivity, alpha or blend are still one patch.
 - **Cost.** One draw call per kind on screen in each height band, and a pass drawing what's mirrored only while a reflective
   overlay is on screen. A level without overlays costs nothing, and one without reflective overlays no reflection pass.
-- **Online**, the overlays come with the level, as everything painted does; they never change in play.
+- **Footsteps.** A hero's steps on an overlay sound as its kind does (`SoundTable.footsteps`), and keep time with their legs
+  however slowly the floor lets them go ([9.8](#98-events-and-hooks)).
+- **Online**, the overlays come with the level, as everything painted does; they never change in play. A guest moves its own hero
+  over them exactly as the host does, slides and all, so they cost no corrections.
 
 ### 9.6 `assets-meta.json`: tile behaviour by sprite name
 
@@ -2285,7 +2299,9 @@ const Orc: MonsterDef = { ...Bruiser, sounds: { death: "big_death" } };
 
 Three in the table aren't for an event, and the scene plays them itself:
 
-- `footstep` - each step a hero played on this machine takes, one every 48 pixels walked, about five a second at full speed (`Footsteps`). Give it takes, as it plays a lot.
+- `footstep` - each step a hero played on this machine takes on bare floor, one every 48 pixels walked, about five a second at full speed (`Footsteps`). Give it takes, as it plays a lot.
+  On a floor overlay it's `footsteps`' sound for its kind (`footsteps: { mud: "footstep_mud", ... }`), with takes of its own, and `footstep` for a kind
+  left out or with no file yet. Where an overlay slows the heroes their stride is as much shorter, so their steps keep time with their legs.
 - `ambience` - the level's sound under its music, on a loop everywhere while the dungeon is showing. A bare name, so a level's bundle can have
   its own, and global's is heard in every level without one.
 - `bossMusic` - in place of the level's `music` while a boss is awake, until the last one awake falls. A game's own volume settings
@@ -2998,14 +3014,14 @@ vertical **toolbar** of tools at the far right. Each palette tab ends in a **+**
   It has no value and no popup. The overlay outlines the sprite it will push, over its whole footprint; a brush with no outline
   pushes nothing - it's on bare floor, or over something that can't be pushed ([9.5.2](#952-pushing-things)).
 - To lay dirt, water, slime or another **floor overlay**, pick the `overlay` brush (the blue square, last of the attribute types)
-  and paint the cells it covers - a new one is water, seed 1. Its popup (Edit, or `E`) picks the kind, the seed (0 to 9999),
-  that kind's colour and how much it mirrors, each starting as the kind's own (for a shiny floor the colour is what tints its
-  reflection), its **Alpha**, 100% to start with: lower it to let the floor show through, and its **Blend**: Normal, Add,
-  Multiply or Screen. Press `+` (or `.`) for the next seed while painting, `-` (or `,`) for the one before, so the next patch looks
-  different; Fill a patch with the brush to give it all the new seed, a quick way to re-roll one that doesn't sit right. The
-  map draws each overlay as the game will - its shape, colours and ripples, by the game's own shader - over the floor layer,
-  whichever layer is selected, unlit and with nothing in it mirrored; its squares on the attributes layer are faint, tagged with
-  the seed, so the overlay shows through them ([9.5.3](#953-floor-overlays)).
+  and paint the cells it covers - a new one is water, as water is. Its popup (Edit, or `E`) picks the kind, then that kind's
+  **Speed** (0.05 to 1.5 times the heroes' pace on bare floor) and **Slipperiness** (0, stopping dead, to 5 times as long as bare
+  floor takes to stop them), colour and how much it mirrors, each starting as the kind's own (for a shiny floor the colour is what
+  tints its reflection), its **Alpha**, 100% to start with: lower it to let the floor show through, and its **Blend**: Normal, Add,
+  Multiply or Screen. Fill a patch with the brush to give it all the new settings. The map draws each overlay as the game will - its
+  shape, colours and ripples, by the game's own shader - over the floor layer, whichever layer is selected, unlit and with nothing in
+  it mirrored; its squares on the attributes layer are faint, tagged with the speed it sets (x0.3), so the overlay shows through them
+  ([9.5.3](#953-floor-overlays)).
 
 ### 10.4 Generated maps and `IStyler`
 

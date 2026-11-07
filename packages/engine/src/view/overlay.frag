@@ -1,6 +1,6 @@
 precision highp float;
 // Floor overlays (see Overlays, OverlayLayer): dirt, mud, water, slime, blood, moss and a shiny floor, made up pixel by pixel from
-// each cell's kind and seed. Everything is worked out on the level's own pixel grid, a world pixel at a time, so an overlay is as
+// each cell's kind and where it is. Everything is worked out on the level's own pixel grid, a world pixel at a time, so an overlay is as
 // blocky as the art round it. highp, because the pattern is laid out in the level's pixels, thousands across - on the first line,
 // where pixi looks for it to step it down on a GPU without highp.
 //
@@ -13,7 +13,7 @@ varying vec2 vPattern;
 varying vec2 vCell;
 varying vec2 vScreen;
 varying vec3 vLight;
-varying vec4 vLook;
+varying vec3 vLook;
 varying vec3 vTint;
 
 // What stands over the overlays, drawn upside down (see ReflectionCapture), and whether it's been drawn this frame.
@@ -107,14 +107,15 @@ float EdgeDistance(vec2 l, float joins)
 
 void main(void)
 {
-    float seed = vLook.y;
-    float reflectivity = vLook.z;
-    float joins = floor(vLook.w + 0.5);
+    float reflectivity = vLook.y;
+    float joins = floor(vLook.z + 0.5);
+    // The pattern is laid out by where each pixel is in the level, so no two patches look alike. It's shifted as a brush's seed of 1
+    // shifted it when overlays had seeds, so one painted then with the seed it started with looks as it did.
+    float seed = 1.0;
 
     // The middle of the world pixel this fragment is in - kept inside its own cell, which a quad's edge can round past.
     vec2 local = clamp(floor(vPattern - vCell) + 0.5, 0.5, uTile - 0.5);
     vec2 pixel = vCell + local;
-    // The seed moves the pattern somewhere else entirely.
     vec2 q = pixel + vec2(Hash(vec2(seed, 3.17)), Hash(vec2(7.91, seed))) * 1024.0;
     float edge = EdgeDistance(local, joins);
     float t = uTime;

@@ -1,14 +1,16 @@
 /**
  * Floor overlays: dirt, mud, water, slime, blood, moss or a shiny floor, painted with the `OVERLAY` data brush and drawn over the
- * floor by a shader (see `view/OverlayLayer`). Nothing about an overlay is stored but its kind, a seed and, if they're not the
- * kind's own, its colour and how much it mirrors: the shape and the look are made up from those as it's drawn, the same on every
- * machine and in the editor. The cells of one kind and seed side by side, at one height, make a patch, edged where it meets
- * anything else (`OverlayCell.joins`), so a pool painted over six cells is one pool with a ragged shore inside them. A cell
- * whose overlay has any reflectivity mirrors what stands over it - the heroes, the monsters, a wall at its edge (see
+ * floor by a shader (see `view/OverlayLayer`). Nothing about an overlay is stored but its kind and, if they're not the kind's
+ * own, how the heroes move over it, its colour and how much it mirrors: the shape and the look are made up as it's drawn, from
+ * where it is, the same on every machine and in the editor. The cells of one kind side by side, at one height, make a patch,
+ * edged where it meets anything else (`OverlayCell.joins`), so a pool painted over six cells is one pool with a ragged shore
+ * inside them. A hero on an overlay moves at its pace and slides as far as it lets them (`Overlays.FootingAt`). A cell whose
+ * overlay has any reflectivity mirrors what stands over it - the heroes, the monsters, a wall at its edge (see
  * `Overlays.Reflects`). Pure - no pixi - so it runs under the plain node test runner.
  */
 
 import type { Vec2Like } from "@logic-incubator/lib/math/Geometry";
+import { BareFloor, Footing } from "../view/helpers/PlayerMovement";
 import { DataBrushName } from "./LevelFormat";
 
 /** What an overlay is of. Each draws its own way (see `view/overlay.frag`); `shiny` has no colour of its own, only the reflection. */
@@ -32,6 +34,26 @@ export const OverlayLooks: { readonly [K in OverlayKind]: OverlayLook } = {
 };
 
 /**
+ * How each kind is to walk on unless its brush says otherwise (see `Footing`): mud and water slow the heroes and stop them short,
+ * slime all but holds them and lets them slide on, a shiny floor or blood is a little slippery.
+ */
+export const OverlayFootings: { readonly [K in OverlayKind]: Footing } = {
+    dirt: { speed: 0.95, slipperiness: 1 },
+    mud: { speed: 0.3, slipperiness: 0.1 },
+    water: { speed: 0.4, slipperiness: 0.5 },
+    slime: { speed: 0.1, slipperiness: 3 },
+    blood: { speed: 0.95, slipperiness: 1.5 },
+    moss: { speed: 0.9, slipperiness: 0.9 },
+    shiny: { speed: 1, slipperiness: 1.3 }
+};
+
+/** The slowest and fastest an overlay can make the heroes go, as a multiple of their pace on bare floor (`Footing.speed`). */
+export const MinOverlaySpeed = 0.05;
+export const MaxOverlaySpeed = 1.5;
+/** The most slippery an overlay can be, as a multiple of how long bare floor takes to stop them (`Footing.slipperiness`); 0 stops them dead. */
+export const MaxOverlaySlipperiness = 5;
+
+/**
  * How an overlay is laid over the floor: `normal` over it; `add` adding its light; `multiply` darkening the floor by its colour,
  * as a stain would; `screen` lightening it. Each is the GPU's own blending, so none costs more than another.
  */
@@ -46,15 +68,22 @@ export function IsOverlayBlend(blend: unknown): blend is OverlayBlend {
 }
 
 /**
- * An `OVERLAY` brush's value: its kind (`overlay`), the seed its shape and pattern are made from - another seed, another look - and,
- * only where they aren't the kind's own (see `OverlayLooks`), its colour (`tint`, 0xRRGGBB) and how much it mirrors (`reflectivity`, 0 to 1).
- * `alpha`, from 0 to 1, fades the whole overlay, its reflection too, for the floor to show through - left out, 1: as its kind draws it.
- * `blend` is how it's laid over the floor (see `OverlayBlend`) - left out, `normal`.
+ * An `OVERLAY` brush's value: its kind (`overlay`) and, only where they aren't the kind's own (see `OverlayFootings`, `OverlayLooks`),
+ * how fast the heroes go over it (`speed`, from `MinOverlaySpeed` to `MaxOverlaySpeed` - 1 as on bare floor), how long they take to slow
+ * down on it (`slipperiness`, 0 to `MaxOverlaySlipperiness` - 1 as on bare floor), its colour (`tint`, 0xRRGGBB) and how much it mirrors
+ * (`reflectivity`, 0 to 1). `alpha`, from 0 to 1, fades the whole overlay, its reflection too, for the floor to show through - left out, 1:
+ * as its kind draws it. `blend` is how it's laid over the floor (see `OverlayBlend`) - left out, `normal`. A level saved before overlays
+ * changed how the heroes move has a `seed` in each, which is let go: the pattern comes from where the overlay is.
  */
-export type OverlayValue = { overlay: OverlayKind; seed: number; tint?: number; reflectivity?: number; alpha?: number; blend?: OverlayBlend };
-
-/** Highest seed the editor offers. */
-export const MaxOverlaySeed = 9999;
+export type OverlayValue = {
+    overlay: OverlayKind;
+    speed?: number;
+    slipperiness?: number;
+    tint?: number;
+    reflectivity?: number;
+    alpha?: number;
+    blend?: OverlayBlend;
+};
 
 /** Whether `value` is an `OverlayValue` - told apart, like every data value, by its shape: its `overlay`. */
 export function IsOverlayValue(value: unknown): value is OverlayValue {
@@ -66,22 +95,41 @@ export function IsOverlayKind(kind: unknown): kind is OverlayKind {
     return OverlayKinds.indexOf(kind as OverlayKind) > -1;
 }
 
-/** What a new overlay brush starts as: water, seed 1. */
+/** What a new overlay brush starts as: water, as water is. */
 export function DefaultOverlayValue(): OverlayValue {
-    return { overlay: "water", seed: 1 };
+    return { overlay: "water" };
+}
+
+/** `n` kept from `min` to `max`, to a hundredth - as fine as the editor's sliders go, so a kind's own value that's been through one is still seen to be. */
+function Hundredths(n: number, min: number, max: number): number {
+    return Math.min(max, Math.max(min, Math.round(n * 100) / 100));
 }
 
 /**
- * `value` as the game reads it - null for a kind it doesn't know, which draws nothing. The seed is a whole number from 0 to
- * `MaxOverlaySeed`, a tint a whole 0xRRGGBB and a reflectivity from 0 to 1; each is kept only where it's set and isn't the kind's own.
- * The alpha, from 0 to 1, is kept only where it's under 1, and the blend only where it's one the game knows other than `normal`.
+ * `value` as the game reads it - null for a kind it doesn't know, which draws nothing. The speed is from `MinOverlaySpeed` to
+ * `MaxOverlaySpeed` and the slipperiness from 0 to `MaxOverlaySlipperiness`, each to a hundredth; a tint a whole 0xRRGGBB and a
+ * reflectivity from 0 to 1; each is kept only where it's set and isn't the kind's own. The alpha, from 0 to 1, is kept only where
+ * it's under 1, and the blend only where it's one the game knows other than `normal`. Anything else - an old level's `seed` - is let go.
  */
 export function SanitiseOverlayValue(value: OverlayValue): OverlayValue | null {
     if (!IsOverlayKind(value.overlay)) {
         return null;
     }
+    const footing = OverlayFootings[value.overlay];
     const look = OverlayLooks[value.overlay];
-    const out: OverlayValue = { overlay: value.overlay, seed: Math.min(MaxOverlaySeed, Math.max(0, Math.round(Number(value.seed) || 0))) };
+    const out: OverlayValue = { overlay: value.overlay };
+    if (typeof value.speed === "number" && isFinite(value.speed)) {
+        const speed = Hundredths(value.speed, MinOverlaySpeed, MaxOverlaySpeed);
+        if (speed !== footing.speed) {
+            out.speed = speed;
+        }
+    }
+    if (typeof value.slipperiness === "number" && isFinite(value.slipperiness)) {
+        const slipperiness = Hundredths(value.slipperiness, 0, MaxOverlaySlipperiness);
+        if (slipperiness !== footing.slipperiness) {
+            out.slipperiness = slipperiness;
+        }
+    }
     if (typeof value.tint === "number" && isFinite(value.tint)) {
         const tint = Math.min(0xffffff, Math.max(0, Math.round(value.tint)));
         if (tint !== look.tint) {
@@ -101,6 +149,21 @@ export function SanitiseOverlayValue(value: OverlayValue): OverlayValue | null {
         out.blend = value.blend;
     }
     return out;
+}
+
+/** How fast the heroes go over `value`, as a multiple of their pace on bare floor: its own speed, or its kind's. */
+export function OverlaySpeed(value: OverlayValue): number {
+    return value.speed != null ? value.speed : IsOverlayKind(value.overlay) ? OverlayFootings[value.overlay].speed : 1;
+}
+
+/** How long the heroes take to slow down on `value`, as a multiple of bare floor's: its own slipperiness, or its kind's. */
+export function OverlaySlipperiness(value: OverlayValue): number {
+    return value.slipperiness != null ? value.slipperiness : IsOverlayKind(value.overlay) ? OverlayFootings[value.overlay].slipperiness : 1;
+}
+
+/** How the heroes move over `value` (see `Footing`): its speed and slipperiness, each its own or its kind's. */
+export function OverlayFootingOf(value: OverlayValue): Footing {
+    return { speed: OverlaySpeed(value), slipperiness: OverlaySlipperiness(value) };
 }
 
 /** The colour `value` is drawn in: its own tint, or its kind's. */
@@ -153,6 +216,8 @@ export type OverlayCell = Vec2Like & {
     value: OverlayValue;
     /** Its kind's place in `OverlayKinds` - what the shader knows it by. */
     kind: number;
+    /** How the heroes move over it (see `OverlayFootingOf`). */
+    footing: Footing;
     tint: number;
     reflectivity: number;
     /** How solid it's drawn, its reflection too (see `OverlayAlpha`). */
@@ -160,7 +225,7 @@ export type OverlayCell = Vec2Like & {
     /** Its blend's place in `OverlayBlends` (see `OverlayBlendOf`). */
     blend: number;
     /**
-     * Which of the eight cells round it are in the same patch - the same kind and seed, at the same height - as `OverlayJoin` bits.
+     * Which of the eight cells round it are in the same patch - the same kind, at the same height - as `OverlayJoin` bits.
      * The patch is edged where a bit is missing.
      */
     joins: number;
@@ -240,6 +305,7 @@ export default class Overlays {
                 y,
                 value,
                 kind: OverlayKinds.indexOf(value.overlay),
+                footing: OverlayFootingOf(value),
                 tint: OverlayTint(value),
                 reflectivity: OverlayReflectivity(value),
                 alpha: OverlayAlpha(value),
@@ -260,7 +326,7 @@ export default class Overlays {
             const height = heightAt(cell.x, cell.y);
             Neighbours.forEach(({ dx, dy, bit }) => {
                 const other = this.At(cell.x + dx, cell.y + dy);
-                if (other && other.value.overlay === cell.value.overlay && other.value.seed === cell.value.seed && heightAt(other.x, other.y) === height) {
+                if (other && other.value.overlay === cell.value.overlay && heightAt(other.x, other.y) === height) {
                     cell.joins |= bit;
                 }
             });
@@ -286,6 +352,12 @@ export default class Overlays {
     /** The overlay on the cell, or null. */
     At(x: number, y: number): OverlayCell | null {
         return this.at.get(Key(x, y)) || null;
+    }
+
+    /** How the heroes move on the cell (see `Footing`): as its overlay lets them, or as on bare floor where there's none. */
+    FootingAt(x: number, y: number): Footing {
+        const cell = this.at.get(Key(x, y));
+        return cell ? cell.footing : BareFloor;
     }
 
     /** Whether the cell's overlay mirrors what stands over it - it has some reflectivity, and shows at all. */

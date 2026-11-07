@@ -860,28 +860,23 @@ describe("the pushable data brush", () => {
 });
 
 describe("the overlay data brush", () => {
-    it("is the palette's last attribute type, starting as water, seed 1 - and is added to a map saved before it existed", () => {
+    it("is the palette's last attribute type, starting as water - and is added to a map saved before it existed", () => {
         const store = new EditorStore();
         const attributes = store.state.dataBrushes.filter(db => !db.height);
         expect(attributes[ attributes.length - 1 ].name).toBe(DataBrushName.OVERLAY);
-        expect(attributes[ attributes.length - 1 ].value).toEqual({ overlay: "water", seed: 1 });
+        expect(attributes[ attributes.length - 1 ].value).toEqual({ overlay: "water" });
         store.Load({ ...store.state, dataBrushes: store.state.dataBrushes.filter(db => db.name !== DataBrushName.OVERLAY) });
         expect(store.state.dataBrushes.find(db => db.name === DataBrushName.OVERLAY)).toBeDefined();
     });
 
-    it("steps its seed with + and -, keeping its kind and look, within 0 to 9999", () => {
+    it("leaves it be with + and -: it's set in its popup", () => {
         const store = new EditorStore();
         store.Dispatch({ type: EditorActions.SELECT_LAYER, data: { layer: implicitLayers(store)[0] } });
         store.Dispatch({ type: EditorActions.BRUSH_CHANGED, data: { name: DataBrushName.OVERLAY } });
-        store.Dispatch({ type: EditorActions.SET_DATA_BRUSH_VALUE, data: { value: { overlay: "slime", seed: 0, tint: 0x00ff00 } } });
+        store.Dispatch({ type: EditorActions.SET_DATA_BRUSH_VALUE, data: { value: { overlay: "slime", speed: 0.5, tint: 0x00ff00 } } });
+        store.Dispatch({ type: EditorActions.DATA_BRUSH_INC });
         store.Dispatch({ type: EditorActions.DATA_BRUSH_DEC });
-        expect(store.state.currentBrush.data).toEqual({ overlay: "slime", seed: 0, tint: 0x00ff00 });
-        store.Dispatch({ type: EditorActions.DATA_BRUSH_INC });
-        expect(store.state.currentBrush.data).toEqual({ overlay: "slime", seed: 1, tint: 0x00ff00 });
-        expect(store.SelectedDataBrush.value).toEqual({ overlay: "slime", seed: 1, tint: 0x00ff00 });
-        store.Dispatch({ type: EditorActions.SET_DATA_BRUSH_VALUE, data: { value: { overlay: "dirt", seed: 9999 } } });
-        store.Dispatch({ type: EditorActions.DATA_BRUSH_INC });
-        expect(store.state.currentBrush.data).toEqual({ overlay: "dirt", seed: 9999 });
+        expect(store.state.currentBrush.data).toEqual({ overlay: "slime", speed: 0.5, tint: 0x00ff00 });
     });
 });
 

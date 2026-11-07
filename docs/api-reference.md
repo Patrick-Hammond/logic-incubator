@@ -1338,7 +1338,7 @@ type DungeonMainOptions = {
     level: () => LevelFile | undefined;                   // asked on every start and restart
     levelBundle?: () => string | undefined;               // the asset bundle the level plays in
     music?: () => SoundId | undefined;                    // the track the level plays to, on a loop while the scene is showing, asked on every start and restart; the same track carries on; sounds.bossMusic takes over while a boss is awake
-    sounds?: SoundTable;                                  // what play sounds like where the thing it happens to names no sound of its own (see SoundBoard); the scene plays footstep, ambience and bossMusic itself
+    sounds?: SoundTable;                                  // what play sounds like where the thing it happens to names no sound of its own (see SoundBoard); the scene plays footstep(s), ambience and bossMusic itself
     seed?: () => number | undefined;                      // what the level's random numbers start from, asked on every start and restart; undefined: a new one
     net?: () => NetPlay | undefined;                      // online: the run this machine plays in (CreateNetPlay), asked on every start and restart; undefined: offline
     playerAnimations?: () => CharacterAnimations | undefined;   // a lone hero's animations, in place of player.animations (only without heroes)
@@ -1420,7 +1420,7 @@ Lifecycle: `OnInitialise` builds the `Level`, attaches `Camera`, `TileMapView`, 
 the `World`, binds asset metadata (`BindAssetMetadata`) and listens for `LEVEL_CREATED`, `ALL_PLAYERS_DIED` and `LEVEL_COMPLETED`. `OnShow` and each
 restart (1.5 s after the level ends, or when told to with `manualRestart`) call `Reload`: prepare the assets (`LevelAssets.Prepare` - refresh dev metadata,
 then `UseLevelBundle(levelBundle())`), then `Level.LoadLevel(level())`, `LevelMusic.Play(music(), bossMusic)` and `AmbientSounds.Begin(sounds.ambience, level.soundLoops)` unless the scene was destroyed meanwhile - so after `LEVEL_COMPLETED` a game moves
-on by having `level` (and `levelBundle`, and `music`) return the next one. The music and loops play only while the scene is shown (a `WhileShown`), so they stop behind the editor or the title; `BOSS_WOKE` and a boss's `MONSTER_KILLED` switch the music to the boss's track and back (`LevelMusic.BossWoke` / `BossFell`). Each frame it updates the loops with the centres of the standing heroes played on this machine, and plays `sounds.footstep` when one of them takes a step (`Footsteps`). On `LEVEL_CREATED` it resets the world for the slots `heroes` gives and keeps one
+on by having `level` (and `levelBundle`, and `music`) return the next one. The music and loops play only while the scene is shown (a `WhileShown`), so they stop behind the editor or the title; `BOSS_WOKE` and a boss's `MONSTER_KILLED` switch the music to the boss's track and back (`LevelMusic.BossWoke` / `BossFell`). Each frame it updates the loops with the centres of the standing heroes played on this machine, and plays a step's sound when one of them takes one (`Footsteps`, each walker's `pace` the `speed` of the floor under them, or their own while they skid in faster): `sounds.footsteps` for the kind of floor overlay they're on, else `sounds.footstep`. On `LEVEL_CREATED` it resets the world for the slots `heroes` gives and keeps one
 `HeroView` per slot from level to level. `OnDestroy` drops the hero views, disposes the level and releases the level bundle (when `levelBundle` was given).
 
 ---
@@ -1458,7 +1458,7 @@ type Talker = Vec2Like & { value: DialogValue; script: DialogScript; tile: Tile 
 | `portals` | `Portals` | Every cell painted with the `teleport` data brush, with its `TeleportValue` - see `PortalJump` and [Portals](#portals). Each one whose id no other portal has is warned of as the level loads. |
 | `spawners` | `Spawner[]` | Every spawner tile and `SPAWNER` brush, one to a cell (`FindSpawners`) - a brush on a spawner tile's cell decides what it does. Each is drawn as a tile on its cell (`SpawnerTile`) - a spawner tile, else the top one that isn't floor - or, with none, as the roster's `spawnerSprite`; that picture's footprint (`cells`) is solid until `RemoveSpawner`. |
 | `pushables` | `Pushable[]` | Everything a hero can push (`FindPushables`), in its brushes' order - its `pushed` event names one by its place here - each where it is now, its footprint (`cells`) solid ([Pushables](#pushables)). Each brush that pushes nothing is warned of as the level loads. |
-| `overlays` | `Overlays` | The floor overlays, from the `OVERLAY` brushes on data layers, a cell's patch joined by kind, seed and height - in normalised cells, their pattern laid out on the level file's own ([Floor overlays](#floor-overlays)). |
+| `overlays` | `Overlays` | The floor overlays, from the `OVERLAY` brushes on data layers, a cell's patch joined by kind and height - in normalised cells, their pattern laid out on the level file's own ([Floor overlays](#floor-overlays)). |
 | `overlayLayer` | `number` | Which of `tileLayers` the overlays are drawn just over (`OverlayLayerIndex`): the last floor layer under the figures, else the first; -1 under every layer. |
 | `pickups` | `Pickup[]` | Every pickup not yet collected: each tile with a `pickup` in its metadata, each `PICKUP` brush (one to a cell, the brush winning), each key dropped (`DropPickup`). |
 | `depths` | | |
@@ -1476,6 +1476,7 @@ type Talker = Vec2Like & { value: DialogValue; script: DialogScript; tile: Tile 
 | `IsFloor(x, y): boolean` | Open floor: in a region and not solid - not a wall, a door, a spawner or off the map. Where the party starts (`StartCells`) and what's dropped lands. |
 | `IsExit(x, y): boolean` | Whether the cell is a way out (an `exit` brush): a hero standing on one ends the level (`World`). |
 | `PortalJump(from, to): Vec2Like \| null` | Where a hero whose step took them from cell `from` to cell `to` comes out, if they've just walked onto a portal: `portals.Jump` with the cells that aren't `IsSolid` to stand on. Null if they haven't (`to` is `from`, or no portal, or an arrival-only one), or it leads nowhere. |
+| `FootingAt(x, y): Footing` | How a hero moves on the cell - `overlays.FootingAt`: its floor overlay's speed and slipperiness, or `BareFloor` ([Floor overlays](#floor-overlays)). `World` and an online guest's `Prediction` step each hero on the one under them. |
 | `IsDoorClosed(x, y): boolean` | Whether the cell belongs to a door that is closed right now. Monsters can't enter one (their path and their movement both stop at it); the heroes can. A door with no sprite pair to swap never opens, so isn't in `doors` and doesn't count. |
 | `RemoveSpawner(spawner)` | Opens a destroyed spawner's cells, and takes away the tile it's drawn as (`SpawnerTile`), putting out its light if it gives one. |
 | `SpawnerTile(spawner): Tile \| null` | The tile a spawner is drawn as - the one `FindSpawners` picked on its cell - or null for one the roster's `spawnerSprite` stands in for. |
@@ -1643,24 +1644,30 @@ type OverlayKind = "dirt" | "mud" | "water" | "slime" | "blood" | "moss" | "shin
 const OverlayKinds: ReadonlyArray<OverlayKind>;        // in that order - the editor's, and the shader's number for each (its place here)
 type OverlayLook = { tint: number; reflectivity: number };
 const OverlayLooks: { [K in OverlayKind]: OverlayLook };   // each kind's own colour (0xRRGGBB) and how much it mirrors (0 to 1)
+const OverlayFootings: { [K in OverlayKind]: Footing };    // each kind's own speed and slipperiness (see PlayerMovement's Footing):
+    // dirt 0.95 / 1, mud 0.3 / 0.1, water 0.4 / 0.5, slime 0.1 / 3, blood 0.95 / 1.5, moss 0.9 / 0.9, shiny 1 / 1.3
+const MinOverlaySpeed = 0.05;  const MaxOverlaySpeed = 1.5;  const MaxOverlaySlipperiness = 5;   // slipperiness from 0, which stops them dead
 type OverlayBlend = "normal" | "add" | "multiply" | "screen";   // how it's laid over the floor - the GPU's own blending
 const OverlayBlends: ReadonlyArray<OverlayBlend>;                // in that order - the editor's, and OverlayLayer's number for each
 IsOverlayBlend(blend): blend is OverlayBlend
-type OverlayValue = { overlay: OverlayKind; seed: number; tint?: number; reflectivity?: number; alpha?: number; blend?: OverlayBlend };
-// tint, reflectivity: only where not the kind's own · alpha: 0 to 1, fading it and its reflection - only where under 1 · blend: only where not "normal"
-const MaxOverlaySeed = 9999;
+type OverlayValue = { overlay: OverlayKind; speed?: number; slipperiness?: number; tint?: number; reflectivity?: number; alpha?: number; blend?: OverlayBlend };
+// speed, slipperiness, tint, reflectivity: only where not the kind's own · alpha: 0 to 1, fading it and its reflection - only where under 1 · blend: only where not "normal"
+// (a level saved before overlays had speeds has a `seed` in each, which is let go)
 IsOverlayValue(value): value is OverlayValue           // told apart by its shape: a string `overlay`
 IsOverlayKind(kind): kind is OverlayKind
-DefaultOverlayValue(): OverlayValue                    // { overlay: "water", seed: 1 } - a new brush's
-SanitiseOverlayValue(value): OverlayValue | null       // null for a kind it doesn't know; a whole seed from 0 to MaxOverlaySeed, a whole tint,
-                                                       // a reflectivity from 0 to 1 - each kept only where it's set and isn't the kind's own -
-                                                       // and an alpha from 0, kept only where it's under 1, and a known blend but "normal"
+DefaultOverlayValue(): OverlayValue                    // { overlay: "water" } - a new brush's
+SanitiseOverlayValue(value): OverlayValue | null       // null for a kind it doesn't know; a speed from MinOverlaySpeed to MaxOverlaySpeed and a
+                                                       // slipperiness from 0 to MaxOverlaySlipperiness, each to a hundredth, a whole tint, a
+                                                       // reflectivity from 0 to 1 - each kept only where it's set and isn't the kind's own -
+                                                       // and an alpha from 0, kept only where it's under 1, and a known blend but "normal"; nothing else
+OverlaySpeed(value): number;  OverlaySlipperiness(value): number  // its own, or its kind's
+OverlayFootingOf(value): Footing                       // { speed: OverlaySpeed, slipperiness: OverlaySlipperiness }
 OverlayTint(value): number;  OverlayReflectivity(value): number   // its own, or its kind's
 OverlayAlpha(value): number                            // its own, or 1
 OverlayBlendOf(value): OverlayBlend                    // its own, or "normal"
 
 const enum OverlayJoin { N = 1, NE = 2, E = 4, SE = 8, S = 16, SW = 32, W = 64, NW = 128 }
-type OverlayCell = Vec2Like & { value: OverlayValue; kind: number; tint: number; reflectivity: number; alpha: number;
+type OverlayCell = Vec2Like & { value: OverlayValue; kind: number; footing: Footing; tint: number; reflectivity: number; alpha: number;
                                 blend: number;                    // its blend's place in OverlayBlends
                                 joins: number;                    // OverlayJoin bits: the neighbours in its patch
                                 patternX: number; patternY: number };   // its cell in the level file's coordinates, what the pattern is laid out on
@@ -1671,17 +1678,22 @@ OverlayLayerIndex(tileLayers, playerLayer): number     // the tile layer they're
 new Overlays(placements = [], heightAt: (x, y) => number = () => 0, pattern: Vec2Like = { x: 0, y: 0 })
 overlays.All: ReadonlyArray<OverlayCell>;  overlays.Any;  overlays.AnyReflective   // AnyReflective: any that Reflects
 overlays.At(x, y): OverlayCell | null;  overlays.Reflects(x, y): boolean          // Reflects: a reflectivity above 0, and an alpha above 0
+overlays.FootingAt(x, y): Footing                      // the cell's overlay's footing, or BareFloor where there's none (whatever its alpha)
 overlays.ReflectsAt(left, right, feet, tileSize): boolean   // whether something standing with its bottom edge at `feet` across `left`..`right`
                                                             // (world pixels) shows in a reflective overlay: on its own row, or the one below
 ```
 
-Nothing about an overlay is stored but its kind, its seed and, where they differ from its kind's, its colour and reflectivity: its shape and
-pattern are made up from those by `overlay.frag` as it's drawn, on the level's own pixel grid, so it's alike on every machine and in the
-editor. **Patches**: the cells side by side with the same kind and seed at the same height join up (`joins`, the eight neighbours' bits), and the
+Nothing about an overlay is stored but its kind and, where they differ from its kind's, its speed, slipperiness, colour and reflectivity: its shape and
+pattern are made up by `overlay.frag` as it's drawn, from where each pixel is on the level's own pixel grid (shifted as a seed of 1 shifted it when
+overlays had seeds, so a level painted then with the starting seed looks as it did), so it's alike on every machine and in the editor and no two
+patches look the same. **Patches**: the cells side by side with the same kind at the same height join up (`joins`, the eight neighbours' bits), and the
 shader edges a patch only where it ends, with a noisy shore inside the painted cells and rounded outer corners; `pattern` (where the
 normalised cells are in the file's coordinates) keeps the pattern laid out alike wherever the map starts. **Reflection**: a cell with a
-reflectivity above 0 mirrors what stands over it - see `ReflectionCapture`. Built once by `Level.LoadLevel`; nothing in play changes them,
-so nothing about them goes over the network but the level itself.
+reflectivity above 0 mirrors what stands over it - see `ReflectionCapture`. **Footing**: a hero steps on the overlay under their centre
+(`FootingAt`, through `Level.FootingAt`) - its `speed` multiplies how fast they walk, its `slipperiness` how long they take to slow down: letting
+go, turning round, or come onto it faster than it lets them walk (`AxisVelocity`); speeding up is as quick on any floor. Monsters move as on bare
+floor. Built once by `Level.LoadLevel`; nothing in play changes them, so nothing about them goes over the network but the level itself, and an
+online guest predicting its own hero walks it over them as the host does (`NetVersion` 14).
 
 ---
 
@@ -1766,10 +1778,12 @@ ambient.Update(hearers: ReadonlyArray<Vec2Like>, seconds);                      
 A loop starts once it would be heard, and stays playing (at 0, when no one is near) until the level or the visit ends. A sound with no file is
 silent until the next `Begin`, as a level's bundle may have it; one that is still starting when it's no longer wanted is stopped as it arrives.
 
-`@logic-incubator/engine/Footsteps` (pure) - when the heroes' feet land. `new Footsteps(stride = DefaultStride)` (48 pixels, about five steps a second at a hero's full speed); `Update(positions:
-ReadonlyArray<Vec2Like | null>): number` - once a frame, each hero's position by slot (null for one not walking), and how many steps were taken: one
-each `stride` walked, the first at half of one, so a hero who sets off is heard at once. Standing still, or a jump of more than a stride (a warp,
-a restart), starts that hero afresh. `Reset()` forgets everyone's walking.
+`@logic-incubator/engine/Footsteps` (pure) - when the heroes' feet land. `new Footsteps(stride = DefaultStride)` (48 pixels, about five steps a second at a hero's full speed); `type Walker = Vec2Like & { pace?: number }`;
+`Update(walkers: ReadonlyArray<Walker | null>): ReadonlyArray<number>` - once a frame, each hero's position by slot (null for one not walking), and the slots of
+those who took a step, in slot order (the same array each call): one each `stride` times `pace` walked (`pace` how fast their legs carry them, as a share of a walk on bare floor -
+`DungeonMain` gives the floor's `Footing.speed`, or their own speed while they skid in faster than that - 1 left out, so a hero slowed by mud steps as
+often as ever, in time with their legs; at most one a frame), the first at half of one, so a hero who sets off is heard at once.
+Standing still, or a jump of more than a stride (a warp, a restart), starts that hero afresh. `Reset()` forgets everyone's walking.
 
 `@logic-incubator/engine/SoundBoard` (pure) - what play sounds like. `DungeonMain` makes one over `NamedSounds(game.assets)` and plays it from
 the dispatcher while the scene is shown (`ListenWhileShown` on each of `SoundEvents`); an online guest hears the host's events as its own.
@@ -1780,6 +1794,7 @@ type SoundTable = {   // each a sound by name (NamedSounds); one left out, or wi
     levelUp?, monsterHit?, monsterDeath?, monsterSpawn?, bossWake?, bossDeath?, spawnerHit?, spawnerBreak?, doorOpen?, doorClose?,
     doorLocked?, teleport?, push?, pickup?: Partial<Record<PickupKind, string>>, questGiven?, questProgress?, questDone?, questNote?, talkStart?, talkLine?,
     shout?, pause?, footstep?, ambience?, bossMusic?: string;   // these three DungeonMain plays itself, not for an event; give bossMusic the music volume
+    footsteps?: Partial<Record<OverlayKind, string>>;   // a step on a floor overlay, by its kind, in place of footstep - which is heard for a kind left out or with no file
 };
 const SoundEvents: ReadonlyArray<string>;   // the events it plays for
 type HeroSounds = { hurt?: string; death?: string };   // one hero's (HeroSlot.sounds), by name
@@ -1912,7 +1927,7 @@ Pure helpers behind `Level`; exported for tests and tooling.
 | `level/ImplicitData` | `EffectiveLight(brush, meta)`, `EffectiveSpawner(brush, meta)` (a placement's override else the sprite's default), `FindImplicitPlacements(...)` (collision, `lightBlocks`, doors, door locks, pickups), `FindLights(brushes, tileLayerOrder, metaFor)` (every light, as a `LightPlacement`: each lit tile's, then each `LIGHT` brush's - one a cell, the last, in place of that cell's tile lights - with the tile it belongs to, the top lit one, else the top one whose `category` isn't `floor`, else null, and the brush if any), `FindSpawners(brushes, tileLayerOrder, metaFor, sizeFor, tileSize, spawnerSpriteSize)` (every spawner tile and `SPAWNER` brush, one to a cell, as a `SpawnerPlacement`: its value, the tile it's drawn as - a spawner tile, else the top one whose `category` isn't `floor`, else null for the roster's sprite - the brush if any, and its footprint), `FindPushables(brushes, tileLayerOrder, metaFor, sizeFor, tileSize)` (everything a `PUSHABLE` brush makes pushable, in the brushes' order, as a `PushablePlacement`: its brush's cell, the tile - the top one whose `category` isn't `floor`, and not a door, spawner, pickup or lit tile - the brush, and its footprint; see [Pushables](#pushables)), `OrphanedExplicitData(...)` |
 | `level/MapBounds` | `type MapBounds`, `FindMapBounds(brushes)` |
 | `level/TileCollision` | `default class TileCollision` - `new TileCollision(level, blocked?)`; `TestX(from, dir)`, `TestY(from, dir)`: the corrected position on a collision, else `null`. `blocked(x, y)` names extra cells that count as solid for that collider (asked live) - `Encounter` gives its monsters' collider the closed doors, `World` gives the heroes' the closed doors the team has no key for (`World.IsLockedOut`) |
-| `view/helpers/PlayerMovement` | `MoveDamping`, `CentreTile(position)`, `BoxCentre(position)`, `ResolveMove(...)`, `interface MoveCollider` |
+| `view/helpers/PlayerMovement` | `MoveDamping` (0.8, a step's velocity damping on bare floor), `type Footing = { speed; slipperiness }` (how the floor under a hero changes their move, each 1 on bare floor: `speed` multiplies their pace, `slipperiness` how long they take to slow down), `BareFloor` (`{ speed: 1, slipperiness: 1 }`), `TopVelocity` (5, `1 / (1 - MoveDamping)`: the velocity a full push holds a hero at on bare floor), `AxisVelocity(velocity, push, footing, dt): number` (one axis of a hero's velocity after a step: it closes on `push * footing.speed * TopVelocity`, keeping `MoveDamping^dt` of the gap while speeding up and `MoveDamping^(dt / slipperiness)` while slowing - letting go, turning round, or onto a slower floor at speed - none at slipperiness 0; on bare floor exactly the push added then damped, as before), `CentreTile(position)`, `BoxCentre(position)`, `ResolveMove(position, velocity, dt, collider, speed = PlayerSpeed, damping = MoveDamping^dt)` (`damping` the share of velocity kept after the move - a hero's is 1, as `AxisVelocity` has damped it already), `interface MoveCollider` |
 | `view/helpers/CameraWindow` | `ViewOrigin(centre, baseWidth, baseHeight, zScale)` |
 | `view/helpers/FigureLayers` | The names of the layers the figures are drawn into, found by name in the camera's root: `GlowsLayer` (`"glows"`), `EntitiesLayer` (`"entities"`), `OrbsLayer` (`"orbs"`), `ProjectilesLayer` (`"projectiles"`) |
 | `view/helpers/PartyFrame` | How the camera frames a party: `MinPartyZoom` (0.5 - zoomed out to half the usual), `PartyMargin` (3 tiles), `type PartyBox = { minX, minY, maxX, maxY }`, `PartyBounds(positions, out?): PartyBox` (round the heroes' top-lefts, in pixels), `PartyZoom(box, view): number` (1 down to `MinPartyZoom`: what fits the box, each hero's tile and the margin into a view `view` tiles across at zoom 1), `PartySpan(view)` (the furthest apart, in tiles, a party may spread so it still fits at `MinPartyZoom` - what `World.SetLeash` is given) |
@@ -2077,7 +2092,7 @@ Pure modules under `level/entities/`:
 | `Pickups` | `type PickupValue = { kind: "gold"; amount } \| { kind: "health"; amount } \| { kind: "key"; id } \| { kind: "weapon"; weapon: WeaponDef } \| { kind: "item"; sprite? } \| { kind: "light"; light: LightValue; seconds? }` (an item with no `sprite` is shown as its own tile; a light is carried from then on, in place of any other, for `seconds` - 0 or left out for the rest of the level); `PickupKinds`; `IsPickupValue(v)` (strict: a known kind with the fields it needs, finite numbers, a key id that's a whole number from 0, a complete light - also what tells a pickup from a light or spawner in a tile's `data`); `DefaultPickupValue(kind?)` (a light: a torch that burns for 120 s). Which a hero reaches: `type PickupSpot = Vec2Like & { area: RectangleLike }` (a pickup's cell, and the pixels it's drawn over); `PickupArea(cell, tileSize, sprite?: { size: SpriteSize, pixelOffset } \| null)` (what its sprite draws: a frame of `size` at the cell's top-left less `pixelOffset`, as `TileMap` draws a tile, less what's see-through round it - `size.trim`; the whole cell without a sprite); `PickupCellsReached(figure, tile, pickups, isHeightGap): Vec2Like[]` (each cell, once and in the pickups' order, with a pickup that `figure` - the hero's sprite, `Hero.Figure` - overlaps, unless `isHeightGap(tile, cell)` - a ledge too high or low to step to from `tile`, the cell under their centre - and always `tile` itself) |
 | `CarriedLight` | `type CarriedLight = { value, seconds, left }`; `GutterTime = 8`; `CreateCarriedLight(value, seconds?)` (0, negative or left out: burns for the rest of the level), `TickCarriedLight(light, seconds): boolean` (false once it's out), `CarriedLightScale(light)` (1, falling to 0 over its last `GutterTime` seconds) |
 | `LightSpell` | `type LightSpell = { light: LightValue; seconds; recharge; icon? }` (lit for `seconds` - 0 for good - then `recharge` seconds before it can be cast again; `icon`, a sprite name, is how the HUD shows it - left out, a glowing orb in its light's tint); `type LightSpellState = { spell, lit: CarriedLight \| null, recharging }`; `CreateLightSpellState(spell)`, `IsLightSpellReady(state)`, `CastLightSpell(state): boolean` (false unless ready), `TickLightSpell(state, seconds)`, `LightSpellScale(state)` (0 while not lit), `LightSpellStatusOf(state): { state: "ready" \| "lit" \| "recharging"; fill; seconds }` (what the HUD shows: a lit one's bar empties as it burns, a recharging one's fills back up) |
-| `PlayerState` | A hero's whole state and one step of it. `type PlayerState = { position, previous, velocity, facingX, health, gold, experience, inventory, keys, weapons, equippedIndex, fireCooldown, shot, carried, spell, orb, previousOrb, orbTime }` (`position` the top-left of their one-tile box in pixels, `previous` where it was before the last step; `orb` the floor under their mage-light). `CreatePlayerState(setup, startTile, lightSpell?)` (on `startTile`, at full health and level 1, carrying `setup.weapons`' first - `weapons` is a list of one, `equippedIndex` always 0 - so a weapon picked up is gone when the level starts over); `StepPlayer(state, input: IPlayerInput, dt, seconds, collider: MoveCollider)` (timers tick, `input` turns and moves them, a shot fired waits in `shot`, the mage-light drifts after them - it reads no device, so it runs the same for input from anywhere); `TakePlayerShot(state): Vec2Like \| null` (once), `DamagePlayer(state, n): boolean`, `EquippedWeapon(state)`, `ApplyPickup(state, pickup: CollectedPickup)` (gold, health, a key, a weapon - in place of the one they carry -, an item - onto its stack -, a light), `GainExperience(state, rules, points): number` (`AddPoints`, and each level gone up adds `rules.hitPointsPerLevel` to their most hit points and - unless they're down - to what they have; returns the levels) |
+| `PlayerState` | A hero's whole state and one step of it. `type PlayerState = { position, previous, velocity, facingX, health, gold, experience, inventory, keys, weapons, equippedIndex, fireCooldown, shot, carried, spell, orb, previousOrb, orbTime }` (`position` the top-left of their one-tile box in pixels, `previous` where it was before the last step; `orb` the floor under their mage-light). `CreatePlayerState(setup, startTile, lightSpell?)` (on `startTile`, at full health and level 1, carrying `setup.weapons`' first - `weapons` is a list of one, `equippedIndex` always 0 - so a weapon picked up is gone when the level starts over); `StepPlayer(state, input: IPlayerInput, dt, seconds, collider: MoveCollider, footing: Footing = BareFloor)` (timers tick, `input` turns and moves them - their velocity per axis by `AxisVelocity` on `footing`, in steps of `PlayerSpeed` pixels a frame - a shot fired waits in `shot`, the mage-light drifts after them - it reads no device, so it runs the same for input from anywhere); `TakePlayerShot(state): Vec2Like \| null` (once), `DamagePlayer(state, n): boolean`, `EquippedWeapon(state)`, `ApplyPickup(state, pickup: CollectedPickup)` (gold, health, a key, a weapon - in place of the one they carry -, an item - onto its stack -, a light), `GainExperience(state, rules, points): number` (`AddPoints`, and each level gone up adds `rules.hitPointsPerLevel` to their most hit points and - unless they're down - to what they have; returns the levels) |
 | `Keys` | `NoLock = -1` (the lock of an unlocked door - every door by default - which opens for anyone, key or no key); `IsLocked(lock)` (0 and up); `type KeyRing = { keys: { id, sprite }[] }`; `CreateKeyRing()`, `AddKey(ring, id, sprite?): boolean` (false if that id is already held), `CanOpen(ring, lock): boolean` (the lock is `NoLock`, or a key with that id is held). There is no key that opens everything |
 
 ---
@@ -2130,7 +2145,7 @@ each hero's input every step and draws it; a game rarely touches it directly.
 
 ```ts
 interface WorldLevel extends EncounterLevel, QuestLevel {   // the parts of Level a world uses
-    playerStartPosition; quests; IsFloor(x, y); IsExit(x, y); PortalJump(from, to); IsTalker(x, y); IsDoorLocked(x, y, canOpen); UpdateDoors(tiles, canOpen);
+    playerStartPosition; quests; IsFloor(x, y); IsExit(x, y); PortalJump(from, to); FootingAt(x, y): Footing; IsTalker(x, y); IsDoorLocked(x, y, canOpen); UpdateDoors(tiles, canOpen);
     UpdateVisibleRegions(tiles); pickups: PickupSpot[]; CollectPickupsAt(x, y); DropPickup(x, y, value, sprite);
     pushables: ReadonlyArray<Pushable>; PushableAt(x, y); CanPush(pushable, dx, dy, taken); MovePushable(index, x, y);   // see Pushables
 }
@@ -2222,7 +2237,7 @@ hero.SetFigure(size: SpriteSize | undefined): void   // their frames' size and w
 hero.HasKeyFor(lockId): boolean
 hero.Reset(startTile, lightSpell?): void      // a fresh PlayerState there
 hero.WarpTo(position): void                   // there at once (a top-left, in pixels) - nothing drawn between - their mage-light with them
-hero.Step(input, dt, seconds, collider: MoveCollider): void   // StepPlayer
+hero.Step(input, dt, seconds, collider: MoveCollider, footing: Footing = BareFloor): void   // StepPlayer; World gives each hero level.FootingAt their Tile
 hero.ApplyPickup(pickup), TakeShot(): Vec2Like | null, Damage(n): boolean
 hero.DropKeys(): HeldKey[]                    // every key they carry, leaving them none
 hero.Gone: boolean                            // their player has left an online run (Leave) - not Alive, and the HUD says LEFT
@@ -2329,7 +2344,7 @@ same level onto every machine, and the host's and guests' lobbies. All pure.
 `@logic-incubator/engine/net/NetMessages` - a kind byte, then JSON (a `level`'s body is its bytes).
 
 ```ts
-NetVersion = 13;    // a guest on another is refused ("version"); raise it whenever a message changes - this file's or PlayMessages' - or how a level sent in one is read
+NetVersion = 14;    // a guest on another is refused ("version"); raise it whenever a message changes - this file's or PlayMessages' - or how a level sent in one is read
 NameLength = 12;
 
 type LobbySeat = { peer: number; name: string; character: string | null };   // host's seat first; character: a game's id, null while choosing
@@ -2559,7 +2574,7 @@ ignored.
 | `RemoteInput` | The host's queue of one guest's inputs, by `seq`: `Receive(inputs)`, `Take(): IPlayerInput[]` (the next one, none while it hasn't come, two once more than `MaxWaiting` (4) are waiting; past 30 waiting it skips a lost one), `Acked` (the last played), `Waiting`, `Started`, `Reset()`. |
 | `PlayClock` | Which of the host's steps a guest draws: `DrawDelayMs` (100) behind the newest, trusting the quickest arrivals and moving smoothly when that changes. `Observe(tick, nowMs)` for each snapshot, `Advance(nowMs, frames)` each frame, `Tick` (fractional), `Started`, `Reset()`. |
 | `Replica` | The guest's copy of the host's monsters, shots and spawners - an `EncounterView`. `new Replica({ you, sizeFor })`; `Reset(spawners)`, `AddShot(index, setup)`, `Push(snapshot)` (keeps the last 20), `Sample(tick, frames)` (each monster and shot between the snapshots either side of `tick`, carried on up to 6 steps past the newest), `HeroAt(index, tick): HeroMoment \| null` (between the snapshots either side, except where a hero moved more than two tiles between them - a portal, a warp - who is drawn at one end or the other), `Newest`. This machine's own shots are stand-ins from the moment they're fired (`Fire(from, direction, setup, seq)`, `StepStandIns(isBlocked)`), stopped by walls and by monsters as drawn, until the host's copy has gone or the host played that input without one. |
-| `Prediction` | The guest's own hero, ahead of the host: `Step(hero, input, others, collider, level)` numbers and plays an input, kept until the host has played it - taking a portal it walks onto as the host will (`TakePortal`; `level: PredictionLevel`, `Pick<WorldLevel, "PortalJump">`), the trip in `Trip` until the next `Step`; `Reconcile(hero, snapshot, others, collider, level)` starts from the host's word and plays the rest again, leaving the difference in `Offset`, which `Settle(frames)` draws away (or jumps, past two tiles); `Corrections` (differences over half a pixel), `LastError`, `Pending`, `Recent(n)`, `Reset()`, `Forget()` (drops the inputs the host never had - after the connection went - numbering on). |
+| `Prediction` | The guest's own hero, ahead of the host: `Step(hero, input, others, collider, level)` numbers and plays an input, kept until the host has played it - taking a portal it walks onto as the host will (`TakePortal`; `level: PredictionLevel`, `Pick<WorldLevel, "PortalJump" | "FootingAt">`, so it walks the hero over a floor overlay as the host does), the trip in `Trip` until the next `Step`; `Reconcile(hero, snapshot, others, collider, level)` starts from the host's word and plays the rest again, leaving the difference in `Offset`, which `Settle(frames)` draws away (or jumps, past two tiles); `Corrections` (differences over half a pixel), `LastError`, `Pending`, `Recent(n)`, `Reset()`, `Forget()` (drops the inputs the host never had - after the connection went - numbering on). |
 | `HeroSync` | `HeroSnapshotOf(hero, ack)` and `ApplyHeroSnapshot(hero, snapshot)` (everything but where they stand, which the caller places). |
 
 ## Quests and dialogs
@@ -2908,7 +2923,7 @@ Both extend lib's `Store`.
 
 `@logic-incubator/editor/stores/EditorStore` - `default class EditorStore` (UI state: tool, brush, layers, zoom, scene):
 `const enum EditorActions` (`BRUSH_MOVED`, `ROTATE_BRUSH`, `FLIP_BRUSH_H`, `FLIP_BRUSH_V`, `BRUSH_CHANGED`, `BRUSH_HOVERED`, `BRUSH_VISIBLE`, `BRUSH_NUDGE`,
-`DATA_BRUSH_INC`, `DATA_BRUSH_DEC` (+/-: step the height brush, the teleport brush's portal id or the overlay brush's seed - no other value), `SET_DATA_BRUSH_VALUE`, `ZOOM_IN`, `ZOOM_OUT`, `MOUSE_BUTTON`, `CHANGE_SCENE`, `RESET` (also clears the level's name), `SET_LEVEL_NAME` (`data.name`), `DUPLICATE_LAYER`,
+`DATA_BRUSH_INC`, `DATA_BRUSH_DEC` (+/-: step the height brush or the teleport brush's portal id - no other value), `SET_DATA_BRUSH_VALUE`, `ZOOM_IN`, `ZOOM_OUT`, `MOUSE_BUTTON`, `CHANGE_SCENE`, `RESET` (also clears the level's name), `SET_LEVEL_NAME` (`data.name`), `DUPLICATE_LAYER`,
 `MOVE_PLAYER_LAYER_UP`, `MOVE_PLAYER_LAYER_DOWN` (see `PlayerLayerMoved`), `INSPECT_CELL` (`data.position`: opens the cell inspector there, or closes it given none), `REFRESH`, ...),
 `const enum EditorTool { BRUSH = "brush", ERASE = "erase", DATA_SELECT = "data-select", STAMP = "stamp", DROPPER = "dropper", FILL = "fill", MOVE = "move" }`,
 `const enum MouseButtonState { LEFT_DOWN, RIGHT_DOWN, UP, MIDDLE_DOWN }`, `IMPLICIT_LAYER_ID = -99999` (the always-present `attributes` data layer, holding every data brush but the heights, one of each name a cell),
@@ -2948,7 +2963,7 @@ Used by the editor's own views; available for editor extensions.
 | `DataBrushDialog` | `OpenDataBrushDialog(name, value, context?, quests?)` - the popup for a value, with the level's quests to offer; `MonsterImage(type)` (a monster's chip picture, cached) |
 | `QuestEditor` | The quest popup's pure parts: `QuestFields(images)`, `QuestToForm(quest)`, `QuestFromForm(form, was)` (a goal of a kind it doesn't know keeps its fields), `QuestProblem(form, others)`, `NewQuestId(quests)`, `DescribeQuest(quest)` |
 | `QuestsDialog` | `OpenQuestsDialog(quests): Promise<QuestDef[] \| null>` - the quest list (Q): Edit, Remove, Add quest; resolves with the new list on Save, null if cancelled or unchanged; `IsQuestsDialogOpen()` |
-| `DataLabels` | `PickupLabel(pickup)`, `MapLabel(value)` (the short tag drawn over a value on the attributes overlay: `G10`, `H2`, `K3`, `W`, `I`, `T` for a light to carry (a torch), `L3` for a locked door - an unlocked one has no tag -, `D` for a dialog, `B` for a boss, a spawner's number of monster types, `P3` for portal 3 - `A3` for an arrival-only one -, an overlay's seed, and a `Q` after a pickup's or boss's that counts for a quest; only characters the bitmap font has), `UnpairedPortalCells(levelData): Set<string>` (the cells, as `"x,y"`, of the `teleport` brushes whose id no other portal has - the map puts a `?` after their tag), `DescribeTeleport(value)` (`portal 3`, `portal 3 · arrival only`), `DescribePickup(pickup)`, `DescribeBoss(boss)`, `DescribeDialog(script)` (its first line, not a part's name, how many lines, and `shouts` when it has a shout part), `DescribeLock(lock)`, `DescribeSpawner(spawner)`, `DescribeOverlay(value)` (`water · seed 3 · mirrors 55%` - nothing about mirroring for one that doesn't - then `· alpha 60%` for one that's faded and its blend, `· screen`, for one that isn't normal), `DescribeDataValue(value): { text, colour? }` (any data value in a line - a number, pickup, dialog, boss, light, spawner, door lock, portal or overlay - for the selected-brush card and the inspector, with a light's or overlay's colour beside it; none for a shiny floor) (pure) |
+| `DataLabels` | `PickupLabel(pickup)`, `MapLabel(value)` (the short tag drawn over a value on the attributes overlay: `G10`, `H2`, `K3`, `W`, `I`, `T` for a light to carry (a torch), `L3` for a locked door - an unlocked one has no tag -, `D` for a dialog, `B` for a boss, a spawner's number of monster types, `P3` for portal 3 - `A3` for an arrival-only one -, `x0.3` for an overlay that sets the heroes' pace to 0.3 of bare floor's, and a `Q` after a pickup's or boss's that counts for a quest; only characters the bitmap font has), `UnpairedPortalCells(levelData): Set<string>` (the cells, as `"x,y"`, of the `teleport` brushes whose id no other portal has - the map puts a `?` after their tag), `DescribeTeleport(value)` (`portal 3`, `portal 3 · arrival only`), `DescribePickup(pickup)`, `DescribeBoss(boss)`, `DescribeDialog(script)` (its first line, not a part's name, how many lines, and `shouts` when it has a shout part), `DescribeLock(lock)`, `DescribeSpawner(spawner)`, `DescribeOverlay(value)` (`water · speed ×0.4 · slipperiness ×0.5 · mirrors 55%` - nothing about mirroring for one that doesn't - then `· alpha 60%` for one that's faded and its blend, `· screen`, for one that isn't normal), `DescribeDataValue(value): { text, colour? }` (any data value in a line - a number, pickup, dialog, boss, light, spawner, door lock, portal or overlay - for the selected-brush card and the inspector, with a light's or overlay's colour beside it; none for a shiny floor) (pure) |
 | `Heights` | The height layer's pure rules: `MaxHeight` (999), `ClampHeight(h)`, `CellKey(cell)`, `HeightMap(levelData)` (cell key -> height), `HeightAtCell(levelData, cell)`, `IsHeightBrush(brush)`, `MakeHeightBrush(cell, height)`, `type HeightChange = { height?; delta? }`, `WithHeights(levelData, cells, change)` (each cell once, clamped; a cell at 0 has no brush; the same array if nothing changed), `HeightColour(h)` (the heatmap's colour: greens through reds up, blues down), `BlockedEdges(heights)` (the cell edges a hero can't step over - `IsHeightGap` - which the map marks in red) |
 | `CellEntries` | `type CellEntry` (a data brush, a tile's own light/spawner/pickup/door lock - `replaced` for a light a `LIGHT` brush on the tile's own cell takes the place of - or the cell's height), `type CellLookups`, `TileValueOf(brush, meta)`, `CellEntriesAt(levelData, layers, cell, lookups)` (everything on a cell, on any layer, shown or not: data brushes, then tiles' values from the top, then always the height), `EntryName(entry)`, `SummariseCell(entries)` (the cursor's one-line summary, leaving out a height of 0 and a replaced light) (pure) |
 | `views/CellLookups` | `EditorCellLookups(levelData, layers)` (footprints and metadata from the loaded art), `EditorCellEntries(levelData, layers, cell)` |

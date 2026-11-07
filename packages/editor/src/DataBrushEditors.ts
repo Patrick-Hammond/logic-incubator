@@ -30,15 +30,20 @@ import {
     IsOverlayBlend,
     IsOverlayKind,
     IsOverlayValue,
-    MaxOverlaySeed,
+    MaxOverlaySlipperiness,
+    MaxOverlaySpeed,
+    MinOverlaySpeed,
     OverlayAlpha,
     OverlayBlend,
     OverlayBlendOf,
     OverlayBlends,
+    OverlayFootings,
     OverlayKind,
     OverlayKinds,
     OverlayLooks,
     OverlayReflectivity,
+    OverlaySlipperiness,
+    OverlaySpeed,
     OverlayTint,
     SanitiseOverlayValue
 } from "@logic-incubator/engine/level/Overlays";
@@ -227,24 +232,39 @@ const OVERLAY_BLEND_LABELS: { [blend in OverlayBlend]: string } = {
 };
 
 /**
- * Each kind of overlay has its own colour and reflectivity fields, shown while it's the kind chosen, so choosing another kind
- * shows that kind's own look to start from rather than the last one's.
+ * Each kind of overlay has its own speed, slipperiness, colour and reflectivity fields, shown while it's the kind chosen, so
+ * choosing another kind shows that kind's own to start from rather than the last one's.
  */
 function OverlayFields(): FieldSpec[] {
     const fields: FieldSpec[] = [
-        { type: "choice", key: "overlay", label: "Kind", options: OverlayKinds.map(kind => ({ value: kind, label: OVERLAY_LABELS[kind] })) },
-        {
-            type: "number",
-            key: "seed",
-            label: "Seed",
-            min: 0,
-            max: MaxOverlaySeed,
-            sliderMax: 99,
-            hint: "What its shape and pattern are made from: another seed, another look. Cells side by side with the same kind and seed are one patch. +/- changes it while painting; fill a patch to give it the new one."
-        }
+        { type: "choice", key: "overlay", label: "Kind", options: OverlayKinds.map(kind => ({ value: kind, label: OVERLAY_LABELS[kind] })) }
     ];
     OverlayKinds.forEach(kind => {
         const when = (form: FormValues) => form.overlay === kind;
+        const footing = OverlayFootings[kind];
+        fields.push({
+            type: "number",
+            key: "speed_" + kind,
+            label: "Speed",
+            min: MinOverlaySpeed,
+            max: MaxOverlaySpeed,
+            step: 0.05,
+            unit: "× normal",
+            hint: `How fast the heroes walk over it: 1 as on bare floor, less to wade or trudge, more to hurry them along. ${OVERLAY_LABELS[kind]} starts at ${footing.speed}.`,
+            visibleWhen: when
+        });
+        fields.push({
+            type: "number",
+            key: "slipperiness_" + kind,
+            label: "Slipperiness",
+            min: 0,
+            max: MaxOverlaySlipperiness,
+            step: 0.05,
+            unit: "× normal",
+            zeroLabel: "stops dead",
+            hint: `How long the heroes take to slow down on it, when they let go or turn round: 1 as on bare floor, less to stop short, more to slide on. ${OVERLAY_LABELS[kind]} starts at ${footing.slipperiness}.`,
+            visibleWhen: when
+        });
         if (kind !== "shiny") {
             fields.push({ type: "colour", key: "tint_" + kind, label: "Colour", visibleWhen: when });
         }
@@ -600,14 +620,16 @@ const EDITORS: { [name: string]: DataBrushEditor } = {
 
     [DataBrushName.OVERLAY]: {
         title: "Floor overlay",
-        subtitle: "Dirt, water, slime and the rest over the floor, made up from its kind and seed. What reflects mirrors what stands over it.",
+        subtitle: "Dirt, water, slime and the rest over the floor: how it slows the heroes or lets them slide, and how it looks. What reflects mirrors what stands over it.",
         fields: () => OverlayFields(),
         toForm: value => {
             const overlay = (IsOverlayValue(value) && SanitiseOverlayValue(value)) || DefaultOverlayValue();
-            const form: FormValues = { overlay: overlay.overlay, seed: overlay.seed, alpha: Math.round(OverlayAlpha(overlay) * 100), blend: OverlayBlendOf(overlay) };
-            // Every kind's fields start as its own look; the chosen kind's as this overlay's.
+            const form: FormValues = { overlay: overlay.overlay, alpha: Math.round(OverlayAlpha(overlay) * 100), blend: OverlayBlendOf(overlay) };
+            // Every kind's fields start as its own; the chosen kind's as this overlay's.
             OverlayKinds.forEach(kind => {
                 const own = kind === overlay.overlay;
+                form["speed_" + kind] = own ? OverlaySpeed(overlay) : OverlayFootings[kind].speed;
+                form["slipperiness_" + kind] = own ? OverlaySlipperiness(overlay) : OverlayFootings[kind].slipperiness;
                 form["tint_" + kind] = own ? OverlayTint(overlay) : OverlayLooks[kind].tint;
                 form["reflectivity_" + kind] = Math.round((own ? OverlayReflectivity(overlay) : OverlayLooks[kind].reflectivity) * 100);
             });
@@ -615,11 +637,12 @@ const EDITORS: { [name: string]: DataBrushEditor } = {
         },
         fromForm: form => {
             const kind = IsOverlayKind(form.overlay) ? form.overlay : DefaultOverlayValue().overlay;
-            // Sanitised, so a tint or reflectivity left as the kind's own isn't saved: it follows the kind's.
+            // Sanitised, so a speed, slipperiness, tint or reflectivity left as the kind's own isn't saved: it follows the kind's.
             return (
                 SanitiseOverlayValue({
                     overlay: kind,
-                    seed: Number(form.seed),
+                    speed: Number(form["speed_" + kind]),
+                    slipperiness: Number(form["slipperiness_" + kind]),
                     tint: Number(form["tint_" + kind]),
                     reflectivity: Number(form["reflectivity_" + kind]) / 100,
                     alpha: Number(form.alpha) / 100,

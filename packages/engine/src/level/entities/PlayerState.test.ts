@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { Vec2 } from "@logic-incubator/lib/math/Geometry";
 import { TileSize } from "../../Constants";
 import type { IPlayerInput } from "../../input/PlayerControl";
-import { MoveCollider } from "../../view/helpers/PlayerMovement";
+import { BareFloor, Footing, MoveCollider } from "../../view/helpers/PlayerMovement";
 import { LightSpell } from "./LightSpell";
 import { DefaultExperienceRules } from "./Experience";
 import { ApplyPickup, CreatePlayerState, EquippedWeapon, GainExperience, StepPlayer, TakePlayerShot } from "./PlayerState";
@@ -112,6 +112,82 @@ describe("PlayerState", () => {
         // Facing right, so it's to their left.
         expect(state.orb.x).toBeLessThan(state.position.x + TileSize / 2);
         expect(state.previousOrb).toEqual(state.orb);
+    });
+
+    describe("on a floor overlay", () => {
+        /** Where they are along x after `walk` steps pushing right, then `coast` with nothing pressed - and how far they went while coasting. */
+        function Walk(footing: Footing | undefined, walk: number, coast = 0): { x: number; slid: number } {
+            const state = CreatePlayerState({ hitPoints: 6, weapons: [BOW] }, { x: 0, y: 0 });
+            for (let i = 0; i < walk; i++) {
+                StepPlayer(state, Input(1, 0), 1, FRAME, OPEN, footing);
+            }
+            const letGo = state.position.x;
+            for (let i = 0; i < coast; i++) {
+                StepPlayer(state, Input(), 1, FRAME, OPEN, footing);
+            }
+            return { x: state.position.x, slid: state.position.x - letGo };
+        }
+
+        it("moves on bare floor as it always has", () => {
+            expect(Walk(BareFloor, 40, 40)).toEqual(Walk(undefined, 40, 40));
+            // One step from standing: a push of 1 at PlayerSpeed, 0.8 pixels.
+            expect(Walk(BareFloor, 1).x).toBeCloseTo(0.8, 10);
+        });
+
+        it("goes at the floor's speed", () => {
+            expect(Walk({ speed: 0.3, slipperiness: 1 }, 60).x).toBeCloseTo(Walk(BareFloor, 60).x * 0.3, 8);
+            expect(Walk({ speed: 1.5, slipperiness: 1 }, 60).x).toBeCloseTo(Walk(BareFloor, 60).x * 1.5, 8);
+        });
+
+        it("speeds up as quickly however slippery the floor - slipperiness only slows the slowing down", () => {
+            expect(Walk({ speed: 1, slipperiness: 3 }, 30).x).toBe(Walk(BareFloor, 30).x);
+            expect(Walk({ speed: 1, slipperiness: 0.1 }, 30).x).toBe(Walk(BareFloor, 30).x);
+        });
+
+        it("slides on further after letting go the more slippery the floor, stopping short on a sticky one", () => {
+            const bare = Walk(BareFloor, 60, 300).slid;
+            const slime = Walk({ speed: 1, slipperiness: 3 }, 60, 300).slid;
+            const mud = Walk({ speed: 1, slipperiness: 0.1 }, 60, 300).slid;
+            expect(slime).toBeGreaterThan(bare * 2.5);
+            expect(mud).toBeLessThan(bare * 0.3);
+            expect(Walk({ speed: 1, slipperiness: 0 }, 60, 300).slid).toBe(0);
+        });
+
+        it("skids on into a slow, slippery floor run onto at speed, and stops short in a slow, sticky one", () => {
+            const into = (footing: Footing) => {
+                const state = CreatePlayerState({ hitPoints: 6, weapons: [BOW] }, { x: 0, y: 0 });
+                for (let i = 0; i < 60; i++) {
+                    StepPlayer(state, Input(1, 0), 1, FRAME, OPEN);
+                }
+                const edge = state.position.x;
+                for (let i = 0; i < 30; i++) {
+                    StepPlayer(state, Input(1, 0), 1, FRAME, OPEN, footing);
+                }
+                return state.position.x - edge;
+            };
+            // Walking 30 steps at slime's pace from a standstill would take them 30 * 0.4 = 12 pixels.
+            expect(into({ speed: 0.1, slipperiness: 3 })).toBeGreaterThan(40);
+            expect(into({ speed: 0.3, slipperiness: 0.1 })).toBeLessThan(30 * 0.3 * 4 + 6);
+        });
+
+        it("carries on further before turning round the more slippery the floor", () => {
+            const overshoot = (slipperiness: number) => {
+                const state = CreatePlayerState({ hitPoints: 6, weapons: [BOW] }, { x: 5, y: 5 });
+                const footing = { speed: 1, slipperiness };
+                for (let i = 0; i < 60; i++) {
+                    StepPlayer(state, Input(1, 0), 1, FRAME, OPEN, footing);
+                }
+                const turned = state.position.x;
+                let furthest = turned;
+                for (let i = 0; i < 60; i++) {
+                    StepPlayer(state, Input(-1, 0), 1, FRAME, OPEN, footing);
+                    furthest = Math.max(furthest, state.position.x);
+                }
+                return furthest - turned;
+            };
+            expect(overshoot(3)).toBeGreaterThan(overshoot(1) * 2.5);
+            expect(overshoot(1)).toBeGreaterThan(overshoot(0.1));
+        });
     });
 
     it("comes out the same from the same start and inputs", () => {

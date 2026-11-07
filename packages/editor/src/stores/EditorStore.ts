@@ -9,7 +9,7 @@ import { DefaultSpawnerValue } from "@logic-incubator/engine/level/entities/Spaw
 import { DefaultTeleportValue, IsTeleportValue, MaxPortalId } from "@logic-incubator/engine/level/Portals";
 import { Brush, DataBrushName, DataBrushValue, HEIGHT_LAYER_ID, IsTileLayer, TileLayerKind } from "@logic-incubator/engine/level/LevelFormat";
 import { DefaultLightValue } from "@logic-incubator/engine/level/Lighting";
-import { DefaultOverlayValue, IsOverlayValue, MaxOverlaySeed } from "@logic-incubator/engine/level/Overlays";
+import { DefaultOverlayValue } from "@logic-incubator/engine/level/Overlays";
 import { DefaultDialogValue } from "@logic-incubator/engine/story/Talk";
 import { ClampHeight } from "../Heights";
 import { Layer } from "./LevelDataStore";
@@ -893,16 +893,13 @@ export default class EditorStore extends Store<IEditorState, IActionData> {
     }
 
     /**
-     * Plain +/- stepping applies to a height, to a portal's id, so the next pair can be painted without the popup, and to an
-     * overlay's seed, for the next patch to look different - a pickup's, spawner's, light's, dialog's or boss's value is set in its popup instead.
+     * Plain +/- stepping applies to a height and to a portal's id, so the next pair can be painted without the popup - a pickup's,
+     * spawner's, light's, dialog's, boss's or overlay's value is set in its popup instead.
      */
     private CalcDataBrushValue(value: DataBrushValue, actionType: EditorActions): DataBrushValue {
         const inc = actionType === EditorActions.DATA_BRUSH_INC ? 1 : -1;
         if (IsTeleportValue(value)) {
             return { ...value, portal: Math.min(MaxPortalId, Math.max(0, value.portal + inc)) };
-        }
-        if (IsOverlayValue(value)) {
-            return { ...value, seed: Math.min(MaxOverlaySeed, Math.max(0, value.seed + inc)) };
         }
         if (typeof value !== "number") {
             return value;

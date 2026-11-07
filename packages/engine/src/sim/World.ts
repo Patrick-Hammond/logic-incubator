@@ -33,7 +33,7 @@ import { BoxOnCell, Pushable, PushDelay, PushTarget } from "../level/entities/Pu
 import TileCollision from "../level/TileCollision";
 import QuestLog, { QuestDef, QuestHappening, QuestLevel, QuestState, QuestStatus } from "../story/Quests";
 import { BumpedNpc } from "../story/Talk";
-import type { MoveCollider } from "../view/helpers/PlayerMovement";
+import type { Footing, MoveCollider } from "../view/helpers/PlayerMovement";
 import Hero from "./Hero";
 import { LeashBoxFor, Leashed } from "./Leash";
 
@@ -48,6 +48,8 @@ export interface WorldLevel extends EncounterLevel, QuestLevel {
     IsExit(tileX: number, tileY: number): boolean;
     /** Where a hero who stepped from cell `from` onto cell `to` comes out of a portal, if they walked onto one - see `Level.PortalJump`. */
     PortalJump(from: Vec2Like, to: Vec2Like): Vec2Like | null;
+    /** How a hero moves on the cell - its floor overlay's pace and slipperiness, or bare floor's (see `Overlays.FootingAt`). */
+    FootingAt(tileX: number, tileY: number): Footing;
     IsDoorLocked(tileX: number, tileY: number, canOpen: (lockId: number) => boolean): boolean;
     UpdateDoors(tiles: ReadonlyArray<Vec2Like>, canOpen: (lockId: number) => boolean): void;
     UpdateVisibleRegions(tiles: ReadonlyArray<Vec2Like>): void;
@@ -282,8 +284,8 @@ export default class World {
     }
 
     /**
-     * One step of play: each hero in play (`Active`) moves with their input (by slot - see `HeroInput`), or warps if they
-     * asked to and may (see `WarpDistance`); the doors and what the team can see follow where they stand, each
+     * One step of play: each hero in play (`Active`) moves with their input (by slot - see `HeroInput`), at the pace of the
+     * floor they're on (`FootingAt` their `Tile`), or warps if they asked to and may (see `WarpDistance`); the doors and what the team can see follow where they stand, each
      * picks up every pickup their sprite touches (`PickupCellsReached`; in slot order, so the first there gets it -
      * `PICKUP_COLLECTED`, once a cell) and fires;
      * then the encounter. A hero who walks onto a portal comes out of its partner (`TakePortal`, `HERO_TELEPORTED`) - and on a
@@ -310,7 +312,7 @@ export default class World {
                 const wasLit = !!hero.Spell && !!hero.Spell.lit;
                 // After any warp: coming out on a portal isn't walking onto it.
                 const from = hero.Tile;
-                hero.Step(input, dt, seconds, box ? Leashed(this.collision, box) : this.collision);
+                hero.Step(input, dt, seconds, box ? Leashed(this.collision, box) : this.collision, this.level.FootingAt(from.x, from.y));
                 if (!wasLit && hero.Spell && hero.Spell.lit) {
                     this.options.emit(LIGHT_SPELL_CAST, hero.Index);
                 }

@@ -20,7 +20,7 @@ import { LightSpell, LightSpellState } from "../level/entities/LightSpell";
 import { Experience, ExperienceRules } from "../level/entities/Experience";
 import { ApplyPickup, CreatePlayerState, DamagePlayer, EquippedWeapon, GainExperience, PlayerState, StepPlayer, TakePlayerShot } from "../level/entities/PlayerState";
 import { FigureBox, SpriteSize, WeaponDef } from "../level/entities/Projectiles";
-import { BoxCentre, CentreTile, MoveCollider } from "../view/helpers/PlayerMovement";
+import { BareFloor, BoxCentre, CentreTile, Footing, MoveCollider } from "../view/helpers/PlayerMovement";
 
 export default class Hero implements EncounterPlayer {
     private state: PlayerState;
@@ -185,9 +185,13 @@ export default class Hero implements EncounterPlayer {
         state.previousOrb.Copy(state.orb);
     }
 
-    /** One step with this input: `dt` in frames (which movement is tuned to - 1 at 60 a second), `seconds` for timers; `collider` keeps them out of walls. */
-    Step(input: IPlayerInput, dt: number, seconds: number, collider: MoveCollider): void {
-        StepPlayer(this.state, input, dt, seconds, collider);
+    /**
+     * One step with this input: `dt` in frames (which movement is tuned to - 1 at 60 a second), `seconds` for timers; `collider` keeps
+     * them out of walls; `footing` is the floor they start it on (see `Footing` - a floor overlay's, `WorldLevel.FootingAt` the cell
+     * of their `Tile`), bare floor's when left out.
+     */
+    Step(input: IPlayerInput, dt: number, seconds: number, collider: MoveCollider, footing: Footing = BareFloor): void {
+        StepPlayer(this.state, input, dt, seconds, collider, footing);
     }
 
     /** See `ApplyPickup` in PlayerState. */

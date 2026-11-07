@@ -37,7 +37,9 @@ describe("MapLabel", () => {
         expect(MapLabel({ lock: 0 })).toBe("L0");
         expect(MapLabel({ portal: 3 })).toBe("P3");
         expect(MapLabel({ portal: 12, arrivalOnly: true })).toBe("A12");
-        expect(MapLabel({ overlay: "water", seed: 37 })).toBe("37");
+        expect(MapLabel({ overlay: "water" })).toBe("x0.4");
+        expect(MapLabel({ overlay: "slime", speed: 0.05 })).toBe("x0.05");
+        expect(MapLabel({ overlay: "shiny" })).toBe("x1");
     });
 
     it("finds the portals that go nowhere - their id no other portal's - for the map to mark", () => {
@@ -123,8 +125,8 @@ describe("DescribeDataValue", () => {
         expect(DescribeDataValue({ portal: 4 })).toEqual({ text: "portal 4" });
         expect(DescribeDataValue({ portal: 4, arrivalOnly: true })).toEqual({ text: "portal 4 · arrival only" });
         expect(DescribeDataValue({ monsters: ["big_demon"], interval: 4, maxAlive: 2, total: 0, activationRange: 10, hitPoints: 10 })).toEqual({ text: "big demon · every 4s · max 2" });
-        expect(DescribeDataValue({ overlay: "slime", seed: 2, tint: 0x00ff00 })).toEqual({ text: "slime · seed 2 · mirrors 20%", colour: 0x00ff00 });
-        expect(DescribeDataValue({ overlay: "shiny", seed: 2 })).toEqual({ text: "shiny · seed 2 · mirrors 35%" });
+        expect(DescribeDataValue({ overlay: "slime", tint: 0x00ff00 })).toEqual({ text: "slime · speed ×0.1 · slipperiness ×3 · mirrors 20%", colour: 0x00ff00 });
+        expect(DescribeDataValue({ overlay: "shiny" })).toEqual({ text: "shiny · speed ×1 · slipperiness ×1.3 · mirrors 35%" });
     });
 
     it("has nothing to say about no value", () => {
@@ -133,12 +135,12 @@ describe("DescribeDataValue", () => {
     });
 
     it("leaves out what an overlay mirrors when it mirrors nothing", () => {
-        expect(DescribeOverlay({ overlay: "dirt", seed: 5 })).toBe("dirt · seed 5");
-        expect(DescribeOverlay({ overlay: "dirt", seed: 5, reflectivity: 0.25 })).toBe("dirt · seed 5 · mirrors 25%");
-        expect(DescribeOverlay({ overlay: "water", seed: 3, alpha: 0.6 })).toBe("water · seed 3 · mirrors 55% · alpha 60%");
-        expect(DescribeOverlay({ overlay: "dirt", seed: 5, alpha: 0.3 })).toBe("dirt · seed 5 · alpha 30%");
-        expect(DescribeOverlay({ overlay: "slime", seed: 2, alpha: 0.5, blend: "add" })).toBe("slime · seed 2 · mirrors 20% · alpha 50% · add");
-        expect(DescribeOverlay({ overlay: "moss", seed: 1, blend: "normal" })).toBe("moss · seed 1");
+        expect(DescribeOverlay({ overlay: "dirt" })).toBe("dirt · speed ×0.95 · slipperiness ×1");
+        expect(DescribeOverlay({ overlay: "dirt", reflectivity: 0.25 })).toBe("dirt · speed ×0.95 · slipperiness ×1 · mirrors 25%");
+        expect(DescribeOverlay({ overlay: "water", alpha: 0.6 })).toBe("water · speed ×0.4 · slipperiness ×0.5 · mirrors 55% · alpha 60%");
+        expect(DescribeOverlay({ overlay: "mud", speed: 0.5, slipperiness: 2, alpha: 0.3 })).toBe("mud · speed ×0.5 · slipperiness ×2 · mirrors 15% · alpha 30%");
+        expect(DescribeOverlay({ overlay: "slime", alpha: 0.5, blend: "add" })).toBe("slime · speed ×0.1 · slipperiness ×3 · mirrors 20% · alpha 50% · add");
+        expect(DescribeOverlay({ overlay: "moss", blend: "normal" })).toBe("moss · speed ×0.9 · slipperiness ×0.9");
     });
 
     it("counts a spawner's monster types when it has several", () => {

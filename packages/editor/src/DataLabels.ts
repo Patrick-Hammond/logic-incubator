@@ -5,8 +5,8 @@
  *
  * The map's labels are drawn in a small bitmap font that has letters, digits and a few marks but no "+" or
  * "$" - so a pickup is its kind's letter and its number ("G10" for ten gold, "K3" for key 3), with a Q after
- * it if it counts for a quest, and a portal is P and its id (A for an arrival-only one), with a ? after it if
- * it goes nowhere.
+ * it if it counts for a quest, a portal is P and its id (A for an arrival-only one), with a ? after it if
+ * it goes nowhere, and a floor overlay is the pace it sets, x0.3 for "a third of normal".
  */
 
 import { IsDoorLockValue } from "@logic-incubator/engine/level/Doors";
@@ -15,7 +15,16 @@ import { IsLocked } from "@logic-incubator/engine/level/entities/Keys";
 import { IsPickupValue, PickupValue } from "@logic-incubator/engine/level/entities/Pickups";
 import { IsSpawnerValue, SpawnerValue } from "@logic-incubator/engine/level/entities/Spawners";
 import { IsLightValue } from "@logic-incubator/engine/level/Lighting";
-import { IsOverlayValue, OverlayAlpha, OverlayBlendOf, OverlayReflectivity, OverlayTint, OverlayValue } from "@logic-incubator/engine/level/Overlays";
+import {
+    IsOverlayValue,
+    OverlayAlpha,
+    OverlayBlendOf,
+    OverlayReflectivity,
+    OverlaySlipperiness,
+    OverlaySpeed,
+    OverlayTint,
+    OverlayValue
+} from "@logic-incubator/engine/level/Overlays";
 import { Brush, DataBrushName, DataBrushValue } from "@logic-incubator/engine/level/LevelFormat";
 import Portals, { IsTeleportValue, TeleportValue } from "@logic-incubator/engine/level/Portals";
 import { ShoutPart } from "@logic-incubator/engine/story/DialogScript";
@@ -43,7 +52,8 @@ export function PickupLabel(pickup: PickupValue): string {
  * The tag drawn over a data value on the map - a bare number for a height, the range of a light, how many
  * monster types a spawner draws from, a pickup's PickupLabel, a locked door's lock as L3 (an unlocked door,
  * which is every door by default, has none - it'd be noise on each), D for an NPC's dialog, B for a boss and
- * a portal's id as P3 (A3 if it's arrival only) and an overlay's seed. A pickup or boss that counts for a quest has a Q after its tag.
+ * a portal's id as P3 (A3 if it's arrival only) and how fast an overlay lets the heroes walk, as x0.3 (the bitmap font has no "×").
+ * A pickup or boss that counts for a quest has a Q after its tag.
  * Empty for anything else.
  * Whatever each is is told apart by its shape, like everywhere else a Brush.data is read.
  */
@@ -73,7 +83,7 @@ export function MapLabel(value: DataBrushValue | null | undefined): string {
         return (value.arrivalOnly ? "A" : "P") + value.portal;
     }
     if (IsOverlayValue(value)) {
-        return String(value.seed);
+        return "x" + OverlaySpeed(value);
     }
     return "";
 }
@@ -97,14 +107,15 @@ export function DescribeTeleport(value: TeleportValue): string {
 }
 
 /**
- * An overlay in a few words, for the selected-brush card and the cell inspector: "water · seed 3 · mirrors 55%" - "mirrors" left out
- * for one that doesn't - then "alpha 60%" for one that's faded and its blend, "screen", for one that isn't laid over the floor as normal.
+ * An overlay in a few words, for the selected-brush card and the cell inspector: "water · speed ×0.4 · slipperiness ×0.5 · mirrors 55%" -
+ * "mirrors" left out for one that doesn't - then "alpha 60%" for one that's faded and its blend, "screen", for one that isn't laid over
+ * the floor as normal.
  */
 export function DescribeOverlay(value: OverlayValue): string {
     const reflectivity = Math.round(OverlayReflectivity(value) * 100);
     const alpha = Math.round(OverlayAlpha(value) * 100);
     const blend = OverlayBlendOf(value);
-    return [value.overlay, `seed ${value.seed}`]
+    return [value.overlay, `speed ×${OverlaySpeed(value)}`, `slipperiness ×${OverlaySlipperiness(value)}`]
         .concat(reflectivity > 0 ? [`mirrors ${reflectivity}%`] : [])
         .concat(alpha < 100 ? [`alpha ${alpha}%`] : [])
         .concat(blend !== "normal" ? [blend] : [])

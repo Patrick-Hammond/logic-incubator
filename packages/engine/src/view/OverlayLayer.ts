@@ -4,8 +4,8 @@ import * as overlayFragmentSrc from "./overlay.frag";
 import * as overlayVertexSrc from "./overlay.vert";
 import type ReflectionCapture from "./ReflectionCapture";
 
-/** Per corner: position (2), pattern position (2), cell corner (2), light (3), look (4), tint (3). */
-const FloatsPerVertex = 16;
+/** Per corner: position (2), pattern position (2), cell corner (2), light (3), look (3), tint (3). */
+const FloatsPerVertex = 15;
 const FloatsPerQuad = FloatsPerVertex * 4;
 /** As many quads as 16-bit indices reach - far more cells than are ever on screen. */
 const MaxQuads = 16383;
@@ -42,7 +42,7 @@ interface KindRun {
 
 /**
  * Draws floor overlays (see `Overlays`) - a quad per cell, refilled every frame between `Begin` and `End`, as a tile layer is -
- * with `overlay.frag`, which makes up the dirt, water, slime and the rest pixel by pixel from each cell's kind and seed, edges
+ * with `overlay.frag`, which makes up the dirt, water, slime and the rest pixel by pixel from each cell's kind and where it is, edges
  * them where their patch ends, lights them as the floor (each corner's light, as a tile's) and, over water, a shiny floor or
  * anything else that reflects, mirrors what `reflections` drew this frame. Its cells are laid out in its own pixels, a cell
  * `tileSize` across, so scale it as the tiles it lies on. Each kind is drawn by a program of its own (see `overlay.frag`), made
@@ -89,8 +89,8 @@ export default class OverlayLayer extends Container {
             .addAttribute("aPattern", this.vertices, 2, false, TYPES.FLOAT, stride, 2 * 4)
             .addAttribute("aCell", this.vertices, 2, false, TYPES.FLOAT, stride, 4 * 4)
             .addAttribute("aLight", this.vertices, 3, false, TYPES.FLOAT, stride, 6 * 4)
-            .addAttribute("aLook", this.vertices, 4, false, TYPES.FLOAT, stride, 9 * 4)
-            .addAttribute("aTint", this.vertices, 3, false, TYPES.FLOAT, stride, 13 * 4)
+            .addAttribute("aLook", this.vertices, 3, false, TYPES.FLOAT, stride, 9 * 4)
+            .addAttribute("aTint", this.vertices, 3, false, TYPES.FLOAT, stride, 12 * 4)
             .addIndex(this.indices);
         this.uniforms = new UniformGroup({
             translationMatrix: new Float32Array(9),
@@ -153,7 +153,6 @@ export default class OverlayLayer extends Container {
             data[i++] = corners[corner * 3 + 1];
             data[i++] = corners[corner * 3 + 2];
             data[i++] = cell.alpha;
-            data[i++] = cell.value.seed;
             data[i++] = cell.reflectivity;
             data[i++] = cell.joins;
             data[i++] = r;

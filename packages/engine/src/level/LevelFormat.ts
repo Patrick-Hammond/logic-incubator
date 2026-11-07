@@ -56,8 +56,9 @@ import type { TeleportValue } from "./Portals";
  * it moves it on a cell if there's room (see `Pushables`, `ImplicitData.FindPushables`). It has no value of its own.
  *
  * `OVERLAY` lays something over the floor of its cell - dirt, mud, water, slime, blood, moss or a shine - made up as it's drawn from
- * its kind and seed (see `Overlays`). Cells of one kind and seed side by side are one patch. One that mirrors (water, a shiny floor)
- * shows the heroes, monsters and walls standing over it upside down in it. It's drawn over the floor layers and under the rest.
+ * its kind and where it is (see `Overlays`). Cells of one kind side by side are one patch. A hero on it moves at its pace and slides
+ * as far as it lets them. One that mirrors (water, a shiny floor) shows the heroes, monsters and walls standing over it upside down
+ * in it. It's drawn over the floor layers and under the rest.
  */
 export const enum DataBrushName {
     PLAYER_START = "player-start",

@@ -7,11 +7,11 @@
  */
 
 import { Vec2, Vec2Like } from "@logic-incubator/lib/math/Geometry";
-import { TileSize } from "../../Constants";
+import { PlayerSpeed, TileSize } from "../../Constants";
 import type { PlayerSetup } from "../../DungeonMain";
 import type { IPlayerInput } from "../../input/PlayerControl";
 import type { CollectedPickup } from "../Level";
-import { BoxCentre, MoveCollider, ResolveMove } from "../../view/helpers/PlayerMovement";
+import { AxisVelocity, BareFloor, BoxCentre, Footing, MoveCollider, ResolveMove } from "../../view/helpers/PlayerMovement";
 import { CarriedLight, CreateCarriedLight, TickCarriedLight } from "./CarriedLight";
 import { AddGold, CreateGold, Gold } from "./Gold";
 import { CreateHealth, DamageHealth, Health, HealHealth, IsDead, TickHealth } from "./Health";
@@ -31,6 +31,7 @@ export type PlayerState = {
     position: Vec2;
     /** Where `position` was before the last step - what drawing between steps starts from. */
     previous: Vec2;
+    /** What they moved by in the last step, in steps of `PlayerSpeed` pixels a frame - see `AxisVelocity`. */
     velocity: Vec2;
     facingX: number;
     health: Health;
@@ -88,10 +89,11 @@ export function CreatePlayerState(setup: Pick<PlayerSetup, "hitPoints" | "weapon
 
 /**
  * One step: `dt` in frames (what movement is tuned to - 1 at 60 a second), `seconds` for timers. Their
- * timers tick, `input` turns and moves them (`collider` keeps them out of walls), and their mage-light
- * drifts after them. A shot fired waits in `shot` for `TakePlayerShot`.
+ * timers tick, `input` turns and moves them (`collider` keeps them out of walls) as the floor they're on lets
+ * them (`footing` - see `Footing`, `AxisVelocity`: a floor overlay's, bare floor's when left out), and their
+ * mage-light drifts after them. A shot fired waits in `shot` for `TakePlayerShot`.
  */
-export function StepPlayer(state: PlayerState, input: IPlayerInput, dt: number, seconds: number, collider: MoveCollider): void {
+export function StepPlayer(state: PlayerState, input: IPlayerInput, dt: number, seconds: number, collider: MoveCollider, footing: Footing = BareFloor): void {
     state.previous.Copy(state.position);
     state.previousOrb.Copy(state.orb);
     TickHealth(state.health, seconds);
@@ -102,7 +104,11 @@ export function StepPlayer(state: PlayerState, input: IPlayerInput, dt: number, 
         TickLightSpell(state.spell, seconds);
     }
     ReadInput(state, input, seconds);
-    ResolveMove(state.position, state.velocity, dt, collider);
+    const push = input.direction;
+    const velocity = state.velocity;
+    velocity.Set(AxisVelocity(velocity.x, push.x, footing, dt), AxisVelocity(velocity.y, push.y, footing, dt));
+    // Damped already, for the floor.
+    ResolveMove(state.position, velocity, dt, collider, PlayerSpeed, 1);
     MoveOrb(state, dt, seconds);
 }
 
@@ -179,7 +185,6 @@ function ReadInput(state: PlayerState, input: IPlayerInput, seconds: number): vo
     if (n.x !== 0) {
         state.facingX = n.x < 0 ? -1 : 1;
     }
-    state.velocity.Offset(n.x, n.y);
 
     state.fireCooldown = Math.max(0, state.fireCooldown - seconds);
     if (input.aimX !== 0) {
