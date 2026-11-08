@@ -1,8 +1,12 @@
-import {AnimatedSprite, Sprite, Texture, utils, BitmapText} from "pixi.js";
+import {AnimatedSprite, Rectangle, Sprite, Texture, utils, BitmapText} from "pixi.js";
 import { ScopedNames } from "../assets/AssetScope";
+import { IsEmptyPiece, ParsePieceName, PieceFrame, PieceGridOf, PieceName, PieceRect } from "./SpritePieces";
 
-/** A registered sprite or animation: the texture keys of its frames, and which bundle it came from (none for a runtime-made one). */
-type Entry = { frames: string[]; bundle?: string; local: string };
+/**
+ * A registered sprite or animation: the texture keys of its frames, and which bundle it came from (none for a runtime-made one).
+ * `piece` marks one cut from a bigger sprite (see `SpritePieces`) - made by asking for it, never listed.
+ */
+type Entry = { frames: string[]; bundle?: string; local: string; piece?: boolean };
 
 /**
  * Makes sprites and animations by name. The names a game uses - in level files, asset metadata,
@@ -11,6 +15,10 @@ type Entry = { frames: string[]; bundle?: string; local: string };
  * asset scope: a bare name means the nearest loaded bundle that has it (see `Assets.SetScope`),
  * and a qualified id means itself. Textures a game makes at runtime (`Add`) belong to no bundle
  * and are found by their own name.
+ *
+ * A sprite bigger than one cell can also be asked for a piece at a time, by a piece name (`floor_rug@1,0` - see
+ * `SpritePieces`): the first time one is, every frame is cut at that place into a texture on the same sheet, which
+ * is kept and given out from then on. A piece belongs to its sprite's bundle and goes with it.
  */
 export default class AssetFactory {
     private static _inst: AssetFactory;
@@ -47,7 +55,7 @@ export default class AssetFactory {
 
     /** Whether `name` is a loaded sprite or animation - `Create` returns null, and `CreateTexture` throws, for anything else. */
     Has(name: string): boolean {
-        return this.scope.Resolve(name) !== undefined;
+        return this.KeyOf(name) !== undefined;
     }
 
     /** Whether `name` is an animation (several frames) rather than a sprite. False for a name nothing in scope has. */
@@ -58,7 +66,17 @@ export default class AssetFactory {
 
     /** The registered key `name` means - itself for a qualified id - or undefined if nothing in scope has it. */
     Resolve(name: string): string | undefined {
-        return this.scope.Resolve(name);
+        return this.KeyOf(name);
+    }
+
+    /**
+     * Whether `name` is a piece with no art: its sprite is clear all over that cell, so the sheet trimmed it away (see
+     * `SpritePieces.PieceFrame`). False for anything else, a piece that isn't loaded included.
+     */
+    IsEmptyPiece(name: string): boolean {
+        const entry = ParsePieceName(name) ? this.EntryOf(name) : undefined;
+        const texture = entry && (utils.TextureCache[entry.frames[0]] as Texture);
+        return !!texture && entry.frames.every(frame => IsEmptyPiece((utils.TextureCache[frame] as Texture).frame));
     }
 
     /** Which bundles a bare name is looked up in, nearest first. Set by `Assets`. */
@@ -98,14 +116,17 @@ export default class AssetFactory {
         this.Changed();
     }
 
+    /** Forgets a sprite or animation, and any pieces cut from it. */
     Remove(id: string): void {
-        if (this.entries.delete(id)) {
+        const pieces = this.DropPieces((entry, key) => key.lastIndexOf(id + "@", 0) === 0);
+        if (this.entries.delete(id) || pieces) {
             this.Changed();
         }
     }
 
     /** Forgets everything a bundle registered - as it unloads. */
     RemoveBundle(bundle: string): void {
+        this.DropPieces(entry => entry.bundle === bundle);
         const owned: string[] = [];
         this.entries.forEach((entry, key) => {
             if (entry.bundle === bundle) {
@@ -162,8 +183,71 @@ export default class AssetFactory {
     }
 
     private EntryOf(name: string): Entry | undefined {
-        const key = this.scope.Resolve(name);
+        const key = this.KeyOf(name);
         return key === undefined ? undefined : this.entries.get(key);
+    }
+
+    /**
+     * The registered key `name` means, or undefined if nothing in scope has it. A piece's is its sprite's key with the
+     * piece's place after it - the sprite is resolved first, so the piece is always of the sprite the name means now - and
+     * it's cut and registered the first time it's asked for. A piece that's out of its sprite, or of a sprite that isn't
+     * a whole number of cells, is nothing.
+     */
+    private KeyOf(name: string): string | undefined {
+        const piece = ParsePieceName(name);
+        if (!piece) {
+            return this.scope.Resolve(name);
+        }
+        const baseKey = this.scope.Resolve(piece.base);
+        const base = baseKey === undefined ? undefined : this.entries.get(baseKey);
+        if (!base || base.piece) {
+            return undefined;
+        }
+        const suffix = PieceName("", piece.column, piece.row);
+        const key = baseKey + suffix;
+        if (this.entries.has(key)) {
+            return key;
+        }
+        const sources = base.frames.map(frame => utils.TextureCache[frame] as Texture);
+        if (sources.some(source => !source)) {
+            return undefined;
+        }
+        const grids = sources.map(source => PieceGridOf(source.orig.width, source.orig.height));
+        const grid = grids[0];
+        if (!grid || piece.column >= grid.columns || piece.row >= grid.rows || grids.some(g => !g || g.columns !== grid.columns || g.rows !== grid.rows)) {
+            return undefined;
+        }
+        const frames = base.frames.map((frame, index) => {
+            const source = sources[index];
+            const cut = PieceFrame(source.frame, source.orig, source.trim || null, piece.column, piece.row);
+            const pieceKey = frame + suffix;
+            utils.TextureCache[pieceKey] = new Texture(source.baseTexture, ToRectangle(cut.frame), ToRectangle(cut.orig), cut.trim ? ToRectangle(cut.trim) : undefined);
+            return pieceKey;
+        });
+        this.entries.set(key, { frames, bundle: base.bundle, local: base.local + suffix, piece: true });
+        this.Changed();
+        return key;
+    }
+
+    /** Forgets the pieces `which` picks, with the textures cut for them (not their sheet, which is their sprite's). Whether there were any. */
+    private DropPieces(which: (entry: Entry, key: string) => boolean): boolean {
+        const dropped: string[] = [];
+        this.entries.forEach((entry, key) => {
+            if (entry.piece && which(entry, key)) {
+                dropped.push(key);
+            }
+        });
+        dropped.forEach(key => {
+            this.entries.get(key).frames.forEach(frame => {
+                const texture = utils.TextureCache[frame] as Texture;
+                delete utils.TextureCache[frame];
+                if (texture) {
+                    texture.destroy(false);
+                }
+            });
+            this.entries.delete(key);
+        });
+        return dropped.length > 0;
     }
 
     private Frames(name: string): string[] {
@@ -185,6 +269,9 @@ export default class AssetFactory {
             const chain = this.scope.Chain;
             const bare = new Set<string>();
             this.entries.forEach((entry, key) => {
+                if (entry.piece) {
+                    return;
+                }
                 if (!entry.bundle) {
                     bare.add(key);
                 } else if (chain.indexOf(entry.bundle) >= 0) {
@@ -203,4 +290,8 @@ export default class AssetFactory {
         }
         return this.visible;
     }
+}
+
+function ToRectangle(rect: PieceRect): Rectangle {
+    return new Rectangle(rect.x, rect.y, rect.width, rect.height);
 }

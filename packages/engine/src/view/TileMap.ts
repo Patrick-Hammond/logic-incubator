@@ -366,12 +366,18 @@ export default class TileMapView extends GameComponent {
                         if (cellZ !== z) {
                             continue;
                         }
-                        if (!this.level.IsCellVisible(x, y)) {
-                            continue;
-                        }
-                        CellCornerLight(this.level.lightGrid, x, y, this.cornerLight);
+                        // A hidden cell can still hold a piece of a sprite that shows elsewhere (see `Level.IsPieceVisible`).
+                        const cellVisible = this.level.IsCellVisible(x, y);
+                        let lit = false;
                         for (let t = 0, tt = tiles.length; t < tt; t++) {
                             const tile = tiles[t];
+                            if (!cellVisible && !(tile.piece && this.level.IsPieceVisible(x, y, tile.piece))) {
+                                continue;
+                            }
+                            if (!lit) {
+                                CellCornerLight(this.level.lightGrid, x, y, this.cornerLight);
+                                lit = true;
+                            }
                             const texture = tile.anim ? tile.anim.texture : tile.texture;
                             if (texture) {
                                 const left = (x - originX) * TileSize - tile.pixelOffset.x;

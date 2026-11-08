@@ -1,12 +1,16 @@
 import {AnimatedSprite, Sprite} from "pixi.js";
 import { AnimationSpeed, TileSize } from "@logic-incubator/engine/Constants";
+import AssetMetadataStore from "@logic-incubator/engine/level/AssetMetadata";
+import { TilePieceGrid } from "@logic-incubator/engine/level/TilePieces";
 import { GridBounds } from "../Layout";
 import EditorComponent from "../EditorComponent";
-import { IEditorState, PaintsWithBrush } from "../stores/EditorStore";
+import { EditorTool, IEditorState, MouseButtonState, PaintsWithBrush } from "../stores/EditorStore";
 
 /** The brush sprite following the cursor over the map. */
 export default class BrushTool extends EditorComponent {
     private brush: Sprite | AnimatedSprite;
+    /** Whether the brush is a big sprite painted in pieces (see `TilePieces`) - a stroke lays it whole where `Tools` outlines, not always at the cursor. */
+    private pieced = false;
 
     protected OnInitialise(): void {
         this.Own(this.editorStore.Subscribe(this.Render, this));
@@ -25,6 +29,8 @@ export default class BrushTool extends EditorComponent {
                 // null for a data brush's name (player-start, collision, z-index, ...) - never a real
                 // sprite, so there's nothing to follow the cursor with; `Tools`' own preview covers it.
                 this.brush = this.assetFactory.Create(state.currentBrush.name);
+                const name = state.currentBrush.name;
+                this.pieced = !!this.brush && TilePieceGrid(AssetMetadataStore.inst.Get(name), this.assetFactory.CreateTexture(name), TileSize) !== null;
                 if (this.brush instanceof AnimatedSprite) {
                     this.brush.play();
                     this.brush.animationSpeed = AnimationSpeed;
@@ -66,7 +72,9 @@ export default class BrushTool extends EditorComponent {
             this.brush.pivot.set(state.currentBrush.pixelOffset.x, state.currentBrush.pixelOffset.y);
         }
 
-        // visible - only for the tools that paint with it; painting itself is done by `Tools`
-        this.brush.visible = state.brushVisible && PaintsWithBrush(state.tool);
+        // visible - only for the tools that paint with it; painting itself is done by `Tools`. A big sprite's stroke is
+        // shown by what it lays and `Tools`' outline, which snap to the stroke's grid, so the sprite would only be in the way.
+        const stroking = this.pieced && state.tool === EditorTool.BRUSH && state.mouseButtonState === MouseButtonState.LEFT_DOWN;
+        this.brush.visible = state.brushVisible && PaintsWithBrush(state.tool) && !stroking;
     }
 }

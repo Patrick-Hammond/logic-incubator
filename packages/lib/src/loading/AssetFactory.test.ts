@@ -10,9 +10,32 @@ vi.mock("pixi.js", () => {
         }
         return { texture: key };
     };
+    /** Records what a piece's texture is cut as (see `AssetFactory.KeyOf`). */
+    class Texture {
+        static from = from;
+        destroyed = false;
+        constructor(
+            public baseTexture: unknown,
+            public frame: unknown,
+            public orig: unknown,
+            public trim?: unknown
+        ) {}
+        destroy(): void {
+            this.destroyed = true;
+        }
+    }
+    class Rectangle {
+        constructor(
+            public x: number,
+            public y: number,
+            public width: number,
+            public height: number
+        ) {}
+    }
     return {
         utils: { TextureCache: pixi.cache },
-        Texture: { from },
+        Texture,
+        Rectangle,
         Sprite: { from: (key: string) => ({ sprite: key }) },
         AnimatedSprite: { fromFrames: (frames: string[]) => ({ anim: frames }) },
         BitmapText: class {
@@ -120,5 +143,85 @@ describe("AssetFactory", () => {
         AssetFactory.Destroy(); // safe twice
         expect(AssetFactory.inst).not.toBe(factory);
         expect(AssetFactory.inst.Has("wall")).toBe(false);
+    });
+});
+
+describe("AssetFactory pieces", () => {
+    type Cut = { baseTexture: unknown; frame: object; orig: object; trim?: object; destroyed: boolean };
+    const sheet = { sheet: "global" };
+
+    /** A sprite's frame on the sheet, as pixi's spritesheet makes it. */
+    function frame(x: number, y: number, width: number, height: number, trim: object | null = null) {
+        return { baseTexture: sheet, frame: { x, y, width, height }, orig: { x: 0, y: 0, width: trim ? 32 : width, height: trim ? 32 : height }, trim };
+    }
+
+    beforeEach(() => {
+        loadBundle("global", ["rug", "door"], { pool: 2 });
+        pixi.cache["global.rug"] = frame(0, 0, 32, 32);
+        pixi.cache["global.door"] = frame(40, 0, 21, 32);
+        pixi.cache["global.pool_f0"] = frame(0, 40, 32, 16);
+        pixi.cache["global.pool_f1"] = frame(40, 40, 32, 16);
+        factory.SetScope(["global"]);
+    });
+
+    it("cuts a piece the first time it's asked for, on the same sheet, and keeps it", () => {
+        expect(factory.Has("rug@1,1")).toBe(true);
+        expect(factory.Resolve("rug@1,1")).toBe("global.rug@1,1");
+        const cut = pixi.cache["global.rug@1,1"] as Cut;
+        expect(cut.baseTexture).toBe(sheet);
+        expect(cut.frame).toEqual({ x: 16, y: 16, width: 16, height: 16 });
+        expect(cut.orig).toEqual({ x: 0, y: 0, width: 16, height: 16 });
+        expect(cut.trim).toBeUndefined();
+        expect(factory.Create("rug@1,1")).toEqual({ sprite: "global.rug@1,1" });
+        expect(factory.Has("rug@1,1")).toBe(true);
+        expect(pixi.cache["global.rug@1,1"]).toBe(cut);
+    });
+
+    it("cuts every frame of an animation, so the piece animates too", () => {
+        expect(factory.IsAnimation("pool@1,0")).toBe(true);
+        expect(factory.Create("pool@1,0")).toEqual({ anim: ["global.pool_f0@1,0", "global.pool_f1@1,0"] });
+        expect((pixi.cache["global.pool_f1@1,0"] as Cut).frame).toEqual({ x: 56, y: 40, width: 16, height: 16 });
+    });
+
+    it("has no piece outside its sprite, nor of a sprite that isn't whole cells, nor of a piece", () => {
+        expect(factory.Has("rug@2,0")).toBe(false);
+        expect(factory.Has("door@0,0")).toBe(false);
+        expect(factory.Has("ghost@0,0")).toBe(false);
+        expect(factory.Has("rug@0,0@0,0")).toBe(false);
+    });
+
+    it("never lists a piece among the sprites", () => {
+        factory.Has("rug@0,0");
+        factory.Has("pool@0,0");
+        expect(factory.SpriteNames.sort()).toEqual(["door", "rug"]);
+        expect(factory.AnimationNames).toEqual(["pool"]);
+    });
+
+    it("tells a piece the sheet trimmed away", () => {
+        pixi.cache["global.rug"] = frame(0, 0, 16, 32, { x: 0, y: 0, width: 16, height: 32 });
+        expect(factory.IsEmptyPiece("rug@1,0")).toBe(true);
+        expect(factory.IsEmptyPiece("rug@0,0")).toBe(false);
+        expect(factory.IsEmptyPiece("rug")).toBe(false);
+        expect(factory.IsEmptyPiece("ghost@0,0")).toBe(false);
+    });
+
+    it("lets a piece go with its sprite's bundle, and cuts it afresh once that's back", () => {
+        factory.Has("rug@0,1");
+        const cut = pixi.cache["global.rug@0,1"] as Cut;
+        factory.RemoveBundle("global");
+        expect(cut.destroyed).toBe(true);
+        expect(pixi.cache["global.rug@0,1"]).toBeUndefined();
+        expect(factory.Has("rug@0,1")).toBe(false);
+        loadBundle("global", ["rug"]);
+        pixi.cache["global.rug"] = frame(0, 0, 32, 32);
+        expect(factory.Has("rug@0,1")).toBe(true);
+        expect(pixi.cache["global.rug@0,1"]).not.toBe(cut);
+    });
+
+    it("lets a piece go with its sprite when that's removed", () => {
+        factory.Has("rug@0,0");
+        factory.Remove("global.rug");
+        expect(factory.Has("rug@0,0")).toBe(false);
+        expect(pixi.cache["global.rug@0,0"]).toBeUndefined();
     });
 });

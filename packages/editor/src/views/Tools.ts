@@ -1,7 +1,9 @@
 import { Graphics, Text } from "pixi.js";
 import { Key } from "@logic-incubator/lib/io/Keyboard";
 import { Vec2Like } from "@logic-incubator/lib/math/Geometry";
+import { BaseName, PieceGrid } from "@logic-incubator/lib/loading/SpritePieces";
 import { Scenes, TileSize } from "@logic-incubator/engine/Constants";
+import { TilePieceGrid } from "@logic-incubator/engine/level/TilePieces";
 import { GridBounds } from "../Layout";
 import { SummariseCell } from "../CellEntries";
 import EditorComponent from "../EditorComponent";
@@ -23,7 +25,8 @@ import {
 import { Layer, LevelDataActions } from "../stores/LevelDataStore";
 import { EditorCellEntries } from "./CellLookups";
 import { TakesCategory } from "./PaletteCategories";
-import { CellRect, FloodFill, RectCells, SpanRect, TopmostBrushAt } from "../tools/ToolGeometry";
+import { BoundsOfCells, CellRect, FloodFill, RectCells, SpanRect, TopmostBrushAt } from "../tools/ToolGeometry";
+import { PiecesOver, StrokeBlock } from "../tools/PiecePainting";
 
 const PAINT_COLOUR = 0x9b5de5;
 const ERASE_COLOUR = 0xff5d5d;
@@ -49,6 +52,11 @@ type RectDrag = { anchor: Vec2Like; erase: boolean; brush: Brush };
  * - Fill: flood-fills the region of matching cells on the selected layer, within the visible map.
  * - Move: drag to pan (the view drag itself is `Canvas`'s, like middle-drag).
  *
+ * A floor or walls sprite bigger than a tile (see `TilePieces`) is painted in tile-sized pieces that join up: a stamp counts
+ * them from its top-left cell, a fill from the top-left of what it fills, and the brush lays a whole sprite at a time,
+ * edge to edge with the first one of its stroke (outlined under the cursor). Erasing takes a cell's piece; the dropper
+ * picks the whole sprite.
+ *
  * On "attributes", painting, erasing and filling touch only the active type (see `ActiveAttributeType`). On the
  * height layer they change heights rather than place brushes (see `WithHeights`): the height brush sets its number,
  * raise and lower step each cell once a stroke, erasing flattens to 0, a fill takes the connected cells of the same
@@ -66,6 +74,10 @@ export default class Tools extends EditorComponent {
     private fillKeys: { levelData: Brush[]; layerId: number; only: string | null; keys: Map<string, string> } = null;
     /** The cells a freehand stroke on the height layer has raised or lowered already, so going back over one doesn't step it again. */
     private stroke = new Set<string>();
+    /** Where the stroke under way began (map coordinates) - the big sprites it lays sit edge to edge from there (see `StrokeBlock`). */
+    private strokeAnchor: Vec2Like | null = null;
+    /** The top-left cell of the big sprite the stroke laid last, so moving about inside it doesn't lay it again. */
+    private strokeBlock: string | null = null;
 
     protected OnInitialise(): void {
         this.label = new Text("", { fontFamily: "Arial", fontSize: 12, fill: 0xffffff, stroke: 0x000000, strokeThickness: 3 });
@@ -136,6 +148,8 @@ export default class Tools extends EditorComponent {
         this.stroke.clear();
         const ctrl = this.Key(Key.Ctrl);
         const cell = this.MapCell(state);
+        this.strokeAnchor = cell;
+        this.strokeBlock = null;
 
         switch (state.tool) {
             case EditorTool.BRUSH:
@@ -191,8 +205,17 @@ export default class Tools extends EditorComponent {
         const right = state.mouseButtonState === MouseButtonState.RIGHT_DOWN;
         const paint = state.tool === EditorTool.BRUSH && left ? this.PaintBrush(state) : null;
         const erase = (state.tool === EditorTool.BRUSH && right) || (state.tool === EditorTool.ERASE && left);
+        const grid = paint && !IsHeightLayer(layer) ? this.PieceGridOf(paint.name) : null;
         if (IsHeightLayer(layer)) {
             this.PaintHeight(state, paint ? HeightChangeOf(paint) : erase ? { height: 0 } : null);
+        } else if (grid) {
+            const cell = this.MapCell(state);
+            const block = StrokeBlock(grid, this.strokeAnchor || cell, cell);
+            const key = block.x + "," + block.y;
+            if (key !== this.strokeBlock) {
+                this.strokeBlock = key;
+                this.PaintCells(state, paint, RectCells(block), block);
+            }
         } else if (paint) {
             this.levelDataStore.Dispatch({
                 type: LevelDataActions.PAINT,
@@ -257,11 +280,7 @@ export default class Tools extends EditorComponent {
                 canUndo: true
             });
         } else {
-            this.levelDataStore.Dispatch({
-                type: LevelDataActions.PAINT_CELLS,
-                data: { brush: this.drag.brush, cells: RectCells(rect, this.StampBorder(state)), layers: state.layers },
-                canUndo: true
-            });
+            this.PaintCells(state, this.drag.brush, RectCells(rect, this.StampBorder(state)), rect);
         }
     }
 
@@ -274,12 +293,33 @@ export default class Tools extends EditorComponent {
         if (IsHeightLayer(this.EditableLayer())) {
             this.levelDataStore.Dispatch({ type: LevelDataActions.SET_HEIGHT, data: { cells, heightChange: HeightChangeOf(brush) }, canUndo: true });
         } else {
-            this.levelDataStore.Dispatch({
-                type: LevelDataActions.PAINT_CELLS,
-                data: { brush, cells, layers: state.layers },
-                canUndo: true
-            });
+            this.PaintCells(state, brush, cells, BoundsOfCells(cells));
         }
+    }
+
+    /**
+     * Paints `brush` over `cells` (map coordinates) as one undo step - a big sprite in pieces counted from `origin`'s top-left
+     * cell (see `PiecesOver`), so they join up into whole sprites from there.
+     */
+    private PaintCells(state: IEditorState, brush: Brush, cells: Vec2Like[], origin: Vec2Like): void {
+        const grid = this.PieceGridOf(brush.name);
+        const pieces = grid ? PiecesOver(brush.name, grid, origin, cells, name => this.assetFactory.IsEmptyPiece(name)) : null;
+        if (pieces && !pieces.cells.length) {
+            return;
+        }
+        this.levelDataStore.Dispatch({
+            type: LevelDataActions.PAINT_CELLS,
+            data: pieces ? { brush, cells: pieces.cells, names: pieces.names, layers: state.layers } : { brush, cells, layers: state.layers },
+            canUndo: true
+        });
+    }
+
+    /** How a sprite is cut to paint with, if it's laid in pieces (see `TilePieces`) - null for any other brush. */
+    private PieceGridOf(name: string): PieceGrid | null {
+        if (!name || !this.assetFactory.Has(name)) {
+            return null;
+        }
+        return TilePieceGrid(AssetMetadataStore.inst.Get(name), this.assetFactory.CreateTexture(name), TileSize);
     }
 
     private Pick(state: IEditorState, cell: Vec2Like): void {
@@ -369,7 +409,8 @@ export default class Tools extends EditorComponent {
             const keys = new Map<string, string>();
             levelData.forEach(brush => {
                 if (brush.layerId === layer.id && (only == null || brush.name === only)) {
-                    keys.set(brush.position.x + "," + brush.position.y, height ? String(brush.data) : brush.name);
+                    // A big sprite's pieces are all of it, so a fill takes in (or stops at) the whole of what it covers.
+                    keys.set(brush.position.x + "," + brush.position.y, height ? String(brush.data) : BaseName(brush.name));
                 }
             });
             this.fillKeys = { levelData, layerId: layer.id, only, keys };
@@ -385,8 +426,9 @@ export default class Tools extends EditorComponent {
     }
 
     /**
-     * The dropper samples the selected layer's kind: tiles from tile layers, data brushes from "attributes" - the active
-     * type's, if the cell has one - and on the height layer, the cell's height (0 where it's unpainted), as the height brush.
+     * The dropper samples the selected layer's kind: tiles from tile layers (a piece as its whole sprite), data brushes from
+     * "attributes" - the active type's, if the cell has one - and on the height layer, the cell's height (0 where it's
+     * unpainted), as the height brush.
      */
     private PickableAt(state: IEditorState, cell: Vec2Like): Brush | undefined {
         const selected = this.editorStore.SelectedLayer;
@@ -397,7 +439,8 @@ export default class Tools extends EditorComponent {
         const wantData = selected != null && selected.isData;
         const layers = state.layers.filter(layer => layer.isData === wantData && !IsHeightLayer(layer));
         const active = ActiveAttributeType(state);
-        return (active && TopmostBrushAt(levelData, layers, cell, brush => brush.name === active)) || TopmostBrushAt(levelData, layers, cell);
+        const found = (active && TopmostBrushAt(levelData, layers, cell, brush => brush.name === active)) || TopmostBrushAt(levelData, layers, cell);
+        return found && { ...found, name: BaseName(found.name) };
     }
 
     /** Everything on `cell` (see `CellEntriesAt`). */
@@ -471,6 +514,16 @@ export default class Tools extends EditorComponent {
         }
         const one = { x: cell.x, y: cell.y, width: 1, height: 1 };
         switch (state.tool) {
+            case EditorTool.BRUSH: {
+                // A big sprite's outline, where the brush lays it - snapped edge to edge with the stroke's first one while painting.
+                const paint = this.PaintBrush(state);
+                const grid = paint && !IsHeightLayer(this.EditableLayer()) ? this.PieceGridOf(paint.name) : null;
+                if (grid) {
+                    const painting = state.mouseButtonState === MouseButtonState.LEFT_DOWN && this.strokeAnchor;
+                    this.OutlineCells(state, StrokeBlock(grid, painting ? this.strokeAnchor : cell, cell), PAINT_COLOUR);
+                }
+                break;
+            }
             case EditorTool.ERASE:
                 if (this.EditableLayer()) {
                     this.OutlineCells(state, one, ERASE_COLOUR);
