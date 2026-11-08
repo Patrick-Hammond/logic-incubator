@@ -58,8 +58,10 @@ export class TileRenderer extends ObjectRenderer {
 
                 renderer.texture.bind(textures[i], i);
 
-                samplerSize[i * 2] = 1.0 / textures[i].realWidth;
-                samplerSize[(i * 2) + 1] = 1.0 / textures[i].realHeight;
+                // In the texture's own units, as a tile's u, v and frame are (its `Texture.frame`), not its pixels: the two differ for
+                // a sheet at a resolution other than 1 - double-resolution art, whose 32 px frame is 16 units wide (see README.md).
+                samplerSize[i * 2] = 1.0 / textures[i].width;
+                samplerSize[(i * 2) + 1] = 1.0 / textures[i].height;
             }
         } else {
             // Ensure we have enough textiles, in case settings.TEXTILE_UNITS was modified.

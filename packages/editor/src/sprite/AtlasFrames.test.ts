@@ -52,6 +52,22 @@ describe("ComposeAtlasFrame", () => {
         expect(Array.from(f.rgba)).toEqual([200, 10, 30, 7, 1, 2, 3, 250]);
     });
 
+    it("reads a double-resolution sheet's frame back at its pixels, not its half-size units", () => {
+        const f = ComposeAtlasFrame(
+            Atlas(8, 8),
+            texture({
+                frame: { x: 1, y: 0.5, width: 1, height: 1.5 },
+                trim: { x: 0.5, y: 0, width: 1, height: 1.5 },
+                orig: { width: 2, height: 2 },
+                baseTexture: { resource: null, resolution: 2 }
+            })
+        );
+        expect([f.width, f.height]).toEqual([4, 4]);
+        expect(pixel(f, 0, 0)).toEqual([0, 0, 0, 0]);
+        expect(pixel(f, 1, 0)).toEqual([2, 1, 100, 255]);
+        expect(pixel(f, 2, 2)).toEqual([3, 3, 100, 255]);
+    });
+
     it("doesn't change the atlas", () => {
         const atlas = Atlas(4, 4);
         const before = atlas.rgba.slice();

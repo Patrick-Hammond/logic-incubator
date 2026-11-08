@@ -110,6 +110,12 @@ describe("ClassifyBundle", () => {
         expect(errors(classify("global", ["sprites/s/x.png"], { assets: { x: { tier: "lazy" } } }))).toHaveLength(1);
     });
 
+    it("takes an atlas resolution above 0, for the bundle or a sheet, and rejects any other", () => {
+        expect(errors(classify("global", ["sprites/s/x.png"], { atlas: { resolution: 2, sheets: { s: { resolution: 0.5 } } } }))).toEqual([]);
+        expect(errors(classify("global", ["sprites/s/x.png"], { atlas: { resolution: 0 } }))[0]).toContain('"atlas.resolution"');
+        expect(errors(classify("global", ["sprites/s/x.png"], { atlas: { sheets: { s: { resolution: "2" } } } }))[0]).toContain('"atlas.sheets.s.resolution"');
+    });
+
     it("applies tiers, defaulting to boot, and preload defaults by bundle name", () => {
         const global = classify("global", ["sounds/a.ogg", "sounds/b.ogg"], { assets: { b: { tier: "background" } } });
         expect(global.assets.map((a: { tier: string }) => a.tier)).toEqual(["boot", "background"]);

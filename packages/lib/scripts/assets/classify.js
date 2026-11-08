@@ -18,7 +18,7 @@ const { DEFAULT_ATLAS_OPTIONS } = require("./atlas");
 
 const TIERS = ["boot", "background", "lazy"];
 const BUNDLE_KEYS = ["dependsOn", "preload", "ignore", "overrides", "animPattern", "atlas", "assets"];
-const ATLAS_KEYS = ["maxSize", "padding", "extrude", "trim", "alphaThreshold", "pot", "scaleMode", "sheets"];
+const ATLAS_KEYS = ["maxSize", "padding", "extrude", "trim", "alphaThreshold", "pot", "scaleMode", "resolution", "sheets"];
 /** What a bundle.json `assets` entry can set: when it loads, and - a sound - how loud it is of itself. */
 const ASSET_KEYS = ["tier", "volume"];
 /** Source files and tool droppings that are never assets - skipped without a warning. */
@@ -110,6 +110,14 @@ function NormalizeBundleConfig(name, raw, diag) {
         if (ATLAS_KEYS.indexOf(key) < 0) {
             const hint = Suggest(key, ATLAS_KEYS);
             diag("error", `bundle.json: unknown atlas key "${key}"${hint ? ` - did you mean "${hint}"?` : ""}`, "bundle.json");
+        }
+    });
+    // How many of the art's pixels make one of the game's (see AtlasJson): a whole sheet's frames drawn at a fraction of their size.
+    const sheetOptions = atlas.sheets && typeof atlas.sheets === "object" ? atlas.sheets : {};
+    [{ where: "atlas", options: atlas }].concat(Object.keys(sheetOptions).map(sheet => ({ where: `atlas.sheets.${sheet}`, options: sheetOptions[sheet] || {} }))).forEach(({ where, options }) => {
+        const resolution = options.resolution;
+        if (resolution !== undefined && !(typeof resolution === "number" && isFinite(resolution) && resolution > 0)) {
+            diag("error", `bundle.json: "${where}.resolution" must be a number above 0 (2 for art drawn at twice the game's pixel size), not ${JSON.stringify(resolution)}`, "bundle.json");
         }
     });
     const preload = config.preload === undefined ? (name === "global" ? "boot" : "manual") : config.preload;

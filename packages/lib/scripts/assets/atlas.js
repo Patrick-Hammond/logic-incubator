@@ -113,8 +113,12 @@ function PackAtlas(frames, options) {
 /**
  * The pixi 5 spritesheet JSON for one page. `trimmed:false` frames carry no trim data on purpose:
  * pixi 5.2.1 builds `texture.trim`/`orig` for every frame it isn't told is untrimmed.
+ *
+ * `resolution` (1 if left out) goes in as `meta.scale`, which pixi 5.2.1 reads as the page's resolution:
+ * art drawn at twice the game's pixel density (2) comes out with every frame half its size in pixels,
+ * so a 32 px wide figure stands one 16 px tile wide with all its detail kept for a zoomed-in camera.
  */
-function AtlasJson(page, imageName) {
+function AtlasJson(page, imageName, resolution) {
     const frames = {};
     page.frames.forEach(f => {
         frames[f.key] = {
@@ -127,7 +131,7 @@ function AtlasJson(page, imageName) {
     });
     return {
         frames,
-        meta: { app: "logic-incubator-assets", image: imageName, format: "RGBA8888", size: { w: page.width, h: page.height }, scale: "1" }
+        meta: { app: "logic-incubator-assets", image: imageName, format: "RGBA8888", size: { w: page.width, h: page.height }, scale: String(resolution || 1) }
     };
 }
 

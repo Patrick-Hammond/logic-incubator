@@ -18,7 +18,8 @@ export type AtlasTextureLike = {
     orig: { width: number; height: number };
     /** Pixi's rotation code for the frame: 0 is unrotated. */
     rotate: number;
-    baseTexture: { resource?: { url?: string } | null };
+    /** `resolution`: how many of the atlas image's pixels make one unit of `frame`, `trim` and `orig` - 2 for double-resolution art; 1 if left out. */
+    baseTexture: { resource?: { url?: string } | null; resolution?: number };
 };
 
 export type RgbaFrame = { width: number; height: number; rgba: Uint8Array };
@@ -43,7 +44,12 @@ export function ComposeAtlasFrame(atlas: RgbaFrame, texture: AtlasTextureLike): 
     if (texture.rotate) {
         throw new Error("This sprite's atlas stores it rotated, which the editor can't read back.");
     }
-    const { frame, trim, orig } = texture;
+    // Back in the atlas image's pixels, which is what the sprite's file holds, from a double-resolution sheet's units.
+    const res = (texture.baseTexture && texture.baseTexture.resolution) || 1;
+    const pixels = (r: RectLike): RectLike => ({ x: Math.round(r.x * res), y: Math.round(r.y * res), width: Math.round(r.width * res), height: Math.round(r.height * res) });
+    const frame = pixels(texture.frame);
+    const trim = texture.trim ? pixels(texture.trim) : null;
+    const orig = { width: texture.orig.width * res, height: texture.orig.height * res };
     if (frame.x < 0 || frame.y < 0 || frame.x + frame.width > atlas.width || frame.y + frame.height > atlas.height) {
         throw new Error("A frame lies outside its atlas image - is the page's atlas out of date?");
     }

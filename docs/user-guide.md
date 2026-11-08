@@ -858,7 +858,8 @@ Optional, in the bundle's root. Every key is optional; unknown keys are an error
     "alphaThreshold": 0,              // alpha above this counts as opaque when trimming
     "pot": false,                     // round page sizes up to a power of two
     "scaleMode": "nearest",           // "nearest" | "linear": the atlas texture's filtering
-    "sheets": { "ui": { "extrude": 0 } }   // per-sheet overrides of any of the above
+    "resolution": 1,                  // art pixels per game pixel: 2 draws the frames at half their size (see below)
+    "sheets": { "ui": { "extrude": 0 }, "heroes": { "resolution": 2 } }   // per-sheet overrides of any of the above
   },
   "assets": {
     "blocky": { "tier": "background" },   // by local name (no bundle prefix): boot (default) | background | lazy
@@ -882,6 +883,14 @@ Notes:
   animation (say `zombie_f1..f3` with no `f0`) is now a build error; list the strays under `ignore` if you really mean
   to leave them out.
 - **`overrides`** silences the build's "shadows" warning (see [5.8](#58-sprites-by-bare-name-scope-and-assetfactory)).
+- **`resolution` is for art drawn finer than the game's pixels.** A sheet at `2` holds double-resolution art: a 32x52 frame comes
+  out as a 16x26 texture, drawn the size a 16x26 sprite would be, with all its pixels. On a camera zoomed in 2x (the dungeon's),
+  that's one art pixel to one screen pixel, so a hero drawn at 32 px stands one 16 px tile wide and keeps every detail. The build
+  writes it into the atlas JSON as `meta.scale`, which pixi reads as the page's resolution; everything that sizes or places a
+  sprite by its texture (`width`, `height`, `trim`, `orig`) - the dungeon's figures, the tile map, the HUD, the editor's palette -
+  sees the smaller size. Code that copies a frame's pixels has to multiply by `texture.baseTexture.resolution` (as
+  `renderer.generateTexture` needs it for its resolution to keep them). It must be above 0; it's left at 1 if not given. For an
+  already-packed sheet, it replaces the sheet's own `meta.scale`.
 
 ### 5.5 `assets.config.json` and running the build
 
@@ -1476,7 +1485,8 @@ stops it (use `this.Own(...)` in a component).
 ### The tilemap
 
 `lib/src/tilemap` is a vendored copy of `@pixi/tilemap` 3.2.1 (see its README for what changed), with per-tile `tint`, per-corner
-`cornerTints` and GPU-driven `flicker` added. It draws thousands of tiles as a few draw calls:
+`cornerTints` and GPU-driven `flicker` added, and a texture from a double-resolution sheet ([5.4](#54-bundlejson)) drawn the size it
+says. It draws thousands of tiles as a few draw calls:
 
 ```ts
 import { CompositeTilemap } from "@logic-incubator/lib/tilemap";
@@ -1629,8 +1639,8 @@ The engine uses a fixed coordinate system from `@logic-incubator/engine/Constant
 import type { PlayerSetup } from "@logic-incubator/engine/DungeonMain";
 
 export const PlayerSetup: PlayerSetup = {
-    animations: { idle: "wizzard_m_idle_anim", run: "wizzard_m_run_anim" },   // animations, by bare name: standing, and moving
-    character: "Warlock",                               // who the animations are: heads the HUD before anyone is picked
+    animations: { idle: "wizard", run: "wizard" },      // animations (or a sprite, drawn still), by bare name: standing, and moving
+    character: "Wizard",                                // who the animations are: heads the HUD before anyone is picked
     hitPoints: 100,                                     // the HUD's red bar: 100 / 100 - monster damage and healing are in the same hit points
     hearts: { full: "ui_heart_full", half: "ui_heart_half", empty: "ui_heart_empty" },   // the full one is the icon by the HUD's hit point bar
     // experience: { perQuest: 50 },                    // optional: change how experience is earned (see 9.3.3)
@@ -1674,7 +1684,8 @@ from its first frame each time they change pose (a monster's keeps its own count
 Each pose plays at its own pace (`PoseRates`): standing still at half the speed of running, so the two read apart even where the
 art barely differs - the heroes' idle bob and run hop look much alike. During a talk every hero stands. Online, every machine
 draws every hero this way - a guest's copies of the others move as the host says, and run when the host has them running. A
-character with a single loop gives it as both. The poses are `idle` and `run` for now; an attack or a death will be a pose of
+character with a single loop gives it as both, and one with no animation yet - a single drawing - gives that sprite's name as both:
+a sprite is a one-frame animation, so they're drawn still, standing and running. The poses are `idle` and `run` for now; an attack or a death will be a pose of
 its own, with an animation for it that a character without one is drawn `idle` in place of.
 
 A hero picks up a pickup as soon as **any part of their sprite overlaps it**, as both are drawn - or they stand on its cell.
@@ -1763,7 +1774,7 @@ const guest = new GuestLobby(joined, {
 
 // Each picks - picking is being ready. Once everyone has (host.CanStart), the host begins.
 host.Pick("witch");
-guest.Pick("warlock");
+guest.Pick("wizard");
 beginButton.on("activate", () => host.CanStart && host.Start({ bundle: "level1", file: game.assets.Data("level1.level"), shipped: true }));
 
 // On every machine, from its own lobby (host or guest): the same start, but for `you`, this machine's seat -

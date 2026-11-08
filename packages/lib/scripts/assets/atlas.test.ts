@@ -163,6 +163,7 @@ describe("PackAtlas", () => {
         const { pages } = PackAtlas([{ key: "g.dot", image: boxed(16, 16, 5, 6, 3, 2) }], {});
         const json = AtlasJson(pages[0], "dungeon_0.png");
         expect(json.meta).toEqual({ app: "logic-incubator-assets", image: "dungeon_0.png", format: "RGBA8888", size: { w: pages[0].width, h: pages[0].height }, scale: "1" });
+        expect(AtlasJson(pages[0], "dungeon_0.png", 2).meta.scale).toBe("2");
         expect(json.frames["g.dot"]).toEqual({
             frame: pages[0].frames[0].frame,
             rotated: false,

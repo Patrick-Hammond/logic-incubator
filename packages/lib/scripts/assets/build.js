@@ -129,10 +129,10 @@ function BuildBundle(model, hasher, cacheDir, usedKeys, diagnostics) {
         }
         pages.forEach((page, i) => {
             const base = `${model.name}/atlases/${sheet.name}_${i}`;
-            const json = StableStringify(AtlasJson(page, `${sheet.name}_${i}.png`));
+            const json = StableStringify(AtlasJson(page, `${sheet.name}_${i}.png`, SheetOption(model, sheet.name, "resolution")));
             put(base + ".json", { data: json });
             put(base + ".png", { data: page.png });
-            atlases.push(AtlasEntry(model, sheet.name, i, base, Buffer.byteLength(json) + page.png.length, model.sheetOptions[sheet.name]));
+            atlases.push(AtlasEntry(model, sheet.name, i, base, Buffer.byteLength(json) + page.png.length));
         });
     });
 
@@ -199,9 +199,15 @@ function BuildBundle(model, hasher, cacheDir, usedKeys, diagnostics) {
     };
 }
 
-function AtlasEntry(model, sheetName, page, base, bytes, sheetOptions) {
+/** The sheet's own `key` atlas option, else the bundle's (undefined if neither sets it). */
+function SheetOption(model, sheetName, key) {
+    const own = model.sheetOptions[sheetName];
+    return own && own[key] !== undefined ? own[key] : model.atlasOptions[key];
+}
+
+function AtlasEntry(model, sheetName, page, base, bytes) {
     const entry = { name: `~atlas.${model.name}.${sheetName}.${page}`, json: base + ".json", bytes };
-    const scaleMode = (sheetOptions && sheetOptions.scaleMode) || model.atlasOptions.scaleMode;
+    const scaleMode = SheetOption(model, sheetName, "scaleMode");
     if (scaleMode) {
         entry.scaleMode = scaleMode;
     }
@@ -216,10 +222,13 @@ function PackPrepacked(model, sheet, put, atlases) {
         frames[`${model.name}.${fr.local}`] = source.frames[fr.raw];
     });
     const base = `${model.name}/atlases/${sheet.name}_0`;
-    const json = StableStringify(Object.assign({}, source, { frames, meta: Object.assign({}, source.meta, { image: `${sheet.name}_0.png` }) }));
+    // Its own meta.scale stands unless bundle.json gives the sheet a resolution.
+    const resolution = SheetOption(model, sheet.name, "resolution");
+    const meta = Object.assign({}, source.meta, { image: `${sheet.name}_0.png` }, resolution !== undefined ? { scale: String(resolution) } : {});
+    const json = StableStringify(Object.assign({}, source, { frames, meta }));
     put(base + ".json", { data: json });
     put(base + ".png", { src: path.join(model.dir, sheet.prepacked.png) });
-    atlases.push(AtlasEntry(model, sheet.name, 0, base, Buffer.byteLength(json) + fs.statSync(path.join(model.dir, sheet.prepacked.png)).size, model.sheetOptions[sheet.name]));
+    atlases.push(AtlasEntry(model, sheet.name, 0, base, Buffer.byteLength(json) + fs.statSync(path.join(model.dir, sheet.prepacked.png)).size));
     return [];
 }
 

@@ -156,6 +156,15 @@ describe("BuildAssets", () => {
         expect(build().diagnostics.some((d: { message: string }) => d.message.includes("shadows"))).toBe(false);
     });
 
+    it("marks a sheet given a resolution in bundle.json as that resolution, and leaves the rest at 1", () => {
+        write("assets/global/sprites/heroes/hero.png", framePng(32, 52, 60));
+        write("assets/global/bundle.json", JSON.stringify({ atlas: { sheets: { heroes: { resolution: 2 } } } }));
+        expect(build().ok).toBe(true);
+        const meta = (sheet: string) => JSON.parse(fs.readFileSync(path.join(dir, `.assets/public/global/atlases/${sheet}_0.json`), "utf8")).meta;
+        expect(meta("heroes").scale).toBe("2");
+        expect(meta("dungeon").scale).toBe("1");
+    });
+
     it("re-keys an already-packed sheet into the bundle's namespace", () => {
         write("assets/level1/sprites/old.json", JSON.stringify({ frames: { "cat_f0.png": { frame: { x: 0, y: 0, w: 4, h: 4 } }, "cat_f1.png": { frame: { x: 4, y: 0, w: 4, h: 4 } } }, meta: { image: "old.png" } }));
         write("assets/level1/sprites/old.png", framePng(8, 4, 5));
@@ -165,6 +174,10 @@ describe("BuildAssets", () => {
         const atlas = JSON.parse(fs.readFileSync(path.join(dir, ".assets/public/level1/atlases/old_0.json"), "utf8"));
         expect(Object.keys(atlas.frames)).toEqual(["level1.cat_f0", "level1.cat_f1"]);
         expect(atlas.meta.image).toBe("old_0.png");
+        expect(atlas.meta.scale).toBeUndefined();
+        write("assets/level1/bundle.json", JSON.stringify({ dependsOn: ["global"], atlas: { sheets: { old: { resolution: 2 } } } }));
+        expect(build().ok).toBe(true);
+        expect(JSON.parse(fs.readFileSync(path.join(dir, ".assets/public/level1/atlases/old_0.json"), "utf8")).meta.scale).toBe("2");
     });
 
     it("--check passes when the declarations are current and fails when they're stale, writing nothing", () => {

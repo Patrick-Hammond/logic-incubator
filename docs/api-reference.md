@@ -730,7 +730,7 @@ Paths are relative to the file. Unknown keys are an error (with a suggestion).
 | `ignore` | `string[]` | Globs over bundle-relative posix paths: `*` (not `/`), `**`, `?`; a glob without `/` matches the file name at any depth. |
 | `overrides` | `string[]` | Sprite/animation names allowed to shadow ones in a bundle this depends on (or `global`). |
 | `animPattern` | `string` | Regex source with **two groups** (animation name, frame index). Default `^(.+)_f(\d+)$`. |
-| `atlas` | object | `maxSize` (4096), `padding` (0), `extrude` (1), `trim` (true), `alphaThreshold` (0), `pot` (false), `scaleMode` (`"nearest"`/`"linear"`), `sheets` (`{ [sheet]: <any of the above> }`). |
+| `atlas` | object | `maxSize` (4096), `padding` (0), `extrude` (1), `trim` (true), `alphaThreshold` (0), `pot` (false), `scaleMode` (`"nearest"`/`"linear"`), `resolution` (1: art pixels per game pixel, a number above 0 - written as the atlas JSON's `meta.scale`, so pixi makes the sheet's textures that many times smaller; for a prepacked sheet it replaces its own), `sheets` (`{ [sheet]: <any of the above> }`). |
 | `assets` | `{ [localName]: { tier?, volume? } }` | `tier`: `"boot"` (default), `"background"`, `"lazy"`. `volume` (a sound only): how loud it is of itself, 0 to 1 - every volume set on it is scaled by it. A name with takes (`coin` for `coin_1`, `coin_2`...) that isn't an asset itself sets every take. Unknown names and keys are errors with a "did you mean"; sprites/animations have no tier. |
 
 ### Classification and ids
@@ -1018,7 +1018,7 @@ Notification iterates a copy of the subscribers, so unsubscribing during a notif
 ## Tilemap
 
 `@logic-incubator/lib/tilemap` - vendored `@pixi/tilemap` 3.2.1 for pixi 5.2.1; see `packages/lib/src/tilemap/README.md` for the changes
-(bug fixes, per-tile and per-corner tint, flicker, container alpha).
+(bug fixes, per-tile and per-corner tint, flicker, container alpha, textures at a resolution other than 1).
 
 Exports: `CompositeTilemap`, `Tilemap`, `TileOptions`, `TilemapShader`, `TilemapGeometry`, `TileRenderer`, `TextileResource`, `settings`.
 
@@ -1994,7 +1994,7 @@ each **pose**.
 type Pose = "idle" | "run";
 const Poses: ReadonlyArray<Pose>;                         // every pose
 const PoseRates: Record<Pose, number> = { idle: 0.5, run: 1 };   // how fast each pose plays, a share of the character's frame rate
-type CharacterAnimations = { idle: string; run: string }; // animation names, by pose; a character with a single loop gives it for both
+type CharacterAnimations = { idle: string; run: string }; // animation names, by pose; a character with a single loop gives it for both, one with a single drawing its sprite for both
 type PoseFacts = { moving: boolean };                     // what PoseOf goes by
 
 const MovingSpeed = 0.1;
@@ -3009,7 +3009,7 @@ Used by the editor's own views; available for editor extensions.
 | `SpriteApi` | The client of the [sprite API](#sprite-api): `new SpriteApi(fetch?)` with `Available()`, `List()`, `Describe`, `ReadSprite`, `Save`; `SharedSpriteApi`; `SpriteApiError`; `ToBase64`. |
 | `SpriteStore` | Where the editor gets sprites and puts them, behind one interface (`Kind`, `List`, `Read`, `Save`): `DiskStore` (the sprite API - on localhost under `npm start`) and `DownloadStore` (anywhere else: reads the page's loaded art, and a save hands the browser a `Download`); `ChooseStore(api, hosted, deliver)` asks the service once. Download helpers: `PackDownload(bundle, name, sheet, pngs)` (a PNG for one frame, a zip for several), `ObsoleteFiles`, `MetaSnippet`, `DescribeDownload` (the status line and the steps left to do by hand), `PngSize`. |
 | `HostedSprites` | `CreateHostedSprites(deps)` - download mode's reader: bundles, sheets and names from `Assets.Catalogue()`, and a sprite's frames from the atlas its textures were loaded from (fetched, decoded, cut out). |
-| `AtlasFrames` | `ComposeAtlasFrame(atlas, texture)` - one frame at its full size, trim put back, from the decoded atlas; `AtlasUrl`, `SheetOfAtlasUrl`; `AtlasTextureLike` (the few `Texture` fields it uses). |
+| `AtlasFrames` | `ComposeAtlasFrame(atlas, texture)` - one frame at its full size in the atlas image's pixels, trim put back, from the decoded atlas (a double-resolution sheet's frame scaled back up by `baseTexture.resolution`); `AtlasUrl`, `SheetOfAtlasUrl`; `AtlasTextureLike` (the few `Texture` fields it uses). |
 | `Zip` | `CreateZip(entries, now?)` - a zip of `{ name, data }` files, stored (PNGs are compressed already), UTF-8 names, checked against real unzippers; `ZipNameProblem`. |
 | `ManifestWatch` | `ReadBundleHash(manifestUrl, bundle)` and `WaitForBundleChange(...)` - how the editor knows a save's rebuild has landed. |
 | `Resume` | The note left in session storage when the window closes after a save: `WriteResumeNote`, `TakeResumeNote`, `PeekResumeNote`. |
