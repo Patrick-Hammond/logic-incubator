@@ -27,6 +27,14 @@ describe("PartyFrame", () => {
         expect(PartyZoom(Box(500, 500), VIEW)).toBe(MinPartyZoom);
     });
 
+    it("goes in no further than `most`, closer than usual only while they fit", () => {
+        expect(PartyZoom(Box(0, 0), VIEW, 2)).toBe(2);
+        // As tall, margins and all, as the view is at 1.5 times the usual zoom.
+        const tall = PartyZoom(Box(0, VIEW.height / 1.5 - 1 - PartyMargin * 2), VIEW, 2);
+        expect(tall).toBeCloseTo(1.5);
+        expect(PartyZoom(Box(500, 500), VIEW, 2)).toBe(MinPartyZoom);
+    });
+
     it("lets them spread exactly as far as fits on screen at the minimum zoom", () => {
         const span = PartySpan(VIEW);
         expect(PartyZoom(Box(span.width, span.height), VIEW)).toBeCloseTo(MinPartyZoom);

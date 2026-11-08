@@ -1548,7 +1548,7 @@ four on one screen. The game supplies **data** - its art, a monster roster, the 
 
 ```
 DungeonMain (a scene)
- ├─ Camera            follows the heroes; handles height zoom, and zooms out to fit a party
+ ├─ Camera            follows the heroes; handles height zoom, the zoom levels the number keys pick, and zooms out to fit a party
  ├─ TileMapView       draws the level's tile layers, lit and banded by height
  ├─ Effects           particle effects over the world (`main.Effects.Play`)
  ├─ Hud               portrait, hit points, XP, gold, spell or weapon, inventory, keys, quest journal - a compact row per hero for a party (built from the UI kit)
@@ -1626,6 +1626,7 @@ export function Dungeon(): () => void {
 | `sounds?` | `SoundTable`. What play sounds like, where the thing it happens to doesn't name a sound of its own: each a sound by name, skipped while the build has no file for it ([9.8](#98-events-and-hooks)). Its `footstep` (and `footsteps`, by floor overlay), `ambience` and `bossMusic` the scene plays itself. |
 | `music?` | `() => SoundId \| undefined`. The track the level plays to, on a loop - usually one in the level's bundle, and `lazy`, so it loads as it starts. Called on every start/restart: the same track carries on through a restart and into a next level that asks for it, a different one takes over. It plays only while the dungeon is showing, so it stops behind the editor or the title. While a boss is awake, `sounds.bossMusic` plays in its place, and the level's track comes back from the top once the boss falls. Leave it out (or return `undefined`) for silence. |
 | `overlay?` | `(main: DungeonMain) => GameComponent`. Called once; what it returns is attached above the HUD and kept with the scene. It gets the scene so it can `Pause()`, `Resume()` and `Restart()` it, and listens to `ALL_PLAYERS_DIED`, `LEVEL_COMPLETED` and the other events. This is how a game adds a pause menu and an end-of-level screen without the engine knowing what they look like. |
+| `zoomLevels?` | `ReadonlyArray<number>`. The camera's zoom levels, times the usual zoom (tiles 32 pixels across), picked with number keys 1-9 in that order; play starts at the first. Default `[1, 1.5, 2]`. See [Zoom levels](#93-the-player). |
 | `manualRestart?` | `boolean`. The end of a level - everyone down, or a hero out - holds everything still until `main.Restart()` is called, instead of starting over by itself 1.5 s later - for a game whose `overlay` offers a choice (try again, quit). |
 | `playerAnimations?` | `() => CharacterAnimations \| undefined`. Only without `heroes`. Called on every start/restart; the animations it returns (`{ idle, run }`) are what the lone hero is drawn with, in place of `player.animations`. Return `undefined` for the default. This is how a character select screen's pick reaches the game: keep the chosen character in your boot code (listen for the event your screen emits) and return their animations. With `heroes`, each slot's `animations` does this. |
 | `playerLightSpell?` | `() => LightSpell \| null \| undefined`. Only without `heroes`. Called with `playerAnimations`: the light spell the chosen character has ([9.6.2](#962-lights-in-play)) - `null` for none, `undefined` to keep `player.lightSpell`. How a game gives the spell to only some characters. |
@@ -1671,6 +1672,25 @@ Controls (`PlayerControl`): move with arrow keys or WASD or the left stick; fire
 stick, always left or right in the direction last faced (Tutankham-style); the right stick also sets facing. L, or a
 gamepad's Y button, calls up the light spell, if the hero has one and it's ready. K, or a gamepad's X button, warps a hero
 who has strayed far from the rest of the party to the nearest of them ([9.3.1](#931-playing-together)).
+
+**Zoom levels.** The number keys (along the top or on the number pad) jump the camera between the zoom levels in the
+`zoomLevels` option ([9.2](#92-booting-a-dungeon-game)): key 1 the first, key 2 the second, and so on, up to 9. Each is times the
+usual zoom, where 16-pixel tiles are drawn 32 pixels across, and play starts at the first. Left out, it's `[1, 1.5, 2]`: the usual
+view, closer (tiles 48 across) and closer still (64 across), for a talk with an NPC.
+
+```ts
+new DungeonMain({
+    // ...
+    zoomLevels: [1, 1.5, 2],   // keys 1, 2, 3; keep each a whole number when doubled (1.5, 2, 2.5, 3) for crisp art
+});
+```
+
+A zoom that's a whole number when doubled draws every pixel of art a whole number of canvas pixels across, so the art stays
+crisp; others (1.7, say) work but draw some pixels a canvas pixel wider than the rest. Zooms that aren't numbers above 0 are
+dropped. The jump takes 0.3 s (`ZoomJumpSeconds` in `engine/view/helpers/ZoomLevels.ts`), eased out. The keys work in a talk
+too, but not while the game is paused, nor with Ctrl, Alt or Cmd held. The level picked stays through restarts and new levels
+until another is picked. It's the camera's own, on this machine only, so online play doesn't change. The keys pick levels
+through `Camera.SetZoomLevel(level)`, counting from 0.
 
 `PlayerSetup` is every hero's: a party shares its hit points, weapon and experience rules, and each hero's `HeroSlot` can give them
 their own animations, light spell, `character` name (what heads their part of the HUD) and voice (`sounds`: their `hurt` and `death`, by name - see [9.8](#98-events-and-hooks)).
@@ -1725,7 +1745,8 @@ the same one. A lone hero (no `heroes`) plays with `DefaultInput`.
 What changes with more than one hero:
 
 - **One screen.** The camera centres on the box round the living heroes and zooms out as they spread, down to half its usual
-  zoom; past that, the edge of the screen holds them back like a wall. A hero who has strayed 8 tiles or more from everyone
+  zoom; past that, the edge of the screen holds them back like a wall. At a closer zoom level it goes no closer than fits them
+  all with a 3-tile margin, so a spread-out party may see little or no change. A hero who has strayed 8 tiles or more from everyone
   else can warp to the nearest of them (K, or a gamepad's X).
 - **Shared keys and sight.** A key any living hero carries opens its doors for everyone, and what one hero can see, all see.
   A door never shuts on a hero standing in it.

@@ -6,6 +6,7 @@ import { Lerp, Sign } from "@logic-incubator/lib/math/Utils";
 import { GameHeight, PlayWidth, Scenes, TileSize } from "../Constants";
 import { CAMERA_MOVED } from "../Events";
 import { StepZoom, ZoomState } from "../level/Depth";
+import ZoomJump from "./helpers/ZoomLevels";
 
 /** Share of the way the party's zoom closes on its target each 60th of a second - smooth, but quick enough to keep up with heroes running apart. */
 const PartyZoomFollow = 0.06;
@@ -39,15 +40,35 @@ export class Camera extends GameComponent {
         return this.currentZ;
     }
     /**
-     * Height-driven zoom (see `UpdateZoom`) times the party's (see `ZoomForParty`) - what `TileMapView`/`EntityRenderer`
-     * should scale their render by, instead of calling `CameraZoom(CurrentZ)` themselves.
+     * Height-driven zoom (see `UpdateZoom`) times the zoom level's (see `SetZoomLevel`), or the party's (see
+     * `ZoomForParty`) where that's further out - what `TileMapView`/`EntityRenderer` should scale their render by,
+     * instead of calling `CameraZoom(CurrentZ)` themselves.
      */
     get EffectiveZoom(): number {
-        return this.zoomState.value * this.partyZoom;
+        return this.zoomState.value * Math.min(this.levelZoom.Value, this.partyZoom);
     }
-    /** The zoom for the party's spread, from 1 (one hero, or a party close together) down to `MinPartyZoom` - see `ZoomForParty`. */
+    /**
+     * The zoom for the party's spread, from `MaxLevelZoom` (one hero, or a party close together) down to `MinPartyZoom` -
+     * see `ZoomForParty`. It holds the view out only where it's further out than the zoom level.
+     */
     get PartyZoom(): number {
         return this.partyZoom;
+    }
+    /** The zoom level picked (see `SetZoomLevel`), from 0 - the usual - in: the one the camera is at, or on its way to. */
+    get ZoomLevel(): number {
+        return this.levelZoom.Level;
+    }
+    /** The zoom level's zoom right now, times the usual - between levels during a jump. */
+    get LevelZoom(): number {
+        return this.levelZoom.Value;
+    }
+    /** The zooms the levels have, times the usual, from level 0 (key 1) - see `new Camera`. */
+    get ZoomLevels(): ReadonlyArray<number> {
+        return this.levelZoom.Levels;
+    }
+    /** The closest of `ZoomLevels` - what to ask `PartyFrame.PartyZoom` for at `most`. */
+    get MaxLevelZoom(): number {
+        return this.levelZoom.Max;
     }
 
     private viewRect: Rectangle;
@@ -60,10 +81,15 @@ export class Camera extends GameComponent {
     private currentZ: number = 0;
     private zoomState: ZoomState = { value: 1, z: 0 };
     private zHeldTime: number = 0;
-    private partyZoom: number = 1;
+    private levelZoom: ZoomJump;
+    private partyZoom: number;
 
-    constructor(private cameraControl?: ICameraControl) {
+    /** `zoomLevels`: what each zoom level is, times the usual, from level 0 (see `ZoomLevels.UsableZoomLevels`); left out, `DefaultZoomLevels`. */
+    constructor(private cameraControl?: ICameraControl, zoomLevels?: ReadonlyArray<number>) {
         super();
+        this.levelZoom = new ZoomJump(zoomLevels);
+        // As close as it goes, so it holds nothing back until a party spreads.
+        this.partyZoom = this.levelZoom.Max;
     }
 
     Move(x: number, y: number): void {
@@ -117,11 +143,21 @@ export class Camera extends GameComponent {
     }
 
     /**
-     * Eases the party's zoom towards `target` (see `PartyFrame.PartyZoom`) - zooming out as heroes on a shared
-     * screen spread apart and back in as they gather - `frames` (60ths of a second) since the last display frame.
+     * Eases the party's zoom towards `target` (see `PartyFrame.PartyZoom`, asked with this `MaxLevelZoom` as its `most`) -
+     * zooming out as heroes on a shared screen spread apart and back in as they gather, but never closer than the zoom
+     * level - `frames` (60ths of a second) since the last display frame.
      */
     ZoomForParty(target: number, frames: number): void {
         this.partyZoom += (target - this.partyZoom) * (1 - Math.pow(1 - PartyZoomFollow, frames));
+    }
+
+    /**
+     * Jumps to zoom level `level` (from 0: one of `ZoomLevels` - keys 1, 2, 3... in play) over
+     * `ZoomJumpSeconds`, from wherever the zoom is now. It stays at that level, restarts and new levels too, until
+     * another is picked.
+     */
+    SetZoomLevel(level: number): void {
+        this.levelZoom.To(level);
     }
 
     /**
@@ -129,11 +165,13 @@ export class Camera extends GameComponent {
      * `SetZ`: for `ZoomSettleDelay` seconds after the last z change, it tracks
      * height incrementally (so interrupting an in-progress ease-back never
      * causes a visible jump); after that, it eases back to a neutral 1:1 zoom
-     * instead of staying pinned to height forever - see `StepZoom`.
+     * instead of staying pinned to height forever - see `StepZoom`. A jump to
+     * another zoom level (see `SetZoomLevel`) moves on too.
      */
     UpdateZoom(dt: number): void {
         this.zoomState = StepZoom(this.zoomState, this.currentZ, this.zHeldTime, dt);
         this.zHeldTime += dt;
+        this.levelZoom.Step(dt);
     }
 
      protected OnInitialise() {

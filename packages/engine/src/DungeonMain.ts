@@ -1,6 +1,7 @@
 import type {SoundId} from "@logic-incubator/lib/assets/AssetIds";
 import NamedSounds from "@logic-incubator/lib/assets/NamedSounds";
 import GameComponent from "@logic-incubator/lib/game/GameComponent";
+import {Key} from "@logic-incubator/lib/io/Keyboard";
 import AssetFactory from "@logic-incubator/lib/loading/AssetFactory";
 import {Vec2, Vec2Like} from "@logic-incubator/lib/math/Geometry";
 import AmbientSounds from "./AmbientSounds";
@@ -142,6 +143,15 @@ export type DungeonMainOptions = {
      * listening to the engine's events (`ALL_PLAYERS_DIED`) for what else it needs.
      */
     overlay?: (main: DungeonMain) => GameComponent;
+    /**
+     * The camera's zoom levels, each times its usual zoom (16-pixel tiles drawn 32 across), picked in play with the number
+     * keys - 1 for the first, 2 for the second, up to 9 - along the top or on the number pad. Play starts at the first. A
+     * zoom that's a whole number when doubled (1.5, 2, 2.5, 3) draws every pixel of art a whole number of canvas pixels
+     * across, so the art stays crisp. Left out, `[1, 1.5, 2]` (`DefaultZoomLevels`): the usual, closer, and closest - for
+     * a talk with an NPC. A party on one screen is zoomed out from the level picked as far as it takes to keep them all
+     * in view.
+     */
+    zoomLevels?: ReadonlyArray<number>;
     /**
      * Whether the end of a level - the last hero falling, or one reaching a way out - waits to be told to start over (`Restart`) instead of starting over by itself a moment after - for a game whose `overlay` offers a choice. Off by default.
      */
@@ -288,7 +298,7 @@ export class DungeonMain extends GameComponent {
         const level = this.level = new Level();
 
         // Attached in drawing order: the world, then the HUD over it.
-        const camera = this.camera = this.Attach(new Camera());
+        const camera = this.camera = this.Attach(new Camera(undefined, this.options.zoomLevels));
         this.Attach(new TileMapView(level, camera));
         // Inside the camera, so effects scroll and zoom with the world, and over its layers; under the HUD.
         this.effects = this.Attach(new Effects(camera), camera.root);
@@ -352,7 +362,24 @@ export class DungeonMain extends GameComponent {
         this.Listen(this.game.dispatcher, ALL_PLAYERS_DIED, this.OnLevelOver);
         this.Listen(this.game.dispatcher, LEVEL_COMPLETED, this.OnLevelOver);
         this.Listen(this.game.dispatcher, NPC_BUMPED, this.OnNpcBumped);
+        this.ListenWhileShown(this.game.keyboard, "keydown", this.OnKeyDown);
         this.Tick(this.OnUpdate);
+    }
+
+    /**
+     * The number keys pick the camera's zoom level (see `zoomLevels`) - 1 the first, along the top or on the number pad -
+     * in a talk too, which the closest is for, but not under a pause menu.
+     */
+    private OnKeyDown(e: KeyboardEvent): void {
+        // Ctrl, Alt or Cmd with a number is the browser's.
+        if (this.paused || e.ctrlKey || e.altKey || e.metaKey) {
+            return;
+        }
+        const code = e.keyCode;
+        const level = code >= Key.One && code <= Key.Nine ? code - Key.One : code >= Key.Numpad1 && code <= Key.Numpad9 ? code - Key.Numpad1 : -1;
+        if (level >= 0 && level < this.camera.ZoomLevels.length) {
+            this.camera.SetZoomLevel(level);
+        }
     }
 
     protected OnShow(): void {
@@ -711,9 +738,9 @@ export class DungeonMain extends GameComponent {
 
     /**
      * Keeps the camera on the heroes played here (every hero, if none is) who are still standing - centred on the
-     * box round where they're drawn, zoomed out as far as it takes to show them all (see `PartyFrame`) and for the
-     * height the first of them stands at. With all of those down it follows a teammate still standing (online, where
-     * the rest play on elsewhere), and with no one standing, where they fell. Where they've gone further than half a
+     * box round where they're drawn, at the zoom level picked (the number keys, see `OnKeyDown`) or zoomed out as far as it
+     * takes to show them all (see `PartyFrame`), and for the height the first of them stands at. With all of those down
+     * it follows a teammate still standing (online, where the rest play on elsewhere), and with no one standing, where they fell. Where they've gone further than half a
      * view in one frame - through a portal - it cuts to them rather than sweeping across the map. `frames` and `seconds`
      * since the last display frame.
      */
@@ -743,7 +770,7 @@ export class DungeonMain extends GameComponent {
         this.camera.UpdateZoom(seconds);
         const box = PartyBounds(followed, this.partyBox);
         const view = this.BaseView();
-        this.camera.ZoomForParty(PartyZoom(box, view), frames);
+        this.camera.ZoomForParty(PartyZoom(box, view, this.camera.MaxLevelZoom), frames);
         const x = (box.minX + box.maxX) / 2;
         const y = (box.minY + box.maxY) / 2;
         const last = this.lastFollowed;

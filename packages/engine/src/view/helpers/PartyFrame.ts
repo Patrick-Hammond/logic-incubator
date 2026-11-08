@@ -1,8 +1,8 @@
 /**
  * How the one camera frames a party of heroes on a shared screen: centred on the box round them, and
- * zoomed out - from the usual close-up down to half of it - as they spread, so everyone stays in view.
- * Past that the screen's edge holds them back (see `sim/Leash` and `PartySpan`). Pure - no pixi - so it
- * runs under the plain node test runner.
+ * zoomed out - from the zoom level picked (see `ZoomLevels`) down to half the usual - as they spread, so
+ * everyone stays in view. Past that the screen's edge holds them back (see `sim/Leash` and `PartySpan`).
+ * Pure - no pixi - so it runs under the plain node test runner.
  */
 
 import { Vec2Like } from "@logic-incubator/lib/math/Geometry";
@@ -35,13 +35,14 @@ export function PartyBounds(positions: ReadonlyArray<Vec2Like>, out: PartyBox = 
 }
 
 /**
- * The zoom (1 down to `MinPartyZoom`, multiplying the camera's own - see `Camera.EffectiveZoom`) that fits
- * the whole box, each hero's tile and `PartyMargin` round it, into a view `view` tiles across at zoom 1.
+ * The zoom (`most` down to `MinPartyZoom`, multiplying the camera's own - see `Camera.EffectiveZoom`) that fits
+ * the whole box, each hero's tile and `PartyMargin` round it, into a view `view` tiles across at zoom 1. The
+ * camera asks with `most` its closest zoom level's (see `ZoomLevels`), and goes no closer than the level picked.
  */
-export function PartyZoom(box: PartyBox, view: { width: number; height: number }): number {
+export function PartyZoom(box: PartyBox, view: { width: number; height: number }, most: number = 1): number {
     const width = (box.maxX - box.minX) / TileSize + 1 + PartyMargin * 2;
     const height = (box.maxY - box.minY) / TileSize + 1 + PartyMargin * 2;
-    return Math.max(MinPartyZoom, Math.min(1, view.width / width, view.height / height));
+    return Math.max(MinPartyZoom, Math.min(most, view.width / width, view.height / height));
 }
 
 /**
