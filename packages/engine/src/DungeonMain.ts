@@ -554,7 +554,7 @@ export class DungeonMain extends GameComponent {
             this.shouts.Render(seconds, hearers);
         }
         this.ambient.Update(this.InTiles(hearers), seconds);
-        this.footsteps.Update(this.Walkers()).forEach(slot => this.Footstep(this.world.Heroes[slot]));
+        this.footsteps.Update(this.Walkers(), seconds).forEach(slot => this.Footstep(this.world.Heroes[slot]));
     }
 
     /** The centres of the heroes played here who are still standing - the ones who hear the NPCs shout. */
@@ -583,8 +583,8 @@ export class DungeonMain extends GameComponent {
 
     /**
      * By slot: the centres of the heroes played here who are still standing, and whether their players are pushing them along, and
-     * null for the rest - whose feet are heard (see `Footsteps`: a step as a push starts, then one every so far walked, so a floor
-     * that slows them spaces their steps out as much).
+     * null for the rest - whose feet are heard (see `Footsteps`: a step as a push starts, then one every so much time while moving,
+     * stretched a little by how much the floor slows them).
      */
     private Walkers(): ReadonlyArray<Walker | null> {
         const walkers = this.walkers;
@@ -592,7 +592,9 @@ export class DungeonMain extends GameComponent {
         this.world.Heroes.forEach((hero, i) => {
             if (this.local[i] && hero.Alive && !hero.Gone) {
                 const centre = hero.Centre;
-                walkers.push({ x: centre.x, y: centre.y, pushing: !!this.pushing[i] });
+                const tile = hero.Tile;
+                const speed = this.level.FootingAt(tile.x, tile.y).speed;
+                walkers.push({ x: centre.x, y: centre.y, pushing: !!this.pushing[i], movementPenalty: Math.max(0, 1 - speed) });
             } else {
                 walkers.push(null);
             }

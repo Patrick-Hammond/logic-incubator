@@ -24,7 +24,7 @@ const MaxSteps = 1000;
 /** Dots the bubble over an NPC counts up to - one, two, three - before their talk starts. */
 export const TalkDots = 3;
 /** Seconds from one dot to the next, and from the last to the talk. */
-export const TalkDotSeconds = 1;
+export const TalkDotSeconds = 0.3;
 
 /** Whether `value` is a dialog brush's value. */
 export function IsDialogValue(value: unknown): value is DialogValue {

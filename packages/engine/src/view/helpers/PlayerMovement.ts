@@ -24,7 +24,7 @@ export interface MoveCollider {
 }
 
 /** Per-frame velocity damping (raised to dt each frame). */
-export const MoveDamping = 0.8;
+export const MoveDamping = 0.6;
 
 /** The velocity a full push holds a hero at on bare floor - where adding the push each step and damping by `MoveDamping` settles. */
 export const TopVelocity = 1 / (1 - MoveDamping);
