@@ -13,9 +13,11 @@
  *
  * Names are bare (what level files store), looked up in the asset scope: the
  * level's bundle first, then `global` - so a level can restyle a tile without
- * the level data changing.
+ * the level data changing. A piece of a big sprite (`floor_rug@1,0` - see
+ * `SpritePieces`) has its sprite's metadata.
  */
 
+import { ParsePieceName } from "@logic-incubator/lib/loading/SpritePieces";
 import { IsPickupValue, PickupValue } from "./entities/Pickups";
 import { SpawnerValue } from "./entities/Spawners";
 import { IsCompleteLightValue, LightValue } from "./Lighting";
@@ -209,6 +211,7 @@ export default class AssetMetadataStore {
                 return { bundle, meta: map[assetName] };
             }
         }
-        return undefined;
+        const piece = ParsePieceName(assetName);
+        return piece ? this.Find(piece.base) : undefined;
     }
 }

@@ -14,6 +14,14 @@ describe("AssetMetadataStore", () => {
         expect(store.Get("floor_1")).toBeUndefined();
     });
 
+    it("gives a piece of a big sprite its sprite's metadata", () => {
+        const store = new AssetMetadataStore();
+        store.Load({ wall_arch: { category: "walls", collidable: true } });
+        expect(store.Get("wall_arch@1,0")).toEqual({ category: "walls", collidable: true });
+        expect(store.CategoryOf("wall_arch@0,1")).toBe("walls");
+        expect(store.Get("floor_rug@0,0")).toBeUndefined();
+    });
+
     it("replaces previously loaded metadata wholesale", () => {
         const store = new AssetMetadataStore();
         store.Load({ wall_mid: { collidable: true } });

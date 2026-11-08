@@ -1,6 +1,7 @@
 import {AnimatedSprite, Texture} from "pixi.js";
 import Game from "@logic-incubator/lib/game/Game";
 import AssetFactory from "@logic-incubator/lib/loading/AssetFactory";
+import {ParsePieceName, PieceGridOf} from "@logic-incubator/lib/loading/SpritePieces";
 import {Rectangle, RectangleLike, Vec2Like} from "@logic-incubator/lib/math/Geometry";
 import { AnimationSpeed, TileSize } from "../Constants";
 import {DOOR_CLOSED, DOOR_OPENED, LEVEL_LOADED} from "../Events";
@@ -24,6 +25,7 @@ import Overlays, {FindOverlays, OverlayLayerIndex} from "./Overlays";
 import Portals, {IsTeleportValue, Portal} from "./Portals";
 import {FindRegions, Region, RegionIdsTouching} from "./Regions";
 import SceneLights, {MovingLight} from "./SceneLights";
+import {PieceBlockCells, TilePiece} from "./TilePieces";
 import type {Footing} from "../view/helpers/PlayerMovement";
 
 export type Tile = Brush & {
@@ -46,6 +48,8 @@ export type Tile = Brush & {
      * mirrored with the figures (see `EntityRenderer`).
      */
     reflects?: boolean;
+    /** Set for a piece of a sprite bigger than a tile (see `TilePieces`): which piece, so it can show with the rest of its sprite - see `Level.IsPieceVisible`. */
+    piece?: TilePiece;
 };
 
 /** A tile whose `AssetMetadata` names a `loop` - a torch's crackle - with the sound, the centre of its cell, in tiles, and how far it's heard (see `AmbientSounds`). */
@@ -73,14 +77,25 @@ function CreateTile(brush: Brush): Tile | null {
         AssetFactory.inst.WarnMissing(brush.name);
         return null;
     }
+    let tile: Tile;
     if (AssetFactory.inst.IsAnimation(brush.name)) {
         const anim = AssetFactory.inst.CreateAnimatedSprite(brush.name);
         anim.animationSpeed = AnimationSpeed;
         // Random start frame so identical brushes (e.g. several torches) don't all pulse in lockstep.
         anim.gotoAndPlay((Math.random() * anim.totalFrames) | 0);
-        return {...brush, texture: anim.texture, anim};
+        tile = {...brush, texture: anim.texture, anim};
+    } else {
+        tile = {...brush, texture: AssetFactory.inst.CreateTexture(brush.name)};
     }
-    return {...brush, texture: AssetFactory.inst.CreateTexture(brush.name)};
+    const piece = ParsePieceName(brush.name);
+    if (piece) {
+        const whole = AssetFactory.inst.CreateTexture(piece.base);
+        const grid = PieceGridOf(whole.width, whole.height, TileSize);
+        if (grid) {
+            tile.piece = {column: piece.column, row: piece.row, columns: grid.columns, rows: grid.rows};
+        }
+    }
+    return tile;
 }
 
 /** The pixels a pickup on `cell` drawn as `tile` covers (see `PickupArea`) - every frame's, for an animated one. */
@@ -428,6 +443,15 @@ export default class Level {
             });
         }
         return {x: tileX, y: tileY};
+    }
+
+    /**
+     * Whether a piece of a big sprite (see `TilePieces`) on the given cell should currently be drawn: when any cell of the whole
+     * sprite it's part of is visible (see `IsCellVisible`) - so the upper pieces of a tall wall, which touch no floor, show with
+     * its bottom row, which does.
+     */
+    IsPieceVisible(tileX: number, tileY: number, piece: TilePiece): boolean {
+        return PieceBlockCells({x: tileX, y: tileY}, piece).some(cell => this.IsCellVisible(cell.x, cell.y));
     }
 
     /** Whether the given cell should currently be drawn: an open-floor cell is visible iff its own region is active, a wall/door cell is visible iff any region it touches is active. */

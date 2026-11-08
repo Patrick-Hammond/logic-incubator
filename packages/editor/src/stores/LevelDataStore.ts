@@ -54,6 +54,8 @@ type ActionData = {
     layers?: Layer[];
     /** PAINT_CELLS: map coordinates, unlike the view-relative `brush.position` the other paint actions offset by `viewOffset`. */
     cells?: Vec2Like[];
+    /** PAINT_CELLS: the name each of `cells` is painted with, in place of the brush's own - a piece of a big sprite each (see `PiecePainting`). */
+    names?: string[];
     target?: Brush;
     value?: DataBrushValue;
     quests?: QuestDef[];
@@ -101,7 +103,10 @@ export default class LevelDataStore extends Store<LevelDataState, ActionData> {
                 const replaces = this.Replaces(action.data.brush, action.data.layers);
                 const cellKeys = new Set(action.data.cells.map(cell => cell.x + "," + cell.y));
                 const kept = levelData.filter(v => !(cellKeys.has(v.position.x + "," + v.position.y) && replaces(v)));
-                return kept.concat(action.data.cells.map(cell => ({ ...action.data.brush, position: { x: cell.x, y: cell.y } })));
+                const names = action.data.names;
+                return kept.concat(
+                    action.data.cells.map((cell, index) => ({ ...action.data.brush, name: names ? names[index] : action.data.brush.name, position: { x: cell.x, y: cell.y } }))
+                );
             }
             case LevelDataActions.ERASE: {
                 const levelDataCopy = levelData.concat();

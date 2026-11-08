@@ -51,3 +51,15 @@ describe("Level start position", () => {
         expect(level.playerStartPosition).toEqual({ x: 6, y: 5 });
     });
 });
+
+describe("Level.IsPieceVisible", () => {
+    it("shows a piece of a big sprite when any cell of the whole sprite shows, its own or not", () => {
+        const level = new Level();
+        const visible = new Set(["4,6"]);
+        vi.spyOn(level, "IsCellVisible").mockImplementation((x: number, y: number) => visible.has(x + "," + y));
+        // The top-right piece of a 2x2 sprite whose top-left is (3, 5): its bottom row, (3, 6) and (4, 6), touches the floor.
+        expect(level.IsPieceVisible(4, 5, { column: 1, row: 0, columns: 2, rows: 2 })).toBe(true);
+        // The same piece one sprite to the right, (5, 5) to (6, 6), shows nothing.
+        expect(level.IsPieceVisible(6, 5, { column: 1, row: 0, columns: 2, rows: 2 })).toBe(false);
+    });
+});

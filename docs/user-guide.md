@@ -1109,6 +1109,14 @@ If the override is intended, list the name under `overrides` in that bundle's `b
 Textures you create at run time (the editor's data-brush swatches, say) can be registered with
 `AssetFactory.inst.Add(name, [frameKey], [texture])`; they belong to no bundle and are visible whatever the scope.
 
+A sprite a whole number of 16 px cells across and down can also be asked for **a piece at a time**, by a piece name: the
+sprite's name, `@`, then the piece's column and row from the top-left (`floor_rug@1,0` is the second piece along the top of
+a 32x32 `floor_rug`). The first time a piece is asked for, every frame of the sprite is cut there into a texture of its own on
+the same sheet - no pixels are copied, and it batches with everything else - and it's kept from then on; it goes when its
+sprite's bundle unloads. Pieces are never listed in `SpriteNames`. A piece the sheet trimmed away entirely (the sprite is
+clear there) is reported by `IsEmptyPiece(name)`. The helpers for piece names are in `@logic-incubator/lib/loading/SpritePieces`.
+This is how the dungeon engine lays big floor and wall tiles ([9.6.3](#963-tiles-bigger-than-a-cell)).
+
 ### 5.9 Sound
 
 Sound is **opt-in**. Importing `pixi-sound` touches `document` and builds an audio context, so only one file in lib
@@ -2225,6 +2233,33 @@ Lights that move are cast from fewer points across their flame, and only again o
 handful of them costs little. Each gets a soft glow: a carried torch and a shot under the figures, the mage-light over them
 with a bright core.
 
+#### 9.6.3 Tiles bigger than a cell
+
+Floor and wall tiles can be bigger than a cell - a 32x32 flagstone, a 48x32 stretch of wall two cells tall - as long as they're
+a whole number of cells each way. The editor lays such a sprite in **pieces**: each cell gets its own cell-sized piece of it
+([5.8](#58-sprites-by-bare-name-scope-and-assetfactory)), and the pieces it lays together join up into whole sprites
+([10.2](#102-using-it)). In the level file a piece is just a name (`floor_rug@1,0`), so in play it is an ordinary one-cell
+tile: lit by its own cell's corners like a 16 px floor, raised by its own cell's height, solid and light-stopping as its
+sprite's `collidable` and `blocksLight` say, and erased cell by cell. Its metadata is its sprite's.
+
+Which sprites are laid in pieces:
+
+- its `category` is `floor` or `walls`;
+- it has no `door`, `light`, `spawner`, `pickup`, `sound` or `loop` - cutting one of those would make four doors or four
+  lights of it, so they stay whole, as before;
+- it's a whole number of cells each way and more than one cell (a 21x32 door, say, isn't, and stays whole).
+
+One difference from other tiles: a wall cell normally shows only while it touches open floor in sight (even diagonally), so the
+top row of a two-tall wall, which touches only the wall under it, would never be drawn. A piece shows whenever **any cell of its
+whole sprite** does, so a tall wall shows from top to bottom as soon as its bottom row does - no need to anchor its top on the
+row below with a pixel offset, as the 16 px caps are.
+
+Tips for the art: make a big floor tile seamless at its outer edges, since it's laid edge to edge, and keep it at the same
+pixel size as the 16 px art. The sheet trims a sprite's clear edges away, so a piece wholly in a clear margin (the right-hand
+pieces of a wall drawn only in its left half) has no art and isn't laid: it leaves what's under it, and isn't solid. Any other
+clear patch is laid like the rest of its piece, and is solid on a collidable sprite. Levels made before keep any big sprite they
+already had placed whole (the stairs, say), drawn as before.
+
 ### 9.7 Heights
 
 The height layer holds an integer height per cell (a `z-index` brush; a cell without one is at 0), painted in the editor with
@@ -2914,6 +2949,12 @@ vertical **toolbar** of tools at the far right. Each palette tab ends in a **+**
 | `I` | Dropper | Click a tile to paint with it (on the attributes layer, a data brush with its value - the active type's, if the cell has one; on the height layer, the cell's height). |
 | `G` | Fill | Flood-fills matching cells on the selected layer, up to the edge of the view (on attributes, by whether a cell has the active type; on the height layer, cells of the same height). |
 | `M` | Move | Drag to pan. Middle-drag or Space+drag pans with any tool. |
+
+**Big tiles.** A floor or wall tile bigger than a cell ([9.6.3](#963-tiles-bigger-than-a-cell)) is painted in pieces that join
+up. The Brush lays a whole one at a time, outlined under the cursor: a click puts one with its top-left on the cell, and a drag
+keeps laying them edge to edge with the first. The Stamp counts the pieces from its rectangle's top-left cell and the Fill from
+the top-left of what it fills, so either can cut a tile short at the far edges. Erase takes one cell's piece. The Dropper on a
+piece picks the whole tile, and a Fill treats all of a tile's pieces as the same tile.
 
 **Keyboard**
 

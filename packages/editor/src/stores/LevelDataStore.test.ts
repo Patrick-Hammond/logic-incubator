@@ -115,6 +115,16 @@ describe("LevelDataStore stamp/fill and placed data", () => {
         expect(names(store)).toEqual(["collision@0,0", "floor@5,5", "wall@0,0"]);
     });
 
+    it("PAINT_CELLS paints each cell with its own name when given them - the pieces of a big sprite", () => {
+        const store = storeWith([brush("floor", 0, 0)]);
+        store.Dispatch({
+            type: LevelDataActions.PAINT_CELLS,
+            data: { brush: brush("rug", 99, 99), cells: [{ x: 0, y: 0 }, { x: 1, y: 0 }], names: ["rug@0,0", "rug@1,0"] },
+            canUndo: true
+        });
+        expect(store.state.levelData.map(b => b.name + " " + b.position.x + "," + b.position.y)).toEqual(["rug@0,0 0,0", "rug@1,0 1,0"]);
+    });
+
     it("SET_DATA changes just the one placed brush's value - a tile's light/spawner override (see ImplicitData.EffectiveLight) writes here exactly the same way an explicit data brush's value does", () => {
         const light = { ...brush("torch_1_anim", 2, 2), data: { brightness: 0.5, tint: 0xffffff, range: 5 } };
         const other = { ...light, position: { x: 3, y: 3 } };
