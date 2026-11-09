@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { Vec2 } from "@logic-incubator/lib/math/Geometry";
-import { TileSize } from "../../Constants";
+import { PlayerSpeed, TileSize } from "../../Constants";
 import type { IPlayerInput } from "../../input/PlayerControl";
-import { BareFloor, Footing, MoveCollider } from "../../view/helpers/PlayerMovement";
+import { BareFloor, Footing, MoveCollider, TopVelocity } from "../../view/helpers/PlayerMovement";
 import { LightSpell } from "./LightSpell";
 import { DefaultExperienceRules } from "./Experience";
 import { ApplyPickup, CreatePlayerState, EquippedWeapon, GainExperience, StepPlayer, TakePlayerShot } from "./PlayerState";
@@ -165,9 +165,10 @@ describe("PlayerState", () => {
                 }
                 return state.position.x - edge;
             };
-            // Walking 30 steps at slime's pace from a standstill would take them 30 * 0.4 = 12 pixels.
-            expect(into({ speed: 0.1, slipperiness: 3 })).toBeGreaterThan(40);
-            expect(into({ speed: 0.3, slipperiness: 0.1 })).toBeLessThan(30 * 0.3 * 4 + 6);
+            // `top` is a step at full pace on bare floor; 30 steps at slime's tenth of it, from a standstill, would cover at most 3 of them.
+            const top = TopVelocity * PlayerSpeed;
+            expect(into({ speed: 0.1, slipperiness: 3 })).toBeGreaterThan(30 * 0.1 * top * 2.5);
+            expect(into({ speed: 0.3, slipperiness: 0.1 })).toBeLessThan(30 * 0.3 * top + 1.5 * top);
         });
 
         it("carries on further before turning round the more slippery the floor", () => {

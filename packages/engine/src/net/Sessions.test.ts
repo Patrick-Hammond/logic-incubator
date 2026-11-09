@@ -279,7 +279,7 @@ describe("an online run", () => {
         await run.BeginAll();
         // The first guest's hero starts beside the host's, and walks right into the crate.
         expect(run.guests[0].world.Heroes[1].Tile).toEqual({ x: 2, y: 1 });
-        await run.Frames(30, hero => (hero === 1 ? Input(1) : undefined));
+        await run.Frames(40, hero => (hero === 1 ? Input(1) : undefined));
         await run.Frames(30, () => undefined);
         run.guests.forEach(guest => {
             expect(guest.level.pushables[0]).toMatchObject({ x: 5, y: 1 });

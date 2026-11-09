@@ -797,10 +797,11 @@ describe("World's pushing", () => {
 
     it("shoves a crate a cell on once a hero has kept walking into it, then needs as long again for the next", () => {
         const { level, world, events } = Setup(YARD, 1);
+        // Counted from when they come up against it (on cell 3, the crate on 4), however long the walk there takes at a hero's pace.
         let leaning = 0;
         while (!pushes(events).length && leaning < 1) {
             world.Step([Input(1, 0)], 1, FRAME);
-            leaning += world.Heroes[0].Tile.x === 3 ? FRAME : 0;
+            leaning += world.Heroes[0].Position.x >= 3 * TileSize - 1 ? FRAME : 0;
         }
         expect(pushes(events)).toEqual([[0, 0, 5, 1, "crate"]]);
         // Against it the whole while, for as long as it takes and no longer.

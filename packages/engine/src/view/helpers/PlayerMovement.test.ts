@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { PlayerSpeed } from "../../Constants";
 import Level from "../../level/Level";
 import TileCollision from "../../level/TileCollision";
 import { AxisVelocity, CentreTile, MoveCollider, MoveDamping, ResolveMove, TopVelocity } from "./PlayerMovement";
@@ -101,11 +102,10 @@ describe("input pipeline", () => {
 describe("open floor, holding right+down", () => {
     const floor = new TileCollision({ collisionData: [], HeightAt: () => 0 } as unknown as Level);
 
-    it("settles to a horizontal step of ~2.8px/frame at dt=1", () => {
+    it("settles to a horizontal step of top speed times the diagonal's share at dt=1", () => {
         const t = simulate({ collider: floor, start: { x: 0, y: 0 }, keys: { down: true, right: true }, frames: 60 });
         const step = t[t.length - 1].x - t[t.length - 2].x;
-        expect(step).toBeGreaterThan(2.7);
-        expect(step).toBeLessThan(2.9);
+        expect(step).toBeCloseTo(TopVelocity * Math.SQRT1_2 * PlayerSpeed, 2);
     });
 
     it("keeps a steady top speed on slow frames instead of accelerating forever", () => {
@@ -183,7 +183,7 @@ describe("driving right+down into a ONE-tile gap - the head-start fix", () => {
                 collider: c,
                 start: { x: 10 * TILE + offset, y: LIP_Y },
                 keys: { down: true, right: true },
-                frames: 220,
+                frames: 440,
             });
             expect(entered(t), `offset ${offset}`).toBe(true);
             expect(maxY(t), `offset ${offset}`).toBeGreaterThan((WALL_ROW + 4) * TILE);
@@ -196,7 +196,7 @@ describe("driving right+down into a ONE-tile gap - the head-start fix", () => {
                 collider: c,
                 start: { x: 10 * TILE + offset, y: LIP_Y },
                 keys: { down: true, right: true },
-                frames: 220,
+                frames: 440,
             });
             const worstStepWhileInWall = Math.max(
                 ...t.filter(f => f.y > 40 && f.y < 80).map(f => Math.abs(f.stepX)),
@@ -238,7 +238,7 @@ describe("the head-start must NOT misfire", () => {
 
     it("one-tile gap present but DOWN not held: player slides across it, does not drop", () => {
         const c = wallWithGap(30, 1);
-        const t = simulate({ collider: c, start: { x: 10 * TILE, y: LIP_Y }, keys: { right: true }, frames: 240 });
+        const t = simulate({ collider: c, start: { x: 10 * TILE, y: LIP_Y }, keys: { right: true }, frames: 480 });
         expect(maxY(t)).toBeLessThan(LIP_Y + 2);
         expect(t[t.length - 1].x).toBeGreaterThan(40 * TILE); // travelled well past the gap
     });
@@ -252,7 +252,7 @@ describe("cases that already worked still work", () => {
                 collider: c,
                 start: { x: 10 * TILE + offset, y: LIP_Y },
                 keys: { down: true, right: true },
-                frames: 220,
+                frames: 440,
             });
             expect(entered(t), `offset ${offset}`).toBe(true);
         }
@@ -343,7 +343,6 @@ describe("AxisVelocity", () => {
             v = AxisVelocity(v, 1, { speed: 0.3, slipperiness: 1 }, 1);
         }
         expect(v).toBeCloseTo(0.3 * TopVelocity, 10);
-        expect(TopVelocity).toBeCloseTo(5, 10);
     });
 
     it("speeds up as quickly on any floor, and slows the slipperiness times as slowly", () => {

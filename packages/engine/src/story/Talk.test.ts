@@ -72,27 +72,30 @@ describe("whether a talk says anything", () => {
 });
 
 describe("the countdown to a talk", () => {
+    const Frame = 0.01;
     const Count = (countdown: TalkCountdown, seconds: number, beside = true) => {
         let due = null;
-        for (let t = 0; t < seconds - 1e-9 && !due; t += 0.1) {
-            due = countdown.Update(0.1, beside);
+        for (let t = 0; t < seconds - 1e-9 && !due; t += Frame) {
+            due = countdown.Update(Frame, beside);
         }
         return due;
     };
+    const Dot = TalkDotSeconds;
 
-    it("counts up a dot a second, and the talk is due a second after the third", () => {
-        expect(TalkDots * TalkDotSeconds).toBe(3);
+    it("counts up a dot every TalkDotSeconds, and the talk is due as long after the third", () => {
+        expect(TalkDots).toBe(3);
         const countdown = new TalkCountdown();
         expect(countdown.Dots).toBe(0);
         countdown.Begin(0, { x: 3, y: 1 });
         expect(countdown.Dots).toBe(1);
-        expect(Count(countdown, 0.95)).toBeNull();
+        expect(Count(countdown, Dot - 0.05)).toBeNull();
         expect(countdown.Dots).toBe(1);
         expect(Count(countdown, 0.1)).toBeNull();
         expect(countdown.Dots).toBe(2);
-        expect(Count(countdown, 1)).toBeNull();
+        expect(Count(countdown, Dot)).toBeNull();
         expect(countdown.Dots).toBe(3);
-        expect(Count(countdown, 1)).toEqual({ hero: 0, x: 3, y: 1 });
+        expect(Count(countdown, Dot - 0.1)).toBeNull();
+        expect(Count(countdown, 0.1)).toEqual({ hero: 0, x: 3, y: 1 });
         expect(countdown.Waiting).toBeNull();
         expect(countdown.Dots).toBe(0);
     });
@@ -100,7 +103,7 @@ describe("the countdown to a talk", () => {
     it("is called off by walking away, and starts over on walking back", () => {
         const countdown = new TalkCountdown();
         countdown.Begin(0, { x: 3, y: 1 });
-        Count(countdown, 2);
+        Count(countdown, 2 * Dot);
         expect(countdown.Update(0.1, false)).toBeNull();
         expect(countdown.Waiting).toBeNull();
         expect(countdown.Update(5, true)).toBeNull();
@@ -111,7 +114,7 @@ describe("the countdown to a talk", () => {
     it("carries on as the same hero walks into the same NPC again, and starts over for another", () => {
         const countdown = new TalkCountdown();
         countdown.Begin(0, { x: 3, y: 1 });
-        Count(countdown, 1.5);
+        Count(countdown, 1.5 * Dot);
         countdown.Begin(0, { x: 3, y: 1 });
         expect(countdown.Dots).toBe(2);
         countdown.Begin(0, { x: 5, y: 1 });
